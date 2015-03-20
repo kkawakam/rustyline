@@ -1,0 +1,5 @@
+[package]
+
+name = "rustyline"
+version = "0.0.1"
+authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]

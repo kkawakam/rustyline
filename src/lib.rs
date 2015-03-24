@@ -1,6 +1,8 @@
 #![feature(libc)]
 extern crate libc;
 
+use std::io::Write;
+use std::io;
 
 
 fn isatty() -> bool {
@@ -8,7 +10,14 @@ fn isatty() -> bool {
     isatty
 }
 
-pub fn readline() -> Option<String> {
+pub fn readline(prompt: &'static str) -> Option<String> {
+    // Write prompt and flush it to stdout
+    let mut stdout = io::stdout();
+    stdout.write(prompt.as_bytes());
+    stdout.flush();
+
+
+    let mut buffer = String::new();
     if isatty() {
         Some(buffer)
     } else {
@@ -16,5 +25,6 @@ pub fn readline() -> Option<String> {
     }
 }
 
-
-
+fn read_handler(buffer: String) -> String {
+   buffer
+}

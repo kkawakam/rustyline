@@ -1,3 +1,5 @@
+extern crate rustyline;
+
 fn main() {
-    println!("Hello, World");
+    rustyline::readline();
 }

@@ -54,8 +54,8 @@ fn readline_raw() -> Result<String, io::Error> {
     if is_a_tty() {
         let original_termios = match enable_raw_mode() {
             Err(Sys(Errno::ENOTTY)) => return Err(Error::new(ErrorKind::Other, "Not a TTY")),
-            Err(Sys(Errno::EBADF))  => Err(Error::new(ErrorKind::Other, "Not a file descriptor")),
-            Err(..)                 => Err(Error::new(ErrorKind::Other, "Unknown Error")),
+            Err(Sys(Errno::EBADF))  => return Err(Error::new(ErrorKind::Other, "Not a file descriptor")),
+            Err(..)                 => return Err(Error::new(ErrorKind::Other, "Unknown Error")),
             Ok(term)                => term
         };
         

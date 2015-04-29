@@ -47,10 +47,16 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error
     Ok(())
 }
 
-fn readline_raw() -> Result<String, io::Error> {
+fn readline_edit() -> Result<String, io::Error> {
     let mut buffer = Vec::new();
     let mut input: [u8; 1] = [0];
+    let numread = io::stdin().read(&mut input).unwrap();
+    buffer.push(input[0]);
+    println!("Read #{:?} bytes with a value of{:?}",numread,input[0]);
+    Ok(String::from_utf8(buffer).unwrap())
+}
 
+fn readline_raw() -> Result<String, io::Error> {
     if is_a_tty() {
         let original_termios = match enable_raw_mode() {
             Err(Sys(Errno::ENOTTY)) => return Err(Error::new(ErrorKind::Other, "Not a TTY")),
@@ -59,16 +65,14 @@ fn readline_raw() -> Result<String, io::Error> {
             Ok(term)                => term
         };
         
-        let numread = io::stdin().read(&mut input).unwrap();
-        buffer.push(input[0]);
-        println!("Read #{:?} bytes with a value of{:?}",numread,input[0]);
-
+        let user_input = readline_edit();
 
         match disable_raw_mode(original_termios) {
             Err(..) => return Err(Error::new(ErrorKind::Other, "Failed to revert to original termios")),
             Ok(..)  => ()
         }
-        Ok(String::from_utf8(buffer).unwrap())
+
+        user_input
     } else {
 
         let mut line = String::new();

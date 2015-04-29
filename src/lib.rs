@@ -11,6 +11,28 @@ use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, IC
 static MAX_LINE: i32 = 4096;
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
 
+enum KEYPRESS{
+    NULL        = 0,     // NULL
+    CTRLA       = 1,     // C-a
+    CTRLB       = 2,     // C-b
+    CTRLC       = 3,     // C-c
+    CTRLD       = 4,     // C-d
+    CTRLE       = 5,     // C-e
+    CTRLF       = 6,     // C-f
+    CTRLH       = 8,     // C-h
+    TAB         = 9,     // Tab
+    CTRLK       = 11,    // C-k
+    CTRLL       = 12,    // C-l
+    ENTER       = 13,    // Enter
+    CTRLN       = 14,    // C-n
+    CTRLP       = 16,    // C-p
+    CTRLT       = 20,    // C-t
+    CTRLU       = 21,    // C-u
+    CTRLW       = 23,    // C-w
+    ESC         = 27,    // Esc
+    BACKSPACE   = 127    // Backspace 
+}
+
 fn is_a_tty() -> bool {
     let isatty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
     isatty
@@ -52,6 +74,7 @@ fn readline_edit() -> Result<String, io::Error> {
     let mut input: [u8; 1] = [0];
     let numread = io::stdin().read(&mut input).unwrap();
     buffer.push(input[0]);
+    println!("{}",input[0]);
     Ok(String::from_utf8(buffer).unwrap())
 }
 

@@ -52,7 +52,6 @@ fn readline_edit() -> Result<String, io::Error> {
     let mut input: [u8; 1] = [0];
     let numread = io::stdin().read(&mut input).unwrap();
     buffer.push(input[0]);
-    println!("Read #{:?} bytes with a value of{:?}",numread,input[0]);
     Ok(String::from_utf8(buffer).unwrap())
 }
 

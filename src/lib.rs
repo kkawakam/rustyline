@@ -8,26 +8,26 @@ use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
 
-static MAX_LINE: i32 = 4096;
+static MAX_LINE: u32 = 4096;
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
 
 const    NULL     : u8   = 0;     // NULL
-const    CTRLA    : u8   = 1;     // C-a
-const    CTRLB    : u8   = 2;     // C-b
-const    CTRLC    : u8   = 3;     // C-c
-const    CTRLD    : u8   = 4;     // C-d
-const    CTRLE    : u8   = 5;     // C-e
-const    CTRLF    : u8   = 6;     // C-f
-const    CTRLH    : u8   = 8;     // C-h
+const    CTRL_A    : u8   = 1;     // C-a
+const    CTRL_B    : u8   = 2;     // C-b
+const    CTRL_C    : u8   = 3;     // C-c
+const    CTRL_D    : u8   = 4;     // C-d
+const    CTRL_E    : u8   = 5;     // C-e
+const    CTRL_F    : u8   = 6;     // C-f
+const    CTRL_H    : u8   = 8;     // C-h
 const    TAB      : u8   = 9;     // Tab
-const    CTRLK    : u8   = 11;    // C-k
-const    CTRLL    : u8   = 12;    // C-l
+const    CTRL_K    : u8   = 11;    // C-k
+const    CTRL_L    : u8   = 12;    // C-l
 const    ENTER    : u8   = 13;    // Enter
-const    CTRLN    : u8   = 14;    // C-n
-const    CTRLP    : u8   = 16;    // C-p
-const    CTRLT    : u8   = 20;    // C-t
-const    CTRLU    : u8   = 21;    // C-u
-const    CTRLW    : u8   = 23;    // C-w
+const    CTRL_N    : u8   = 14;    // C-n
+const    CTRL_P    : u8   = 16;    // C-p
+const    CTRL_T    : u8   = 20;    // C-t
+const    CTRL_U    : u8   = 21;    // C-u
+const    CTRL_W    : u8   = 23;    // C-w
 const    ESC      : u8   = 27;    // Esc
 const    BACKSPACE: u8   = 127;   // Backspace 
 
@@ -73,6 +73,21 @@ fn readline_edit() -> Result<String, io::Error> {
     loop {
         let numread = io::stdin().read(&mut input).unwrap();
         match input[0] {
+            CTRL_A => print!("Pressed C-a"),
+            CTRL_B => print!("Pressed C-b"),
+            CTRL_C => print!("Pressed C-c"),
+            CTRL_D => print!("Pressed C-d"),
+            CTRL_E => print!("Pressed C-e"),
+            CTRL_F => print!("Pressed C-f"),
+            CTRL_H => print!("Pressed C-h"),
+            CTRL_K => print!("Pressed C-k"),
+            CTRL_L => print!("Pressed C-l"),
+            CTRL_N => print!("Pressed C-n"),
+            CTRL_P => print!("Pressed C-p"),
+            CTRL_T => print!("Pressed C-t"),
+            CTRL_U => print!("Pressed C-u"),
+            CTRL_W => print!("Pressed C-w"),
+            ESC    => print!("Pressed esc") ,
             ENTER  => break,
             _      => { print!("{}", input[0]); io::stdout().flush(); }
         }

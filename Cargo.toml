@@ -5,4 +5,4 @@ authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 
 [dependencies]
 libc = "0.1.6"
-nix = "0.3.3"
+nix = "0.3.5"

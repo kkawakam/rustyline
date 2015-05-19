@@ -8,6 +8,8 @@ use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
 
+pub mod readline_error;
+
 static MAX_LINE: u32 = 4096;
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
 

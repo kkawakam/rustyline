@@ -1,11 +1,16 @@
+//! Contains error type for handling I/O and Errno errors
 use std::io;
 use std::error;
 use std::fmt;
 use nix;
 
+/// The error type for Rustyline errors that can arise from
+/// I/O related errors or Errno when using the nix-rust library
 #[derive(Debug)]
 pub enum ReadlineError {
+    /// I/O Error
     Io(io::Error),
+    /// Error from syscall
     Errno(nix::Error)
 }
 

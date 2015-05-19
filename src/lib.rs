@@ -61,12 +61,16 @@ fn is_a_tty() -> bool {
 
 /// Check to see if the current `TERM` is unsupported
 fn is_unsupported_term() -> bool {
-    let term = std::env::var("TERM").ok().unwrap();
-    let mut unsupported = false;
-    for iter in &UNSUPPORTED_TERM {
-        unsupported = term == *iter
+    match std::env::var("TERM") {
+        Ok(val) => {
+            let mut unsupported = false;
+            for iter in &UNSUPPORTED_TERM {
+                unsupported = term == *iter
+            }
+            unsupported
+        }
+        Err(_) => false
     }
-    unsupported
 }
 
 /// Enable raw mode for the TERM

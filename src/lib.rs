@@ -8,26 +8,28 @@ use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
 
+pub mod readline_error;
+
 static MAX_LINE: u32 = 4096;
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
 
 const    NULL     : u8   = 0;     // NULL
-const    CTRL_A    : u8   = 1;     // C-a
-const    CTRL_B    : u8   = 2;     // C-b
-const    CTRL_C    : u8   = 3;     // C-c
-const    CTRL_D    : u8   = 4;     // C-d
-const    CTRL_E    : u8   = 5;     // C-e
-const    CTRL_F    : u8   = 6;     // C-f
-const    CTRL_H    : u8   = 8;     // C-h
+const    CTRL_A   : u8   = 1;     // C-a
+const    CTRL_B   : u8   = 2;     // C-b
+const    CTRL_C   : u8   = 3;     // C-c
+const    CTRL_D   : u8   = 4;     // C-d
+const    CTRL_E   : u8   = 5;     // C-e
+const    CTRL_F   : u8   = 6;     // C-f
+const    CTRL_H   : u8   = 8;     // C-h
 const    TAB      : u8   = 9;     // Tab
-const    CTRL_K    : u8   = 11;    // C-k
-const    CTRL_L    : u8   = 12;    // C-l
+const    CTRL_K   : u8   = 11;    // C-k
+const    CTRL_L   : u8   = 12;    // C-l
 const    ENTER    : u8   = 13;    // Enter
-const    CTRL_N    : u8   = 14;    // C-n
-const    CTRL_P    : u8   = 16;    // C-p
-const    CTRL_T    : u8   = 20;    // C-t
-const    CTRL_U    : u8   = 21;    // C-u
-const    CTRL_W    : u8   = 23;    // C-w
+const    CTRL_N   : u8   = 14;    // C-n
+const    CTRL_P   : u8   = 16;    // C-p
+const    CTRL_T   : u8   = 20;    // C-t
+const    CTRL_U   : u8   = 21;    // C-u
+const    CTRL_W   : u8   = 23;    // C-w
 const    ESC      : u8   = 27;    // Esc
 const    BACKSPACE: u8   = 127;   // Backspace 
 
@@ -104,7 +106,7 @@ fn readline_raw() -> Result<String, io::Error> {
             Err(..)                 => return Err(Error::new(ErrorKind::Other, "Unknown Error")),
             Ok(term)                => term
         };
-        
+
         let user_input = readline_edit();
 
         match disable_raw_mode(original_termios) {

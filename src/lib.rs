@@ -1,3 +1,18 @@
+//!Readline Implementation in Rust
+//!
+//!This implementation is based on [Antirez's Linenoise](https://github.com/antirez/linenoise)
+//!
+//!# Example
+//!
+//!Usage
+//!
+//!```
+//!let readline = rustyline::readline(">> ");
+//!match readline {
+//!     Ok(line) => println!("Line: {:?}",line),
+//!     Err(_)   => println!("No input"),
+//! }
+//!```
 extern crate libc;
 extern crate nix;
 
@@ -10,34 +25,40 @@ use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, IC
 
 pub mod readline_error;
 
+/// Maximum buffer size for the line read
 static MAX_LINE: u32 = 4096;
+
+/// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
 
-const    NULL     : u8   = 0;     // NULL
-const    CTRL_A   : u8   = 1;     // C-a
-const    CTRL_B   : u8   = 2;     // C-b
-const    CTRL_C   : u8   = 3;     // C-c
-const    CTRL_D   : u8   = 4;     // C-d
-const    CTRL_E   : u8   = 5;     // C-e
-const    CTRL_F   : u8   = 6;     // C-f
-const    CTRL_H   : u8   = 8;     // C-h
-const    TAB      : u8   = 9;     // Tab
-const    CTRL_K   : u8   = 11;    // C-k
-const    CTRL_L   : u8   = 12;    // C-l
-const    ENTER    : u8   = 13;    // Enter
-const    CTRL_N   : u8   = 14;    // C-n
-const    CTRL_P   : u8   = 16;    // C-p
-const    CTRL_T   : u8   = 20;    // C-t
-const    CTRL_U   : u8   = 21;    // C-u
-const    CTRL_W   : u8   = 23;    // C-w
-const    ESC      : u8   = 27;    // Esc
-const    BACKSPACE: u8   = 127;   // Backspace 
+/// Key Strokes that rustyline should capture
+const    NULL     : u8   = 0;     
+const    CTRL_A   : u8   = 1;     
+const    CTRL_B   : u8   = 2;     
+const    CTRL_C   : u8   = 3;     
+const    CTRL_D   : u8   = 4;     
+const    CTRL_E   : u8   = 5;     
+const    CTRL_F   : u8   = 6;     
+const    CTRL_H   : u8   = 8;     
+const    TAB      : u8   = 9;     
+const    CTRL_K   : u8   = 11;    
+const    CTRL_L   : u8   = 12;    
+const    ENTER    : u8   = 13;    
+const    CTRL_N   : u8   = 14;    
+const    CTRL_P   : u8   = 16;    
+const    CTRL_T   : u8   = 20;    
+const    CTRL_U   : u8   = 21;    
+const    CTRL_W   : u8   = 23;    
+const    ESC      : u8   = 27;    
+const    BACKSPACE: u8   = 127;    
 
+/// Check to see if STDIN is a TTY
 fn is_a_tty() -> bool {
     let isatty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
     isatty
 }
 
+/// Check to see if the current `TERM` is unsupported
 fn is_unsupported_term() -> bool {
     let term = std::env::var("TERM").ok().unwrap();
     let mut unsupported = false;
@@ -47,6 +68,7 @@ fn is_unsupported_term() -> bool {
     unsupported
 }
 
+/// Enable raw mode for the TERM
 fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
     if !is_a_tty() {
         Err(Sys(Errno::ENOTTY)) 
@@ -64,11 +86,15 @@ fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
     }
 }
 
+/// Disable Raw mode for the term
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error> {
     try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
     Ok(())
 }
 
+/// Handles reading and editting the readline buffer.
+/// It will also handle special inputs in an appropriate fashion
+/// (e.g., C-c will exit readline)
 fn readline_edit() -> Result<String, io::Error> {
     let mut buffer = Vec::new();
     let mut input: [u8; 1] = [0];
@@ -98,6 +124,8 @@ fn readline_edit() -> Result<String, io::Error> {
     Ok(String::from_utf8(buffer).unwrap())
 }
 
+/// Readline method that will enable RAW mode, call the ```readline_edit()```
+/// method and disable raw mode
 fn readline_raw() -> Result<String, io::Error> {
     if is_a_tty() {
         let original_termios = match enable_raw_mode() {
@@ -125,6 +153,7 @@ fn readline_raw() -> Result<String, io::Error> {
     }
 }
 
+/// This is the only public library method that will be called by the end-user
 pub fn readline(prompt: &'static str) -> Result<String, io::Error> {
     // Write prompt and flush it to stdout
     let mut stdout = io::stdout();

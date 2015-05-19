@@ -17,3 +17,12 @@ impl fmt::Display for ReadlineError {
         }
     }
 }
+
+impl error::Error for ReadlineError {
+    fn description(&self) -> &str {
+        match *self {
+            ReadlineError::Io(ref err) => err.description(),
+            ReadlineError::Errno(ref err) => err.errno().desc()
+        }
+    }
+}

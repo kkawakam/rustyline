@@ -23,29 +23,27 @@ pub enum KeyPress {
     BACKSPACE   = 127,    
 }
 
-impl KeyPress {
-    pub fn from_u8(i: u8) -> KeyPress {
-        match i {
-            0   => KeyPress::NULL,
-            1   => KeyPress::CTRL_A,
-            2   => KeyPress::CTRL_B,
-            3   => KeyPress::CTRL_C,
-            4   => KeyPress::CTRL_D,
-            5   => KeyPress::CTRL_E,
-            6   => KeyPress::CTRL_F,
-            8   => KeyPress::CTRL_H,
-            9   => KeyPress::TAB,
-            11  => KeyPress::CTRL_K,
-            12  => KeyPress::CTRL_L,
-            13  => KeyPress::ENTER,
-            14  => KeyPress::CTRL_N,
-            16  => KeyPress::CTRL_P,
-            20  => KeyPress::CTRL_T,
-            21  => KeyPress::CTRL_U,
-            23  => KeyPress::CTRL_W,
-            27  => KeyPress::ESC,
-            127 => KeyPress::BACKSPACE,
-            _   => KeyPress::NULL
-        } 
-    }
+pub fn u8_to_key_press(i: u8) -> KeyPress {
+    match i {
+        0   => KeyPress::NULL,
+        1   => KeyPress::CTRL_A,
+        2   => KeyPress::CTRL_B,
+        3   => KeyPress::CTRL_C,
+        4   => KeyPress::CTRL_D,
+        5   => KeyPress::CTRL_E,
+        6   => KeyPress::CTRL_F,
+        8   => KeyPress::CTRL_H,
+        9   => KeyPress::TAB,
+        11  => KeyPress::CTRL_K,
+        12  => KeyPress::CTRL_L,
+        13  => KeyPress::ENTER,
+        14  => KeyPress::CTRL_N,
+        16  => KeyPress::CTRL_P,
+        20  => KeyPress::CTRL_T,
+        21  => KeyPress::CTRL_U,
+        23  => KeyPress::CTRL_W,
+        27  => KeyPress::ESC,
+        127 => KeyPress::BACKSPACE,
+        _   => KeyPress::NULL
+    } 
 }

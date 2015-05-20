@@ -17,7 +17,7 @@ pub enum ReadlineError {
 impl fmt::Display for ReadlineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ReadlineError::Io(ref err) => write!(f, "IO error: {}", err),
+            ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc())
         }
     }
@@ -29,5 +29,17 @@ impl error::Error for ReadlineError {
             ReadlineError::Io(ref err) => err.description(),
             ReadlineError::Errno(ref err) => err.errno().desc()
         }
+    }
+}
+
+impl From<io::Error> for ReadlineError {
+    fn from(err: io::Error) -> ReadlineError {
+        ReadlineError::Io(err)    
+    }
+}
+
+impl From<nix::Error> for ReadlineError {
+    fn from(err: nix::Error) -> ReadlineError {
+        ReadlineError::Errno(err)
     }
 }

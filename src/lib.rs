@@ -16,42 +16,26 @@
 extern crate libc;
 extern crate nix;
 
+pub mod consts;
+pub mod error;
+
+use std::result;
 use std::io;
-use std::io::{Write, Read, Error, ErrorKind};
+use std::io::{Write, Read};
 use nix::errno::Errno;
 use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
+use consts::{KeyPress, u8_to_KeyPress};
 
-pub mod readline_error;
-pub mod consts;
+/// The error type for I/O and Linux Syscalls (Errno)
+pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 /// Maximum buffer size for the line read
-static MAX_LINE: u32 = 4096;
+static MAX_LINE: usize = 4096;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
-
-/// Key Strokes that rustyline should capture
-const    NULL     : u8   = 0;     
-const    CTRL_A   : u8   = 1;     
-const    CTRL_B   : u8   = 2;     
-const    CTRL_C   : u8   = 3;     
-const    CTRL_D   : u8   = 4;     
-const    CTRL_E   : u8   = 5;     
-const    CTRL_F   : u8   = 6;     
-const    CTRL_H   : u8   = 8;     
-const    TAB      : u8   = 9;     
-const    CTRL_K   : u8   = 11;    
-const    CTRL_L   : u8   = 12;    
-const    ENTER    : u8   = 13;    
-const    CTRL_N   : u8   = 14;    
-const    CTRL_P   : u8   = 16;    
-const    CTRL_T   : u8   = 20;    
-const    CTRL_U   : u8   = 21;    
-const    CTRL_W   : u8   = 23;    
-const    ESC      : u8   = 27;    
-const    BACKSPACE: u8   = 127;    
 
 /// Check to see if STDIN is a TTY
 fn is_a_tty() -> bool {
@@ -61,18 +45,24 @@ fn is_a_tty() -> bool {
 
 /// Check to see if the current `TERM` is unsupported
 fn is_unsupported_term() -> bool {
-    let term = std::env::var("TERM").ok().unwrap();
-    let mut unsupported = false;
-    for iter in &UNSUPPORTED_TERM {
-        unsupported = term == *iter
+    match std::env::var("TERM") {
+        Ok(term) => {
+            let mut unsupported = false;
+            for iter in &UNSUPPORTED_TERM {
+                unsupported = term == *iter
+            }
+            unsupported
+        }
+        Err(_) => false
     }
-    unsupported
 }
 
 /// Enable raw mode for the TERM
-fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
+fn enable_raw_mode() -> Result<termios::Termios> {
     if !is_a_tty() {
-        Err(Sys(Errno::ENOTTY)) 
+        Err(error::ReadlineError
+                          ::from(nix::Error
+                                    ::from_errno(Errno::ENOTTY)))
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
@@ -88,74 +78,65 @@ fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
 }
 
 /// Disable Raw mode for the term
-fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
+fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
+    try!(termios::tcsetattr(libc::STDIN_FILENO,
+                             termios::TCSAFLUSH,
+                             &original_termios));
     Ok(())
 }
 
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit() -> Result<String, io::Error> {
-    let mut buffer = Vec::new();
-    let mut input: [u8; 1] = [0];
+fn readline_edit() -> Result<String> {
+    // Preallocate a buffer for the input line
+    let mut buffer = String::with_capacity(MAX_LINE);
+    
+    // Input buffer for reading a single UTF-8
+    let mut input = String::with_capacity(1);
     loop {
-        let numread = io::stdin().read(&mut input).unwrap();
-        match input[0] {
-            CTRL_A => print!("Pressed C-a"),
-            CTRL_B => print!("Pressed C-b"),
-            CTRL_C => print!("Pressed C-c"),
-            CTRL_D => print!("Pressed C-d"),
-            CTRL_E => print!("Pressed C-e"),
-            CTRL_F => print!("Pressed C-f"),
-            CTRL_H => print!("Pressed C-h"),
-            CTRL_K => print!("Pressed C-k"),
-            CTRL_L => print!("Pressed C-l"),
-            CTRL_N => print!("Pressed C-n"),
-            CTRL_P => print!("Pressed C-p"),
-            CTRL_T => print!("Pressed C-t"),
-            CTRL_U => print!("Pressed C-u"),
-            CTRL_W => print!("Pressed C-w"),
-            ESC    => print!("Pressed esc") ,
-            ENTER  => break,
-            _      => { print!("{}", input[0]); io::stdout().flush(); }
+        io::stdin().read_to_string(&mut input).unwrap();
+        match u8_to_KeyPress(input.as_bytes()[0]) {
+            KeyPress::CTRL_A => print!("Pressed C-a"),
+            KeyPress::CTRL_B => print!("Pressed C-b"),
+            KeyPress::CTRL_C => print!("Pressed C-c"),
+            KeyPress::CTRL_D => print!("Pressed C-d"),
+            KeyPress::CTRL_E => print!("Pressed C-e"),
+            KeyPress::CTRL_F => print!("Pressed C-f"),
+            KeyPress::CTRL_H => print!("Pressed C-h"),
+            KeyPress::CTRL_K => print!("Pressed C-k"),
+            KeyPress::CTRL_L => print!("Pressed C-l"),
+            KeyPress::CTRL_N => print!("Pressed C-n"),
+            KeyPress::CTRL_P => print!("Pressed C-p"),
+            KeyPress::CTRL_T => print!("Pressed C-t"),
+            KeyPress::CTRL_U => print!("Pressed C-u"),
+            KeyPress::CTRL_W => print!("Pressed C-w"),
+            KeyPress::ESC    => print!("Pressed esc") ,
+            KeyPress::ENTER  => break,
+            _      => { print!("{}", input); try!(io::stdout().flush()); }
         }
-        buffer.push(input[0]);
+        buffer.push_str(&input);
     }
-    Ok(String::from_utf8(buffer).unwrap())
+    Ok(buffer)
 }
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw() -> Result<String, io::Error> {
+fn readline_raw() -> Result<String> {
     if is_a_tty() {
-        let original_termios = match enable_raw_mode() {
-            Err(Sys(Errno::ENOTTY)) => return Err(Error::new(ErrorKind::Other, "Not a TTY")),
-            Err(Sys(Errno::EBADF))  => return Err(Error::new(ErrorKind::Other, "Not a file descriptor")),
-            Err(..)                 => return Err(Error::new(ErrorKind::Other, "Unknown Error")),
-            Ok(term)                => term
-        };
-
+        let original_termios = try!(enable_raw_mode());
         let user_input = readline_edit();
-
-        match disable_raw_mode(original_termios) {
-            Err(..) => return Err(Error::new(ErrorKind::Other, "Failed to revert to original termios")),
-            Ok(..)  => ()
-        }
-
+        try!(disable_raw_mode(original_termios));
         user_input
     } else {
-
         let mut line = String::new();
-        match io::stdin().read_line(&mut line) {
-            Ok(_) => Ok(line),
-            Err(e) => Err(e),
-        }
+        try!(io::stdin().read_line(&mut line));
+        Ok(line)
     }
 }
 
-/// This is the only public library method that will be called by the end-user
-pub fn readline(prompt: &'static str) -> Result<String, io::Error> {
+/// This method will read a line from STDIN and will display a `prompt`
+pub fn readline(prompt: &'static str) -> Result<String> {
     // Write prompt and flush it to stdout
     let mut stdout = io::stdout();
     try!(stdout.write(prompt.as_bytes()));
@@ -163,10 +144,8 @@ pub fn readline(prompt: &'static str) -> Result<String, io::Error> {
 
     if is_unsupported_term() {
         let mut line = String::new();
-        match io::stdin().read_line(&mut line) {
-            Ok(_) => Ok(line),
-            Err(e) => Err(e),
-        }
+        try!(io::stdin().read_line(&mut line));
+        Ok(line)
     } else {
         readline_raw()
     }

@@ -27,7 +27,7 @@ pub mod readline_error;
 pub mod consts;
 
 /// Maximum buffer size for the line read
-static MAX_LINE: u32 = 4096;
+static MAX_LINE: usize = 4096;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
@@ -62,7 +62,7 @@ fn is_a_tty() -> bool {
 /// Check to see if the current `TERM` is unsupported
 fn is_unsupported_term() -> bool {
     match std::env::var("TERM") {
-        Ok(val) => {
+        Ok(term) => {
             let mut unsupported = false;
             for iter in &UNSUPPORTED_TERM {
                 unsupported = term == *iter
@@ -101,11 +101,14 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit() -> Result<String, io::Error> {
-    let mut buffer = Vec::new();
-    let mut input: [u8; 1] = [0];
+    // Preallocate a buffer for the input line
+    let mut buffer = String::with_capacity(MAX_LINE);
+    
+    // Input buffer for reading a single UTF-8
+    let mut input = String::with_capacity(1);
     loop {
-        let numread = io::stdin().read(&mut input).unwrap();
-        match input[0] {
+        let numread = io::stdin().read_to_string(&mut input).unwrap();
+        match input.as_bytes()[0] {
             CTRL_A => print!("Pressed C-a"),
             CTRL_B => print!("Pressed C-b"),
             CTRL_C => print!("Pressed C-c"),
@@ -122,11 +125,11 @@ fn readline_edit() -> Result<String, io::Error> {
             CTRL_W => print!("Pressed C-w"),
             ESC    => print!("Pressed esc") ,
             ENTER  => break,
-            _      => { print!("{}", input[0]); io::stdout().flush(); }
+            _      => { print!("{}", input); io::stdout().flush(); }
         }
-        buffer.push(input[0]);
+        buffer.push_str(&input);
     }
-    Ok(String::from_utf8(buffer).unwrap())
+    Ok(buffer)
 }
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```

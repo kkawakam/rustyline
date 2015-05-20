@@ -16,6 +16,7 @@
 extern crate libc;
 extern crate nix;
 
+#[allow(non_camel_case_types)]
 pub mod consts;
 pub mod error;
 
@@ -23,10 +24,9 @@ use std::result;
 use std::io;
 use std::io::{Write, Read};
 use nix::errno::Errno;
-use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
-use consts::{KeyPress, u8_to_KeyPress};
+use consts::{KeyPress, u8_to_key_press};
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -96,7 +96,7 @@ fn readline_edit() -> Result<String> {
     let mut input = String::with_capacity(1);
     loop {
         io::stdin().read_to_string(&mut input).unwrap();
-        match u8_to_KeyPress(input.as_bytes()[0]) {
+        match u8_to_key_press(input.as_bytes()[0]) {
             KeyPress::CTRL_A => print!("Pressed C-a"),
             KeyPress::CTRL_B => print!("Pressed C-b"),
             KeyPress::CTRL_C => print!("Pressed C-c"),

@@ -1,4 +1,4 @@
-//!Readline Implementation in Rust
+//!Readline for Rust
 //!
 //!This implementation is based on [Antirez's Linenoise](https://github.com/antirez/linenoise)
 //!
@@ -24,6 +24,7 @@ use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
 
 pub mod readline_error;
+pub mod consts;
 
 /// Maximum buffer size for the line read
 static MAX_LINE: u32 = 4096;

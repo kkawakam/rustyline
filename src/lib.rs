@@ -23,8 +23,8 @@ use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
 
-pub mod readline_error;
 pub mod consts;
+pub mod error;
 
 /// Maximum buffer size for the line read
 static MAX_LINE: usize = 4096;
@@ -74,9 +74,9 @@ fn is_unsupported_term() -> bool {
 }
 
 /// Enable raw mode for the TERM
-fn enable_raw_mode() -> Result<termios::Termios, readline_error::ReadlineError> {
+fn enable_raw_mode() -> Result<termios::Termios, error::ReadlineError> {
     if !is_a_tty() {
-        Err(readline_error::ReadlineError
+        Err(error::ReadlineError
                           ::from(nix::Error
                                     ::from_errno(Errno::ENOTTY)))
     } else {
@@ -104,7 +104,7 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit() -> Result<String, readline_error::ReadlineError> {
+fn readline_edit() -> Result<String, error::ReadlineError> {
     // Preallocate a buffer for the input line
     let mut buffer = String::with_capacity(MAX_LINE);
     
@@ -138,7 +138,7 @@ fn readline_edit() -> Result<String, readline_error::ReadlineError> {
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw() -> Result<String, readline_error::ReadlineError> {
+fn readline_raw() -> Result<String, error::ReadlineError> {
     if is_a_tty() {
         let original_termios = try!(enable_raw_mode());
         let user_input = readline_edit();
@@ -148,13 +148,13 @@ fn readline_raw() -> Result<String, readline_error::ReadlineError> {
         let mut line = String::new();
         match io::stdin().read_line(&mut line) {
             Ok(_) => Ok(line),
-            Err(err) => Err(readline_error::ReadlineError::from(err))
+            Err(err) => Err(error::ReadlineError::from(err))
         }
     }
 }
 
 /// This is the only public library method that will be called by the end-user
-pub fn readline(prompt: &'static str) -> Result<String, readline_error::ReadlineError> {
+pub fn readline(prompt: &'static str) -> Result<String, error::ReadlineError> {
     // Write prompt and flush it to stdout
     let mut stdout = io::stdout();
     try!(stdout.write(prompt.as_bytes()));
@@ -164,7 +164,7 @@ pub fn readline(prompt: &'static str) -> Result<String, readline_error::Readline
         let mut line = String::new();
         match io::stdin().read_line(&mut line) {
             Ok(_) => Ok(line),
-            Err(err) => Err(readline_error::ReadlineError::from(err))
+            Err(err) => Err(error::ReadlineError::from(err))
         }
     } else {
         readline_raw()

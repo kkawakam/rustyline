@@ -16,6 +16,9 @@
 extern crate libc;
 extern crate nix;
 
+pub mod consts;
+pub mod error;
+
 use std::result;
 use std::io;
 use std::io::{Write, Read};
@@ -23,10 +26,9 @@ use nix::errno::Errno;
 use nix::Error::Sys;
 use nix::sys::termios;
 use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
+use consts::{KeyPress, u8_to_KeyPress};
 
-pub mod consts;
-pub mod error;
-
+/// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 /// Maximum buffer size for the line read
@@ -34,27 +36,6 @@ static MAX_LINE: usize = 4096;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
-
-/// Key Strokes that rustyline should capture
-const    NULL     : u8   = 0;     
-const    CTRL_A   : u8   = 1;     
-const    CTRL_B   : u8   = 2;     
-const    CTRL_C   : u8   = 3;     
-const    CTRL_D   : u8   = 4;     
-const    CTRL_E   : u8   = 5;     
-const    CTRL_F   : u8   = 6;     
-const    CTRL_H   : u8   = 8;     
-const    TAB      : u8   = 9;     
-const    CTRL_K   : u8   = 11;    
-const    CTRL_L   : u8   = 12;    
-const    ENTER    : u8   = 13;    
-const    CTRL_N   : u8   = 14;    
-const    CTRL_P   : u8   = 16;    
-const    CTRL_T   : u8   = 20;    
-const    CTRL_U   : u8   = 21;    
-const    CTRL_W   : u8   = 23;    
-const    ESC      : u8   = 27;    
-const    BACKSPACE: u8   = 127;    
 
 /// Check to see if STDIN is a TTY
 fn is_a_tty() -> bool {
@@ -115,23 +96,23 @@ fn readline_edit() -> Result<String> {
     let mut input = String::with_capacity(1);
     loop {
         io::stdin().read_to_string(&mut input).unwrap();
-        match input.as_bytes()[0] {
-            CTRL_A => print!("Pressed C-a"),
-            CTRL_B => print!("Pressed C-b"),
-            CTRL_C => print!("Pressed C-c"),
-            CTRL_D => print!("Pressed C-d"),
-            CTRL_E => print!("Pressed C-e"),
-            CTRL_F => print!("Pressed C-f"),
-            CTRL_H => print!("Pressed C-h"),
-            CTRL_K => print!("Pressed C-k"),
-            CTRL_L => print!("Pressed C-l"),
-            CTRL_N => print!("Pressed C-n"),
-            CTRL_P => print!("Pressed C-p"),
-            CTRL_T => print!("Pressed C-t"),
-            CTRL_U => print!("Pressed C-u"),
-            CTRL_W => print!("Pressed C-w"),
-            ESC    => print!("Pressed esc") ,
-            ENTER  => break,
+        match u8_to_KeyPress(input.as_bytes()[0]) {
+            KeyPress::CTRL_A => print!("Pressed C-a"),
+            KeyPress::CTRL_B => print!("Pressed C-b"),
+            KeyPress::CTRL_C => print!("Pressed C-c"),
+            KeyPress::CTRL_D => print!("Pressed C-d"),
+            KeyPress::CTRL_E => print!("Pressed C-e"),
+            KeyPress::CTRL_F => print!("Pressed C-f"),
+            KeyPress::CTRL_H => print!("Pressed C-h"),
+            KeyPress::CTRL_K => print!("Pressed C-k"),
+            KeyPress::CTRL_L => print!("Pressed C-l"),
+            KeyPress::CTRL_N => print!("Pressed C-n"),
+            KeyPress::CTRL_P => print!("Pressed C-p"),
+            KeyPress::CTRL_T => print!("Pressed C-t"),
+            KeyPress::CTRL_U => print!("Pressed C-u"),
+            KeyPress::CTRL_W => print!("Pressed C-w"),
+            KeyPress::ESC    => print!("Pressed esc") ,
+            KeyPress::ENTER  => break,
             _      => { print!("{}", input); try!(io::stdout().flush()); }
         }
         buffer.push_str(&input);
@@ -154,7 +135,7 @@ fn readline_raw() -> Result<String> {
     }
 }
 
-/// This is the only public library method that will be called by the end-user
+/// This method will read a line from STDIN and will display a `prompt`
 pub fn readline(prompt: &'static str) -> Result<String> {
     // Write prompt and flush it to stdout
     let mut stdout = io::stdout();

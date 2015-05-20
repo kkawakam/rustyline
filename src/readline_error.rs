@@ -31,3 +31,15 @@ impl error::Error for ReadlineError {
         }
     }
 }
+
+impl From<io::Error> for ReadlineError {
+    fn from(err: io::Error) -> ReadlineError {
+        ReadlineError::Io(err)    
+    }
+}
+
+impl From<nix::Error> for ReadlineError {
+    fn from(err: nix::Error) -> ReadlineError {
+        ReadlineError::Errno(err)
+    }
+}

@@ -74,9 +74,11 @@ fn is_unsupported_term() -> bool {
 }
 
 /// Enable raw mode for the TERM
-fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
+fn enable_raw_mode() -> Result<termios::Termios, readline_error::ReadlineError> {
     if !is_a_tty() {
-        Err(Sys(Errno::ENOTTY)) 
+        Err(readline_error::ReadlineError
+                          ::from(nix::Error
+                                    ::from_errno(Errno::ENOTTY)))
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
@@ -93,14 +95,16 @@ fn enable_raw_mode() -> Result<termios::Termios, nix::Error> {
 
 /// Disable Raw mode for the term
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<(), nix::Error> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
+    try!(termios::tcsetattr(libc::STDIN_FILENO,
+                            termios::TCSAFLUSH,
+                            &original_termios));
     Ok(())
 }
 
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit() -> Result<String, io::Error> {
+fn readline_edit() -> Result<String, readline_error::ReadlineError> {
     // Preallocate a buffer for the input line
     let mut buffer = String::with_capacity(MAX_LINE);
     
@@ -134,35 +138,23 @@ fn readline_edit() -> Result<String, io::Error> {
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw() -> Result<String, io::Error> {
+fn readline_raw() -> Result<String, readline_error::ReadlineError> {
     if is_a_tty() {
-        let original_termios = match enable_raw_mode() {
-            Err(Sys(Errno::ENOTTY)) => return Err(Error::new(ErrorKind::Other, "Not a TTY")),
-            Err(Sys(Errno::EBADF))  => return Err(Error::new(ErrorKind::Other, "Not a file descriptor")),
-            Err(..)                 => return Err(Error::new(ErrorKind::Other, "Unknown Error")),
-            Ok(term)                => term
-        };
-
+        let original_termios = try!(enable_raw_mode());
         let user_input = readline_edit();
-
-        match disable_raw_mode(original_termios) {
-            Err(..) => return Err(Error::new(ErrorKind::Other, "Failed to revert to original termios")),
-            Ok(..)  => ()
-        }
-
+        try!(disable_raw_mode(original_termios));
         user_input
     } else {
-
         let mut line = String::new();
         match io::stdin().read_line(&mut line) {
             Ok(_) => Ok(line),
-            Err(e) => Err(e),
+            Err(err) => Err(readline_error::ReadlineError::from(err))
         }
     }
 }
 
 /// This is the only public library method that will be called by the end-user
-pub fn readline(prompt: &'static str) -> Result<String, io::Error> {
+pub fn readline(prompt: &'static str) -> Result<String, readline_error::ReadlineError> {
     // Write prompt and flush it to stdout
     let mut stdout = io::stdout();
     try!(stdout.write(prompt.as_bytes()));
@@ -172,7 +164,7 @@ pub fn readline(prompt: &'static str) -> Result<String, io::Error> {
         let mut line = String::new();
         match io::stdin().read_line(&mut line) {
             Ok(_) => Ok(line),
-            Err(e) => Err(e),
+            Err(err) => Err(readline_error::ReadlineError::from(err))
         }
     } else {
         readline_raw()

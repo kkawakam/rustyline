@@ -89,14 +89,11 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit() -> Result<String> {
-    // Preallocate a buffer for the input line
-    let mut buffer = String::with_capacity(MAX_LINE);
-    
-    // Input buffer for reading a single UTF-8
-    let mut input = String::with_capacity(1);
+    let mut buffer = Vec::new();
+    let mut input: [u8; 1] = [0];
     loop {
-        io::stdin().read_to_string(&mut input).unwrap();
-        match u8_to_key_press(input.as_bytes()[0]) {
+        io::stdin().read(&mut input).unwrap();
+        match u8_to_key_press(input[0]) {
             KeyPress::CTRL_A => print!("Pressed C-a"),
             KeyPress::CTRL_B => print!("Pressed C-b"),
             KeyPress::CTRL_C => print!("Pressed C-c"),
@@ -113,11 +110,11 @@ fn readline_edit() -> Result<String> {
             KeyPress::CTRL_W => print!("Pressed C-w"),
             KeyPress::ESC    => print!("Pressed esc") ,
             KeyPress::ENTER  => break,
-            _      => { print!("{}", input); try!(io::stdout().flush()); }
+            _      => { print!("{}", input[0]); try!(io::stdout().flush()); }
         }
-        buffer.push_str(&input);
+        buffer.push(input[0]);
     }
-    Ok(buffer)
+    Ok(String::from_utf8(buffer).unwrap())
 }
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```

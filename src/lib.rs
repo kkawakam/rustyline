@@ -22,6 +22,7 @@ pub mod error;
 
 use std::result;
 use std::io;
+use std::str;
 use std::io::{Write, Read};
 use nix::errno::Errno;
 use nix::sys::termios;
@@ -89,32 +90,39 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit() -> Result<String> {
-    let mut buffer = Vec::new();
-    let mut input: [u8; 1] = [0];
+    let mut buffer = String::with_capacity(MAX_LINE);
+    let mut input: [u8; 4] = [0; 4]; // UTF-8 can be max 4 bytes
     loop {
-        io::stdin().read(&mut input).unwrap();
-        match u8_to_key_press(input[0]) {
-            KeyPress::CTRL_A => print!("Pressed C-a"),
-            KeyPress::CTRL_B => print!("Pressed C-b"),
-            KeyPress::CTRL_C => print!("Pressed C-c"),
-            KeyPress::CTRL_D => print!("Pressed C-d"),
-            KeyPress::CTRL_E => print!("Pressed C-e"),
-            KeyPress::CTRL_F => print!("Pressed C-f"),
-            KeyPress::CTRL_H => print!("Pressed C-h"),
-            KeyPress::CTRL_K => print!("Pressed C-k"),
-            KeyPress::CTRL_L => print!("Pressed C-l"),
-            KeyPress::CTRL_N => print!("Pressed C-n"),
-            KeyPress::CTRL_P => print!("Pressed C-p"),
-            KeyPress::CTRL_T => print!("Pressed C-t"),
-            KeyPress::CTRL_U => print!("Pressed C-u"),
-            KeyPress::CTRL_W => print!("Pressed C-w"),
-            KeyPress::ESC    => print!("Pressed esc") ,
-            KeyPress::ENTER  => break,
-            _      => { print!("{}", input[0]); try!(io::stdout().flush()); }
+        if io::stdin().read(&mut input).is_ok()
+        {
+            match u8_to_key_press(input[0]) {
+                KeyPress::CTRL_A => print!("Pressed C-a"),
+                KeyPress::CTRL_B => print!("Pressed C-b"),
+                KeyPress::CTRL_C => print!("Pressed C-c"),
+                KeyPress::CTRL_D => print!("Pressed C-d"),
+                KeyPress::CTRL_E => print!("Pressed C-e"),
+                KeyPress::CTRL_F => print!("Pressed C-f"),
+                KeyPress::CTRL_H => print!("Pressed C-h"),
+                KeyPress::CTRL_K => print!("Pressed C-k"),
+                KeyPress::CTRL_L => print!("Pressed C-l"),
+                KeyPress::CTRL_N => print!("Pressed C-n"),
+                KeyPress::CTRL_P => print!("Pressed C-p"),
+                KeyPress::CTRL_T => print!("Pressed C-t"),
+                KeyPress::CTRL_U => print!("Pressed C-u"),
+                KeyPress::CTRL_W => print!("Pressed C-w"),
+                KeyPress::ESC    => print!("Pressed esc"),
+                KeyPress::ENTER  => break,
+                _      => {
+                    match str::from_utf8(&input) {
+                        Ok(s) => buffer.push_str(s) ,
+                        Err(_) => panic!("Invalid UTF-8 Character"),  
+                    }
+                }
+            }
         }
-        buffer.push(input[0]);
+        
     }
-    Ok(String::from_utf8(buffer).unwrap())
+    Ok(buffer)
 }
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```

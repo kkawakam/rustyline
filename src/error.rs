@@ -11,14 +11,17 @@ pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),
     /// Error from syscall
-    Errno(nix::Error)
+    Errno(nix::Error),
+    /// Invalid UTF-8 Error
+    InvalidUTF8
 }
 
 impl fmt::Display for ReadlineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReadlineError::Io(ref err) => err.fmt(f),
-            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc())
+            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
+            ReadlineError::InvalidUTF8 => write!(f, "Encountered an invalid UTF-8 bytes")
         }
     }
 }
@@ -27,7 +30,8 @@ impl error::Error for ReadlineError {
     fn description(&self) -> &str {
         match *self {
             ReadlineError::Io(ref err) => err.description(),
-            ReadlineError::Errno(ref err) => err.errno().desc()
+            ReadlineError::Errno(ref err) => err.errno().desc(),
+            ReadlineError::InvalidUTF8 => "invalid utf-8 byte"
         }
     }
 }

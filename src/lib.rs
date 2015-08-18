@@ -196,7 +196,7 @@ fn refresh_line(s: &mut State, stdout: &mut Write) -> Result<()> {
     write_and_flush(stdout, ab.as_bytes())
 }
 
-/// Insert the character 'c' at cursor current position.
+/// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, stdout: &mut Write, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
         if s.buf.len() == s.pos {
@@ -223,8 +223,7 @@ fn edit_insert(s: &mut State, stdout: &mut Write, ch: char) -> Result<()> {
 fn edit_move_left(s: &mut State, stdout: &mut Write) -> Result<()> {
     if s.pos > 0 {
         let ch = s.buf.char_at_reverse(s.pos);
-        let size = ch.len_utf8();
-        s.pos -= size;
+        s.pos -= ch.len_utf8();
         refresh_line(s, stdout)
     } else {
         Ok(())
@@ -235,8 +234,7 @@ fn edit_move_left(s: &mut State, stdout: &mut Write) -> Result<()> {
 fn edit_move_right(s: &mut State, stdout: &mut Write) -> Result<()> {
     if s.pos != s.buf.len() {
         let ch = s.buf.char_at(s.pos);
-        let size = ch.len_utf8();
-        s.pos += size;
+        s.pos += ch.len_utf8();
         refresh_line(s, stdout)
     } else {
         Ok(())
@@ -278,8 +276,7 @@ fn edit_delete(s: &mut State, stdout: &mut Write) -> Result<()> {
 fn edit_backspace(s: &mut State, stdout: &mut Write) -> Result<()> {
     if s.pos > 0 && s.buf.len() > 0 {
         let ch = s.buf.char_at_reverse(s.pos);
-        let size = ch.len_utf8();
-        s.pos -= size;
+        s.pos -= ch.len_utf8();
         s.buf.remove(s.pos);
         refresh_line(s, stdout)
     } else {
@@ -331,6 +328,27 @@ fn edit_transpose_chars(s: &mut State, stdout: &mut Write) -> Result<()> {
     }
 }
 
+/// Delete the previous word, maintaining the cursor at the start of the
+/// current word.
+fn edit_delete_prev_word(s: &mut State, stdout: &mut Write) -> Result<()> {
+    if s.pos > 0 {
+        let old_pos = s.pos;
+        let mut ch = s.buf.char_at_reverse(s.pos);
+        while s.pos > 0 && ch.is_whitespace() {
+            s.pos -= ch.len_utf8();
+            ch = s.buf.char_at_reverse(s.pos);
+        }
+        while s.pos > 0 && !ch.is_whitespace() {
+            s.pos -= ch.len_utf8();
+            ch = s.buf.char_at_reverse(s.pos);
+        }
+        s.buf.drain(s.pos..old_pos);
+        refresh_line(s, stdout)
+    } else {
+        Ok(())
+    }
+}
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -376,8 +394,8 @@ fn readline_edit(prompt: &str) -> Result<String> {
             KeyPress::CTRL_P => print!("Pressed C-p"), // Fetch the previous command from the history list.
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s, &mut stdout)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s, &mut stdout)), // Kill backward from point to the beginning of the line.
-            KeyPress::CTRL_W => print!("Pressed C-w"), // Kill the word behind point, using white space as a word boundary
-            KeyPress::ESC    => print!("Pressed esc") ,
+            KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s, &mut stdout)), // Kill the word behind point, using white space as a word boundary
+            KeyPress::ESC    => print!("Pressed esc"),
             KeyPress::ENTER  => break, // Accept the line regardless of where the cursor is.
             _      => try!(edit_insert(&mut s, &mut stdout, ch)), // Insert the character typed.
         }
@@ -423,7 +441,7 @@ mod test {
     use State;
 
     #[test]
-    fn test_insert() {
+    fn insert() {
         let mut s = State { prompt: "", prompt_width: 0, buf: String::with_capacity(128), pos: 0, cols: 80, bytes: [0; 4]};
         let mut stdout = ::std::io::sink();
         super::edit_insert(&mut s, &mut stdout, 'α').unwrap();
@@ -441,7 +459,7 @@ mod test {
     }
 
     #[test]
-    fn test_move() {
+    fn moves() {
         let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αß"), pos: 4, cols: 80, bytes: [0; 4]};
         let mut stdout = ::std::io::sink();
         super::edit_move_left(&mut s, &mut stdout).unwrap();
@@ -462,7 +480,7 @@ mod test {
     }
 
     #[test]
-    fn test_delete() {
+    fn delete() {
         let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αß"), pos: 2, cols: 80, bytes: [0; 4]};
         let mut stdout = ::std::io::sink();
         super::edit_delete(&mut s, &mut stdout).unwrap();
@@ -475,7 +493,7 @@ mod test {
     }
 
     #[test]
-    fn test_kill() {
+    fn kill() {
         let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αßγδε"), pos: 6, cols: 80, bytes: [0; 4]};
         let mut stdout = ::std::io::sink();
         super::edit_kill_line(&mut s, &mut stdout).unwrap();
@@ -489,7 +507,7 @@ mod test {
     }
 
     #[test]
-    fn test_transpose() {
+    fn transpose() {
         let mut s = State { prompt: "", prompt_width: 0, buf: String::from("aßc"), pos: 1, cols: 80, bytes: [0; 4]};
         let mut stdout = ::std::io::sink();
         super::edit_transpose_chars(&mut s, &mut stdout).unwrap();
@@ -500,6 +518,15 @@ mod test {
         s.pos = 3;
         super::edit_transpose_chars(&mut s, &mut stdout).unwrap();
         assert_eq!("acß", s.buf);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
+    fn delete_prev_word() {
+        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("a ß  c"), pos: 6, cols: 80, bytes: [0; 4]};
+        let mut stdout = ::std::io::sink();
+        super::edit_delete_prev_word(&mut s, &mut stdout).unwrap();
+        assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
     }
 }

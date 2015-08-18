@@ -7,3 +7,6 @@ authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 libc = "~0.1.8"
 nix = "~0.3.9"
 unicode-width = "~0.1.2"
+
+[dev-dependencies]
+tempdir = "~0.3.4"

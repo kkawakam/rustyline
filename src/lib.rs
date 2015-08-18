@@ -7,7 +7,7 @@
 //!Usage
 //!
 //!```
-//!let readline = rustyline::readline(">> ");
+//!let readline = rustyline::readline(">> ", &mut None);
 //!match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
 //!     Err(_)   => println!("No input"),
@@ -22,8 +22,9 @@ extern crate nix;
 extern crate unicode_width;
 
 #[allow(non_camel_case_types)]
-pub mod consts;
+mod consts;
 pub mod error;
+pub mod history;
 
 use std::result;
 use std::io;
@@ -32,6 +33,7 @@ use nix::errno::Errno;
 use nix::sys::termios;
 
 use consts::{KeyPress, char_to_key_press};
+use history::History;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -43,7 +45,8 @@ struct State<'prompt> {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
     cols: usize, // Number of columns in terminal
-    bytes: [u8; 4]
+    history_index: usize, // The history index we are currently editing.
+    bytes: [u8; 4],
 }
 
 impl<'prompt> State<'prompt> {
@@ -54,6 +57,7 @@ impl<'prompt> State<'prompt> {
             buf: String::with_capacity(capacity),
             pos: 0,
             cols: cols,
+            history_index: 0,
             bytes: [0; 4],
         }
     }
@@ -361,10 +365,23 @@ fn edit_delete_prev_word(s: &mut State, stdout: &mut Write) -> Result<()> {
     }
 }
 
+/// Substitute the currently edited line with the next or previous history
+/// entry.
+fn edit_history_next(s: &mut State, history: &mut History, stdout: &mut Write, prev: bool) -> Result<()> {
+    if history.len() > 1 {
+        unimplemented!();
+        //s.buf = ;
+        //s.pos = s.buf.len();
+        //refresh_line(s, stdout)
+    } else {
+        Ok(())
+    }
+}
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit(prompt: &str) -> Result<String> {
+fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
@@ -394,8 +411,16 @@ fn readline_edit(prompt: &str) -> Result<String> {
                 try!(clear_screen(&mut stdout));
                 try!(refresh_line(&mut s, &mut stdout))
             },
-            KeyPress::CTRL_N => print!("Pressed C-n"), // Fetch the next command from the history list.
-            KeyPress::CTRL_P => print!("Pressed C-p"), // Fetch the previous command from the history list.
+            KeyPress::CTRL_N => { // Fetch the next command from the history list.
+                if history.is_some() {
+                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), &mut stdout, false))
+                }
+            },
+            KeyPress::CTRL_P => { // Fetch the previous command from the history list.
+                if history.is_some() {
+                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), &mut stdout, true))
+                }
+            },
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s, &mut stdout)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s, &mut stdout)), // Kill backward from point to the beginning of the line.
             KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s, &mut stdout)), // Kill the word behind point, using white space as a word boundary
@@ -409,10 +434,10 @@ fn readline_edit(prompt: &str) -> Result<String> {
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw(prompt: &str) -> Result<String> {
+fn readline_raw(prompt: &str, history: &mut Option<History>) -> Result<String> {
     if is_a_tty() {
         let original_termios = try!(enable_raw_mode());
-        let user_input = readline_edit(prompt);
+        let user_input = readline_edit(prompt, history);
         try!(disable_raw_mode(original_termios));
         println!("");
         user_input
@@ -428,7 +453,7 @@ fn readline_direct() -> Result<String> {
 }
 
 /// This method will read a line from STDIN and will display a `prompt`
-pub fn readline(prompt: &str) -> Result<String> {
+pub fn readline(prompt: &str, history: &mut Option<History>) -> Result<String> {
     if is_unsupported_term() {
         // Write prompt and flush it to stdout
         let mut stdout = io::stdout();
@@ -436,7 +461,7 @@ pub fn readline(prompt: &str) -> Result<String> {
 
         readline_direct()
     } else {
-        readline_raw(prompt)
+        readline_raw(prompt, history)
     }
 }
 
@@ -451,6 +476,7 @@ mod test {
             buf: String::from(line),
             pos: pos,
             cols: cols,
+            history_index: 0,
             bytes: [0; 4],
         }
     }

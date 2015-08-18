@@ -42,9 +42,21 @@ struct State<'prompt> {
     prompt_width: usize, // Prompt Unicode width
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
-//    oldpos: usize, // Previous refresh cursor position
     cols: usize, // Number of columns in terminal
     bytes: [u8; 4]
+}
+
+impl<'prompt> State<'prompt> {
+    fn new(prompt: &'prompt str, capacity: usize, cols: usize) -> State<'prompt> {
+        State {
+            prompt: prompt,
+            prompt_width: unicode_width::UnicodeWidthStr::width(prompt),
+            buf: String::with_capacity(capacity),
+            pos: 0,
+            cols: cols,
+            bytes: [0; 4],
+        }
+    }
 }
 
 /// Maximum buffer size for the line read
@@ -356,15 +368,7 @@ fn readline_edit(prompt: &str) -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
-    let mut s = State {
-        prompt: prompt,
-        prompt_width: unicode_width::UnicodeWidthStr::width(prompt),
-        buf: String::with_capacity(MAX_LINE),
-        pos: 0,
-//        oldpos: 0,
-        cols: get_columns(),
-        bytes: [0; 4],
-    };
+    let mut s = State::new(prompt, MAX_LINE, get_columns());
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
@@ -440,9 +444,20 @@ pub fn readline(prompt: &str) -> Result<String> {
 mod test {
     use State;
 
+    fn init_state(line: &str, pos: usize, cols: usize) -> State<'static> {
+        State {
+            prompt: "",
+            prompt_width: 0,
+            buf: String::from(line),
+            pos: pos,
+            cols: cols,
+            bytes: [0; 4],
+        }
+    }
+
     #[test]
     fn insert() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::with_capacity(128), pos: 0, cols: 80, bytes: [0; 4]};
+        let mut s = State::new("", 128, 80);
         let mut stdout = ::std::io::sink();
         super::edit_insert(&mut s, &mut stdout, 'α').unwrap();
         assert_eq!("α", s.buf);
@@ -460,7 +475,7 @@ mod test {
 
     #[test]
     fn moves() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αß"), pos: 4, cols: 80, bytes: [0; 4]};
+        let mut s = init_state("αß", 4, 80);
         let mut stdout = ::std::io::sink();
         super::edit_move_left(&mut s, &mut stdout).unwrap();
         assert_eq!("αß", s.buf);
@@ -481,7 +496,7 @@ mod test {
 
     #[test]
     fn delete() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αß"), pos: 2, cols: 80, bytes: [0; 4]};
+        let mut s = init_state("αß", 2, 80);
         let mut stdout = ::std::io::sink();
         super::edit_delete(&mut s, &mut stdout).unwrap();
         assert_eq!("α", s.buf);
@@ -494,7 +509,7 @@ mod test {
 
     #[test]
     fn kill() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("αßγδε"), pos: 6, cols: 80, bytes: [0; 4]};
+        let mut s = init_state("αßγδε", 6, 80);
         let mut stdout = ::std::io::sink();
         super::edit_kill_line(&mut s, &mut stdout).unwrap();
         assert_eq!("αßγ", s.buf);
@@ -508,7 +523,7 @@ mod test {
 
     #[test]
     fn transpose() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("aßc"), pos: 1, cols: 80, bytes: [0; 4]};
+        let mut s = init_state("aßc", 1, 80);
         let mut stdout = ::std::io::sink();
         super::edit_transpose_chars(&mut s, &mut stdout).unwrap();
         assert_eq!("ßac", s.buf);
@@ -523,7 +538,7 @@ mod test {
 
     #[test]
     fn delete_prev_word() {
-        let mut s = State { prompt: "", prompt_width: 0, buf: String::from("a ß  c"), pos: 6, cols: 80, bytes: [0; 4]};
+        let mut s = init_state("a ß  c", 6, 80);
         let mut stdout = ::std::io::sink();
         super::edit_delete_prev_word(&mut s, &mut stdout).unwrap();
         assert_eq!("a c", s.buf);

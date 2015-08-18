@@ -62,8 +62,8 @@ fn is_unsupported_term() -> bool {
 fn enable_raw_mode() -> Result<termios::Termios> {
     if !is_a_tty() {
         Err(error::ReadlineError
-                          ::from(nix::Error
-                                    ::from_errno(Errno::ENOTTY)))
+            ::from(nix::Error
+                   ::from_errno(Errno::ENOTTY)))
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
@@ -81,8 +81,8 @@ fn enable_raw_mode() -> Result<termios::Termios> {
 /// Disable Raw mode for the term
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
     try!(termios::tcsetattr(libc::STDIN_FILENO,
-                             termios::TCSAFLUSH,
-                             &original_termios));
+                            termios::TCSAFLUSH,
+                            &original_termios));
     Ok(())
 }
 
@@ -93,36 +93,37 @@ fn readline_edit() -> Result<String> {
     let mut buffer = String::with_capacity(MAX_LINE);
     let mut input: [u8; 4] = [0; 4]; // UTF-8 can be max 4 bytes
     loop {
-        if io::stdin().read(&mut input).is_ok()
+        let read_result = io::stdin().read(&mut input);
+        if read_result.is_ok()
         {
             match u8_to_key_press(input[0]) {
-                KeyPress::CTRL_A => print!("Pressed C-a"),
-                KeyPress::CTRL_B => print!("Pressed C-b"),
-                KeyPress::CTRL_C => print!("Pressed C-c"),
-                KeyPress::CTRL_D => print!("Pressed C-d"),
-                KeyPress::CTRL_E => print!("Pressed C-e"),
-                KeyPress::CTRL_F => print!("Pressed C-f"),
-                KeyPress::CTRL_H => print!("Pressed C-h"),
-                KeyPress::CTRL_K => print!("Pressed C-k"),
-                KeyPress::CTRL_L => print!("Pressed C-l"),
-                KeyPress::CTRL_N => print!("Pressed C-n"),
-                KeyPress::CTRL_P => print!("Pressed C-p"),
-                KeyPress::CTRL_T => print!("Pressed C-t"),
-                KeyPress::CTRL_U => print!("Pressed C-u"),
-                KeyPress::CTRL_W => print!("Pressed C-w"),
-                KeyPress::ESC    => print!("Pressed esc"),
-                KeyPress::ENTER  => break,
-                _      => {
-                    match str::from_utf8(&input) {
-                        Ok(s) => buffer.push_str(s) ,
-                        Err(_) => panic!("Invalid UTF-8 Character"),  
-                    }
-                }
+                KeyPress::ENTER     => return Ok(buffer),
+                KeyPress::BACKSPACE => { buffer.pop(); },
+                //KeyPress::CTRL_A      => print!("Pressed C-a"),
+                //KeyPress::CTRL_B    => print!("Pressed C-b"),
+                //KeyPress::CTRL_C    => print!("Pressed C-c"),
+                //KeyPress::CTRL_D    => print!("Pressed C-d"),
+                //KeyPress::CTRL_E    => print!("Pressed C-e"),
+                //KeyPress::CTRL_F    => print!("Pressed C-f"),
+                //KeyPress::CTRL_H    => print!("Pressed C-h"),
+                //KeyPress::CTRL_K    => print!("Pressed C-k"),
+                //KeyPress::CTRL_L    => print!("Pressed C-l"),
+                //KeyPress::CTRL_N    => print!("Pressed C-n"),
+                //KeyPress::CTRL_P    => print!("Pressed C-p"),
+                //KeyPress::CTRL_T    => print!("Pressed C-t"),
+                //KeyPress::CTRL_U    => print!("Pressed C-u"),
+                //KeyPress::CTRL_W    => print!("Pressed C-w"),
+                //KeyPress::ESC       => print!("Pressed esc"),
+                _                   => {
+                    read_result.map_err(error::ReadlineError::Io)
+                               .and_then(|bytes| str::from_utf8(&input[0..bytes])
+                                                        .map_err(|_| error::ReadlineError::InvalidUTF8))
+                               .ok()
+                               .and_then(|c| Some(buffer.push_str(c)));
+                } 
             }
         }
-        
     }
-    Ok(buffer)
 }
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```

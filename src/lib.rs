@@ -39,25 +39,29 @@ use history::History;
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 // Represent the state during line editing.
-struct State<'prompt> {
+struct State<'out, 'prompt> {
+    out: &'out mut Write,
     prompt: &'prompt str, // Prompt to display
     prompt_width: usize, // Prompt Unicode width
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
     cols: usize, // Number of columns in terminal
     history_index: usize, // The history index we are currently editing.
+    history_end: String, // Current edited line before history browsing
     bytes: [u8; 4],
 }
 
-impl<'prompt> State<'prompt> {
-    fn new(prompt: &'prompt str, capacity: usize, cols: usize) -> State<'prompt> {
+impl<'out, 'prompt> State<'out, 'prompt> {
+    fn new(out: &'out mut Write, prompt: &'prompt str, capacity: usize, cols: usize, history_index: usize) -> State<'out, 'prompt> {
         State {
+            out: out,
             prompt: prompt,
             prompt_width: unicode_width::UnicodeWidthStr::width(prompt),
             buf: String::with_capacity(capacity),
             pos: 0,
             cols: cols,
-            history_index: 0,
+            history_index: history_index,
+            history_end: String::new(),
             bytes: [0; 4],
         }
     }
@@ -162,8 +166,8 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-fn clear_screen(stdout: &mut io::Stdout) -> Result<()> {
-    write_and_flush(stdout, b"\x1b[H\x1b[2J")
+fn clear_screen(out: &mut Write) -> Result<()> {
+    write_and_flush(out, b"\x1b[H\x1b[2J")
 }
 
 /// Beep, used for completion when there is nothing to complete or when all
@@ -179,7 +183,7 @@ fn width(s: &str) -> usize {
 
 /// Rewrite the currently edited line accordingly to the buffer content,
 /// cursor position, and number of columns of the terminal.
-fn refresh_line(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn refresh_line(s: &mut State) -> Result<()> {
     use std::fmt::Write;
     use unicode_width::UnicodeWidthChar;
 
@@ -209,11 +213,11 @@ fn refresh_line(s: &mut State, stdout: &mut Write) -> Result<()> {
     ab.push_str("\x1b[0K");
     // Move cursor to original position.
     ab.write_fmt(format_args!("\r\x1b[{}C", w1 + s.prompt_width)).unwrap();
-    write_and_flush(stdout, ab.as_bytes())
+    write_and_flush(s.out, ab.as_bytes())
 }
 
 /// Insert the character `ch` at cursor current position.
-fn edit_insert(s: &mut State, stdout: &mut Write, ch: char) -> Result<()> {
+fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
         if s.buf.len() == s.pos {
             s.buf.push(ch);
@@ -221,14 +225,14 @@ fn edit_insert(s: &mut State, stdout: &mut Write, ch: char) -> Result<()> {
             s.pos += size;
             if s.prompt_width + width(&s.buf) < s.cols {
                 // Avoid a full update of the line in the trivial case.
-                write_and_flush(stdout, &mut s.bytes[0..size])
+                write_and_flush(s.out, &mut s.bytes[0..size])
             } else {
-                refresh_line(s, stdout)
+                refresh_line(s)
             }
         } else {
             s.buf.insert(s.pos, ch);
             s.pos += ch.len_utf8();
-            refresh_line(s, stdout)
+            refresh_line(s)
         }
     } else {
         Ok(())
@@ -236,42 +240,42 @@ fn edit_insert(s: &mut State, stdout: &mut Write, ch: char) -> Result<()> {
 }
 
 /// Move cursor on the left.
-fn edit_move_left(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_move_left(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         let ch = s.buf.char_at_reverse(s.pos);
         s.pos -= ch.len_utf8();
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Move cursor on the right.
-fn edit_move_right(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_move_right(s: &mut State) -> Result<()> {
     if s.pos != s.buf.len() {
         let ch = s.buf.char_at(s.pos);
         s.pos += ch.len_utf8();
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Move cursor to the start of the line.
-fn edit_move_home(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_move_home(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         s.pos = 0;
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Move cursor to the end of the line.
-fn edit_move_end(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_move_end(s: &mut State) -> Result<()> {
     if s.pos != s.buf.len() {
         s.pos = s.buf.len();
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
@@ -279,50 +283,50 @@ fn edit_move_end(s: &mut State, stdout: &mut Write) -> Result<()> {
 
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
-fn edit_delete(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_delete(s: &mut State) -> Result<()> {
     if s.buf.len() > 0 && s.pos < s.buf.len() {
         s.buf.remove(s.pos);
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Backspace implementation.
-fn edit_backspace(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_backspace(s: &mut State) -> Result<()> {
     if s.pos > 0 && s.buf.len() > 0 {
         let ch = s.buf.char_at_reverse(s.pos);
         s.pos -= ch.len_utf8();
         s.buf.remove(s.pos);
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Kill the text from point to the end of the line.
-fn edit_kill_line(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_kill_line(s: &mut State) -> Result<()> {
     if s.buf.len() > 0 && s.pos < s.buf.len() {
         s.buf.drain(s.pos..);
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Kill backward from point to the beginning of the line.
-fn edit_discard_line(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_discard_line(s: &mut State) -> Result<()> {
     if s.pos > 0 && s.buf.len() > 0 {
         s.buf.drain(..s.pos);
         s.pos = 0;
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
 }
 
 /// Exchange the char before cursor with the character at cursor.
-fn edit_transpose_chars(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_transpose_chars(s: &mut State) -> Result<()> {
     if s.pos > 0 && s.pos < s.buf.len() {
         let ch = s.buf.remove(s.pos);
         let size = ch.len_utf8();
@@ -338,7 +342,7 @@ fn edit_transpose_chars(s: &mut State, stdout: &mut Write) -> Result<()> {
                 s.pos -= osize - size;
             }
         }
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
@@ -346,7 +350,7 @@ fn edit_transpose_chars(s: &mut State, stdout: &mut Write) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State, stdout: &mut Write) -> Result<()> {
+fn edit_delete_prev_word(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         let old_pos = s.pos;
         let mut ch = s.buf.char_at_reverse(s.pos);
@@ -359,7 +363,7 @@ fn edit_delete_prev_word(s: &mut State, stdout: &mut Write) -> Result<()> {
             ch = s.buf.char_at_reverse(s.pos);
         }
         s.buf.drain(s.pos..old_pos);
-        refresh_line(s, stdout)
+        refresh_line(s)
     } else {
         Ok(())
     }
@@ -367,12 +371,30 @@ fn edit_delete_prev_word(s: &mut State, stdout: &mut Write) -> Result<()> {
 
 /// Substitute the currently edited line with the next or previous history
 /// entry.
-fn edit_history_next(s: &mut State, history: &mut History, stdout: &mut Write, prev: bool) -> Result<()> {
+fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result<()> {
     if history.len() > 1 {
-        unimplemented!();
-        //s.buf = ;
-        //s.pos = s.buf.len();
-        //refresh_line(s, stdout)
+        if s.history_index == history.len() {
+            if prev {
+                // Save the current edited line before to overwrite it
+                s.history_end = s.buf.clone();
+            } else {
+                return Ok(());
+            }
+        } else if s.history_index == 0 && prev {
+            return Ok(());
+        }
+        if prev {
+            s.history_index -= 1;
+        } else {
+            s.history_index += 1;
+        }
+        if s.history_index < history.len() {
+            s.buf = history.get(s.history_index).unwrap().clone();
+        } else {
+            s.buf = s.history_end.clone(); // TODO how to avoid cloning?
+        }
+        s.pos = s.buf.len();
+        refresh_line(s)
     } else {
         Ok(())
     }
@@ -385,48 +407,48 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
-    let mut s = State::new(prompt, MAX_LINE, get_columns());
+    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.as_mut().map_or(0, |h| h.len()));
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
         let ch = try!(chars.next().unwrap());
         match char_to_key_press(ch) {
-            KeyPress::CTRL_A => try!(edit_move_home(&mut s, &mut stdout)), // Move to the beginning of line.
-            KeyPress::CTRL_B => try!(edit_move_left(&mut s, &mut stdout)), // Move back a character.
+            KeyPress::CTRL_A => try!(edit_move_home(&mut s)), // Move to the beginning of line.
+            KeyPress::CTRL_B => try!(edit_move_left(&mut s)), // Move back a character.
             KeyPress::CTRL_C => {
                 return Err(from_errno(Errno::EAGAIN))
             },
             KeyPress::CTRL_D => {
                 if s.buf.len() > 0 { // Delete one character at point.
-                    try!(edit_delete(&mut s, &mut stdout))
+                    try!(edit_delete(&mut s))
                 } else {
                     break
                 }
             },
-            KeyPress::CTRL_E => try!(edit_move_end(&mut s, &mut stdout)), // Move to the end of line.
-            KeyPress::CTRL_F => try!(edit_move_right(&mut s, &mut stdout)), // Move forward a character.
-            KeyPress::CTRL_H | KeyPress::BACKSPACE => try!(edit_backspace(&mut s, &mut stdout)), // Delete one character backward.
-            KeyPress::CTRL_K => try!(edit_kill_line(&mut s, &mut stdout)), // Kill the text from point to the end of the line.
+            KeyPress::CTRL_E => try!(edit_move_end(&mut s)), // Move to the end of line.
+            KeyPress::CTRL_F => try!(edit_move_right(&mut s)), // Move forward a character.
+            KeyPress::CTRL_H | KeyPress::BACKSPACE => try!(edit_backspace(&mut s)), // Delete one character backward.
+            KeyPress::CTRL_K => try!(edit_kill_line(&mut s)), // Kill the text from point to the end of the line.
             KeyPress::CTRL_L => { // Clear the screen leaving the current line at the top of the screen.
-                try!(clear_screen(&mut stdout));
-                try!(refresh_line(&mut s, &mut stdout))
+                try!(clear_screen(s.out));
+                try!(refresh_line(&mut s))
             },
             KeyPress::CTRL_N => { // Fetch the next command from the history list.
                 if history.is_some() {
-                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), &mut stdout, false))
+                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), false))
                 }
             },
             KeyPress::CTRL_P => { // Fetch the previous command from the history list.
                 if history.is_some() {
-                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), &mut stdout, true))
+                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
                 }
             },
-            KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s, &mut stdout)), // Exchange the char before cursor with the character at cursor.
-            KeyPress::CTRL_U => try!(edit_discard_line(&mut s, &mut stdout)), // Kill backward from point to the beginning of the line.
-            KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s, &mut stdout)), // Kill the word behind point, using white space as a word boundary
+            KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
+            KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
+            KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s)), // Kill the word behind point, using white space as a word boundary
             KeyPress::ESC    => print!("Pressed esc"),
             KeyPress::ENTER  => break, // Accept the line regardless of where the cursor is.
-            _      => try!(edit_insert(&mut s, &mut stdout, ch)), // Insert the character typed.
+            _      => try!(edit_insert(&mut s, ch)), // Insert the character typed.
         }
     }
     Ok(s.buf)
@@ -467,107 +489,150 @@ pub fn readline(prompt: &str, history: &mut Option<History>) -> Result<String> {
 
 #[cfg(test)]
 mod test {
+    use std::io::Write;
+    use history::History;
     use State;
 
-    fn init_state(line: &str, pos: usize, cols: usize) -> State<'static> {
+    fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
         State {
+            out : out,
             prompt: "",
             prompt_width: 0,
             buf: String::from(line),
             pos: pos,
             cols: cols,
             history_index: 0,
+            history_end: String::new(),
             bytes: [0; 4],
         }
     }
 
     #[test]
     fn insert() {
-        let mut s = State::new("", 128, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_insert(&mut s, &mut stdout, 'α').unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = State::new(&mut out, "", 128, 80, 0);
+        super::edit_insert(&mut s, 'α').unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
 
-        super::edit_insert(&mut s, &mut stdout, 'ß').unwrap();
+        super::edit_insert(&mut s, 'ß').unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
 
         s.pos = 0;
-        super::edit_insert(&mut s, &mut stdout, 'γ').unwrap();
+        super::edit_insert(&mut s, 'γ').unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
     }
 
     #[test]
     fn moves() {
-        let mut s = init_state("αß", 4, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_move_left(&mut s, &mut stdout).unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "αß", 4, 80);
+        super::edit_move_left(&mut s).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
 
-        super::edit_move_right(&mut s, &mut stdout).unwrap();
+        super::edit_move_right(&mut s).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
 
-        super::edit_move_home(&mut s, &mut stdout).unwrap();
+        super::edit_move_home(&mut s).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(0, s.pos);
 
-        super::edit_move_end(&mut s, &mut stdout).unwrap();
+        super::edit_move_end(&mut s).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
     }
 
     #[test]
     fn delete() {
-        let mut s = init_state("αß", 2, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_delete(&mut s, &mut stdout).unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "αß", 2, 80);
+        super::edit_delete(&mut s).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
 
-        super::edit_backspace(&mut s, &mut stdout).unwrap();
+        super::edit_backspace(&mut s).unwrap();
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
     }
 
     #[test]
     fn kill() {
-        let mut s = init_state("αßγδε", 6, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_kill_line(&mut s, &mut stdout).unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "αßγδε", 6, 80);
+        super::edit_kill_line(&mut s).unwrap();
         assert_eq!("αßγ", s.buf);
         assert_eq!(6, s.pos);
 
         s.pos = 4;
-        super::edit_discard_line(&mut s, &mut stdout).unwrap();
+        super::edit_discard_line(&mut s).unwrap();
         assert_eq!("γ", s.buf);
         assert_eq!(0, s.pos);
     }
 
     #[test]
     fn transpose() {
-        let mut s = init_state("aßc", 1, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_transpose_chars(&mut s, &mut stdout).unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "aßc", 1, 80);
+        super::edit_transpose_chars(&mut s).unwrap();
         assert_eq!("ßac", s.buf);
         assert_eq!(3, s.pos);
 
         s.buf = String::from("aßc");
         s.pos = 3;
-        super::edit_transpose_chars(&mut s, &mut stdout).unwrap();
+        super::edit_transpose_chars(&mut s).unwrap();
         assert_eq!("acß", s.buf);
         assert_eq!(2, s.pos);
     }
 
     #[test]
     fn delete_prev_word() {
-        let mut s = init_state("a ß  c", 6, 80);
-        let mut stdout = ::std::io::sink();
-        super::edit_delete_prev_word(&mut s, &mut stdout).unwrap();
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ß  c", 6, 80);
+        super::edit_delete_prev_word(&mut s).unwrap();
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
+    }
+
+    #[test]
+    fn edit_history_next() {
+        let mut out = ::std::io::sink();
+        let line = "current edited line";
+        let mut s = init_state(&mut out, line, 6, 80);
+        let mut history = History::new();
+        history.add("line0");
+        history.add("line1");
+        s.history_index = history.len();
+        s.buf = String::from(line);
+
+        for _ in 0..2 {
+            super::edit_history_next(&mut s, &mut history, false).unwrap();
+            assert_eq!(line, s.buf);
+        }
+
+        super::edit_history_next(&mut s, &mut history, true).unwrap();
+        assert_eq!(line, s.history_end);
+        assert_eq!(1, s.history_index);
+        assert_eq!("line1", s.buf);
+
+        for _ in 0..2 {
+            super::edit_history_next(&mut s, &mut history, true).unwrap();
+            assert_eq!(line, s.history_end);
+            assert_eq!(0, s.history_index);
+            assert_eq!("line0", s.buf);
+        }
+
+        super::edit_history_next(&mut s, &mut history, false).unwrap();
+        assert_eq!(line, s.history_end);
+        assert_eq!(1, s.history_index);
+        assert_eq!("line1", s.buf);
+
+        super::edit_history_next(&mut s, &mut history, false).unwrap();
+        assert_eq!(line, s.history_end);
+        assert_eq!(2, s.history_index);
+        assert_eq!(line, s.buf);
     }
 }

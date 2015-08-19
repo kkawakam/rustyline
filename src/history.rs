@@ -18,6 +18,11 @@ impl History {
         History { entries: VecDeque::new(), max_len: DEFAULT_HISTORY_MAX_LEN }
     }
 
+    /// Return the history entry at position `index`, starting from 0.
+    pub fn get(& self, index: usize) -> Option<&String> {
+        return self.entries.get(index)
+    }
+
     /// Add a new entry in the history.
     pub fn add(&mut self, line: &str) -> bool {
         if self.max_len == 0 {

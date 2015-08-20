@@ -13,7 +13,9 @@ pub enum ReadlineError {
     /// Error from syscall
     Errno(nix::Error),
     /// Chars Error
-    Char(io::CharsError)
+    Char(io::CharsError),
+    /// EOF (Ctrl-d)
+    Eof
 }
 
 impl fmt::Display for ReadlineError {
@@ -22,6 +24,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
             ReadlineError::Char(ref err) => err.fmt(f),
+            ReadlineError::Eof => write!(f, "EOF"),
         }
     }
 }
@@ -32,6 +35,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Io(ref err) => err.description(),
             ReadlineError::Errno(ref err) => err.errno().desc(),
             ReadlineError::Char(ref err) => err.description(),
+            ReadlineError::Eof => "EOF",
         }
     }
 }

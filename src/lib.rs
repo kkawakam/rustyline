@@ -422,7 +422,7 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
                 if s.buf.len() > 0 { // Delete one character at point.
                     try!(edit_delete(&mut s))
                 } else {
-                    break
+                    return Err(error::ReadlineError::Eof)
                 }
             },
             KeyPress::CTRL_E => try!(edit_move_end(&mut s)), // Move to the end of line.
@@ -446,7 +446,55 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
             KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s)), // Kill the word behind point, using white space as a word boundary
-            KeyPress::ESC    => print!("Pressed esc"),
+            KeyPress::ESC    => { // escape sequence
+                // Read the next two bytes representing the escape sequence.
+                let seq1 = try!(chars.next().unwrap());
+                if seq1 == '[' { // ESC [ sequences.
+                    let seq2 = try!(chars.next().unwrap());
+                    if seq2 >= '0' && seq2 <= '9' { // Extended escape, read additional byte.
+                        let seq3 = try!(chars.next().unwrap());
+                        if seq3 == '~' {
+                            match seq2 {
+                                '3' => try!(edit_delete(&mut s)),
+                                _ => (),
+                            }
+                        }
+                    } else {
+                        match seq2 {
+                            'A' => { // Up
+                                if history.is_some() {
+                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
+                                }
+                            },
+                            'B' => { // Down
+                                if history.is_some() {
+                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
+                                }
+                            },
+                            'C' => { // Right
+                                try!(edit_move_right(&mut s))
+                            },
+                            'D' => { // Left
+                                try!(edit_move_left(&mut s))
+                            },
+                            'H' => { // Home
+                                try!(edit_move_home(&mut s))
+                            },
+                            'F' => { // End
+                                try!(edit_move_end(&mut s))
+                            },
+                            _ => ()
+                        }
+                    }
+                } else if seq1 == 'O' { // ESC O sequences.
+                    let seq2 = try!(chars.next().unwrap());
+                    match seq2 {
+                        'H' =>  try!(edit_move_home(&mut s)),
+                        'F' => try!(edit_move_end(&mut s)),
+                        _ => ()
+                    }
+                }
+            },
             KeyPress::ENTER  => break, // Accept the line regardless of where the cursor is.
             _      => try!(edit_insert(&mut s, ch)), // Insert the character typed.
         }

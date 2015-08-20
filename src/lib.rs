@@ -372,7 +372,7 @@ fn edit_delete_prev_word(s: &mut State) -> Result<()> {
 /// Substitute the currently edited line with the next or previous history
 /// entry.
 fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result<()> {
-    if history.len() > 1 {
+    if history.len() > 0 {
         if s.history_index == history.len() {
             if prev {
                 // Save the current edited line before to overwrite it
@@ -451,7 +451,7 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
                 let seq1 = try!(chars.next().unwrap());
                 if seq1 == '[' { // ESC [ sequences.
                     let seq2 = try!(chars.next().unwrap());
-                    if seq2 >= '0' && seq2 <= '9' { // Extended escape, read additional byte.
+                    if seq2.is_digit(10) { // Extended escape, read additional byte.
                         let seq3 = try!(chars.next().unwrap());
                         if seq3 == '~' {
                             match seq2 {
@@ -468,7 +468,7 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
                             },
                             'B' => { // Down
                                 if history.is_some() {
-                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
+                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), false))
                                 }
                             },
                             'C' => { // Right

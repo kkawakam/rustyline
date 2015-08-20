@@ -28,6 +28,7 @@ pub mod history;
 
 use std::fmt;
 use std::io;
+use std::str;
 use std::io::{Write, Read};
 use std::result;
 use nix::errno::Errno;
@@ -137,8 +138,8 @@ fn enable_raw_mode() -> Result<termios::Termios> {
 /// Disable Raw mode for the term
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
     try!(termios::tcsetattr(libc::STDIN_FILENO,
-                             termios::TCSAFLUSH,
-                             &original_termios));
+                            termios::TCSAFLUSH,
+                            &original_termios));
     Ok(())
 }
 

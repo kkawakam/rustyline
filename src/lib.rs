@@ -26,9 +26,10 @@ mod consts;
 pub mod error;
 pub mod history;
 
-use std::result;
+use std::fmt;
 use std::io;
 use std::io::{Write, Read};
+use std::result;
 use nix::errno::Errno;
 use nix::sys::termios;
 
@@ -64,6 +65,22 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_end: String::new(),
             bytes: [0; 4],
         }
+    }
+}
+
+impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("State")
+            .field("prompt", &self.prompt)
+            .field("prompt_width", &self.prompt_width)
+            .field("buf", &self.buf)
+            .field("buf length", &self.buf.len())
+            .field("buf capacity", &self.buf.capacity())
+            .field("pos", &self.pos)
+            .field("cols", &self.cols)
+            .field("history_index", &self.history_index)
+            .field("history_end", &self.history_end)
+            .finish()
     }
 }
 
@@ -394,6 +411,10 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
             s.buf = s.history_end.clone(); // TODO how to avoid cloning?
         }
         s.pos = s.buf.len();
+        if s.buf.capacity() < MAX_LINE {
+            let cap = s.buf.capacity();
+            s.buf.reserve_exact(MAX_LINE - cap);
+        }
         refresh_line(s)
     } else {
         Ok(())

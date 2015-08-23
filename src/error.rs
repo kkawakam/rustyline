@@ -15,7 +15,9 @@ pub enum ReadlineError {
     /// Chars Error
     Char(io::CharsError),
     /// EOF (Ctrl-d)
-    Eof
+    Eof,
+    /// Ctrl-C
+    Interrupted
 }
 
 impl fmt::Display for ReadlineError {
@@ -25,6 +27,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
             ReadlineError::Char(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
+            ReadlineError::Interrupted => write!(f, "Interrupted"),
         }
     }
 }
@@ -36,6 +39,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Errno(ref err) => err.errno().desc(),
             ReadlineError::Char(ref err) => err.description(),
             ReadlineError::Eof => "EOF",
+            ReadlineError::Interrupted => "Interrupted",
         }
     }
 }

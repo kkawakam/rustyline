@@ -65,7 +65,7 @@ impl History {
     }
 
     /// Save the history in the specified file.
-    pub fn save<P: AsRef<Path>>(&self, path: &P) -> Result<()> {
+    pub fn save<P: AsRef<Path>+?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
         if self.entries.len() == 0 {
@@ -81,7 +81,7 @@ impl History {
     }
 
     /// Load the history from the specified file.
-    pub fn load<P: AsRef<Path>>(&mut self, path: &P) -> Result<()> {
+    pub fn load<P: AsRef<Path>+?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
         let file = try!(File::open(&path));

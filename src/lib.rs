@@ -28,8 +28,7 @@ pub mod history;
 
 use std::fmt;
 use std::io;
-use std::str;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::result;
 use nix::errno::Errno;
 use nix::sys::termios;
@@ -65,6 +64,14 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             history_end: String::new(),
             bytes: [0; 4],
+        }
+    }
+
+    fn update_buf(&mut self, buf: &str) {
+        self.buf = String::from(buf);
+        if self.buf.capacity() < MAX_LINE {
+            let cap = self.buf.capacity();
+            self.buf.reserve_exact(MAX_LINE - cap);
         }
     }
 }
@@ -184,7 +191,7 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-fn clear_screen(out: &mut Write) -> Result<()> {
+pub fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
 }
 
@@ -407,15 +414,13 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
             s.history_index += 1;
         }
         if s.history_index < history.len() {
-            s.buf = history.get(s.history_index).unwrap().clone();
+            let buf = history.get(s.history_index).unwrap();
+            s.update_buf(buf);
         } else {
-            s.buf = s.history_end.clone(); // TODO how to avoid cloning?
-        }
+            let buf = s.history_end.clone(); // TODO how to avoid cloning?
+            s.update_buf(&buf);
+        };
         s.pos = s.buf.len();
-        if s.buf.capacity() < MAX_LINE {
-            let cap = s.buf.capacity();
-            s.buf.reserve_exact(MAX_LINE - cap);
-        }
         refresh_line(s)
     } else {
         Ok(())
@@ -438,7 +443,7 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
             KeyPress::CTRL_A => try!(edit_move_home(&mut s)), // Move to the beginning of line.
             KeyPress::CTRL_B => try!(edit_move_left(&mut s)), // Move back a character.
             KeyPress::CTRL_C => {
-                return Err(from_errno(Errno::EAGAIN))
+                return Err(error::ReadlineError::Interrupted)
             },
             KeyPress::CTRL_D => {
                 if s.buf.len() > 0 { // Delete one character at point.

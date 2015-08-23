@@ -197,9 +197,9 @@ pub fn clear_screen(out: &mut Write) -> Result<()> {
 
 /// Beep, used for completion when there is nothing to complete or when all
 /// the choices were already shown.
-/*fn beep() -> Result<()> {
+fn beep() -> Result<()> {
     write_and_flush(&mut io::stderr(), b"\x07")
-}*/
+}
 
 // Control characters are treated as having zero width.
 fn width(s: &str) -> usize {
@@ -427,10 +427,72 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
     }
 }
 
+pub trait Completer {
+    fn complete(&self, line: &str, pos: usize) -> Vec<String>;
+    fn update(&self, line: &str, pos: usize, elected: &str) -> (String, usize) {
+        // line completion (not word completion)
+        (String::from(elected), elected.len())
+    }
+}
+
+/// Completes the line/word
+fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer: &Completer) -> Result<Option<char>> {
+    let candidates = completer.complete(&s.buf, s.pos);
+    if candidates.is_empty() {
+        try!(beep());
+        Ok(None)
+    } else {
+        let mut ch;
+        let mut i = 0;
+        loop {
+            // Show completion or original buffer
+            if i < candidates.len() {
+                let buf = s.buf.clone(); // TODO how to avoid cloning?
+                let pos = s.pos;
+                let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, &candidates[i]);
+                s.buf = tmp_buf;
+                s.pos = tmp_pos;
+                try!(refresh_line(s));
+                s.update_buf(&buf);
+                s.pos = pos;
+            } else {
+                try!(refresh_line(s));
+            }
+
+            ch = try!(chars.next().unwrap());
+            let key = char_to_key_press(ch);
+            match key {
+                KeyPress::TAB => {
+                    i = (i+1) % (candidates.len()+1); // Circular
+                    if i == candidates.len() {
+                        try!(beep());
+                    }
+                },
+                KeyPress::ESC => { // Re-show original buffer
+                    if i < candidates.len() {
+                        try!(refresh_line(s));
+                    }
+                    break
+                },
+                _ => { // Update buffer and return
+                    if i < candidates.len() {
+                        let (buf, pos) = completer.update(&s.buf, s.pos, &candidates[i]);
+                        s.update_buf(&buf);
+                        s.pos = pos;
+                    }
+                    break
+                }
+            }
+        }
+        Ok(Some(ch))
+    }
+}
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> {
+    let completer = None;
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
@@ -439,7 +501,18 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
     let mut chars = stdin.lock().chars();
     loop {
         let ch = try!(chars.next().unwrap());
-        match char_to_key_press(ch) {
+        let mut key = char_to_key_press(ch);
+        // autocomplete
+        if key == KeyPress::TAB && completer.is_some() {
+            let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
+            if next.is_some() {
+                key = char_to_key_press(next.unwrap());
+            } else {
+                continue;
+            }
+        }
+
+        match key {
             KeyPress::CTRL_A => try!(edit_move_home(&mut s)), // Move to the beginning of line.
             KeyPress::CTRL_B => try!(edit_move_left(&mut s)), // Move back a character.
             KeyPress::CTRL_C => {
@@ -566,6 +639,7 @@ pub fn readline(prompt: &str, history: &mut Option<History>) -> Result<String> {
 mod test {
     use std::io::Write;
     use history::History;
+    use Completer;
     use State;
 
     fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
@@ -709,5 +783,27 @@ mod test {
         assert_eq!(line, s.history_end);
         assert_eq!(2, s.history_index);
         assert_eq!(line, s.buf);
+    }
+
+    struct SimpleCompleter;
+    impl Completer for SimpleCompleter {
+        fn complete(&self, line: &str, pos: usize) -> Vec<String> {
+            vec!(line.to_string() + "t")
+        }
+    }
+
+    #[test]
+    fn complete_line() {
+        use std::io::Read;
+
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "rus", 6, 80);
+        let input = b"\n";
+        let mut chars = input.chars();
+        let completer = SimpleCompleter;
+        let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
+        assert_eq!(Some('\n'), ch);
+        assert_eq!("rust", s.buf);
+        assert_eq!(4, s.pos);
     }
 }

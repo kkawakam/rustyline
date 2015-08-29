@@ -2,10 +2,10 @@ extern crate nix;
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;
-use rustyline::ReadLiner;
+use rustyline::Reader;
 
 fn main() {
-    let mut rl = ReadLiner::new();
+    let mut rl = Reader::new();
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");
     }

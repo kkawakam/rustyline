@@ -7,7 +7,7 @@
 //!Usage
 //!
 //!```
-//!let mut rl = rustyline::ReadLiner::new();
+//!let mut rl = rustyline::Reader::new();
 //!let readline = rl.readline(">> ");
 //!match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -609,19 +609,20 @@ fn readline_direct() -> Result<String> {
         Ok(line)
 }
 
-pub struct ReadLiner<'completer> {
+///
+pub struct Reader<'completer> {
     //unsupported_term: bool,
     //cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
 }
 
-impl<'completer> ReadLiner<'completer> {
-    pub fn new() -> ReadLiner<'completer> {
+impl<'completer> Reader<'completer> {
+    pub fn new() -> Reader<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
         // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
-        ReadLiner{ history: History::new(), completer: None}
+        Reader{ history: History::new(), completer: None}
     }
 
     /// This method will read a line from STDIN and will display a `prompt`

@@ -7,7 +7,8 @@
 //!Usage
 //!
 //!```
-//!let readline = rustyline::readline(">> ", &mut None);
+//!let mut rl = rustyline::ReadLiner::new();
+//!let readline = rl.readline(">> ");
 //!match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
 //!     Err(_)   => println!("No input"),
@@ -21,6 +22,7 @@ extern crate libc;
 extern crate nix;
 extern crate unicode_width;
 
+pub mod completion;
 #[allow(non_camel_case_types)]
 mod consts;
 pub mod error;
@@ -29,10 +31,12 @@ pub mod history;
 use std::fmt;
 use std::io;
 use std::io::{Read, Write};
+use std::path::Path;
 use std::result;
 use nix::errno::Errno;
 use nix::sys::termios;
 
+use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
 
@@ -427,14 +431,6 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
     }
 }
 
-pub trait Completer {
-    fn complete(&self, line: &str, pos: usize) -> Vec<String>;
-    fn update(&self, line: &str, pos: usize, elected: &str) -> (String, usize) {
-        // line completion (not word completion)
-        (String::from(elected), elected.len())
-    }
-}
-
 /// Completes the line/word
 fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer: &Completer) -> Result<Option<char>> {
     let candidates = completer.complete(&s.buf, s.pos);
@@ -491,12 +487,11 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> {
-    let completer = None;
+fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Completer>) -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
-    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.as_mut().map_or(0, |h| h.len()));
+    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
@@ -534,14 +529,10 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
                 try!(refresh_line(&mut s))
             },
             KeyPress::CTRL_N => { // Fetch the next command from the history list.
-                if history.is_some() {
-                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), false))
-                }
+                try!(edit_history_next(&mut s, history, false))
             },
             KeyPress::CTRL_P => { // Fetch the previous command from the history list.
-                if history.is_some() {
-                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
-                }
+                try!(edit_history_next(&mut s, history, true))
             },
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
@@ -562,14 +553,10 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
                     } else {
                         match seq2 {
                             'A' => { // Up
-                                if history.is_some() {
-                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), true))
-                                }
+                                try!(edit_history_next(&mut s, history, true))
                             },
                             'B' => { // Down
-                                if history.is_some() {
-                                    try!(edit_history_next(&mut s, history.as_mut().unwrap(), false))
-                                }
+                                try!(edit_history_next(&mut s, history, false))
                             },
                             'C' => { // Right
                                 try!(edit_move_right(&mut s))
@@ -604,10 +591,10 @@ fn readline_edit(prompt: &str, history: &mut Option<History>) -> Result<String> 
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw(prompt: &str, history: &mut Option<History>) -> Result<String> {
+fn readline_raw(prompt: &str, history: &mut History, completer: Option<&Completer>) -> Result<String> {
     if is_a_tty() {
         let original_termios = try!(enable_raw_mode());
-        let user_input = readline_edit(prompt, history);
+        let user_input = readline_edit(prompt, history, completer);
         try!(disable_raw_mode(original_termios));
         println!("");
         user_input
@@ -622,16 +609,54 @@ fn readline_direct() -> Result<String> {
         Ok(line)
 }
 
-/// This method will read a line from STDIN and will display a `prompt`
-pub fn readline(prompt: &str, history: &mut Option<History>) -> Result<String> {
-    if is_unsupported_term() {
-        // Write prompt and flush it to stdout
-        let mut stdout = io::stdout();
-        try!(write_and_flush(&mut stdout, prompt.as_bytes()));
+pub struct ReadLiner<'completer> {
+    //unsupported_term: bool,
+    //cols: usize, // Number of columns in terminal
+    history: History,
+    completer: Option<&'completer Completer>,
+}
 
-        readline_direct()
-    } else {
-        readline_raw(prompt, history)
+impl<'completer> ReadLiner<'completer> {
+    pub fn new() -> ReadLiner<'completer> {
+        // TODO check what is done in rl_initialize()
+        // if the number of columns is stored here, we need a SIGWINCH handler...
+        // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
+        ReadLiner{ history: History::new(), completer: None}
+    }
+
+    /// This method will read a line from STDIN and will display a `prompt`
+    pub fn readline(&mut self, prompt: &str) -> Result<String> {
+        if is_unsupported_term() {
+            // Write prompt and flush it to stdout
+            let mut stdout = io::stdout();
+            try!(write_and_flush(&mut stdout, prompt.as_bytes()));
+
+            readline_direct()
+        } else {
+            readline_raw(prompt, &mut self.history, self.completer)
+        }
+    }
+
+    /// Load the history from the specified file.
+    pub fn load_history<P: AsRef<Path>+?Sized>(&mut self, path: &P) -> Result<()> {
+        self.history.load(path)
+    }
+    /// Save the history in the specified file.
+    pub fn save_history<P: AsRef<Path>+?Sized>(&self, path: &P) -> Result<()> {
+        self.history.save(path)
+    }
+    /// Add a new entry in the history.
+    pub fn add_history_entry(&mut self, line: &str) -> bool {
+        self.history.add(line)
+    }
+    /// Set the maximum length for the history.
+    pub fn set_history_max_len(&mut self, max_len: usize) {
+        self.history.set_max_len(max_len)
+    }
+
+    /// Register a callback function to be called for tab-completion.
+    pub fn set_completer(&mut self, completer: Option<&'completer Completer>) {
+        self.completer = completer;
     }
 }
 
@@ -639,7 +664,7 @@ pub fn readline(prompt: &str, history: &mut Option<History>) -> Result<String> {
 mod test {
     use std::io::Write;
     use history::History;
-    use Completer;
+    use completion::Completer;
     use State;
 
     fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
@@ -787,7 +812,7 @@ mod test {
 
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
-        fn complete(&self, line: &str, pos: usize) -> Vec<String> {
+        fn complete(&self, line: &str, _pos: usize) -> Vec<String> {
             vec!(line.to_string() + "t")
         }
     }
@@ -797,7 +822,7 @@ mod test {
         use std::io::Read;
 
         let mut out = ::std::io::sink();
-        let mut s = init_state(&mut out, "rus", 6, 80);
+        let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
         let mut chars = input.chars();
         let completer = SimpleCompleter;

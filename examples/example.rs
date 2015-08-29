@@ -1,7 +1,8 @@
 extern crate rustyline;
 
 fn main() {
-    let readline = rustyline::readline(">> ", &mut None);
+    let mut rl = rustyline::ReadLiner::new();
+    let readline = rl.readline(">> ");
     match readline {
         Ok(line) => println!("Line: {}",line),
         Err(_)   => println!("No input"),

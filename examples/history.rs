@@ -2,16 +2,18 @@ extern crate nix;
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;
-use rustyline::history::History;
+use rustyline::ReadLiner;
 
 fn main() {
-    let mut history = Some(History::new());
-    history.as_mut().unwrap().load("history.txt");
+    let mut rl = ReadLiner::new();
+    if let Err(_) = rl.load_history("history.txt") {
+        println!("No previous history.");
+    }
     loop {
-        let readline = rustyline::readline(">> ", &mut history);
+        let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                history.as_mut().unwrap().add(&line);
+                rl.add_history_entry(&line);
                 println!("Line: {}", line);
             },
             Err(ReadlineError::Interrupted) => {
@@ -28,5 +30,5 @@ fn main() {
             }
         }
     }
-    history.as_mut().unwrap().save("history.txt");
+    rl.save_history("history.txt").unwrap();
 }

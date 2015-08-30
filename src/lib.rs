@@ -135,10 +135,10 @@ fn enable_raw_mode() -> Result<termios::Termios> {
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
-        raw.c_iflag = raw.c_iflag   & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-        raw.c_oflag = raw.c_oflag   & !(OPOST);
-        raw.c_cflag = raw.c_cflag   | (CS8);
-        raw.c_lflag = raw.c_lflag   & !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        raw.c_oflag = raw.c_oflag & !(OPOST);
+        raw.c_cflag = raw.c_cflag | (CS8);
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
         raw.c_cc[VMIN] = 1;
         raw.c_cc[VTIME] = 0;
         try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
@@ -592,26 +592,23 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
 fn readline_raw(prompt: &str, history: &mut History, completer: Option<&Completer>) -> Result<String> {
-    if is_a_tty() {
-        let original_termios = try!(enable_raw_mode());
-        let user_input = readline_edit(prompt, history, completer);
-        try!(disable_raw_mode(original_termios));
-        println!("");
-        user_input
-    } else {
-        readline_direct()
-    }
+    let original_termios = try!(enable_raw_mode());
+    let user_input = readline_edit(prompt, history, completer);
+    try!(disable_raw_mode(original_termios));
+    println!("");
+    user_input
 }
 
 fn readline_direct() -> Result<String> {
-        let mut line = String::new();
-        try!(io::stdin().read_line(&mut line));
-        Ok(line)
+    let mut line = String::new();
+    try!(io::stdin().read_line(&mut line));
+    Ok(line)
 }
 
 /// Line editor
 pub struct Editor<'completer> {
-    //unsupported_term: bool,
+    unsupported_term: bool,
+    stdin_isatty: bool,
     //cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
@@ -622,16 +619,22 @@ impl<'completer> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
         // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
-        Editor{ history: History::new(), completer: None}
+        Editor{
+            unsupported_term: is_unsupported_term(),
+            stdin_isatty: is_a_tty(),
+            history: History::new(),
+            completer: None}
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        if is_unsupported_term() {
+        if self.unsupported_term {
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
+            readline_direct()
+        } else if !self.stdin_isatty { // Not a tty: read from file / pipe.
             readline_direct()
         } else {
             readline_raw(prompt, &mut self.history, self.completer)

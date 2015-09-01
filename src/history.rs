@@ -91,6 +91,11 @@ impl History {
         }
         return Ok(());
     }
+
+    /// Clear history
+    pub fn clear(&mut self) {
+        self.entries.clear()
+    }
 }
 
 #[cfg(test)]

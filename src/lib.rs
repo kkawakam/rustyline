@@ -219,6 +219,7 @@ fn refresh_line(s: &mut State) -> Result<()> {
     let buf = &s.buf;
     let mut start = 0;
     let mut w1 = width(&buf[start..s.pos]);
+    // horizontal-scroll-mode
     while s.prompt_width + w1 >= s.cols {
         let ch = buf.char_at(start);
         start += ch.len_utf8();
@@ -514,7 +515,7 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
                 return Err(error::ReadlineError::Interrupted)
             },
             KeyPress::CTRL_D => {
-                if s.buf.len() > 0 { // Delete one character at point.
+                if s.buf.len() > 0 { // Delete (forward) one character at point.
                     try!(edit_delete(&mut s))
                 } else {
                     return Err(error::ReadlineError::Eof)
@@ -552,24 +553,12 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
                         }
                     } else {
                         match seq2 {
-                            'A' => { // Up
-                                try!(edit_history_next(&mut s, history, true))
-                            },
-                            'B' => { // Down
-                                try!(edit_history_next(&mut s, history, false))
-                            },
-                            'C' => { // Right
-                                try!(edit_move_right(&mut s))
-                            },
-                            'D' => { // Left
-                                try!(edit_move_left(&mut s))
-                            },
-                            'H' => { // Home
-                                try!(edit_move_home(&mut s))
-                            },
-                            'F' => { // End
-                                try!(edit_move_end(&mut s))
-                            },
+                            'A' => try!(edit_history_next(&mut s, history, true)), // Up
+                            'B' => try!(edit_history_next(&mut s, history, false)), // Down
+                            'C' => try!(edit_move_right(&mut s)), // Right
+                            'D' => try!(edit_move_left(&mut s)), // Left
+                            'H' => try!(edit_move_home(&mut s)), // Home
+                            'F' => try!(edit_move_end(&mut s)), // End
                             _ => ()
                         }
                     }
@@ -656,6 +645,10 @@ impl<'completer> Editor<'completer> {
     /// Set the maximum length for the history.
     pub fn set_history_max_len(&mut self, max_len: usize) {
         self.history.set_max_len(max_len)
+    }
+    /// Clear history.
+    pub fn clear_history(&mut self) {
+        self.history.clear()
     }
 
     /// Register a callback function to be called for tab-completion.

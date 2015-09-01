@@ -1,4 +1,3 @@
-extern crate nix;
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;

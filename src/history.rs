@@ -31,14 +31,15 @@ impl History {
         if line.len() == 0 || line.chars().next().map_or(true, |c| c.is_whitespace()) { // ignorespace
             return false;
         }
-        let s = String::from(line); // TODO try to allocate only on push_back
-        if self.entries.back() == Some(&s) { // ignoredups
-            return false;
+        if let Some(s) = self.entries.back() {
+            if s == line { // ignoredups
+                return false;
+            }
         }
         if self.entries.len() == self.max_len {
             self.entries.pop_front();
         }
-        self.entries.push_back(s);
+        self.entries.push_back(String::from(line));
         return true;
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 
 [dependencies]

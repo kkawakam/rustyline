@@ -12,7 +12,7 @@ cargo build --release
 ```
 
 ## Example
-``rust
+```rust
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;
@@ -52,7 +52,7 @@ fn main() {
 You can use this package in your project by adding the following
 to your `Cargo.toml`:
 
-``toml
+```toml
 [dependencies]
 rustyline = "0.1.0"
 ```

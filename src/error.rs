@@ -12,8 +12,12 @@ pub enum ReadlineError {
     Io(io::Error),
     /// Error from syscall
     Errno(nix::Error),
-    /// Invalid UTF-8 Error
-    InvalidUTF8
+    /// Chars Error
+    Char(io::CharsError),
+    /// EOF (Ctrl-d)
+    Eof,
+    /// Ctrl-C
+    Interrupted
 }
 
 impl fmt::Display for ReadlineError {
@@ -21,7 +25,9 @@ impl fmt::Display for ReadlineError {
         match *self {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
-            ReadlineError::InvalidUTF8 => write!(f, "Encountered an invalid UTF-8 bytes")
+            ReadlineError::Char(ref err) => err.fmt(f),
+            ReadlineError::Eof => write!(f, "EOF"),
+            ReadlineError::Interrupted => write!(f, "Interrupted"),
         }
     }
 }
@@ -31,19 +37,27 @@ impl error::Error for ReadlineError {
         match *self {
             ReadlineError::Io(ref err) => err.description(),
             ReadlineError::Errno(ref err) => err.errno().desc(),
-            ReadlineError::InvalidUTF8 => "invalid utf-8 byte"
+            ReadlineError::Char(ref err) => err.description(),
+            ReadlineError::Eof => "EOF",
+            ReadlineError::Interrupted => "Interrupted",
         }
     }
 }
 
 impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> ReadlineError {
-        ReadlineError::Io(err)    
+        ReadlineError::Io(err)
     }
 }
 
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> ReadlineError {
         ReadlineError::Errno(err)
+    }
+}
+
+impl From<io::CharsError> for ReadlineError {
+    fn from(err: io::CharsError) -> ReadlineError {
+        ReadlineError::Char(err)
     }
 }

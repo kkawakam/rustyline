@@ -4,5 +4,9 @@ version = "0.0.1"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 
 [dependencies]
-libc = "0.1.8"
-nix = "0.3.9"
+libc = "~0.1"
+nix = "~0.3"
+unicode-width = "~0.1"
+
+[dev-dependencies]
+tempdir = "~0.3"

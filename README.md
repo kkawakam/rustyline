@@ -6,7 +6,7 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 [Documentation](https://kkawakam.github.io/rustyline)
 
 ## Build
-This project uses Cargo and Rust Stable
+This project uses Cargo and Rust Nightly
 ```bash
 cargo build --release
 ```

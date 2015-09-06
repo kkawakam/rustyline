@@ -71,8 +71,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    fn update_buf(&mut self, buf: &str) {
-        self.buf = String::from(buf);
+    fn update_buf<S: Into<String>>(&mut self, buf: S) {
+        self.buf = buf.into();
         if self.buf.capacity() < MAX_LINE {
             let cap = self.buf.capacity();
             self.buf.reserve_exact(MAX_LINE - cap);
@@ -420,10 +420,10 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
         }
         if s.history_index < history.len() {
             let buf = history.get(s.history_index).unwrap();
-            s.update_buf(buf);
+            s.update_buf(buf.clone());
         } else {
             let buf = s.history_end.clone(); // TODO how to avoid cloning?
-            s.update_buf(&buf);
+            s.update_buf(buf);
         };
         s.pos = s.buf.len();
         refresh_line(s)
@@ -450,7 +450,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                 s.buf = tmp_buf;
                 s.pos = tmp_pos;
                 try!(refresh_line(s));
-                s.update_buf(&buf);
+                s.update_buf(buf);
                 s.pos = pos;
             } else {
                 try!(refresh_line(s));
@@ -474,7 +474,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                 _ => { // Update buffer and return
                     if i < candidates.len() {
                         let (buf, pos) = completer.update(&s.buf, s.pos, &candidates[i]);
-                        s.update_buf(&buf);
+                        s.update_buf(buf);
                         s.pos = pos;
                     }
                     break

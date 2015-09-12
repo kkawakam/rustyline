@@ -29,8 +29,7 @@ pub mod error;
 pub mod history;
 
 use std::fmt;
-use std::io;
-use std::io::{Read, Write};
+use std::io::{self,Read, Write};
 use std::path::Path;
 use std::result;
 use nix::errno::Errno;
@@ -135,12 +134,12 @@ fn enable_raw_mode() -> Result<termios::Termios> {
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
-        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-        raw.c_oflag = raw.c_oflag & !(OPOST);
-        raw.c_cflag = raw.c_cflag | (CS8);
-        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
-        raw.c_cc[VMIN] = 1;
-        raw.c_cc[VTIME] = 0;
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
+        raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
+        raw.c_cc[VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[VTIME] = 0; // with blocking read
         try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
         Ok(original_term)
     }

@@ -1,10 +1,13 @@
 extern crate rustyline;
 
+use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 fn main() {
+    let c = FilenameCompleter::new();
     let mut rl = Editor::new();
+    rl.set_completer(Some(&c));
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");
     }

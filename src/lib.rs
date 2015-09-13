@@ -16,6 +16,8 @@
 //!```
 #![feature(drain)]
 #![feature(io)]
+#![feature(path_relative_from)]
+#![feature(str_split_at)]
 #![feature(str_char)]
 #![feature(unicode)]
 extern crate libc;
@@ -433,7 +435,7 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
 
 /// Completes the line/word
 fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer: &Completer) -> Result<Option<char>> {
-    let candidates = completer.complete(&s.buf, s.pos);
+    let (start, candidates) = try!(completer.complete(&s.buf, s.pos));
     if candidates.is_empty() {
         try!(beep());
         Ok(None)
@@ -445,7 +447,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
             if i < candidates.len() {
                 let buf = s.buf.clone(); // TODO how to avoid cloning?
                 let pos = s.pos;
-                let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, &candidates[i]);
+                let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                 s.buf = tmp_buf;
                 s.pos = tmp_pos;
                 try!(refresh_line(s));
@@ -472,7 +474,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                 },
                 _ => { // Update buffer and return
                     if i < candidates.len() {
-                        let (buf, pos) = completer.update(&s.buf, s.pos, &candidates[i]);
+                        let (buf, pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                         s.update_buf(buf);
                         s.pos = pos;
                     }
@@ -662,6 +664,7 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
+    use super::Result;
 
     fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
         State {
@@ -808,8 +811,8 @@ mod test {
 
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
-        fn complete(&self, line: &str, _pos: usize) -> Vec<String> {
-            vec!(line.to_string() + "t")
+        fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+            Ok((0, vec!(line.to_string() + "t")))
         }
     }
 
@@ -824,7 +827,7 @@ mod test {
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);
-        assert_eq!("rust", s.buf);
-        assert_eq!(4, s.pos);
+        assert_eq!("rust ", s.buf);
+        assert_eq!(5, s.pos);
     }
 }

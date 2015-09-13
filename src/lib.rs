@@ -470,7 +470,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                     if i < candidates.len() {
                         try!(refresh_line(s));
                     }
-                    break
+                    return Ok(None)
                 },
                 _ => { // Update buffer and return
                     if i < candidates.len() {
@@ -497,13 +497,14 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
-        let ch = try!(chars.next().unwrap());
+        let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
         let mut key = char_to_key_press(ch);
         // autocomplete
         if key == KeyPress::TAB && completer.is_some() {
             let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
             if next.is_some() {
-                key = char_to_key_press(next.unwrap());
+                ch = next.unwrap();
+                key = char_to_key_press(ch);
             } else {
                 continue;
             }

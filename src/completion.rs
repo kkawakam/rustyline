@@ -22,7 +22,7 @@ pub trait Completer {
     fn update(&self, line: &str, pos: usize, start: usize, elected: &str) -> (String, usize) {
         let mut buf = String::from(&line[..start]);
         buf.push_str(elected);
-        buf.push(' ');
+        //buf.push(' ');
         let new_pos = buf.len();
         buf.push_str(&line[pos..]);
         (buf, new_pos)

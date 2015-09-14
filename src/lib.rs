@@ -828,7 +828,7 @@ mod test {
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);
-        assert_eq!("rust ", s.buf);
-        assert_eq!(5, s.pos);
+        assert_eq!("rust", s.buf);
+        assert_eq!(4, s.pos);
     }
 }

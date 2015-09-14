@@ -20,7 +20,8 @@ pub trait Completer {
     /// the `elected` candidate.
     /// Returns the new line content and cursor position.
     fn update(&self, line: &str, pos: usize, start: usize, elected: &str) -> (String, usize) {
-        let mut buf = String::from(&line[..start]);
+        let mut buf = String::with_capacity(start + elected.len() + line.len() - pos);
+        buf.push_str(&line[..start]);
         buf.push_str(elected);
         //buf.push(' ');
         let new_pos = buf.len();

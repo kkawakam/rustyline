@@ -16,6 +16,8 @@
 //!```
 #![feature(drain)]
 #![feature(io)]
+#![feature(path_relative_from)]
+#![feature(str_split_at)]
 #![feature(str_char)]
 #![feature(unicode)]
 extern crate libc;
@@ -29,8 +31,7 @@ pub mod error;
 pub mod history;
 
 use std::fmt;
-use std::io;
-use std::io::{Read, Write};
+use std::io::{self,Read, Write};
 use std::path::Path;
 use std::result;
 use nix::errno::Errno;
@@ -71,8 +72,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    fn update_buf(&mut self, buf: &str) {
-        self.buf = String::from(buf);
+    fn update_buf<S: Into<String>>(&mut self, buf: S) {
+        self.buf = buf.into();
         if self.buf.capacity() < MAX_LINE {
             let cap = self.buf.capacity();
             self.buf.reserve_exact(MAX_LINE - cap);
@@ -135,12 +136,12 @@ fn enable_raw_mode() -> Result<termios::Termios> {
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
         let mut raw = original_term;
-        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-        raw.c_oflag = raw.c_oflag & !(OPOST);
-        raw.c_cflag = raw.c_cflag | (CS8);
-        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
-        raw.c_cc[VMIN] = 1;
-        raw.c_cc[VTIME] = 0;
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
+        raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
+        raw.c_cc[VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[VTIME] = 0; // with blocking read
         try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
         Ok(original_term)
     }
@@ -420,10 +421,10 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
         }
         if s.history_index < history.len() {
             let buf = history.get(s.history_index).unwrap();
-            s.update_buf(buf);
+            s.update_buf(buf.clone());
         } else {
             let buf = s.history_end.clone(); // TODO how to avoid cloning?
-            s.update_buf(&buf);
+            s.update_buf(buf);
         };
         s.pos = s.buf.len();
         refresh_line(s)
@@ -434,7 +435,7 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
 
 /// Completes the line/word
 fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer: &Completer) -> Result<Option<char>> {
-    let candidates = completer.complete(&s.buf, s.pos);
+    let (start, candidates) = try!(completer.complete(&s.buf, s.pos));
     if candidates.is_empty() {
         try!(beep());
         Ok(None)
@@ -446,11 +447,11 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
             if i < candidates.len() {
                 let buf = s.buf.clone(); // TODO how to avoid cloning?
                 let pos = s.pos;
-                let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, &candidates[i]);
+                let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                 s.buf = tmp_buf;
                 s.pos = tmp_pos;
                 try!(refresh_line(s));
-                s.update_buf(&buf);
+                s.update_buf(buf);
                 s.pos = pos;
             } else {
                 try!(refresh_line(s));
@@ -469,12 +470,12 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                     if i < candidates.len() {
                         try!(refresh_line(s));
                     }
-                    break
+                    return Ok(None)
                 },
                 _ => { // Update buffer and return
                     if i < candidates.len() {
-                        let (buf, pos) = completer.update(&s.buf, s.pos, &candidates[i]);
-                        s.update_buf(&buf);
+                        let (buf, pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
+                        s.update_buf(buf);
                         s.pos = pos;
                     }
                     break
@@ -496,13 +497,14 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
-        let ch = try!(chars.next().unwrap());
+        let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
         let mut key = char_to_key_press(ch);
         // autocomplete
         if key == KeyPress::TAB && completer.is_some() {
             let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
             if next.is_some() {
-                key = char_to_key_press(next.unwrap());
+                ch = next.unwrap();
+                key = char_to_key_press(ch);
             } else {
                 continue;
             }
@@ -663,6 +665,7 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
+    use super::Result;
 
     fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
         State {
@@ -809,8 +812,8 @@ mod test {
 
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
-        fn complete(&self, line: &str, _pos: usize) -> Vec<String> {
-            vec!(line.to_string() + "t")
+        fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+            Ok((0, vec!(line.to_string() + "t")))
         }
     }
 

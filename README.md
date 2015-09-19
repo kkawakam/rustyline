@@ -56,3 +56,15 @@ to your `Cargo.toml`:
 [dependencies]
 rustyline = "0.1.0"
 ```
+
+## Features
+
+ - Unicode (UTF-8) (linenoise supports only ASCII)
+ - Word completion (linenoise supports only line completion)
+ - Filename completion
+
+## ToDo
+
+ - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
+ - History search ([Searching for Commands in the History]http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8)
+ - Word commands

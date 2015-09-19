@@ -17,7 +17,6 @@
 #![feature(drain)]
 #![feature(io)]
 #![feature(path_relative_from)]
-#![feature(str_split_at)]
 #![feature(str_char)]
 #![feature(unicode)]
 extern crate libc;

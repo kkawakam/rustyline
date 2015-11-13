@@ -17,7 +17,6 @@
 #![feature(drain)]
 #![feature(io)]
 #![feature(path_relative_from)]
-#![feature(str_split_at)]
 #![feature(str_char)]
 #![feature(unicode)]
 extern crate libc;
@@ -78,6 +77,52 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             let cap = self.buf.capacity();
             self.buf.reserve_exact(MAX_LINE - cap);
         }
+    }
+
+    /// Rewrite the currently edited line accordingly to the buffer content,
+    /// cursor position, and number of columns of the terminal.
+    fn refresh_line(&mut self) -> Result<()> {
+        let prompt_width = self.prompt_width;
+        self.refresh(self.prompt, prompt_width)
+    }
+
+    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
+        let prompt_width = unicode_width::UnicodeWidthStr::width(prompt);
+        self.refresh(prompt, prompt_width)
+    }
+
+    fn refresh(&mut self, prompt: &str, prompt_width: usize) -> Result<()> {
+        use std::fmt::Write;
+        use unicode_width::UnicodeWidthChar;
+
+        let buf = &self.buf;
+        let mut start = 0;
+        let mut w1 = width(&buf[start..self.pos]);
+        // horizontal-scroll-mode
+        while prompt_width + w1 >= self.cols {
+            let ch = buf.char_at(start);
+            start += ch.len_utf8();
+            w1 -= UnicodeWidthChar::width(ch).unwrap_or(0);
+        }
+        let mut end = buf.len();
+        let mut w2 = width(&buf[start..end]);
+        while prompt_width + w2 > self.cols {
+            let ch = buf.char_at_reverse(end);
+            end -= ch.len_utf8();
+            w2 -= UnicodeWidthChar::width(ch).unwrap_or(0);
+        }
+
+        let mut ab = String::new();
+        // Cursor to left edge
+        ab.push('\r');
+        // Write the prompt and the current buffer content
+        ab.push_str(prompt);
+        ab.push_str(&self.buf[start..end]);
+        // Erase to right
+        ab.push_str("\x1b[0K");
+        // Move cursor to original position.
+        ab.write_fmt(format_args!("\r\x1b[{}C", w1 + prompt_width)).unwrap();
+        write_and_flush(self.out, ab.as_bytes())
     }
 }
 
@@ -170,7 +215,7 @@ const TIOCGWINSZ: libc::c_ulong = 0x5413;
 fn get_columns() -> usize {
     use std::mem::zeroed;
     use libc::c_ushort;
-    use nix::sys::ioctl;
+    use libc;
 
     unsafe {
         #[repr(C)]
@@ -182,9 +227,9 @@ fn get_columns() -> usize {
         }
 
         let mut size: winsize = zeroed();
-        match ioctl::read_into(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
-            Ok(_) => size.ws_col as usize, // TODO getCursorPosition
-            Err(_) => 80,
+        match libc::ioctl(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
+            0 => size.ws_col as usize, // TODO getCursorPosition
+            _ => 80,
         }
     }
 }
@@ -203,48 +248,12 @@ pub fn clear_screen(out: &mut Write) -> Result<()> {
 /// Beep, used for completion when there is nothing to complete or when all
 /// the choices were already shown.
 fn beep() -> Result<()> {
-    write_and_flush(&mut io::stderr(), b"\x07")
+    write_and_flush(&mut io::stderr(), b"\x07") // TODO bell-style
 }
 
 // Control characters are treated as having zero width.
 fn width(s: &str) -> usize {
     unicode_width::UnicodeWidthStr::width(s)
-}
-
-/// Rewrite the currently edited line accordingly to the buffer content,
-/// cursor position, and number of columns of the terminal.
-fn refresh_line(s: &mut State) -> Result<()> {
-    use std::fmt::Write;
-    use unicode_width::UnicodeWidthChar;
-
-    let buf = &s.buf;
-    let mut start = 0;
-    let mut w1 = width(&buf[start..s.pos]);
-    // horizontal-scroll-mode
-    while s.prompt_width + w1 >= s.cols {
-        let ch = buf.char_at(start);
-        start += ch.len_utf8();
-        w1 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-    }
-    let mut end = buf.len();
-    let mut w2 = width(&buf[start..end]);
-    while s.prompt_width + w2 > s.cols {
-        let ch = buf.char_at_reverse(end);
-        end -= ch.len_utf8();
-        w2 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-    }
-
-    let mut ab = String::new();
-    // Cursor to left edge
-    ab.push('\r');
-    // Write the prompt and the current buffer content
-    ab.push_str(s.prompt);
-    ab.push_str(&s.buf[start..end]);
-    // Erase to right
-    ab.push_str("\x1b[0K");
-    // Move cursor to original position.
-    ab.write_fmt(format_args!("\r\x1b[{}C", w1 + s.prompt_width)).unwrap();
-    write_and_flush(s.out, ab.as_bytes())
 }
 
 /// Insert the character `ch` at cursor current position.
@@ -258,12 +267,12 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
                 // Avoid a full update of the line in the trivial case.
                 write_and_flush(s.out, &mut s.bytes[0..size])
             } else {
-                refresh_line(s)
+                s.refresh_line()
             }
         } else {
             s.buf.insert(s.pos, ch);
             s.pos += ch.len_utf8();
-            refresh_line(s)
+            s.refresh_line()
         }
     } else {
         Ok(())
@@ -275,7 +284,7 @@ fn edit_move_left(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         let ch = s.buf.char_at_reverse(s.pos);
         s.pos -= ch.len_utf8();
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -286,7 +295,7 @@ fn edit_move_right(s: &mut State) -> Result<()> {
     if s.pos != s.buf.len() {
         let ch = s.buf.char_at(s.pos);
         s.pos += ch.len_utf8();
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -296,7 +305,7 @@ fn edit_move_right(s: &mut State) -> Result<()> {
 fn edit_move_home(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         s.pos = 0;
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -306,7 +315,7 @@ fn edit_move_home(s: &mut State) -> Result<()> {
 fn edit_move_end(s: &mut State) -> Result<()> {
     if s.pos != s.buf.len() {
         s.pos = s.buf.len();
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -317,7 +326,7 @@ fn edit_move_end(s: &mut State) -> Result<()> {
 fn edit_delete(s: &mut State) -> Result<()> {
     if s.buf.len() > 0 && s.pos < s.buf.len() {
         s.buf.remove(s.pos);
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -329,7 +338,7 @@ fn edit_backspace(s: &mut State) -> Result<()> {
         let ch = s.buf.char_at_reverse(s.pos);
         s.pos -= ch.len_utf8();
         s.buf.remove(s.pos);
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -339,7 +348,7 @@ fn edit_backspace(s: &mut State) -> Result<()> {
 fn edit_kill_line(s: &mut State) -> Result<()> {
     if s.buf.len() > 0 && s.pos < s.buf.len() {
         s.buf.drain(s.pos..);
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -350,7 +359,7 @@ fn edit_discard_line(s: &mut State) -> Result<()> {
     if s.pos > 0 && s.buf.len() > 0 {
         s.buf.drain(..s.pos);
         s.pos = 0;
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -358,7 +367,7 @@ fn edit_discard_line(s: &mut State) -> Result<()> {
 
 /// Exchange the char before cursor with the character at cursor.
 fn edit_transpose_chars(s: &mut State) -> Result<()> {
-    if s.pos > 0 && s.pos < s.buf.len() {
+    if s.pos > 0 && s.pos < s.buf.len() { // TODO should work even if s.pos == s.buf.len()
         let ch = s.buf.remove(s.pos);
         let size = ch.len_utf8();
         let och = s.buf.char_at_reverse(s.pos);
@@ -373,7 +382,7 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
                 s.pos -= osize - size;
             }
         }
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -385,16 +394,18 @@ fn edit_delete_prev_word(s: &mut State) -> Result<()> {
     if s.pos > 0 {
         let old_pos = s.pos;
         let mut ch = s.buf.char_at_reverse(s.pos);
+        // eat any spaces on the left
         while s.pos > 0 && ch.is_whitespace() {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
+        // eat any non-spaces on the left
         while s.pos > 0 && !ch.is_whitespace() {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
         s.buf.drain(s.pos..old_pos);
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -402,7 +413,7 @@ fn edit_delete_prev_word(s: &mut State) -> Result<()> {
 
 /// Substitute the currently edited line with the next or previous history
 /// entry.
-fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result<()> {
+fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()> {
     if history.len() > 0 {
         if s.history_index == history.len() {
             if prev {
@@ -427,7 +438,7 @@ fn edit_history_next(s: &mut State, history: &mut History, prev: bool) -> Result
             s.update_buf(buf);
         };
         s.pos = s.buf.len();
-        refresh_line(s)
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -450,11 +461,11 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                 let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                 s.buf = tmp_buf;
                 s.pos = tmp_pos;
-                try!(refresh_line(s));
+                try!(s.refresh_line());
                 s.update_buf(buf);
                 s.pos = pos;
             } else {
-                try!(refresh_line(s));
+                try!(s.refresh_line());
             }
 
             ch = try!(chars.next().unwrap());
@@ -468,7 +479,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
                 },
                 KeyPress::ESC => { // Re-show original buffer
                     if i < candidates.len() {
-                        try!(refresh_line(s));
+                        try!(s.refresh_line());
                     }
                     return Ok(None)
                 },
@@ -486,6 +497,125 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
     }
 }
 
+/// Incremental search
+fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, history: &History) -> Result<Option<KeyPress>> {
+    // Save the current edited line (and cursor position) before to overwrite it
+    let original_buf = s.buf.clone();
+    let original_pos = s.pos;
+
+    let mut search_buf = String::new();
+    let mut history_idx = history.len() - 1;
+    let mut success = true;
+
+    let mut ch;
+    let mut key;
+    // Display the reverse-i-search prompt and process chars
+    loop {
+        let prompt = match success {
+            true => format!("(reverse-i-search)`{}': ", search_buf),
+            false => format!("(failed reverse-i-search)`{}': ", search_buf)
+        };
+        try!(s.refresh_prompt_and_line(&prompt));
+
+        ch = try!(chars.next().unwrap());
+        if !ch.is_control() {
+            search_buf.push(ch);
+        } else {
+            key = char_to_key_press(ch);
+            if key == KeyPress::ESC {
+                key = try!(escape_sequence(chars));
+            }
+            match key {
+                KeyPress::CTRL_H | KeyPress::BACKSPACE => {
+                    search_buf.pop();
+                    continue
+                },
+                KeyPress::CTRL_R => {
+                    if history_idx > 0 {
+                        history_idx -= 1;
+                    } else {
+                        success = false;
+                        continue;
+                    }
+                },
+                KeyPress::CTRL_G => {
+                    s.update_buf(original_buf);
+                    s.pos = original_pos;
+                    try!(s.refresh_line());
+                    return Ok(None)
+                },
+                _ => break
+            }
+        }
+        success = match history.search(&search_buf, history_idx, true) {
+            Some(idx) => {
+                history_idx = idx;
+                let entry = history.get(idx).unwrap();
+                s.update_buf(entry.clone());
+                s.pos = entry.find(&search_buf).unwrap();
+                true
+            }
+            _ => false
+        };
+    }
+    Ok(Some(key))
+}
+
+fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
+    // Read the next two bytes representing the escape sequence.
+    let seq1 = try!(chars.next().unwrap());
+    if seq1 == '[' { // ESC [ sequences.
+        let seq2 = try!(chars.next().unwrap());
+        if seq2.is_digit(10) { // Extended escape, read additional byte.
+            let seq3 = try!(chars.next().unwrap());
+            if seq3 == '~' {
+                match seq2 {
+                    '3' => Ok(KeyPress::ESC_SEQ_DELETE),
+                    // TODO '1' // Home
+                    // TODO '4' // End
+                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                }
+            } else {
+                Ok(KeyPress::UNKNOWN_ESC_SEQ)
+            }
+        } else {
+            match seq2 {
+                'A' => Ok(KeyPress::CTRL_P), // Up
+                'B' => Ok(KeyPress::CTRL_N), // Down
+                'C' => Ok(KeyPress::CTRL_F), // Right
+                'D' => Ok(KeyPress::CTRL_B), // Left
+                'F' => Ok(KeyPress::CTRL_E), // End
+                'H' => Ok(KeyPress::CTRL_A), // Home
+                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ)
+            }
+        }
+    } else if seq1 == 'O' { // ESC O sequences.
+        let seq2 = try!(chars.next().unwrap());
+        match seq2 {
+            'F' => Ok(KeyPress::CTRL_E),
+            'H' => Ok(KeyPress::CTRL_A),
+            _ => Ok(KeyPress::UNKNOWN_ESC_SEQ)
+        }
+    } else {
+        // TODO ESC-B (b): move backward a word (https://github.com/antirez/linenoise/pull/64, https://github.com/antirez/linenoise/pull/6)
+        // TODO ESC-C (c): capitalize word after point
+        // TODO ESC-D (d): kill one word forward
+        // TODO ESC-F (f): move forward a word
+        // TODO ESC-L (l): lowercase word after point
+        // TODO ESC-N (n): search history forward not interactively
+        // TODO ESC-P (p): search history backward not interactively
+        // TODO ESC-R (r): Undo all changes made to this line.
+        // TODO EST-T (t): transpose words
+        // TODO ESC-U (u): uppercase word after point
+        // TODO ESC-Y (y): yank-pop
+        // TODO ESC-CTRl-H | ESC-BACKSPACE kill one word backward
+        // TODO ESC-<: move to first entry in history
+        // TODO ESC->: move to last entry in history
+        writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
+        Ok(KeyPress::UNKNOWN_ESC_SEQ)
+    }
+}
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -498,14 +628,35 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
     let mut chars = stdin.lock().chars();
     loop {
         let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
+        if !ch.is_control() {
+            try!(edit_insert(&mut s, ch));
+            continue;
+        }
+
         let mut key = char_to_key_press(ch);
         // autocomplete
         if key == KeyPress::TAB && completer.is_some() {
             let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
             if next.is_some() {
                 ch = next.unwrap();
+                if !ch.is_control() {
+                    try!(edit_insert(&mut s, ch));
+                    continue;
+                }
                 key = char_to_key_press(ch);
             } else {
+                continue;
+            }
+        } else if key == KeyPress::CTRL_R { // Search history backward
+             let next = try!(reverse_incremental_search(&mut chars, &mut s, history));
+             if next.is_some() {
+                key = next.unwrap();
+             } else {
+                continue;
+             }
+        } else if key == KeyPress::ESC { // escape sequence
+            key = try!(escape_sequence(&mut chars));
+            if key == KeyPress::UNKNOWN_ESC_SEQ {
                 continue;
             }
         }
@@ -526,10 +677,11 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
             KeyPress::CTRL_E => try!(edit_move_end(&mut s)), // Move to the end of line.
             KeyPress::CTRL_F => try!(edit_move_right(&mut s)), // Move forward a character.
             KeyPress::CTRL_H | KeyPress::BACKSPACE => try!(edit_backspace(&mut s)), // Delete one character backward.
+            KeyPress::CTRL_J => break, // like ENTER
             KeyPress::CTRL_K => try!(edit_kill_line(&mut s)), // Kill the text from point to the end of the line.
             KeyPress::CTRL_L => { // Clear the screen leaving the current line at the top of the screen.
                 try!(clear_screen(s.out));
-                try!(refresh_line(&mut s))
+                try!(s.refresh_line())
             },
             KeyPress::CTRL_N => { // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, history, false))
@@ -539,40 +691,11 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
             },
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
+            // TODO CTRL_V // Quoted insert
             KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s)), // Kill the word behind point, using white space as a word boundary
-            KeyPress::ESC    => { // escape sequence
-                // Read the next two bytes representing the escape sequence.
-                let seq1 = try!(chars.next().unwrap());
-                if seq1 == '[' { // ESC [ sequences.
-                    let seq2 = try!(chars.next().unwrap());
-                    if seq2.is_digit(10) { // Extended escape, read additional byte.
-                        let seq3 = try!(chars.next().unwrap());
-                        if seq3 == '~' {
-                            match seq2 {
-                                '3' => try!(edit_delete(&mut s)),
-                                _ => (),
-                            }
-                        }
-                    } else {
-                        match seq2 {
-                            'A' => try!(edit_history_next(&mut s, history, true)), // Up
-                            'B' => try!(edit_history_next(&mut s, history, false)), // Down
-                            'C' => try!(edit_move_right(&mut s)), // Right
-                            'D' => try!(edit_move_left(&mut s)), // Left
-                            'H' => try!(edit_move_home(&mut s)), // Home
-                            'F' => try!(edit_move_end(&mut s)), // End
-                            _ => ()
-                        }
-                    }
-                } else if seq1 == 'O' { // ESC O sequences.
-                    let seq2 = try!(chars.next().unwrap());
-                    match seq2 {
-                        'H' =>  try!(edit_move_home(&mut s)),
-                        'F' => try!(edit_move_end(&mut s)),
-                        _ => ()
-                    }
-                }
-            },
+            // TODO CTRL_Y // retrieve (yank) last item killed
+            // TODO CTRL-_ // undo
+            KeyPress::ESC_SEQ_DELETE => try!(edit_delete(&mut s)),
             KeyPress::ENTER  => break, // Accept the line regardless of where the cursor is.
             _      => try!(edit_insert(&mut s, ch)), // Insert the character typed.
         }

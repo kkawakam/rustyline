@@ -97,6 +97,20 @@ impl History {
     pub fn clear(&mut self) {
         self.entries.clear()
     }
+
+    /// Search history (start position inclusive [0, len-1])
+    pub fn search(&self, term: &str, start: usize, reverse: bool) -> Option<usize> {
+        if term.is_empty() || start >= self.len() {
+            return None;
+        }
+        if reverse {
+            let index = self.entries.iter().rev().skip(self.entries.len() - 1 - start).position(|entry| entry.contains(term));
+            index.and_then(|index| Some(start - index))
+        } else {
+            let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));
+            index.and_then(|index| Some(index + start))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -146,5 +160,29 @@ mod tests {
         history.save(&history_path).unwrap();
         history.load(&history_path).unwrap();
         td.close().unwrap();
+    }
+
+    #[test]
+    fn search() {
+        let history = init();
+        assert_eq!(None, history.search("", 0, false));
+        assert_eq!(None, history.search("none", 0, false));
+        assert_eq!(None, history.search("line", 3, false));
+
+        assert_eq!(Some(0), history.search("line", 0, false));
+        assert_eq!(Some(1), history.search("line", 1, false));
+        assert_eq!(Some(2), history.search("line3", 1, false));
+    }
+
+    #[test]
+    fn reverse_search() {
+        let history = init();
+        assert_eq!(None, history.search("", 2, true));
+        assert_eq!(None, history.search("none", 2, true));
+        assert_eq!(None, history.search("line", 3, true));
+
+        assert_eq!(Some(2), history.search("line", 2, true));
+        assert_eq!(Some(1), history.search("line", 1, true));
+        assert_eq!(Some(0), history.search("line1", 1, true));
     }
 }

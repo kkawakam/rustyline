@@ -715,8 +715,11 @@ fn readline_raw(prompt: &str, history: &mut History, completer: Option<&Complete
 
 fn readline_direct() -> Result<String> {
     let mut line = String::new();
-    try!(io::stdin().read_line(&mut line));
-    Ok(line)
+    if try!(io::stdin().read_line(&mut line)) > 0 {
+        Ok(line)
+    } else {
+        Err(error::ReadlineError::Eof)
+    }
 }
 
 /// Line editor
@@ -779,6 +782,15 @@ impl<'completer> Editor<'completer> {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<&'completer Completer>) {
         self.completer = completer;
+    }
+}
+
+impl<'completer> fmt::Debug for Editor<'completer> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("State")
+            .field("unsupported_term", &self.unsupported_term)
+            .field("stdin_isatty", &self.stdin_isatty)
+            .finish()
     }
 }
 

@@ -17,7 +17,7 @@ pub enum ReadlineError {
     /// EOF (Ctrl-d)
     Eof,
     /// Ctrl-C
-    Interrupted
+    Interrupted,
 }
 
 impl fmt::Display for ReadlineError {

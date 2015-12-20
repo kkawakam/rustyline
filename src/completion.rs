@@ -1,7 +1,7 @@
 //! Completion API
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{self,Path};
+use std::path::{self, Path};
 
 use super::Result;
 
@@ -23,7 +23,7 @@ pub trait Completer {
         let mut buf = String::with_capacity(start + elected.len() + line.len() - pos);
         buf.push_str(&line[..start]);
         buf.push_str(elected);
-        //buf.push(' ');
+        // buf.push(' ');
         let new_pos = buf.len();
         buf.push_str(&line[pos..]);
         (buf, new_pos)
@@ -31,11 +31,11 @@ pub trait Completer {
 }
 
 pub struct FilenameCompleter {
-    break_chars: BTreeSet<char>
+    break_chars: BTreeSet<char>,
 }
 
-static DEFAULT_BREAK_CHARS : [char; 18] = [ ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$',
-            '>', '<', '=', ';', '|', '&', '{', '(', '\0' ];
+static DEFAULT_BREAK_CHARS: [char; 18] = [' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>',
+                                          '<', '=', ';', '|', '&', '{', '(', '\0'];
 
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
@@ -52,25 +52,27 @@ impl Completer for FilenameCompleter {
 }
 
 fn filename_complete(path: &str) -> Result<Vec<String>> {
-    use std::env::{current_dir,home_dir};
+    use std::env::{current_dir, home_dir};
 
     let sep = path::MAIN_SEPARATOR;
     let (dir_name, file_name) = match path.rfind(sep) {
-        Some(idx) => path.split_at(idx+sep.len_utf8()),
-        None => ("", path)
+        Some(idx) => path.split_at(idx + sep.len_utf8()),
+        None => ("", path),
     };
 
     let dir_path = Path::new(dir_name);
-    let dir = if dir_path.starts_with("~") { // ~[/...]
+    let dir = if dir_path.starts_with("~") {
+        // ~[/...]
         if let Some(home) = home_dir() {
             match dir_path.relative_from("~") {
                 Some(rel_path) => home.join(rel_path),
-                None => home
+                None => home,
             }
         } else {
             dir_path.to_path_buf()
         }
-    } else if dir_path.is_relative() { // TODO ~user[/...] (https://crates.io/crates/users)
+    } else if dir_path.is_relative() {
+        // TODO ~user[/...] (https://crates.io/crates/users)
         if let Ok(cwd) = current_dir() {
             cwd.join(dir_path)
         } else {
@@ -96,17 +98,20 @@ fn filename_complete(path: &str) -> Result<Vec<String>> {
     Ok(entries)
 }
 
-pub fn extract_word<'l>(line: &'l str, pos: usize, break_chars: &BTreeSet<char>) -> (usize, &'l str) {
+pub fn extract_word<'l>(line: &'l str,
+                        pos: usize,
+                        break_chars: &BTreeSet<char>)
+                        -> (usize, &'l str) {
     let line = &line[..pos];
     if line.is_empty() {
         return (0, line);
     }
     match line.char_indices().rev().find(|&(_, c)| break_chars.contains(&c)) {
         Some((i, c)) => {
-            let start = i+c.len_utf8();
+            let start = i + c.len_utf8();
             (start, &line[start..])
-        },
-        None => (0, line)
+        }
+        None => (0, line),
     }
 }
 
@@ -118,6 +123,7 @@ mod tests {
     pub fn extract_word() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
         let line = "ls '/usr/local/b";
-        assert_eq!((4, "/usr/local/b"), super::extract_word(line, line.len(), &break_chars));
+        assert_eq!((4, "/usr/local/b"),
+                   super::extract_word(line, line.len(), &break_chars));
     }
 }

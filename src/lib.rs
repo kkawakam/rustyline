@@ -1,20 +1,19 @@
-//!Readline for Rust
+//! Readline for Rust
 //!
-//!This implementation is based on [Antirez's Linenoise](https://github.com/antirez/linenoise)
+//! This implementation is based on [Antirez's Linenoise](https://github.com/antirez/linenoise)
 //!
-//!# Example
+//! # Example
 //!
-//!Usage
+//! Usage
 //!
-//!```
-//!let mut rl = rustyline::Editor::new();
-//!let readline = rl.readline(">> ");
-//!match readline {
+//! ```
+//! let mut rl = rustyline::Editor::new();
+//! let readline = rl.readline(">> ");
+//! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
 //!     Err(_)   => println!("No input"),
 //! }
-//!```
-#![feature(drain)]
+//! ```
 #![feature(io)]
 #![feature(path_relative_from)]
 #![feature(str_char)]
@@ -30,7 +29,7 @@ pub mod error;
 pub mod history;
 
 use std::fmt;
-use std::io::{self,Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::result;
 use nix::errno::Errno;
@@ -57,7 +56,12 @@ struct State<'out, 'prompt> {
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
-    fn new(out: &'out mut Write, prompt: &'prompt str, capacity: usize, cols: usize, history_index: usize) -> State<'out, 'prompt> {
+    fn new(out: &'out mut Write,
+           prompt: &'prompt str,
+           capacity: usize,
+           cols: usize,
+           history_index: usize)
+           -> State<'out, 'prompt> {
         State {
             out: out,
             prompt: prompt,
@@ -129,16 +133,16 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
-            .field("prompt", &self.prompt)
-            .field("prompt_width", &self.prompt_width)
-            .field("buf", &self.buf)
-            .field("buf length", &self.buf.len())
-            .field("buf capacity", &self.buf.capacity())
-            .field("pos", &self.pos)
-            .field("cols", &self.cols)
-            .field("history_index", &self.history_index)
-            .field("history_end", &self.history_end)
-            .finish()
+         .field("prompt", &self.prompt)
+         .field("prompt_width", &self.prompt_width)
+         .field("buf", &self.buf)
+         .field("buf length", &self.buf.len())
+         .field("buf capacity", &self.buf.capacity())
+         .field("pos", &self.pos)
+         .field("cols", &self.cols)
+         .field("history_index", &self.history_index)
+         .field("history_end", &self.history_end)
+         .finish()
     }
 }
 
@@ -146,7 +150,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
 static MAX_LINE: usize = 4096;
 
 /// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb","cons25","emacs"];
+static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
 /// Check to see if STDIN is a TTY
 fn is_a_tty() -> bool {
@@ -165,7 +169,7 @@ fn is_unsupported_term() -> bool {
             }
             unsupported
         }
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
@@ -175,7 +179,8 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
 
 /// Enable raw mode for the TERM
 fn enable_raw_mode() -> Result<termios::Termios> {
-    use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME};
+    use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN,
+                            ISIG, VMIN, VTIME};
     if !is_a_tty() {
         Err(from_errno(Errno::ENOTTY))
     } else {
@@ -194,9 +199,7 @@ fn enable_raw_mode() -> Result<termios::Termios> {
 
 /// Disable Raw mode for the term
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO,
-                            termios::TCSAFLUSH,
-                            &original_termios));
+    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
     Ok(())
 }
 
@@ -223,7 +226,7 @@ fn get_columns() -> usize {
             ws_row: c_ushort,
             ws_col: c_ushort,
             ws_xpixel: c_ushort,
-            ws_ypixel: c_ushort
+            ws_ypixel: c_ushort,
         }
 
         let mut size: winsize = zeroed();
@@ -367,13 +370,14 @@ fn edit_discard_line(s: &mut State) -> Result<()> {
 
 /// Exchange the char before cursor with the character at cursor.
 fn edit_transpose_chars(s: &mut State) -> Result<()> {
-    if s.pos > 0 && s.pos < s.buf.len() { // TODO should work even if s.pos == s.buf.len()
+    if s.pos > 0 && s.pos < s.buf.len() {
+        // TODO should work even if s.pos == s.buf.len()
         let ch = s.buf.remove(s.pos);
         let size = ch.len_utf8();
         let och = s.buf.char_at_reverse(s.pos);
         let osize = och.len_utf8();
         s.buf.insert(s.pos - osize, ch);
-        if s.pos != s.buf.len()-size {
+        if s.pos != s.buf.len() - size {
             s.pos += size;
         } else {
             if size >= osize {
@@ -445,7 +449,10 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 }
 
 /// Completes the line/word
-fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer: &Completer) -> Result<Option<char>> {
+fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
+                              s: &mut State,
+                              completer: &Completer)
+                              -> Result<Option<char>> {
     let (start, candidates) = try!(completer.complete(&s.buf, s.pos));
     if candidates.is_empty() {
         try!(beep());
@@ -472,24 +479,26 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
             let key = char_to_key_press(ch);
             match key {
                 KeyPress::TAB => {
-                    i = (i+1) % (candidates.len()+1); // Circular
+                    i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
                         try!(beep());
                     }
-                },
-                KeyPress::ESC => { // Re-show original buffer
+                }
+                KeyPress::ESC => {
+                    // Re-show original buffer
                     if i < candidates.len() {
                         try!(s.refresh_line());
                     }
-                    return Ok(None)
-                },
-                _ => { // Update buffer and return
+                    return Ok(None);
+                }
+                _ => {
+                    // Update buffer and return
                     if i < candidates.len() {
                         let (buf, pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                         s.update_buf(buf);
                         s.pos = pos;
                     }
-                    break
+                    break;
                 }
             }
         }
@@ -498,7 +507,10 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, completer
 }
 
 /// Incremental search
-fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut State, history: &History) -> Result<Option<KeyPress>> {
+fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
+                                           s: &mut State,
+                                           history: &History)
+                                           -> Result<Option<KeyPress>> {
     // Save the current edited line (and cursor position) before to overwrite it
     let original_buf = s.buf.clone();
     let original_pos = s.pos;
@@ -513,7 +525,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut Sta
     loop {
         let prompt = match success {
             true => format!("(reverse-i-search)`{}': ", search_buf),
-            false => format!("(failed reverse-i-search)`{}': ", search_buf)
+            false => format!("(failed reverse-i-search)`{}': ", search_buf),
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
@@ -528,8 +540,8 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut Sta
             match key {
                 KeyPress::CTRL_H | KeyPress::BACKSPACE => {
                     search_buf.pop();
-                    continue
-                },
+                    continue;
+                }
                 KeyPress::CTRL_R => {
                     if history_idx > 0 {
                         history_idx -= 1;
@@ -537,14 +549,14 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut Sta
                         success = false;
                         continue;
                     }
-                },
+                }
                 KeyPress::CTRL_G => {
                     s.update_buf(original_buf);
                     s.pos = original_pos;
                     try!(s.refresh_line());
-                    return Ok(None)
-                },
-                _ => break
+                    return Ok(None);
+                }
+                _ => break,
             }
         }
         success = match history.search(&search_buf, history_idx, true) {
@@ -555,7 +567,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut Sta
                 s.pos = entry.find(&search_buf).unwrap();
                 true
             }
-            _ => false
+            _ => false,
         };
     }
     Ok(Some(key))
@@ -564,9 +576,11 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>, s: &mut Sta
 fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     // Read the next two bytes representing the escape sequence.
     let seq1 = try!(chars.next().unwrap());
-    if seq1 == '[' { // ESC [ sequences.
+    if seq1 == '[' {
+        // ESC [ sequences.
         let seq2 = try!(chars.next().unwrap());
-        if seq2.is_digit(10) { // Extended escape, read additional byte.
+        if seq2.is_digit(10) {
+            // Extended escape, read additional byte.
             let seq3 = try!(chars.next().unwrap());
             if seq3 == '~' {
                 match seq2 {
@@ -586,15 +600,16 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
                 'D' => Ok(KeyPress::CTRL_B), // Left
                 'F' => Ok(KeyPress::CTRL_E), // End
                 'H' => Ok(KeyPress::CTRL_A), // Home
-                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ)
+                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
             }
         }
-    } else if seq1 == 'O' { // ESC O sequences.
+    } else if seq1 == 'O' {
+        // ESC O sequences.
         let seq2 = try!(chars.next().unwrap());
         match seq2 {
             'F' => Ok(KeyPress::CTRL_E),
             'H' => Ok(KeyPress::CTRL_A),
-            _ => Ok(KeyPress::UNKNOWN_ESC_SEQ)
+            _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
         }
     } else {
         // TODO ESC-B (b): move backward a word (https://github.com/antirez/linenoise/pull/64, https://github.com/antirez/linenoise/pull/6)
@@ -619,7 +634,10 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Completer>) -> Result<String> {
+fn readline_edit(prompt: &str,
+                 history: &mut History,
+                 completer: Option<&Completer>)
+                 -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
@@ -647,14 +665,16 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
             } else {
                 continue;
             }
-        } else if key == KeyPress::CTRL_R { // Search history backward
-             let next = try!(reverse_incremental_search(&mut chars, &mut s, history));
-             if next.is_some() {
+        } else if key == KeyPress::CTRL_R {
+            // Search history backward
+            let next = try!(reverse_incremental_search(&mut chars, &mut s, history));
+            if next.is_some() {
                 key = next.unwrap();
-             } else {
+            } else {
                 continue;
-             }
-        } else if key == KeyPress::ESC { // escape sequence
+            }
+        } else if key == KeyPress::ESC {
+            // escape sequence
             key = try!(escape_sequence(&mut chars));
             if key == KeyPress::UNKNOWN_ESC_SEQ {
                 continue;
@@ -664,31 +684,33 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
         match key {
             KeyPress::CTRL_A => try!(edit_move_home(&mut s)), // Move to the beginning of line.
             KeyPress::CTRL_B => try!(edit_move_left(&mut s)), // Move back a character.
-            KeyPress::CTRL_C => {
-                return Err(error::ReadlineError::Interrupted)
-            },
+            KeyPress::CTRL_C => return Err(error::ReadlineError::Interrupted),
             KeyPress::CTRL_D => {
-                if s.buf.len() > 0 { // Delete (forward) one character at point.
+                if s.buf.len() > 0 {
+                    // Delete (forward) one character at point.
                     try!(edit_delete(&mut s))
                 } else {
-                    return Err(error::ReadlineError::Eof)
+                    return Err(error::ReadlineError::Eof);
                 }
-            },
+            }
             KeyPress::CTRL_E => try!(edit_move_end(&mut s)), // Move to the end of line.
             KeyPress::CTRL_F => try!(edit_move_right(&mut s)), // Move forward a character.
             KeyPress::CTRL_H | KeyPress::BACKSPACE => try!(edit_backspace(&mut s)), // Delete one character backward.
             KeyPress::CTRL_J => break, // like ENTER
             KeyPress::CTRL_K => try!(edit_kill_line(&mut s)), // Kill the text from point to the end of the line.
-            KeyPress::CTRL_L => { // Clear the screen leaving the current line at the top of the screen.
+            KeyPress::CTRL_L => {
+                // Clear the screen leaving the current line at the top of the screen.
                 try!(clear_screen(s.out));
                 try!(s.refresh_line())
-            },
-            KeyPress::CTRL_N => { // Fetch the next command from the history list.
+            }
+            KeyPress::CTRL_N => {
+                // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, history, false))
-            },
-            KeyPress::CTRL_P => { // Fetch the previous command from the history list.
+            }
+            KeyPress::CTRL_P => {
+                // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, history, true))
-            },
+            }
             KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
             KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
             // TODO CTRL_V // Quoted insert
@@ -696,8 +718,8 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
             // TODO CTRL_Y // retrieve (yank) last item killed
             // TODO CTRL-_ // undo
             KeyPress::ESC_SEQ_DELETE => try!(edit_delete(&mut s)),
-            KeyPress::ENTER  => break, // Accept the line regardless of where the cursor is.
-            _      => try!(edit_insert(&mut s, ch)), // Insert the character typed.
+            KeyPress::ENTER => break, // Accept the line regardless of where the cursor is.
+            _ => try!(edit_insert(&mut s, ch)), // Insert the character typed.
         }
     }
     Ok(s.buf)
@@ -705,7 +727,10 @@ fn readline_edit(prompt: &str, history: &mut History, completer: Option<&Complet
 
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
-fn readline_raw(prompt: &str, history: &mut History, completer: Option<&Completer>) -> Result<String> {
+fn readline_raw(prompt: &str,
+                history: &mut History,
+                completer: Option<&Completer>)
+                -> Result<String> {
     let original_termios = try!(enable_raw_mode());
     let user_input = readline_edit(prompt, history, completer);
     try!(disable_raw_mode(original_termios));
@@ -726,7 +751,7 @@ fn readline_direct() -> Result<String> {
 pub struct Editor<'completer> {
     unsupported_term: bool,
     stdin_isatty: bool,
-    //cols: usize, // Number of columns in terminal
+    // cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
 }
@@ -736,11 +761,12 @@ impl<'completer> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
         // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
-        Editor{
+        Editor {
             unsupported_term: is_unsupported_term(),
             stdin_isatty: is_a_tty(),
             history: History::new(),
-            completer: None}
+            completer: None,
+        }
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
@@ -751,7 +777,8 @@ impl<'completer> Editor<'completer> {
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
             readline_direct()
-        } else if !self.stdin_isatty { // Not a tty: read from file / pipe.
+        } else if !self.stdin_isatty {
+            // Not a tty: read from file / pipe.
             readline_direct()
         } else {
             readline_raw(prompt, &mut self.history, self.completer)
@@ -759,11 +786,11 @@ impl<'completer> Editor<'completer> {
     }
 
     /// Load the history from the specified file.
-    pub fn load_history<P: AsRef<Path>+?Sized>(&mut self, path: &P) -> Result<()> {
+    pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)
     }
     /// Save the history in the specified file.
-    pub fn save_history<P: AsRef<Path>+?Sized>(&self, path: &P) -> Result<()> {
+    pub fn save_history<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         self.history.save(path)
     }
     /// Add a new entry in the history.
@@ -788,9 +815,9 @@ impl<'completer> Editor<'completer> {
 impl<'completer> fmt::Debug for Editor<'completer> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
-            .field("unsupported_term", &self.unsupported_term)
-            .field("stdin_isatty", &self.stdin_isatty)
-            .finish()
+         .field("unsupported_term", &self.unsupported_term)
+         .field("stdin_isatty", &self.stdin_isatty)
+         .finish()
     }
 }
 
@@ -802,9 +829,13 @@ mod test {
     use State;
     use super::Result;
 
-    fn init_state<'out>(out: &'out mut Write, line: &str, pos: usize, cols: usize) -> State<'out, 'static> {
+    fn init_state<'out>(out: &'out mut Write,
+                        line: &str,
+                        pos: usize,
+                        cols: usize)
+                        -> State<'out, 'static> {
         State {
-            out : out,
+            out: out,
             prompt: "",
             prompt_width: 0,
             buf: String::from(line),
@@ -948,7 +979,7 @@ mod test {
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
         fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
-            Ok((0, vec!(line.to_string() + "t")))
+            Ok((0, vec![line.to_string() + "t"]))
         }
     }
 

@@ -15,12 +15,15 @@ const DEFAULT_HISTORY_MAX_LEN: usize = 100;
 
 impl History {
     pub fn new() -> History {
-        History { entries: VecDeque::new(), max_len: DEFAULT_HISTORY_MAX_LEN }
+        History {
+            entries: VecDeque::new(),
+            max_len: DEFAULT_HISTORY_MAX_LEN,
+        }
     }
 
     /// Return the history entry at position `index`, starting from 0.
-    pub fn get(& self, index: usize) -> Option<&String> {
-        return self.entries.get(index)
+    pub fn get(&self, index: usize) -> Option<&String> {
+        return self.entries.get(index);
     }
 
     /// Add a new entry in the history.
@@ -28,11 +31,13 @@ impl History {
         if self.max_len == 0 {
             return false;
         }
-        if line.len() == 0 || line.chars().next().map_or(true, |c| c.is_whitespace()) { // ignorespace
+        if line.len() == 0 || line.chars().next().map_or(true, |c| c.is_whitespace()) {
+            // ignorespace
             return false;
         }
         if let Some(s) = self.entries.back() {
-            if s == line { // ignoredups
+            if s == line {
+                // ignoredups
                 return false;
             }
         }
@@ -66,7 +71,7 @@ impl History {
     }
 
     /// Save the history in the specified file.
-    pub fn save<P: AsRef<Path>+?Sized>(&self, path: &P) -> Result<()> {
+    pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
         if self.entries.len() == 0 {
@@ -82,7 +87,7 @@ impl History {
     }
 
     /// Load the history from the specified file.
-    pub fn load<P: AsRef<Path>+?Sized>(&mut self, path: &P) -> Result<()> {
+    pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
         let file = try!(File::open(&path));
@@ -104,7 +109,11 @@ impl History {
             return None;
         }
         if reverse {
-            let index = self.entries.iter().rev().skip(self.entries.len() - 1 - start).position(|entry| entry.contains(term));
+            let index = self.entries
+                            .iter()
+                            .rev()
+                            .skip(self.entries.len() - 1 - start)
+                            .position(|entry| entry.contains(term));
             index.and_then(|index| Some(start - index))
         } else {
             let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));
@@ -138,9 +147,9 @@ mod tests {
         let mut history = super::History::new();
         assert!(history.add("line1"));
         assert!(history.add("line2"));
-        assert!(! history.add("line2"));
-        assert!(! history.add(""));
-        assert!(! history.add(" line3"));
+        assert!(!history.add("line2"));
+        assert!(!history.add(""));
+        assert!(!history.add(" line3"));
     }
 
     #[test]

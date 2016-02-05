@@ -805,6 +805,10 @@ impl<'completer> Editor<'completer> {
     pub fn clear_history(&mut self) {
         self.history.clear()
     }
+    /// Return a reference to the history object.
+    pub fn get_history(&mut self) -> &mut History {
+        &mut self.history
+    }
 
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<&'completer Completer>) {

@@ -15,7 +15,6 @@
 //! }
 //! ```
 #![feature(io)]
-#![feature(path_relative_from)]
 #![feature(str_char)]
 #![feature(unicode)]
 extern crate libc;
@@ -65,7 +64,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         State {
             out: out,
             prompt: prompt,
-            prompt_width: unicode_width::UnicodeWidthStr::width(prompt),
+            prompt_width: width(prompt),
             buf: String::with_capacity(capacity),
             pos: 0,
             cols: cols,
@@ -91,7 +90,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_width = unicode_width::UnicodeWidthStr::width(prompt);
+        let prompt_width = width(prompt);
         self.refresh(prompt, prompt_width)
     }
 
@@ -256,7 +255,34 @@ fn beep() -> Result<()> {
 
 // Control characters are treated as having zero width.
 fn width(s: &str) -> usize {
-    unicode_width::UnicodeWidthStr::width(s)
+    if s.contains('\x1b') {
+        let mut w = 0;
+        let mut esc_seq = 0;
+        for c in s.chars() {
+            if esc_seq  == 1 {
+                if c == '[' { // CSI
+                    esc_seq = 2;
+                } else { // two-character sequence
+                    esc_seq = 0;
+                }
+            } else if esc_seq == 2 {
+                if c == ';' || (c >= '0' && c <= '9') {
+                } else if c == 'm' { // last
+                    esc_seq = 0
+                } else { // not supported
+                    w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+                    esc_seq = 0
+                }
+            } else if c == '\x1b' {
+                esc_seq = 1;
+            } else {
+                w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+            }
+        }
+        w
+    } else {
+        unicode_width::UnicodeWidthStr::width(s)
+    }
 }
 
 /// Insert the character `ch` at cursor current position.
@@ -996,5 +1022,11 @@ mod test {
         assert_eq!(Some('\n'), ch);
         assert_eq!("rust", s.buf);
         assert_eq!(4, s.pos);
+    }
+
+    #[test]
+    fn prompt_with_ansi_escape_codes() {
+        let w = super::width("\x1b[1;32m>>\x1b[0m ");
+        assert_eq!(3, w);
     }
 }

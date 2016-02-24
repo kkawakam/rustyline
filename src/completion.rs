@@ -64,9 +64,9 @@ fn filename_complete(path: &str) -> Result<Vec<String>> {
     let dir = if dir_path.starts_with("~") {
         // ~[/...]
         if let Some(home) = home_dir() {
-            match dir_path.relative_from("~") {
-                Some(rel_path) => home.join(rel_path),
-                None => home,
+            match dir_path.strip_prefix("~") {
+                Ok(rel_path) => home.join(rel_path),
+                _ => home,
             }
         } else {
             dir_path.to_path_buf()

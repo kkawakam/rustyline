@@ -12,7 +12,7 @@ fn main() {
         println!("No previous history.");
     }
     loop {
-        let readline = rl.readline(">> ");
+        let readline = rl.readline("\x1b[1;32m>>\x1b[0m ");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);

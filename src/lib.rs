@@ -290,8 +290,16 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
         if s.buf.len() == s.pos {
             s.buf.push(ch);
-            let size = ch.encode_utf8(&mut s.bytes).unwrap();
+
+            let mut size = 0;
+
+            for (i, byte) in ch.encode_utf8().take(4).enumerate() {
+                size += 1;
+                s.bytes[i] = byte;
+            }
+
             s.pos += size;
+
             if s.prompt_width + width(&s.buf) < s.cols {
                 // Avoid a full update of the line in the trivial case.
                 write_and_flush(s.out, &mut s.bytes[0..size])

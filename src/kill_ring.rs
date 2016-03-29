@@ -202,37 +202,3 @@ mod tests {
         assert_eq!(Some((9, &"word1".to_string())), kill_ring.yank_pop());
     }
 }
-
-// Ctrl-K -> delete to kill ring (forward) (killLine)
-// Ctrl-U -> erase to kill ring (backward) (resetLine)
-// Ctrl-W -> erase word to kill ring (backward) (unixWordRubout)
-//
-// Meta Ctrl-H -> deletePreviousWord
-// Meta Delete -> deletePreviousWord
-// Meta D -> deleteNextWord
-// Meta-Y/y -> yankPop
-//
-// Ctrl-Y -> paste from buffer (yank)
-//
-// resetLine
-// unixWordRubout
-// deletePreviousWord
-// deleteNextWord
-// killLine
-//
-// yank
-// yankPop
-//
-// echo hello world
-// Ctrl-W Ctrl-W Ctrl-Y
-// echo hello
-// echo
-// echo hello world
-//
-// echo hello world
-// Ctrl-W
-// echo hello rust
-// Ctrl-W Ctrl-Y Meta-Y
-// echo hello world
-// Meta-Y
-//

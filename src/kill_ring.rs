@@ -23,7 +23,7 @@ impl KillRing {
         }
     }
 
-    /// Reset last_astion state.
+    /// Reset `last_action` state.
     pub fn reset(&mut self) {
         self.last_action = Action::Other;
     }

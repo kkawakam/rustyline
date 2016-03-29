@@ -322,6 +322,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     }
 }
 
+// Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
     for ch in text.chars() {
         try!(edit_insert(s, ch));
@@ -329,6 +330,7 @@ fn edit_yank(s: &mut State, text: &str) -> Result<()> {
     Ok(())
 }
 
+// Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.buf.drain((s.pos - yank_size)..s.pos);
     s.pos -= yank_size;

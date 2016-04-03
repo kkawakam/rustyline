@@ -26,6 +26,7 @@ pub mod completion;
 mod consts;
 pub mod error;
 pub mod history;
+mod kill_ring;
 
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -37,6 +38,7 @@ use nix::sys::termios;
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
+use kill_ring::KillRing;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -259,17 +261,21 @@ fn width(s: &str) -> usize {
         let mut w = 0;
         let mut esc_seq = 0;
         for c in s.chars() {
-            if esc_seq  == 1 {
-                if c == '[' { // CSI
+            if esc_seq == 1 {
+                if c == '[' {
+                    // CSI
                     esc_seq = 2;
-                } else { // two-character sequence
+                } else {
+                    // two-character sequence
                     esc_seq = 0;
                 }
             } else if esc_seq == 2 {
                 if c == ';' || (c >= '0' && c <= '9') {
-                } else if c == 'm' { // last
+                } else if c == 'm' {
+                    // last
                     esc_seq = 0
-                } else { // not supported
+                } else {
+                    // not supported
                     w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
                     esc_seq = 0
                 }
@@ -314,6 +320,22 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+// Yank/paste `text` at current position.
+fn edit_yank(s: &mut State, text: &str) -> Result<()> {
+    for ch in text.chars() {
+        try!(edit_insert(s, ch));
+    }
+    Ok(())
+}
+
+// Delete previously yanked text and yank/paste `text` at current position.
+fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
+    s.buf.drain((s.pos - yank_size)..s.pos);
+    s.pos -= yank_size;
+    try!(s.refresh_line());
+    edit_yank(s, text)
 }
 
 /// Move cursor on the left.
@@ -382,23 +404,25 @@ fn edit_backspace(s: &mut State) -> Result<()> {
 }
 
 /// Kill the text from point to the end of the line.
-fn edit_kill_line(s: &mut State) -> Result<()> {
+fn edit_kill_line(s: &mut State) -> Result<Option<String>> {
     if s.buf.len() > 0 && s.pos < s.buf.len() {
-        s.buf.drain(s.pos..);
-        s.refresh_line()
+        let text = s.buf.drain(s.pos..).collect();
+        try!(s.refresh_line());
+        Ok(Some(text))
     } else {
-        Ok(())
+        Ok(None)
     }
 }
 
 /// Kill backward from point to the beginning of the line.
-fn edit_discard_line(s: &mut State) -> Result<()> {
+fn edit_discard_line(s: &mut State) -> Result<Option<String>> {
     if s.pos > 0 && s.buf.len() > 0 {
-        s.buf.drain(..s.pos);
+        let text = s.buf.drain(..s.pos).collect();
         s.pos = 0;
-        s.refresh_line()
+        try!(s.refresh_line());
+        Ok(Some(text))
     } else {
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -428,7 +452,7 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State) -> Result<()> {
+fn edit_delete_prev_word(s: &mut State) -> Result<Option<String>> {
     if s.pos > 0 {
         let old_pos = s.pos;
         let mut ch = s.buf.char_at_reverse(s.pos);
@@ -442,10 +466,11 @@ fn edit_delete_prev_word(s: &mut State) -> Result<()> {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
-        s.buf.drain(s.pos..old_pos);
-        s.refresh_line()
+        let text = s.buf.drain(s.pos..old_pos).collect();
+        try!(s.refresh_line());
+        Ok(Some(text))
     } else {
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -656,12 +681,16 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
         // TODO ESC-R (r): Undo all changes made to this line.
         // TODO EST-T (t): transpose words
         // TODO ESC-U (u): uppercase word after point
-        // TODO ESC-Y (y): yank-pop
         // TODO ESC-CTRl-H | ESC-BACKSPACE kill one word backward
         // TODO ESC-<: move to first entry in history
         // TODO ESC->: move to last entry in history
-        writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
-        Ok(KeyPress::UNKNOWN_ESC_SEQ)
+        match seq1 {
+            'y' | 'Y' => Ok(KeyPress::ESC_Y),
+            _ => {
+                writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
+                Ok(KeyPress::UNKNOWN_ESC_SEQ)
+            }
+        }
     }
 }
 
@@ -670,17 +699,20 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 /// (e.g., C-c will exit readline)
 fn readline_edit(prompt: &str,
                  history: &mut History,
-                 completer: Option<&Completer>)
+                 completer: Option<&Completer>,
+                 kill_ring: &mut KillRing)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
+    kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
         let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
         if !ch.is_control() {
+            kill_ring.reset();
             try!(edit_insert(&mut s, ch));
             continue;
         }
@@ -690,6 +722,7 @@ fn readline_edit(prompt: &str,
         if key == KeyPress::TAB && completer.is_some() {
             let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
             if next.is_some() {
+                kill_ring.reset();
                 ch = next.unwrap();
                 if !ch.is_control() {
                     try!(edit_insert(&mut s, ch));
@@ -716,10 +749,22 @@ fn readline_edit(prompt: &str,
         }
 
         match key {
-            KeyPress::CTRL_A => try!(edit_move_home(&mut s)), // Move to the beginning of line.
-            KeyPress::CTRL_B => try!(edit_move_left(&mut s)), // Move back a character.
-            KeyPress::CTRL_C => return Err(error::ReadlineError::Interrupted),
+            KeyPress::CTRL_A => {
+                kill_ring.reset();
+                // Move to the beginning of line.
+                try!(edit_move_home(&mut s))
+            }
+            KeyPress::CTRL_B => {
+                kill_ring.reset();
+                // Move back a character.
+                try!(edit_move_left(&mut s))
+            }
+            KeyPress::CTRL_C => {
+                kill_ring.reset();
+                return Err(error::ReadlineError::Interrupted);
+            }
             KeyPress::CTRL_D => {
+                kill_ring.reset();
                 if s.buf.len() > 0 {
                     // Delete (forward) one character at point.
                     try!(edit_delete(&mut s))
@@ -727,33 +772,97 @@ fn readline_edit(prompt: &str,
                     return Err(error::ReadlineError::Eof);
                 }
             }
-            KeyPress::CTRL_E => try!(edit_move_end(&mut s)), // Move to the end of line.
-            KeyPress::CTRL_F => try!(edit_move_right(&mut s)), // Move forward a character.
-            KeyPress::CTRL_H | KeyPress::BACKSPACE => try!(edit_backspace(&mut s)), // Delete one character backward.
-            KeyPress::CTRL_J => break, // like ENTER
-            KeyPress::CTRL_K => try!(edit_kill_line(&mut s)), // Kill the text from point to the end of the line.
+            KeyPress::CTRL_E => {
+                kill_ring.reset();
+                // Move to the end of line.
+                try!(edit_move_end(&mut s))
+            }
+            KeyPress::CTRL_F => {
+                kill_ring.reset();
+                // Move forward a character.
+                try!(edit_move_right(&mut s))
+            }
+            KeyPress::CTRL_H | KeyPress::BACKSPACE => {
+                kill_ring.reset();
+                // Delete one character backward.
+                try!(edit_backspace(&mut s))
+            }
+            KeyPress::CTRL_J => {
+                // like ENTER
+                kill_ring.reset();
+                break;
+            }
+            KeyPress::CTRL_K => {
+                // Kill the text from point to the end of the line.
+                match try!(edit_kill_line(&mut s)) {
+                    Some(text) => kill_ring.kill(&text, true),
+                    None => (),
+                }
+            }
             KeyPress::CTRL_L => {
                 // Clear the screen leaving the current line at the top of the screen.
                 try!(clear_screen(s.out));
                 try!(s.refresh_line())
             }
             KeyPress::CTRL_N => {
+                kill_ring.reset();
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, history, false))
             }
             KeyPress::CTRL_P => {
+                kill_ring.reset();
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, history, true))
             }
-            KeyPress::CTRL_T => try!(edit_transpose_chars(&mut s)), // Exchange the char before cursor with the character at cursor.
-            KeyPress::CTRL_U => try!(edit_discard_line(&mut s)), // Kill backward from point to the beginning of the line.
+            KeyPress::CTRL_T => {
+                kill_ring.reset();
+                // Exchange the char before cursor with the character at cursor.
+                try!(edit_transpose_chars(&mut s))
+            }
+            KeyPress::CTRL_U => {
+                // Kill backward from point to the beginning of the line.
+                match try!(edit_discard_line(&mut s)) {
+                    Some(text) => kill_ring.kill(&text, false),
+                    None => (),
+                }
+            }
             // TODO CTRL_V // Quoted insert
-            KeyPress::CTRL_W => try!(edit_delete_prev_word(&mut s)), // Kill the word behind point, using white space as a word boundary
-            // TODO CTRL_Y // retrieve (yank) last item killed
+            KeyPress::CTRL_W => {
+                // Kill the word behind point, using white space as a word boundary
+                match try!(edit_delete_prev_word(&mut s)) {
+                    Some(text) => kill_ring.kill(&text, false),
+                    None => (),
+                }
+            }
+            KeyPress::CTRL_Y => {
+                // retrieve (yank) last item killed
+                match kill_ring.yank() {
+                    Some(text) => try!(edit_yank(&mut s, text)),
+                    None => (),
+                }
+            }
+            KeyPress::ESC_Y => {
+                // yank-pop
+                match kill_ring.yank_pop() {
+                    Some((yank_size, text)) => try!(edit_yank_pop(&mut s, yank_size, text)),
+                    None => (),
+                }
+            }
             // TODO CTRL-_ // undo
-            KeyPress::ESC_SEQ_DELETE => try!(edit_delete(&mut s)),
-            KeyPress::ENTER => break, // Accept the line regardless of where the cursor is.
-            _ => try!(edit_insert(&mut s, ch)), // Insert the character typed.
+            KeyPress::ESC_SEQ_DELETE => {
+                kill_ring.reset();
+                try!(edit_delete(&mut s))
+            }
+            KeyPress::ENTER => {
+                kill_ring.reset();
+                // Accept the line regardless of where the cursor is.
+                break;
+            }
+            _ => {
+                kill_ring.reset();
+                // Insert the character typed.
+                try!(edit_insert(&mut s, ch))
+            }
         }
     }
     Ok(s.buf)
@@ -763,10 +872,11 @@ fn readline_edit(prompt: &str,
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
                 history: &mut History,
-                completer: Option<&Completer>)
+                completer: Option<&Completer>,
+                kill_ring: &mut KillRing)
                 -> Result<String> {
     let original_termios = try!(enable_raw_mode());
-    let user_input = readline_edit(prompt, history, completer);
+    let user_input = readline_edit(prompt, history, completer, kill_ring);
     try!(disable_raw_mode(original_termios));
     println!("");
     user_input
@@ -788,6 +898,7 @@ pub struct Editor<'completer> {
     // cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
+    kill_ring: KillRing,
 }
 
 impl<'completer> Editor<'completer> {
@@ -800,6 +911,7 @@ impl<'completer> Editor<'completer> {
             stdin_isatty: is_a_tty(),
             history: History::new(),
             completer: None,
+            kill_ring: KillRing::new(60),
         }
     }
 
@@ -815,7 +927,10 @@ impl<'completer> Editor<'completer> {
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {
-            readline_raw(prompt, &mut self.history, self.completer)
+            readline_raw(prompt,
+                         &mut self.history,
+                         self.completer,
+                         &mut self.kill_ring)
         }
     }
 
@@ -941,14 +1056,16 @@ mod test {
     fn kill() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "αßγδε", 6, 80);
-        super::edit_kill_line(&mut s).unwrap();
+        let text = super::edit_kill_line(&mut s).unwrap();
         assert_eq!("αßγ", s.buf);
         assert_eq!(6, s.pos);
+        assert_eq!(Some("δε".to_string()), text);
 
         s.pos = 4;
-        super::edit_discard_line(&mut s).unwrap();
+        let text = super::edit_discard_line(&mut s).unwrap();
         assert_eq!("γ", s.buf);
         assert_eq!(0, s.pos);
+        assert_eq!(Some("αß".to_string()), text);
     }
 
     #[test]
@@ -970,9 +1087,10 @@ mod test {
     fn delete_prev_word() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "a ß  c", 6, 80);
-        super::edit_delete_prev_word(&mut s).unwrap();
+        let text = super::edit_delete_prev_word(&mut s).unwrap();
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
+        assert_eq!(Some("ß  ".to_string()), text);
     }
 
     #[test]

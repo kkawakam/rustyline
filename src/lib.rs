@@ -868,6 +868,16 @@ fn readline_edit(prompt: &str,
     Ok(s.buf)
 }
 
+struct Guard(termios::Termios);
+
+#[allow(unused_must_use)]
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let Guard(termios) = *self;
+        disable_raw_mode(termios);
+    }
+}
+
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
@@ -876,8 +886,9 @@ fn readline_raw(prompt: &str,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
     let original_termios = try!(enable_raw_mode());
+    let guard = Guard(original_termios);
     let user_input = readline_edit(prompt, history, completer, kill_ring);
-    try!(disable_raw_mode(original_termios));
+    drop(guard); // try!(disable_raw_mode(original_termios));
     println!("");
     user_input
 }

@@ -16,7 +16,6 @@
 //! ```
 #![feature(io)]
 #![feature(str_char)]
-#![feature(unicode)]
 extern crate libc;
 extern crate nix;
 extern crate unicode_width;
@@ -50,10 +49,11 @@ struct State<'out, 'prompt> {
     prompt_width: usize, // Prompt Unicode width
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
+    old_pos: usize, // Previous refresh cursor position (multiline mode)
     cols: usize, // Number of columns in terminal
+    max_rows: usize, // Maximum num of rows used so far (multiline mode)
     history_index: usize, // The history index we are currently editing.
     history_end: String, // Current edited line before history browsing
-    bytes: [u8; 4],
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -69,10 +69,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             prompt_width: width(prompt),
             buf: String::with_capacity(capacity),
             pos: 0,
+            old_pos: 0,
             cols: cols,
+            max_rows: 0,
             history_index: history_index,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 
@@ -98,35 +99,64 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn refresh(&mut self, prompt: &str, prompt_width: usize) -> Result<()> {
         use std::fmt::Write;
-        use unicode_width::UnicodeWidthChar;
 
         let buf = &self.buf;
-        let mut start = 0;
-        let mut w1 = width(&buf[start..self.pos]);
-        // horizontal-scroll-mode
-        while prompt_width + w1 >= self.cols {
-            let ch = buf.char_at(start);
-            start += ch.len_utf8();
-            w1 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-        }
-        let mut end = buf.len();
-        let mut w2 = width(&buf[start..end]);
-        while prompt_width + w2 > self.cols {
-            let ch = buf.char_at_reverse(end);
-            end -= ch.len_utf8();
-            w2 -= UnicodeWidthChar::width(ch).unwrap_or(0);
+        // rows used by current buf.
+        let mut rows = (prompt_width + width(&buf)) / self.cols; // FIXME does not work with a char which width > 1...
+        // cursor relative row.
+        let rpos = (prompt_width + self.old_pos + self.cols) / self.cols;
+        //
+
+        let old_rows = self.max_rows;
+        // Update maxrows if needed.
+        if rows > self.max_rows {
+            self.max_rows = rows;
         }
 
+        // First step: clear all the lines used before. To do so start by going to the last row.
         let mut ab = String::new();
-        // Cursor to left edge
-        ab.push('\r');
+        if old_rows > rpos {
+            ab.write_fmt(format_args!("\r\x1b[{}B", old_rows - rpos)).unwrap();
+        }
+        // Now for every row clear it, go up.
+        for _ in 1..old_rows {
+            ab.push_str("\r\x1b[0K\x1b[1A");
+        }
+        // Clean the top line.
+        ab.push_str("\r\x1b[0K");
+
         // Write the prompt and the current buffer content
         ab.push_str(prompt);
-        ab.push_str(&self.buf[start..end]);
-        // Erase to right
-        ab.push_str("\x1b[0K");
-        // Move cursor to original position.
-        ab.write_fmt(format_args!("\r\x1b[{}C", w1 + prompt_width)).unwrap();
+        ab.push_str(&buf);
+
+        // If we are at the very end of the screen with our prompt, we need to
+        // emit a newline and move the prompt to the first column.
+        if self.pos > 0 && self.pos == buf.len() && (self.pos + prompt_width) % self.cols == 0 {
+            ab.push_str("\n\r");
+            rows += 1;
+            if rows > self.max_rows {
+                self.max_rows = rows;
+            }
+        }
+
+        // Move cursor to right position.
+        // current cursor relative row.
+        let rpos2 = (prompt_width + self.pos + self.cols) / self.cols;
+        // Go up till we reach the expected positon.
+        if rows > rpos2 {
+            ab.write_fmt(format_args!("\x1b[{}A", rows - rpos2)).unwrap();
+        }
+
+        // Set column.
+        let col = (prompt_width + self.pos) % self.cols;
+        if col != 0 {
+            ab.write_fmt(format_args!("\r\x1b[{}C", col)).unwrap();
+        } else {
+            ab.push('\r');
+        }
+
+        self.old_pos = self.pos;
+
         write_and_flush(self.out, ab.as_bytes())
     }
 }
@@ -294,29 +324,9 @@ fn width(s: &str) -> usize {
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
-        if s.buf.len() == s.pos {
-            s.buf.push(ch);
-
-            let mut size = 0;
-
-            for (i, byte) in ch.encode_utf8().take(4).enumerate() {
-                size += 1;
-                s.bytes[i] = byte;
-            }
-
-            s.pos += size;
-
-            if s.prompt_width + width(&s.buf) < s.cols {
-                // Avoid a full update of the line in the trivial case.
-                write_and_flush(s.out, &mut s.bytes[0..size])
-            } else {
-                s.refresh_line()
-            }
-        } else {
-            s.buf.insert(s.pos, ch);
-            s.pos += ch.len_utf8();
-            s.refresh_line()
-        }
+        s.buf.insert(s.pos, ch);
+        s.pos += ch.len_utf8();
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -324,17 +334,26 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    for ch in text.chars() {
-        try!(edit_insert(s, ch));
+    if text.len() == 0 || (s.buf.len() + text.len()) > s.buf.capacity() {
+        return Ok(());
     }
-    Ok(())
+    if s.pos == s.buf.len() {
+        s.buf.push_str(text);
+    } else {
+        let mut buf = String::with_capacity(MAX_LINE);
+        buf.push_str(&s.buf[..s.pos]);
+        buf.push_str(text);
+        buf.push_str(&s.buf[s.pos..]);
+        s.update_buf(buf);
+    }
+    s.pos += width(text);
+    s.refresh_line()
 }
 
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.buf.drain((s.pos - yank_size)..s.pos);
     s.pos -= yank_size;
-    try!(s.refresh_line());
     edit_yank(s, text)
 }
 
@@ -993,10 +1012,11 @@ mod test {
             prompt_width: 0,
             buf: String::from(line),
             pos: pos,
+            old_pos: pos,
             cols: cols,
+            max_rows: 0,
             history_index: 0,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 

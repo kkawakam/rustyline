@@ -452,21 +452,44 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State) -> Result<Option<String>> {
+fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
+    where F: Fn(char) -> bool
+{
     if s.pos > 0 {
         let old_pos = s.pos;
         let mut ch = s.buf.char_at_reverse(s.pos);
         // eat any spaces on the left
-        while s.pos > 0 && ch.is_whitespace() {
+        while s.pos > 0 && test(ch) {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
         // eat any non-spaces on the left
-        while s.pos > 0 && !ch.is_whitespace() {
+        while s.pos > 0 && !test(ch) {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
         let text = s.buf.drain(s.pos..old_pos).collect();
+        try!(s.refresh_line());
+        Ok(Some(text))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
+fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
+    if s.pos < s.buf.len() {
+        let mut pos = s.pos;
+        let mut ch = s.buf.char_at(pos);
+        while pos < s.buf.len() && !ch.is_alphanumeric() {
+            pos += ch.len_utf8();
+            ch = s.buf.char_at(pos);
+        }
+        while pos < s.buf.len() && ch.is_alphanumeric() {
+            pos += ch.len_utf8();
+            ch = s.buf.char_at(pos);
+        }
+        let text = s.buf.drain(s.pos..pos).collect();
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -673,7 +696,6 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     } else {
         // TODO ESC-B (b): move backward a word (https://github.com/antirez/linenoise/pull/64, https://github.com/antirez/linenoise/pull/6)
         // TODO ESC-C (c): capitalize word after point
-        // TODO ESC-D (d): kill one word forward
         // TODO ESC-F (f): move forward a word
         // TODO ESC-L (l): lowercase word after point
         // TODO ESC-N (n): search history forward not interactively
@@ -681,11 +703,12 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
         // TODO ESC-R (r): Undo all changes made to this line.
         // TODO EST-T (t): transpose words
         // TODO ESC-U (u): uppercase word after point
-        // TODO ESC-CTRl-H | ESC-BACKSPACE kill one word backward
         // TODO ESC-<: move to first entry in history
         // TODO ESC->: move to last entry in history
         match seq1 {
+            'd' | 'D' => Ok(KeyPress::ESC_D),
             'y' | 'Y' => Ok(KeyPress::ESC_Y),
+            '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
             _ => {
                 writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
                 Ok(KeyPress::UNKNOWN_ESC_SEQ)
@@ -794,9 +817,8 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::CTRL_K => {
                 // Kill the text from point to the end of the line.
-                match try!(edit_kill_line(&mut s)) {
-                    Some(text) => kill_ring.kill(&text, true),
-                    None => (),
+                if let Some(text) = try!(edit_kill_line(&mut s)) {
+                    kill_ring.kill(&text, true)
                 }
             }
             KeyPress::CTRL_L => {
@@ -821,31 +843,41 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::CTRL_U => {
                 // Kill backward from point to the beginning of the line.
-                match try!(edit_discard_line(&mut s)) {
-                    Some(text) => kill_ring.kill(&text, false),
-                    None => (),
+                if let Some(text) = try!(edit_discard_line(&mut s)) {
+                    kill_ring.kill(&text, false)
                 }
             }
             // TODO CTRL_V // Quoted insert
             KeyPress::CTRL_W => {
                 // Kill the word behind point, using white space as a word boundary
-                match try!(edit_delete_prev_word(&mut s)) {
-                    Some(text) => kill_ring.kill(&text, false),
-                    None => (),
+                if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
+                    kill_ring.kill(&text, false)
                 }
             }
             KeyPress::CTRL_Y => {
                 // retrieve (yank) last item killed
-                match kill_ring.yank() {
-                    Some(text) => try!(edit_yank(&mut s, text)),
-                    None => (),
+                if let Some(text) = kill_ring.yank() {
+                    try!(edit_yank(&mut s, text))
+                }
+            }
+            KeyPress::ESC_BACKSPACE => {
+                // kill one word backward
+                // Kill from the cursor the start of the current word, or, if between words, to the start of the previous word.
+                if let Some(text) = try!(edit_delete_prev_word(&mut s,
+                                                               |ch| !ch.is_alphanumeric())) {
+                    kill_ring.kill(&text, false)
+                }
+            }
+            KeyPress::ESC_D => {
+                // kill one word forward
+                if let Some(text) = try!(edit_delete_word(&mut s)) {
+                    kill_ring.kill(&text, true)
                 }
             }
             KeyPress::ESC_Y => {
                 // yank-pop
-                match kill_ring.yank_pop() {
-                    Some((yank_size, text)) => try!(edit_yank_pop(&mut s, yank_size, text)),
-                    None => (),
+                if let Some((yank_size, text)) = kill_ring.yank_pop() {
+                    try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
             // TODO CTRL-_ // undo
@@ -1087,10 +1119,20 @@ mod test {
     fn delete_prev_word() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "a ß  c", 6, 80);
-        let text = super::edit_delete_prev_word(&mut s).unwrap();
+        let text = super::edit_delete_prev_word(&mut s, char::is_whitespace).unwrap();
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
+    }
+
+    #[test]
+    fn delete_word() {
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ß  c", 1, 80);
+        let text = super::edit_delete_word(&mut s).unwrap();
+        assert_eq!("a  c", s.buf);
+        assert_eq!(1, s.pos);
+        assert_eq!(Some(" ß".to_string()), text);
     }
 
     #[test]

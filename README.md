@@ -54,7 +54,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "0.2.1"
+rustyline = "0.2.2"
 ```
 
 ## Features
@@ -63,10 +63,10 @@ rustyline = "0.2.1"
  - Word completion (linenoise supports only line completion)
  - Filename completion
  - History search ([Searching for Commands in the History](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8)
+ - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
 
 ## ToDo
 
- - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
  - Word commands
  - Multi line mode
  - expose an API callable from C

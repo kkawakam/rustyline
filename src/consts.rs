@@ -23,10 +23,12 @@ pub enum KeyPress {
     CTRL_T,
     CTRL_U,
     CTRL_W,
+    CTRL_Y,
     ESC,
     BACKSPACE,
     UNKNOWN_ESC_SEQ,
     ESC_SEQ_DELETE,
+    ESC_Y,
 }
 
 pub fn char_to_key_press(c: char) -> KeyPress {
@@ -52,6 +54,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x14' => KeyPress::CTRL_T,
         '\x15' => KeyPress::CTRL_U,
         '\x17' => KeyPress::CTRL_W,
+        '\x19' => KeyPress::CTRL_Y,
         '\x1b' => KeyPress::ESC,
         '\x7f' => KeyPress::BACKSPACE,
         _ => KeyPress::NULL,

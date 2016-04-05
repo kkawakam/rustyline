@@ -16,6 +16,7 @@
 //! ```
 #![feature(io)]
 #![feature(str_char)]
+#![feature(unicode)]
 extern crate libc;
 extern crate nix;
 extern crate unicode_width;
@@ -324,9 +325,22 @@ fn width(s: &str) -> usize {
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
-        s.buf.insert(s.pos, ch);
-        s.pos += ch.len_utf8();
-        s.refresh_line()
+        if s.pos == s.buf.len() {
+            s.buf.push(ch);
+            s.pos += ch.len_utf8();
+            if s.prompt_width + width(&s.buf) < s.cols {
+                // Avoid a full update of the line in the trivial case.
+                let bits = ch.encode_utf8();
+                let bits = bits.as_slice();
+                write_and_flush(s.out, bits)
+            } else {
+                s.refresh_line()
+            }
+        } else {
+            s.buf.insert(s.pos, ch);
+            s.pos += ch.len_utf8();
+            s.refresh_line()
+        }
     } else {
         Ok(())
     }
@@ -340,14 +354,29 @@ fn edit_yank(s: &mut State, text: &str) -> Result<()> {
     if s.pos == s.buf.len() {
         s.buf.push_str(text);
     } else {
-        let mut buf = String::with_capacity(MAX_LINE);
-        buf.push_str(&s.buf[..s.pos]);
-        buf.push_str(text);
-        buf.push_str(&s.buf[s.pos..]);
-        s.update_buf(buf);
+        insert_str(&mut s.buf, s.pos, text);
     }
     s.pos += width(text);
     s.refresh_line()
+}
+
+fn insert_str(buf: &mut String, idx: usize, s: &str) {
+    use std::ptr;
+
+    let len = buf.len();
+    assert!(idx <= len);
+    assert!(buf.is_char_boundary(idx));
+    let amt = s.len();
+    buf.reserve(amt);
+
+    unsafe {
+        let v = buf.as_mut_vec();
+        ptr::copy(v.as_ptr().offset(idx as isize),
+                  v.as_mut_ptr().offset((idx + amt) as isize),
+                  len - idx);
+        ptr::copy_nonoverlapping(s.as_ptr(), v.as_mut_ptr().offset(idx as isize), amt);
+        v.set_len(len + amt);
+    }
 }
 
 // Delete previously yanked text and yank/paste `text` at current position.
@@ -806,11 +835,6 @@ fn readline_edit(prompt: &str,
                 // Delete one character backward.
                 try!(edit_backspace(&mut s))
             }
-            KeyPress::CTRL_J => {
-                // like ENTER
-                kill_ring.reset();
-                break;
-            }
             KeyPress::CTRL_K => {
                 // Kill the text from point to the end of the line.
                 match try!(edit_kill_line(&mut s)) {
@@ -872,9 +896,10 @@ fn readline_edit(prompt: &str,
                 kill_ring.reset();
                 try!(edit_delete(&mut s))
             }
-            KeyPress::ENTER => {
-                kill_ring.reset();
+            KeyPress::ENTER | KeyPress::CTRL_J => {
                 // Accept the line regardless of where the cursor is.
+                kill_ring.reset();
+                try!(edit_move_end(&mut s));
                 break;
             }
             _ => {

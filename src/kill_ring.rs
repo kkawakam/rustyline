@@ -68,7 +68,7 @@ impl KillRing {
     /// Yank previously killed text.
     /// Return `None` when kill-ring is empty.
     pub fn yank(&mut self) -> Option<&String> {
-        if self.slots.len() == 0 {
+        if self.slots.is_empty() {
             None
         } else {
             self.last_action = Action::Yank(self.slots[self.index].len());
@@ -81,7 +81,7 @@ impl KillRing {
     pub fn yank_pop(&mut self) -> Option<(usize, &String)> {
         match self.last_action {
             Action::Yank(yank_size) => {
-                if self.slots.len() == 0 {
+                if self.slots.is_empty() {
                     return None;
                 }
                 if self.index == 0 {

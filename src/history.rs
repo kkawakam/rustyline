@@ -23,7 +23,7 @@ impl History {
 
     /// Return the history entry at position `index`, starting from 0.
     pub fn get(&self, index: usize) -> Option<&String> {
-        return self.entries.get(index);
+        self.entries.get(index)
     }
 
     /// Add a new entry in the history.
@@ -31,7 +31,7 @@ impl History {
         if self.max_len == 0 {
             return false;
         }
-        if line.len() == 0 || line.chars().next().map_or(true, |c| c.is_whitespace()) {
+        if line.is_empty() || line.chars().next().map_or(true, |c| c.is_whitespace()) {
             // ignorespace
             return false;
         }
@@ -45,11 +45,14 @@ impl History {
             self.entries.pop_front();
         }
         self.entries.push_back(String::from(line));
-        return true;
+        true
     }
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     /// Set the maximum length for the history. This function can be called even
@@ -74,16 +77,16 @@ impl History {
     pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
-        if self.entries.len() == 0 {
+        if self.is_empty() {
             return Ok(());
         }
         let file = try!(File::create(path));
         let mut wtr = BufWriter::new(file);
-        for entry in self.entries.iter() {
+        for entry in &self.entries {
             try!(wtr.write_all(&entry.as_bytes()));
             try!(wtr.write_all(b"\n"));
         }
-        return Ok(());
+        Ok(())
     }
 
     /// Load the history from the specified file.
@@ -95,7 +98,7 @@ impl History {
         for line in rdr.lines() {
             self.add(try!(line).as_ref()); // TODO truncate to MAX_LINE
         }
-        return Ok(());
+        Ok(())
     }
 
     /// Clear history
@@ -122,6 +125,12 @@ impl History {
     }
 }
 
+impl Default for History {
+    fn default() -> History {
+        History::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate tempdir;
@@ -132,7 +141,7 @@ mod tests {
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
-        return history;
+        history
     }
 
     #[test]

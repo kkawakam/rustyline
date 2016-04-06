@@ -43,6 +43,12 @@ impl FilenameCompleter {
     }
 }
 
+impl Default for FilenameCompleter {
+    fn default() -> FilenameCompleter {
+        FilenameCompleter::new()
+    }
+}
+
 impl Completer for FilenameCompleter {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
         let (start, path) = extract_word(line, pos, &self.break_chars);
@@ -51,6 +57,7 @@ impl Completer for FilenameCompleter {
     }
 }
 
+#[cfg_attr(feature="clippy", allow(single_char_pattern))]
 fn filename_complete(path: &str) -> Result<Vec<String>> {
     use std::env::{current_dir, home_dir};
 

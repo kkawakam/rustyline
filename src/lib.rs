@@ -32,6 +32,8 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::result;
+use std::sync;
+use std::sync::atomic;
 use nix::errno::Errno;
 use nix::sys::signal;
 use nix::sys::termios;
@@ -168,9 +170,9 @@ static MAX_LINE: usize = 4096;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-/// Check to see if STDIN is a TTY
-fn is_a_tty() -> bool {
-    let isatty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
+/// Check to see if `fd` is a TTY
+fn is_a_tty(fd: libc::c_int) -> bool {
+    let isatty = unsafe { libc::isatty(fd) } != 0;
     isatty
 }
 
@@ -197,7 +199,7 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
 fn enable_raw_mode() -> Result<termios::Termios> {
     use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN,
                             ISIG, VMIN, VTIME};
-    if !is_a_tty() {
+    if !is_a_tty(libc::STDIN_FILENO) {
         Err(from_errno(Errno::ENOTTY))
     } else {
         let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
@@ -782,7 +784,13 @@ fn readline_edit(prompt: &str,
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
-        let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
+        let c = chars.next().unwrap();
+        if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+            s.cols = get_columns();
+            try!(s.refresh_line());
+            continue;
+        }
+        let mut ch = try!(c);
         if !ch.is_control() {
             kill_ring.reset();
             try!(edit_insert(&mut s, ch));
@@ -989,6 +997,7 @@ fn readline_direct() -> Result<String> {
 pub struct Editor<'completer> {
     unsupported_term: bool,
     stdin_isatty: bool,
+    stdout_isatty: bool,
     // cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
@@ -999,14 +1008,18 @@ impl<'completer> Editor<'completer> {
     pub fn new() -> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
-        // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
-        Editor {
+        let editor = Editor {
             unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(),
+            stdin_isatty: is_a_tty(libc::STDIN_FILENO),
+            stdout_isatty: is_a_tty(libc::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),
+        };
+        if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
+            install_sigwinch_handler();
         }
+        editor
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
@@ -1066,6 +1079,20 @@ impl<'completer> fmt::Debug for Editor<'completer> {
          .field("stdin_isatty", &self.stdin_isatty)
          .finish()
     }
+}
+
+static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+fn install_sigwinch_handler() {
+    SIGWINCH_ONCE.call_once(|| unsafe {
+        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
+                                              signal::SaFlag::empty(),
+                                              signal::SigSet::empty());
+        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
+    });
+}
+extern "C" fn sigwinch_handler(_: signal::SigNum) {
+    SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }
 
 #[cfg(test)]

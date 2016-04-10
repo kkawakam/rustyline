@@ -17,6 +17,9 @@
 #![feature(io)]
 #![feature(str_char)]
 #![feature(unicode)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
+
 extern crate libc;
 extern crate nix;
 extern crate unicode_width;
@@ -172,8 +175,7 @@ static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
 /// Check to see if `fd` is a TTY
 fn is_a_tty(fd: libc::c_int) -> bool {
-    let isatty = unsafe { libc::isatty(fd) } != 0;
-    isatty
+    unsafe { libc::isatty(fd) != 0 }
 }
 
 /// Check to see if the current `TERM` is unsupported
@@ -200,19 +202,18 @@ fn enable_raw_mode() -> Result<termios::Termios> {
     use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN,
                             ISIG, VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
-        Err(from_errno(Errno::ENOTTY))
-    } else {
-        let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
-        let mut raw = original_term;
-        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
-        raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
-        raw.c_cc[VMIN] = 1; // One character-at-a-time input
-        raw.c_cc[VTIME] = 0; // with blocking read
-        try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
-        Ok(original_term)
+        return Err(from_errno(Errno::ENOTTY));
     }
+    let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
+    let mut raw = original_term;
+    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
+    raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
+    raw.c_cc[VMIN] = 1; // One character-at-a-time input
+    raw.c_cc[VTIME] = 0; // with blocking read
+    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
+    Ok(original_term)
 }
 
 /// Disable Raw mode for the term
@@ -276,8 +277,9 @@ fn beep() -> Result<()> {
 /// starting at `orig`.
 /// Control characters are treated as having zero width.
 /// Characters with 2 column width are correctly handled (not splitted).
+#[cfg_attr(feature="clippy", allow(if_same_then_else))]
 fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
-    let mut pos = orig.clone();
+    let mut pos = orig;
     let mut esc_seq = 0;
     for c in s.chars() {
         let cw = if esc_seq == 1 {
@@ -350,7 +352,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    if text.len() == 0 || (s.buf.len() + text.len()) > s.buf.capacity() {
+    if text.is_empty() || (s.buf.len() + text.len()) > s.buf.capacity() {
         return Ok(());
     }
     if s.pos == s.buf.len() {
@@ -401,13 +403,12 @@ fn edit_move_left(s: &mut State) -> Result<()> {
 
 /// Move cursor on the right.
 fn edit_move_right(s: &mut State) -> Result<()> {
-    if s.pos != s.buf.len() {
-        let ch = s.buf.char_at(s.pos);
-        s.pos += ch.len_utf8();
-        s.refresh_line()
-    } else {
-        Ok(())
+    if s.pos == s.buf.len() {
+        return Ok(());
     }
+    let ch = s.buf.char_at(s.pos);
+    s.pos += ch.len_utf8();
+    s.refresh_line()
 }
 
 /// Move cursor to the start of the line.
@@ -422,18 +423,17 @@ fn edit_move_home(s: &mut State) -> Result<()> {
 
 /// Move cursor to the end of the line.
 fn edit_move_end(s: &mut State) -> Result<()> {
-    if s.pos != s.buf.len() {
-        s.pos = s.buf.len();
-        s.refresh_line()
-    } else {
-        Ok(())
+    if s.pos == s.buf.len() {
+        return Ok(());
     }
+    s.pos = s.buf.len();
+    s.refresh_line()
 }
 
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
 fn edit_delete(s: &mut State) -> Result<()> {
-    if s.buf.len() > 0 && s.pos < s.buf.len() {
+    if !s.buf.is_empty() && s.pos < s.buf.len() {
         s.buf.remove(s.pos);
         s.refresh_line()
     } else {
@@ -443,7 +443,7 @@ fn edit_delete(s: &mut State) -> Result<()> {
 
 /// Backspace implementation.
 fn edit_backspace(s: &mut State) -> Result<()> {
-    if s.pos > 0 && s.buf.len() > 0 {
+    if s.pos > 0 && !s.buf.is_empty() {
         let ch = s.buf.char_at_reverse(s.pos);
         s.pos -= ch.len_utf8();
         s.buf.remove(s.pos);
@@ -455,7 +455,7 @@ fn edit_backspace(s: &mut State) -> Result<()> {
 
 /// Kill the text from point to the end of the line.
 fn edit_kill_line(s: &mut State) -> Result<Option<String>> {
-    if s.buf.len() > 0 && s.pos < s.buf.len() {
+    if !s.buf.is_empty() && s.pos < s.buf.len() {
         let text = s.buf.drain(s.pos..).collect();
         try!(s.refresh_line());
         Ok(Some(text))
@@ -466,7 +466,7 @@ fn edit_kill_line(s: &mut State) -> Result<Option<String>> {
 
 /// Kill backward from point to the beginning of the line.
 fn edit_discard_line(s: &mut State) -> Result<Option<String>> {
-    if s.pos > 0 && s.buf.len() > 0 {
+    if s.pos > 0 && !s.buf.is_empty() {
         let text = s.buf.drain(..s.pos).collect();
         s.pos = 0;
         try!(s.refresh_line());
@@ -482,17 +482,15 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
         // TODO should work even if s.pos == s.buf.len()
         let ch = s.buf.remove(s.pos);
         let size = ch.len_utf8();
-        let och = s.buf.char_at_reverse(s.pos);
-        let osize = och.len_utf8();
-        s.buf.insert(s.pos - osize, ch);
+        let other_ch = s.buf.char_at_reverse(s.pos);
+        let other_size = other_ch.len_utf8();
+        s.buf.insert(s.pos - other_size, ch);
         if s.pos != s.buf.len() - size {
             s.pos += size;
+        } else if size >= other_size {
+            s.pos += size - other_size;
         } else {
-            if size >= osize {
-                s.pos += size - osize;
-            } else {
-                s.pos -= osize - size;
-            }
+            s.pos -= other_size - size;
         }
         s.refresh_line()
     } else {
@@ -550,34 +548,33 @@ fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
 /// Substitute the currently edited line with the next or previous history
 /// entry.
 fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()> {
-    if history.len() > 0 {
-        if s.history_index == history.len() {
-            if prev {
-                // Save the current edited line before to overwrite it
-                s.history_end = s.buf.clone();
-            } else {
-                return Ok(());
-            }
-        } else if s.history_index == 0 && prev {
+    if history.is_empty() {
+        return Ok(());
+    }
+    if s.history_index == history.len() {
+        if prev {
+            // Save the current edited line before to overwrite it
+            s.history_end = s.buf.clone();
+        } else {
             return Ok(());
         }
-        if prev {
-            s.history_index -= 1;
-        } else {
-            s.history_index += 1;
-        }
-        if s.history_index < history.len() {
-            let buf = history.get(s.history_index).unwrap();
-            s.update_buf(buf.clone());
-        } else {
-            let buf = s.history_end.clone(); // TODO how to avoid cloning?
-            s.update_buf(buf);
-        };
-        s.pos = s.buf.len();
-        s.refresh_line()
-    } else {
-        Ok(())
+    } else if s.history_index == 0 && prev {
+        return Ok(());
     }
+    if prev {
+        s.history_index -= 1;
+    } else {
+        s.history_index += 1;
+    }
+    if s.history_index < history.len() {
+        let buf = history.get(s.history_index).unwrap();
+        s.update_buf(buf.clone());
+    } else {
+        let buf = s.history_end.clone(); // TODO how to avoid cloning?
+        s.update_buf(buf);
+    };
+    s.pos = s.buf.len();
+    s.refresh_line()
 }
 
 /// Completes the line/word
@@ -639,6 +636,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
 }
 
 /// Incremental search
+#[cfg_attr(feature="clippy", allow(if_not_else))]
 fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
                                            s: &mut State,
                                            history: &History)
@@ -655,9 +653,10 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
     let mut key;
     // Display the reverse-i-search prompt and process chars
     loop {
-        let prompt = match success {
-            true => format!("(reverse-i-search)`{}': ", search_buf),
-            false => format!("(failed reverse-i-search)`{}': ", search_buf),
+        let prompt = if success {
+            format!("(reverse-i-search)`{}': ", search_buf)
+        } else {
+            format!("(failed reverse-i-search)`{}': ", search_buf)
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
@@ -770,6 +769,7 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
+#[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
 fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
@@ -845,11 +845,11 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::CTRL_D => {
                 kill_ring.reset();
-                if s.buf.len() > 0 {
+                if s.buf.is_empty() {
+                    return Err(error::ReadlineError::Eof);
+                } else {
                     // Delete (forward) one character at point.
                     try!(edit_delete(&mut s))
-                } else {
-                    return Err(error::ReadlineError::Eof);
                 }
             }
             KeyPress::CTRL_E => {
@@ -969,7 +969,7 @@ impl Drop for Guard {
     }
 }
 
-/// Readline method that will enable RAW mode, call the ```readline_edit()```
+/// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
                 history: &mut History,
@@ -1023,6 +1023,7 @@ impl<'completer> Editor<'completer> {
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
+    #[cfg_attr(feature="clippy", allow(if_not_else))]
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         if self.unsupported_term {
             // Write prompt and flush it to stdout
@@ -1069,6 +1070,12 @@ impl<'completer> Editor<'completer> {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<&'completer Completer>) {
         self.completer = completer;
+    }
+}
+
+impl<'completer> Default for Editor<'completer> {
+    fn default() -> Editor<'completer> {
+        Editor::new()
     }
 }
 
@@ -1236,28 +1243,28 @@ mod test {
         s.buf = String::from(line);
 
         for _ in 0..2 {
-            super::edit_history_next(&mut s, &mut history, false).unwrap();
+            super::edit_history_next(&mut s, &history, false).unwrap();
             assert_eq!(line, s.buf);
         }
 
-        super::edit_history_next(&mut s, &mut history, true).unwrap();
+        super::edit_history_next(&mut s, &history, true).unwrap();
         assert_eq!(line, s.history_end);
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.buf);
 
         for _ in 0..2 {
-            super::edit_history_next(&mut s, &mut history, true).unwrap();
+            super::edit_history_next(&mut s, &history, true).unwrap();
             assert_eq!(line, s.history_end);
             assert_eq!(0, s.history_index);
             assert_eq!("line0", s.buf);
         }
 
-        super::edit_history_next(&mut s, &mut history, false).unwrap();
+        super::edit_history_next(&mut s, &history, false).unwrap();
         assert_eq!(line, s.history_end);
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.buf);
 
-        super::edit_history_next(&mut s, &mut history, false).unwrap();
+        super::edit_history_next(&mut s, &history, false).unwrap();
         assert_eq!(line, s.history_end);
         assert_eq!(2, s.history_index);
         assert_eq!(line, s.buf);

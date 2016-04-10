@@ -35,7 +35,10 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::result;
+use std::sync;
+use std::sync::atomic;
 use nix::errno::Errno;
+use nix::sys::signal;
 use nix::sys::termios;
 
 use completion::Completer;
@@ -50,13 +53,19 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 struct State<'out, 'prompt> {
     out: &'out mut Write,
     prompt: &'prompt str, // Prompt to display
-    prompt_width: usize, // Prompt Unicode width
+    prompt_size: Position, // Prompt Unicode width and height
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
+    cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
     history_index: usize, // The history index we are currently editing.
     history_end: String, // Current edited line before history browsing
-    bytes: [u8; 4],
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+struct Position {
+    col: usize,
+    row: usize,
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -66,16 +75,17 @@ impl<'out, 'prompt> State<'out, 'prompt> {
            cols: usize,
            history_index: usize)
            -> State<'out, 'prompt> {
+        let prompt_size = calculate_position(prompt, Default::default(), cols);
         State {
             out: out,
             prompt: prompt,
-            prompt_width: width(prompt),
+            prompt_size: prompt_size,
             buf: String::with_capacity(capacity),
             pos: 0,
+            cursor: prompt_size,
             cols: cols,
             history_index: history_index,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 
@@ -90,46 +100,52 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()> {
-        let prompt_width = self.prompt_width;
-        self.refresh(self.prompt, prompt_width)
+        let prompt_size = self.prompt_size;
+        self.refresh(self.prompt, prompt_size)
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_width = width(prompt);
-        self.refresh(prompt, prompt_width)
+        let prompt_size = calculate_position(prompt, Default::default(), self.cols);
+        self.refresh(prompt, prompt_size)
     }
 
-    fn refresh(&mut self, prompt: &str, prompt_width: usize) -> Result<()> {
+    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         use std::fmt::Write;
-        use unicode_width::UnicodeWidthChar;
 
-        let buf = &self.buf;
-        let mut start = 0;
-        let mut w1 = width(&buf[start..self.pos]);
-        // horizontal-scroll-mode
-        while prompt_width + w1 >= self.cols {
-            let ch = buf.char_at(start);
-            start += ch.len_utf8();
-            w1 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-        }
-        let mut end = buf.len();
-        let mut w2 = width(&buf[start..end]);
-        while prompt_width + w2 > self.cols {
-            let ch = buf.char_at_reverse(end);
-            end -= ch.len_utf8();
-            w2 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-        }
+        let end_pos = calculate_position(&self.buf, prompt_size, self.cols);
+        let cursor = calculate_position(&self.buf[..self.pos], prompt_size, self.cols);
 
         let mut ab = String::new();
-        // Cursor to left edge
-        ab.push('\r');
-        // Write the prompt and the current buffer content
+        let cursor_row_movement = self.cursor.row - self.prompt_size.row;
+        // move the cursor up as required
+        if cursor_row_movement > 0 {
+            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+        }
+        // position at the start of the prompt, clear to end of screen
+        ab.push_str("\r\x1b[J");
+        // display the prompt
         ab.push_str(prompt);
-        ab.push_str(&self.buf[start..end]);
-        // Erase to right
-        ab.push_str("\x1b[0K");
-        // Move cursor to original position.
-        ab.write_fmt(format_args!("\r\x1b[{}C", w1 + prompt_width)).unwrap();
+        // display the input line
+        ab.push_str(&self.buf);
+        // we have to generate our own newline on line wrap
+        if end_pos.col == 0 && end_pos.row > 0 {
+            ab.push_str("\n");
+        }
+        // position the cursor
+        let cursor_row_movement = end_pos.row - cursor.row;
+        // move the cursor up as required
+        if cursor_row_movement > 0 {
+            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+        }
+        // position the cursor within the line
+        if cursor.col > 0 {
+            ab.write_fmt(format_args!("\r\x1b[{}C", cursor.col)).unwrap();
+        } else {
+            ab.push('\r');
+        }
+
+        self.cursor = cursor;
+
         write_and_flush(self.out, ab.as_bytes())
     }
 }
@@ -138,11 +154,12 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
          .field("prompt", &self.prompt)
-         .field("prompt_width", &self.prompt_width)
+         .field("prompt_size", &self.prompt_size)
          .field("buf", &self.buf)
          .field("buf length", &self.buf.len())
          .field("buf capacity", &self.buf.capacity())
          .field("pos", &self.pos)
+         .field("cursor", &self.cursor)
          .field("cols", &self.cols)
          .field("history_index", &self.history_index)
          .field("history_end", &self.history_end)
@@ -156,9 +173,9 @@ static MAX_LINE: usize = 4096;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-/// Check to see if STDIN is a TTY
-fn is_a_tty() -> bool {
-    unsafe { libc::isatty(libc::STDIN_FILENO as i32) != 0 }
+/// Check to see if `fd` is a TTY
+fn is_a_tty(fd: libc::c_int) -> bool {
+    unsafe { libc::isatty(fd) != 0 }
 }
 
 /// Check to see if the current `TERM` is unsupported
@@ -184,7 +201,7 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
 fn enable_raw_mode() -> Result<termios::Termios> {
     use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN,
                             ISIG, VMIN, VTIME};
-    if !is_a_tty() {
+    if !is_a_tty(libc::STDIN_FILENO) {
         return Err(from_errno(Errno::ENOTTY));
     }
     let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
@@ -256,60 +273,70 @@ fn beep() -> Result<()> {
     write_and_flush(&mut io::stderr(), b"\x07") // TODO bell-style
 }
 
-// Control characters are treated as having zero width.
-fn width(s: &str) -> usize {
-    if s.contains('\x1b') {
-        let mut w = 0;
-        let mut esc_seq = 0;
-        for c in s.chars() {
-            if esc_seq == 1 {
-                if c == '[' {
-                    // CSI
-                    esc_seq = 2;
-                } else {
-                    // two-character sequence
-                    esc_seq = 0;
-                }
-            } else if esc_seq == 2 {
-                if c == ';' || (c >= '0' && c <= '9') {
-                } else if c == 'm' {
-                    // last
-                    esc_seq = 0
-                } else {
-                    // not supported
-                    w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
-                    esc_seq = 0
-                }
-            } else if c == '\x1b' {
-                esc_seq = 1;
+/// Calculate the number of columns and rows used to display `s` on a `cols` width terminal
+/// starting at `orig`.
+/// Control characters are treated as having zero width.
+/// Characters with 2 column width are correctly handled (not splitted).
+#[cfg_attr(feature="clippy", allow(if_same_then_else))]
+fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
+    let mut pos = orig;
+    let mut esc_seq = 0;
+    for c in s.chars() {
+        let cw = if esc_seq == 1 {
+            if c == '[' {
+                // CSI
+                esc_seq = 2;
             } else {
-                w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+                // two-character sequence
+                esc_seq = 0;
+            }
+            None
+        } else if esc_seq == 2 {
+            if c == ';' || (c >= '0' && c <= '9') {
+            } else if c == 'm' {
+                // last
+                esc_seq = 0;
+            } else {
+                // not supported
+                esc_seq = 0;
+            }
+            None
+        } else if c == '\x1b' {
+            esc_seq = 1;
+            None
+        } else if c == '\n' {
+            pos.col = 0;
+            pos.row += 1;
+            None
+        } else {
+            unicode_width::UnicodeWidthChar::width(c)
+        };
+        if let Some(cw) = cw {
+            pos.col += cw;
+            if pos.col > cols {
+                pos.row += 1;
+                pos.col = cw;
             }
         }
-        w
-    } else {
-        unicode_width::UnicodeWidthStr::width(s)
     }
+    if pos.col == cols {
+        pos.col = 0;
+        pos.row += 1;
+    }
+    pos
 }
 
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
-        if s.buf.len() == s.pos {
+        if s.pos == s.buf.len() {
             s.buf.push(ch);
-
-            let mut size = 0;
-
-            for (i, byte) in ch.encode_utf8().take(4).enumerate() {
-                size += 1;
-                s.bytes[i] = byte;
-            }
-
-            s.pos += size;
-
-            if s.prompt_width + width(&s.buf) < s.cols {
+            s.pos += ch.len_utf8();
+            if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
-                write_and_flush(s.out, &s.bytes[0..size])
+                let bits = ch.encode_utf8();
+                let bits = bits.as_slice();
+                write_and_flush(s.out, bits)
             } else {
                 s.refresh_line()
             }
@@ -325,17 +352,41 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    for ch in text.chars() {
-        try!(edit_insert(s, ch));
+    if text.is_empty() || (s.buf.len() + text.len()) > s.buf.capacity() {
+        return Ok(());
     }
-    Ok(())
+    if s.pos == s.buf.len() {
+        s.buf.push_str(text);
+    } else {
+        insert_str(&mut s.buf, s.pos, text);
+    }
+    s.pos += text.len();
+    s.refresh_line()
+}
+
+fn insert_str(buf: &mut String, idx: usize, s: &str) {
+    use std::ptr;
+
+    let len = buf.len();
+    assert!(idx <= len);
+    assert!(buf.is_char_boundary(idx));
+    let amt = s.len();
+    buf.reserve(amt);
+
+    unsafe {
+        let v = buf.as_mut_vec();
+        ptr::copy(v.as_ptr().offset(idx as isize),
+                  v.as_mut_ptr().offset((idx + amt) as isize),
+                  len - idx);
+        ptr::copy_nonoverlapping(s.as_ptr(), v.as_mut_ptr().offset(idx as isize), amt);
+        v.set_len(len + amt);
+    }
 }
 
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.buf.drain((s.pos - yank_size)..s.pos);
     s.pos -= yank_size;
-    try!(s.refresh_line());
     edit_yank(s, text)
 }
 
@@ -449,21 +500,44 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State) -> Result<Option<String>> {
+fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
+    where F: Fn(char) -> bool
+{
     if s.pos > 0 {
         let old_pos = s.pos;
         let mut ch = s.buf.char_at_reverse(s.pos);
         // eat any spaces on the left
-        while s.pos > 0 && ch.is_whitespace() {
+        while s.pos > 0 && test(ch) {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
         // eat any non-spaces on the left
-        while s.pos > 0 && !ch.is_whitespace() {
+        while s.pos > 0 && !test(ch) {
             s.pos -= ch.len_utf8();
             ch = s.buf.char_at_reverse(s.pos);
         }
         let text = s.buf.drain(s.pos..old_pos).collect();
+        try!(s.refresh_line());
+        Ok(Some(text))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
+fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
+    if s.pos < s.buf.len() {
+        let mut pos = s.pos;
+        let mut ch = s.buf.char_at(pos);
+        while pos < s.buf.len() && !ch.is_alphanumeric() {
+            pos += ch.len_utf8();
+            ch = s.buf.char_at(pos);
+        }
+        while pos < s.buf.len() && ch.is_alphanumeric() {
+            pos += ch.len_utf8();
+            ch = s.buf.char_at(pos);
+        }
+        let text = s.buf.drain(s.pos..pos).collect();
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -671,7 +745,6 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     } else {
         // TODO ESC-B (b): move backward a word (https://github.com/antirez/linenoise/pull/64, https://github.com/antirez/linenoise/pull/6)
         // TODO ESC-C (c): capitalize word after point
-        // TODO ESC-D (d): kill one word forward
         // TODO ESC-F (f): move forward a word
         // TODO ESC-L (l): lowercase word after point
         // TODO ESC-N (n): search history forward not interactively
@@ -679,11 +752,12 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
         // TODO ESC-R (r): Undo all changes made to this line.
         // TODO EST-T (t): transpose words
         // TODO ESC-U (u): uppercase word after point
-        // TODO ESC-CTRl-H | ESC-BACKSPACE kill one word backward
         // TODO ESC-<: move to first entry in history
         // TODO ESC->: move to last entry in history
         match seq1 {
+            'd' | 'D' => Ok(KeyPress::ESC_D),
             'y' | 'Y' => Ok(KeyPress::ESC_Y),
+            '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
             _ => {
                 writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
                 Ok(KeyPress::UNKNOWN_ESC_SEQ)
@@ -699,7 +773,8 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
-                 kill_ring: &mut KillRing)
+                 kill_ring: &mut KillRing,
+                 original_termios: termios::Termios)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
@@ -709,7 +784,13 @@ fn readline_edit(prompt: &str,
     let stdin = io::stdin();
     let mut chars = stdin.lock().chars();
     loop {
-        let mut ch = try!(chars.next().unwrap()); // FIXME unwrap
+        let c = chars.next().unwrap();
+        if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+            s.cols = get_columns();
+            try!(s.refresh_line());
+            continue;
+        }
+        let mut ch = try!(c);
         if !ch.is_control() {
             kill_ring.reset();
             try!(edit_insert(&mut s, ch));
@@ -821,7 +902,7 @@ fn readline_edit(prompt: &str,
             // TODO CTRL_V // Quoted insert
             KeyPress::CTRL_W => {
                 // Kill the word behind point, using white space as a word boundary
-                if let Some(text) = try!(edit_delete_prev_word(&mut s)) {
+                if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
                     kill_ring.kill(&text, false)
                 }
             }
@@ -830,6 +911,26 @@ fn readline_edit(prompt: &str,
                 if let Some(text) = kill_ring.yank() {
                     try!(edit_yank(&mut s, text))
                 }
+            }
+            KeyPress::ESC_BACKSPACE => {
+                // kill one word backward
+                // Kill from the cursor the start of the current word, or, if between words, to the start of the previous word.
+                if let Some(text) = try!(edit_delete_prev_word(&mut s,
+                                                               |ch| !ch.is_alphanumeric())) {
+                    kill_ring.kill(&text, false)
+                }
+            }
+            KeyPress::ESC_D => {
+                // kill one word forward
+                if let Some(text) = try!(edit_delete_word(&mut s)) {
+                    kill_ring.kill(&text, true)
+                }
+            }
+            KeyPress::CTRL_Z => {
+                try!(disable_raw_mode(original_termios));
+                try!(signal::raise(signal::SIGSTOP));
+                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(s.refresh_line())
             }
             KeyPress::ESC_Y => {
                 // yank-pop
@@ -843,8 +944,9 @@ fn readline_edit(prompt: &str,
                 try!(edit_delete(&mut s))
             }
             KeyPress::ENTER | KeyPress::CTRL_J => {
-                kill_ring.reset();
                 // Accept the line regardless of where the cursor is.
+                kill_ring.reset();
+                try!(edit_move_end(&mut s));
                 break;
             }
             _ => {
@@ -857,6 +959,16 @@ fn readline_edit(prompt: &str,
     Ok(s.buf)
 }
 
+struct Guard(termios::Termios);
+
+#[allow(unused_must_use)]
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let Guard(termios) = *self;
+        disable_raw_mode(termios);
+    }
+}
+
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
@@ -865,8 +977,9 @@ fn readline_raw(prompt: &str,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
     let original_termios = try!(enable_raw_mode());
-    let user_input = readline_edit(prompt, history, completer, kill_ring);
-    try!(disable_raw_mode(original_termios));
+    let guard = Guard(original_termios);
+    let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
+    drop(guard); // try!(disable_raw_mode(original_termios));
     println!("");
     user_input
 }
@@ -884,6 +997,7 @@ fn readline_direct() -> Result<String> {
 pub struct Editor<'completer> {
     unsupported_term: bool,
     stdin_isatty: bool,
+    stdout_isatty: bool,
     // cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<&'completer Completer>,
@@ -894,14 +1008,18 @@ impl<'completer> Editor<'completer> {
     pub fn new() -> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
-        // if enable_raw_mode is called here, we need to implement Drop to reset the terminal in its original state...
-        Editor {
+        let editor = Editor {
             unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(),
+            stdin_isatty: is_a_tty(libc::STDIN_FILENO),
+            stdout_isatty: is_a_tty(libc::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),
+        };
+        if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
+            install_sigwinch_handler();
         }
+        editor
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
@@ -970,6 +1088,20 @@ impl<'completer> fmt::Debug for Editor<'completer> {
     }
 }
 
+static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+fn install_sigwinch_handler() {
+    SIGWINCH_ONCE.call_once(|| unsafe {
+        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
+                                              signal::SaFlag::empty(),
+                                              signal::SigSet::empty());
+        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
+    });
+}
+extern "C" fn sigwinch_handler(_: signal::SigNum) {
+    SIGWINCH.store(true, atomic::Ordering::SeqCst);
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Write;
@@ -986,13 +1118,13 @@ mod test {
         State {
             out: out,
             prompt: "",
-            prompt_width: 0,
+            prompt_size: Default::default(),
             buf: String::from(line),
             pos: pos,
+            cursor: Default::default(),
             cols: cols,
             history_index: 0,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 
@@ -1083,10 +1215,20 @@ mod test {
     fn delete_prev_word() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "a ß  c", 6, 80);
-        let text = super::edit_delete_prev_word(&mut s).unwrap();
+        let text = super::edit_delete_prev_word(&mut s, char::is_whitespace).unwrap();
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
+    }
+
+    #[test]
+    fn delete_word() {
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ß  c", 1, 80);
+        let text = super::edit_delete_word(&mut s).unwrap();
+        assert_eq!("a  c", s.buf);
+        assert_eq!(1, s.pos);
+        assert_eq!(Some(" ß".to_string()), text);
     }
 
     #[test]
@@ -1152,7 +1294,8 @@ mod test {
 
     #[test]
     fn prompt_with_ansi_escape_codes() {
-        let w = super::width("\x1b[1;32m>>\x1b[0m ");
-        assert_eq!(3, w);
+        let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Default::default(), 80);
+        assert_eq!(3, pos.col);
+        assert_eq!(0, pos.row);
     }
 }

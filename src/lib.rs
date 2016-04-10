@@ -33,6 +33,7 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::result;
 use nix::errno::Errno;
+use nix::sys::signal;
 use nix::sys::termios;
 
 use completion::Completer;
@@ -723,7 +724,8 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
-                 kill_ring: &mut KillRing)
+                 kill_ring: &mut KillRing,
+                 original_termios: termios::Termios)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
@@ -874,6 +876,12 @@ fn readline_edit(prompt: &str,
                     kill_ring.kill(&text, true)
                 }
             }
+            KeyPress::CTRL_Z => {
+                try!(disable_raw_mode(original_termios));
+                try!(signal::raise(signal::SIGSTOP));
+                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(s.refresh_line())
+            }
             KeyPress::ESC_Y => {
                 // yank-pop
                 if let Some((yank_size, text)) = kill_ring.yank_pop() {
@@ -900,6 +908,16 @@ fn readline_edit(prompt: &str,
     Ok(s.buf)
 }
 
+struct Guard(termios::Termios);
+
+#[allow(unused_must_use)]
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let Guard(termios) = *self;
+        disable_raw_mode(termios);
+    }
+}
+
 /// Readline method that will enable RAW mode, call the ```readline_edit()```
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
@@ -908,8 +926,9 @@ fn readline_raw(prompt: &str,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
     let original_termios = try!(enable_raw_mode());
-    let user_input = readline_edit(prompt, history, completer, kill_ring);
-    try!(disable_raw_mode(original_termios));
+    let guard = Guard(original_termios);
+    let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
+    drop(guard); // try!(disable_raw_mode(original_termios));
     println!("");
     user_input
 }

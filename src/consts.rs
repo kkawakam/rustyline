@@ -28,6 +28,8 @@ pub enum KeyPress {
     BACKSPACE,
     UNKNOWN_ESC_SEQ,
     ESC_SEQ_DELETE,
+    ESC_BACKSPACE,
+    ESC_D,
     ESC_Y,
 }
 

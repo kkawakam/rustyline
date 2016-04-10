@@ -48,13 +48,19 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 struct State<'out, 'prompt> {
     out: &'out mut Write,
     prompt: &'prompt str, // Prompt to display
-    prompt_width: usize, // Prompt Unicode width
+    prompt_size: Position, // Prompt Unicode width and height
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
+    cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
     history_index: usize, // The history index we are currently editing.
     history_end: String, // Current edited line before history browsing
-    bytes: [u8; 4],
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+struct Position {
+    col: usize,
+    row: usize,
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -64,16 +70,17 @@ impl<'out, 'prompt> State<'out, 'prompt> {
            cols: usize,
            history_index: usize)
            -> State<'out, 'prompt> {
+        let prompt_size = calculate_position(prompt, Default::default(), cols);
         State {
             out: out,
             prompt: prompt,
-            prompt_width: width(prompt),
+            prompt_size: prompt_size,
             buf: String::with_capacity(capacity),
             pos: 0,
+            cursor: prompt_size,
             cols: cols,
             history_index: history_index,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 
@@ -88,46 +95,52 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()> {
-        let prompt_width = self.prompt_width;
-        self.refresh(self.prompt, prompt_width)
+        let prompt_size = self.prompt_size;
+        self.refresh(self.prompt, prompt_size)
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_width = width(prompt);
-        self.refresh(prompt, prompt_width)
+        let prompt_size = calculate_position(prompt, Default::default(), self.cols);
+        self.refresh(prompt, prompt_size)
     }
 
-    fn refresh(&mut self, prompt: &str, prompt_width: usize) -> Result<()> {
+    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         use std::fmt::Write;
-        use unicode_width::UnicodeWidthChar;
 
-        let buf = &self.buf;
-        let mut start = 0;
-        let mut w1 = width(&buf[start..self.pos]);
-        // horizontal-scroll-mode
-        while prompt_width + w1 >= self.cols {
-            let ch = buf.char_at(start);
-            start += ch.len_utf8();
-            w1 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-        }
-        let mut end = buf.len();
-        let mut w2 = width(&buf[start..end]);
-        while prompt_width + w2 > self.cols {
-            let ch = buf.char_at_reverse(end);
-            end -= ch.len_utf8();
-            w2 -= UnicodeWidthChar::width(ch).unwrap_or(0);
-        }
+        let end_pos = calculate_position(&self.buf, prompt_size, self.cols);
+        let cursor = calculate_position(&self.buf[..self.pos], prompt_size, self.cols);
 
         let mut ab = String::new();
-        // Cursor to left edge
-        ab.push('\r');
-        // Write the prompt and the current buffer content
+        let cursor_row_movement = self.cursor.row - self.prompt_size.row;
+        // move the cursor up as required
+        if cursor_row_movement > 0 {
+            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+        }
+        // position at the start of the prompt, clear to end of screen
+        ab.push_str("\r\x1b[J");
+        // display the prompt
         ab.push_str(prompt);
-        ab.push_str(&self.buf[start..end]);
-        // Erase to right
-        ab.push_str("\x1b[0K");
-        // Move cursor to original position.
-        ab.write_fmt(format_args!("\r\x1b[{}C", w1 + prompt_width)).unwrap();
+        // display the input line
+        ab.push_str(&self.buf);
+        // we have to generate our own newline on line wrap
+        if end_pos.col == 0 && end_pos.row > 0 {
+            ab.push_str("\n");
+        }
+        // position the cursor
+        let cursor_row_movement = end_pos.row - cursor.row;
+        // move the cursor up as required
+        if cursor_row_movement > 0 {
+            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+        }
+        // position the cursor within the line
+        if cursor.col > 0 {
+            ab.write_fmt(format_args!("\r\x1b[{}C", cursor.col)).unwrap();
+        } else {
+            ab.push('\r');
+        }
+
+        self.cursor = cursor;
+
         write_and_flush(self.out, ab.as_bytes())
     }
 }
@@ -136,11 +149,12 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
          .field("prompt", &self.prompt)
-         .field("prompt_width", &self.prompt_width)
+         .field("prompt_size", &self.prompt_size)
          .field("buf", &self.buf)
          .field("buf length", &self.buf.len())
          .field("buf capacity", &self.buf.capacity())
          .field("pos", &self.pos)
+         .field("cursor", &self.cursor)
          .field("cols", &self.cols)
          .field("history_index", &self.history_index)
          .field("history_end", &self.history_end)
@@ -256,60 +270,69 @@ fn beep() -> Result<()> {
     write_and_flush(&mut io::stderr(), b"\x07") // TODO bell-style
 }
 
-// Control characters are treated as having zero width.
-fn width(s: &str) -> usize {
-    if s.contains('\x1b') {
-        let mut w = 0;
-        let mut esc_seq = 0;
-        for c in s.chars() {
-            if esc_seq == 1 {
-                if c == '[' {
-                    // CSI
-                    esc_seq = 2;
-                } else {
-                    // two-character sequence
-                    esc_seq = 0;
-                }
-            } else if esc_seq == 2 {
-                if c == ';' || (c >= '0' && c <= '9') {
-                } else if c == 'm' {
-                    // last
-                    esc_seq = 0
-                } else {
-                    // not supported
-                    w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
-                    esc_seq = 0
-                }
-            } else if c == '\x1b' {
-                esc_seq = 1;
+/// Calculate the number of columns and rows used to display `s` on a `cols` width terminal
+/// starting at `orig`.
+/// Control characters are treated as having zero width.
+/// Characters with 2 column width are correctly handled (not splitted).
+fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
+    let mut pos = orig.clone();
+    let mut esc_seq = 0;
+    for c in s.chars() {
+        let cw = if esc_seq == 1 {
+            if c == '[' {
+                // CSI
+                esc_seq = 2;
             } else {
-                w += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+                // two-character sequence
+                esc_seq = 0;
+            }
+            None
+        } else if esc_seq == 2 {
+            if c == ';' || (c >= '0' && c <= '9') {
+            } else if c == 'm' {
+                // last
+                esc_seq = 0;
+            } else {
+                // not supported
+                esc_seq = 0;
+            }
+            None
+        } else if c == '\x1b' {
+            esc_seq = 1;
+            None
+        } else if c == '\n' {
+            pos.col = 0;
+            pos.row += 1;
+            None
+        } else {
+            unicode_width::UnicodeWidthChar::width(c)
+        };
+        if let Some(cw) = cw {
+            pos.col += cw;
+            if pos.col > cols {
+                pos.row += 1;
+                pos.col = cw;
             }
         }
-        w
-    } else {
-        unicode_width::UnicodeWidthStr::width(s)
     }
+    if pos.col == cols {
+        pos.col = 0;
+        pos.row += 1;
+    }
+    pos
 }
 
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     if s.buf.len() < s.buf.capacity() {
-        if s.buf.len() == s.pos {
+        if s.pos == s.buf.len() {
             s.buf.push(ch);
-
-            let mut size = 0;
-
-            for (i, byte) in ch.encode_utf8().take(4).enumerate() {
-                size += 1;
-                s.bytes[i] = byte;
-            }
-
-            s.pos += size;
-
-            if s.prompt_width + width(&s.buf) < s.cols {
+            s.pos += ch.len_utf8();
+            if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
-                write_and_flush(s.out, &mut s.bytes[0..size])
+                let bits = ch.encode_utf8();
+                let bits = bits.as_slice();
+                write_and_flush(s.out, bits)
             } else {
                 s.refresh_line()
             }
@@ -325,17 +348,41 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    for ch in text.chars() {
-        try!(edit_insert(s, ch));
+    if text.len() == 0 || (s.buf.len() + text.len()) > s.buf.capacity() {
+        return Ok(());
     }
-    Ok(())
+    if s.pos == s.buf.len() {
+        s.buf.push_str(text);
+    } else {
+        insert_str(&mut s.buf, s.pos, text);
+    }
+    s.pos += text.len();
+    s.refresh_line()
+}
+
+fn insert_str(buf: &mut String, idx: usize, s: &str) {
+    use std::ptr;
+
+    let len = buf.len();
+    assert!(idx <= len);
+    assert!(buf.is_char_boundary(idx));
+    let amt = s.len();
+    buf.reserve(amt);
+
+    unsafe {
+        let v = buf.as_mut_vec();
+        ptr::copy(v.as_ptr().offset(idx as isize),
+                  v.as_mut_ptr().offset((idx + amt) as isize),
+                  len - idx);
+        ptr::copy_nonoverlapping(s.as_ptr(), v.as_mut_ptr().offset(idx as isize), amt);
+        v.set_len(len + amt);
+    }
 }
 
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.buf.drain((s.pos - yank_size)..s.pos);
     s.pos -= yank_size;
-    try!(s.refresh_line());
     edit_yank(s, text)
 }
 
@@ -812,11 +859,6 @@ fn readline_edit(prompt: &str,
                 // Delete one character backward.
                 try!(edit_backspace(&mut s))
             }
-            KeyPress::CTRL_J => {
-                // like ENTER
-                kill_ring.reset();
-                break;
-            }
             KeyPress::CTRL_K => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
@@ -893,9 +935,10 @@ fn readline_edit(prompt: &str,
                 kill_ring.reset();
                 try!(edit_delete(&mut s))
             }
-            KeyPress::ENTER => {
-                kill_ring.reset();
+            KeyPress::ENTER | KeyPress::CTRL_J => {
                 // Accept the line regardless of where the cursor is.
+                kill_ring.reset();
+                try!(edit_move_end(&mut s));
                 break;
             }
             _ => {
@@ -1041,13 +1084,13 @@ mod test {
         State {
             out: out,
             prompt: "",
-            prompt_width: 0,
+            prompt_size: Default::default(),
             buf: String::from(line),
             pos: pos,
+            cursor: Default::default(),
             cols: cols,
             history_index: 0,
             history_end: String::new(),
-            bytes: [0; 4],
         }
     }
 
@@ -1217,7 +1260,8 @@ mod test {
 
     #[test]
     fn prompt_with_ansi_escape_codes() {
-        let w = super::width("\x1b[1;32m>>\x1b[0m ");
-        assert_eq!(3, w);
+        let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Default::default(), 80);
+        assert_eq!(3, pos.col);
+        assert_eq!(0, pos.row);
     }
 }

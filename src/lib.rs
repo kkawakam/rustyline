@@ -33,6 +33,7 @@ mod kill_ring;
 
 use std::fmt;
 use std::io::{self, Read, Write};
+use std::mem;
 use std::path::Path;
 use std::result;
 use std::sync;
@@ -59,7 +60,8 @@ struct State<'out, 'prompt> {
     cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
     history_index: usize, // The history index we are currently editing.
-    history_end: String, // Current edited line before history browsing
+    snapshot: String, // Current edited line before history browsing/completion
+    snapshot_pos: usize, // Current cursor position before history browsing/completion
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -85,16 +87,24 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             cursor: prompt_size,
             cols: cols,
             history_index: history_index,
-            history_end: String::new(),
+            snapshot: String::with_capacity(capacity),
+            snapshot_pos: 0,
         }
     }
 
-    fn update_buf<S: Into<String>>(&mut self, buf: S) {
-        self.buf = buf.into();
-        if self.buf.capacity() < MAX_LINE {
-            let cap = self.buf.capacity();
-            self.buf.reserve_exact(MAX_LINE - cap);
+    fn update_buf(&mut self, buf: &str) {
+        self.buf.clear();
+        if buf.len() > MAX_LINE {
+            self.buf.push_str(&buf[..MAX_LINE]);
+        } else {
+            self.buf.push_str(buf);
+
         }
+    }
+
+    fn snapshot(&mut self) {
+        mem::swap(&mut self.buf, &mut self.snapshot);
+        mem::swap(&mut self.pos, &mut self.snapshot_pos);
     }
 
     /// Rewrite the currently edited line accordingly to the buffer content,
@@ -162,7 +172,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
          .field("cursor", &self.cursor)
          .field("cols", &self.cols)
          .field("history_index", &self.history_index)
-         .field("history_end", &self.history_end)
+         .field("snapshot", &self.snapshot)
          .finish()
     }
 }
@@ -554,7 +564,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     if s.history_index == history.len() {
         if prev {
             // Save the current edited line before to overwrite it
-            s.history_end = s.buf.clone();
+            s.snapshot();
         } else {
             return Ok(());
         }
@@ -568,12 +578,12 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     }
     if s.history_index < history.len() {
         let buf = history.get(s.history_index).unwrap();
-        s.update_buf(buf.clone());
-    } else {
-        let buf = s.history_end.clone(); // TODO how to avoid cloning?
         s.update_buf(buf);
+        s.pos = s.buf.len();
+    } else {
+        // Restore current edited line
+        s.snapshot();
     };
-    s.pos = s.buf.len();
     s.refresh_line()
 }
 
@@ -592,14 +602,14 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
         loop {
             // Show completion or original buffer
             if i < candidates.len() {
-                let buf = s.buf.clone(); // TODO how to avoid cloning?
-                let pos = s.pos;
+                // Save the current edited line before to overwrite it
+                s.snapshot();
                 let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
                 s.buf = tmp_buf;
                 s.pos = tmp_pos;
                 try!(s.refresh_line());
-                s.update_buf(buf);
-                s.pos = pos;
+                // Restore current edited line (but no refresh)
+                s.snapshot();
             } else {
                 try!(s.refresh_line());
             }
@@ -624,7 +634,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
                     // Update buffer and return
                     if i < candidates.len() {
                         let (buf, pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
-                        s.update_buf(buf);
+                        s.update_buf(&buf);
                         s.pos = pos;
                     }
                     break;
@@ -642,8 +652,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
                                            history: &History)
                                            -> Result<Option<KeyPress>> {
     // Save the current edited line (and cursor position) before to overwrite it
-    let original_buf = s.buf.clone();
-    let original_pos = s.pos;
+    s.snapshot();
 
     let mut search_buf = String::new();
     let mut history_idx = history.len() - 1;
@@ -682,8 +691,8 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
                     }
                 }
                 KeyPress::CTRL_G => {
-                    s.update_buf(original_buf);
-                    s.pos = original_pos;
+                    // Restore current edited line (before search)
+                    s.snapshot();
                     try!(s.refresh_line());
                     return Ok(None);
                 }
@@ -694,7 +703,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
             Some(idx) => {
                 history_idx = idx;
                 let entry = history.get(idx).unwrap();
-                s.update_buf(entry.clone());
+                s.update_buf(entry);
                 s.pos = entry.find(&search_buf).unwrap();
                 true
             }
@@ -1124,7 +1133,8 @@ mod test {
             cursor: Default::default(),
             cols: cols,
             history_index: 0,
-            history_end: String::new(),
+            snapshot: String::new(),
+            snapshot_pos: 0,
         }
     }
 
@@ -1248,24 +1258,24 @@ mod test {
         }
 
         super::edit_history_next(&mut s, &history, true).unwrap();
-        assert_eq!(line, s.history_end);
+        assert_eq!(line, s.snapshot);
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.buf);
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, true).unwrap();
-            assert_eq!(line, s.history_end);
+            assert_eq!(line, s.snapshot);
             assert_eq!(0, s.history_index);
             assert_eq!("line0", s.buf);
         }
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        assert_eq!(line, s.history_end);
+        assert_eq!(line, s.snapshot);
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.buf);
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        assert_eq!(line, s.history_end);
+        // assert_eq!(line, s.snapshot);
         assert_eq!(2, s.history_index);
         assert_eq!(line, s.buf);
     }

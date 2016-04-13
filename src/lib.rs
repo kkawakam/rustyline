@@ -92,12 +92,18 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    fn update_buf(&mut self, buf: &str) {
+    fn update_buf(&mut self, buf: &str, pos: usize) {
         self.buf.clear();
         if buf.len() > MAX_LINE {
             self.buf.push_str(&buf[..MAX_LINE]);
+            if pos > MAX_LINE {
+                self.pos = MAX_LINE;
+            } else {
+                self.pos = pos;
+            }
         } else {
             self.buf.push_str(buf);
+            self.pos = pos;
 
         }
     }
@@ -105,6 +111,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     fn snapshot(&mut self) {
         mem::swap(&mut self.buf, &mut self.snapshot);
         mem::swap(&mut self.pos, &mut self.snapshot_pos);
+    }
+    fn backup(&mut self) {
+        self.snapshot.clear();
+        self.snapshot.push_str(&self.buf);
+        self.snapshot_pos = self.pos;
     }
 
     /// Rewrite the currently edited line accordingly to the buffer content,
@@ -578,8 +589,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     }
     if s.history_index < history.len() {
         let buf = history.get(s.history_index).unwrap();
-        s.update_buf(buf);
-        s.pos = s.buf.len();
+        s.update_buf(buf, buf.len());
     } else {
         // Restore current edited line
         s.snapshot();
@@ -603,10 +613,9 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
             // Show completion or original buffer
             if i < candidates.len() {
                 // Save the current edited line before to overwrite it
-                s.snapshot();
+                s.backup();
                 let (tmp_buf, tmp_pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
-                s.buf = tmp_buf;
-                s.pos = tmp_pos;
+                s.update_buf(&tmp_buf, tmp_pos);
                 try!(s.refresh_line());
                 // Restore current edited line (but no refresh)
                 s.snapshot();
@@ -634,8 +643,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
                     // Update buffer and return
                     if i < candidates.len() {
                         let (buf, pos) = completer.update(&s.buf, s.pos, start, &candidates[i]);
-                        s.update_buf(&buf);
-                        s.pos = pos;
+                        s.update_buf(&buf, pos);
                     }
                     break;
                 }
@@ -703,8 +711,8 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
             Some(idx) => {
                 history_idx = idx;
                 let entry = history.get(idx).unwrap();
-                s.update_buf(entry);
-                s.pos = entry.find(&search_buf).unwrap();
+                let pos = entry.find(&search_buf).unwrap();
+                s.update_buf(entry, pos);
                 true
             }
             _ => false,

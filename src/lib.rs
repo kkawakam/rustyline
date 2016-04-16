@@ -15,7 +15,7 @@
 //! }
 //! ```
 #![feature(io)]
-#![feature(str_char)]
+#![feature(iter_arith)]
 #![feature(unicode)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
@@ -168,6 +168,21 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         self.cursor = cursor;
 
         write_and_flush(self.out, ab.as_bytes())
+    }
+
+    fn char_at_cursor(&self) -> Option<char> {
+        if self.pos == self.buf.len() {
+            None
+        } else {
+            self.buf[self.pos..].chars().next()
+        }
+    }
+    fn char_before_cursor(&self) -> Option<char> {
+        if self.pos == 0 {
+            None
+        } else {
+            self.buf[..self.pos].chars().next_back()
+        }
     }
 }
 
@@ -413,8 +428,7 @@ fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
 
 /// Move cursor on the left.
 fn edit_move_left(s: &mut State) -> Result<()> {
-    if s.pos > 0 {
-        let ch = s.buf.char_at_reverse(s.pos);
+    if let Some(ch) = s.char_before_cursor() {
         s.pos -= ch.len_utf8();
         s.refresh_line()
     } else {
@@ -424,12 +438,12 @@ fn edit_move_left(s: &mut State) -> Result<()> {
 
 /// Move cursor on the right.
 fn edit_move_right(s: &mut State) -> Result<()> {
-    if s.pos == s.buf.len() {
-        return Ok(());
+    if let Some(ch) = s.char_at_cursor() {
+        s.pos += ch.len_utf8();
+        s.refresh_line()
+    } else {
+        Ok(())
     }
-    let ch = s.buf.char_at(s.pos);
-    s.pos += ch.len_utf8();
-    s.refresh_line()
 }
 
 /// Move cursor to the start of the line.
@@ -464,8 +478,7 @@ fn edit_delete(s: &mut State) -> Result<()> {
 
 /// Backspace implementation.
 fn edit_backspace(s: &mut State) -> Result<()> {
-    if s.pos > 0 && !s.buf.is_empty() {
-        let ch = s.buf.char_at_reverse(s.pos);
+    if let Some(ch) = s.char_before_cursor() {
         s.pos -= ch.len_utf8();
         s.buf.remove(s.pos);
         s.refresh_line()
@@ -503,7 +516,7 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
         // TODO should work even if s.pos == s.buf.len()
         let ch = s.buf.remove(s.pos);
         let size = ch.len_utf8();
-        let other_ch = s.buf.char_at_reverse(s.pos);
+        let other_ch = s.char_before_cursor().unwrap();
         let other_size = other_ch.len_utf8();
         s.buf.insert(s.pos - other_size, ch);
         if s.pos != s.buf.len() - size {
@@ -526,16 +539,21 @@ fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
 {
     if s.pos > 0 {
         let old_pos = s.pos;
-        let mut ch = s.buf.char_at_reverse(s.pos);
         // eat any spaces on the left
-        while s.pos > 0 && test(ch) {
-            s.pos -= ch.len_utf8();
-            ch = s.buf.char_at_reverse(s.pos);
-        }
-        // eat any non-spaces on the left
-        while s.pos > 0 && !test(ch) {
-            s.pos -= ch.len_utf8();
-            ch = s.buf.char_at_reverse(s.pos);
+        s.pos -= s.buf[..s.pos]
+                     .chars()
+                     .rev()
+                     .take_while(|ch| test(*ch))
+                     .map(char::len_utf8)
+                     .sum();
+        if s.pos > 0 {
+            // eat any non-spaces on the left
+            s.pos -= s.buf[..s.pos]
+                         .chars()
+                         .rev()
+                         .take_while(|ch| !test(*ch))
+                         .map(char::len_utf8)
+                         .sum();
         }
         let text = s.buf.drain(s.pos..old_pos).collect();
         try!(s.refresh_line());
@@ -549,15 +567,21 @@ fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
 fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
     if s.pos < s.buf.len() {
         let mut pos = s.pos;
-        let mut ch = s.buf.char_at(pos);
-        while pos < s.buf.len() && !ch.is_alphanumeric() {
-            pos += ch.len_utf8();
-            ch = s.buf.char_at(pos);
+        // eat any spaces
+        pos += s.buf[pos..]
+                   .chars()
+                   .take_while(|ch| !ch.is_alphanumeric())
+                   .map(char::len_utf8)
+                   .sum();
+        if pos < s.buf.len() {
+            // eat any non-spaces
+            pos += s.buf[pos..]
+                       .chars()
+                       .take_while(|ch| ch.is_alphanumeric())
+                       .map(char::len_utf8)
+                       .sum();
         }
-        while pos < s.buf.len() && ch.is_alphanumeric() {
-            pos += ch.len_utf8();
-            ch = s.buf.char_at(pos);
-        }
+
         let text = s.buf.drain(s.pos..pos).collect();
         try!(s.refresh_line());
         Ok(Some(text))

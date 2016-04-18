@@ -140,7 +140,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let cursor_row_movement = self.cursor.row - self.prompt_size.row;
         // move the cursor up as required
         if cursor_row_movement > 0 {
-            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
         }
         // position at the start of the prompt, clear to end of screen
         ab.push_str("\r\x1b[J");
@@ -156,11 +156,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if cursor_row_movement > 0 {
-            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            ab.write_fmt(format_args!("\r\x1b[{}C", cursor.col)).unwrap();
+            write!(ab, "\r\x1b[{}C", cursor.col).unwrap();
         } else {
             ab.push('\r');
         }

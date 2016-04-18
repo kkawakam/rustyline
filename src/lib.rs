@@ -299,7 +299,7 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-pub fn clear_screen(out: &mut Write) -> Result<()> {
+fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
 }
 

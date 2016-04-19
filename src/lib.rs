@@ -140,7 +140,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let cursor_row_movement = self.cursor.row - self.prompt_size.row;
         // move the cursor up as required
         if cursor_row_movement > 0 {
-            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
         }
         // position at the start of the prompt, clear to end of screen
         ab.push_str("\r\x1b[J");
@@ -156,11 +156,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if cursor_row_movement > 0 {
-            ab.write_fmt(format_args!("\x1b[{}A", cursor_row_movement)).unwrap();
+            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            ab.write_fmt(format_args!("\r\x1b[{}C", cursor.col)).unwrap();
+            write!(ab, "\r\x1b[{}C", cursor.col).unwrap();
         } else {
             ab.push('\r');
         }
@@ -299,7 +299,7 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-pub fn clear_screen(out: &mut Write) -> Result<()> {
+fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
 }
 
@@ -532,30 +532,50 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     }
 }
 
+fn prev_word_pos<F>(s: &State, test: F) -> Option<usize>
+    where F: Fn(char) -> bool
+{
+    if s.pos > 0 {
+        let mut pos = s.pos;
+        // eat any spaces on the left
+        pos -= s.buf[..pos]
+                   .chars()
+                   .rev()
+                   .take_while(|ch| test(*ch))
+                   .map(char::len_utf8)
+                   .sum();
+        if pos > 0 {
+            // eat any non-spaces on the left
+            pos -= s.buf[..pos]
+                       .chars()
+                       .rev()
+                       .take_while(|ch| !test(*ch))
+                       .map(char::len_utf8)
+                       .sum();
+        }
+        Some(pos)
+    } else {
+        None
+    }
+}
+
+fn edit_move_to_prev_word(s: &mut State) -> Result<()> {
+    if let Some(pos) = prev_word_pos(s, |ch| !ch.is_alphanumeric()) {
+        s.pos = pos;
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
 fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
     where F: Fn(char) -> bool
 {
-    if s.pos > 0 {
-        let old_pos = s.pos;
-        // eat any spaces on the left
-        s.pos -= s.buf[..s.pos]
-                     .chars()
-                     .rev()
-                     .take_while(|ch| test(*ch))
-                     .map(char::len_utf8)
-                     .sum();
-        if s.pos > 0 {
-            // eat any non-spaces on the left
-            s.pos -= s.buf[..s.pos]
-                         .chars()
-                         .rev()
-                         .take_while(|ch| !test(*ch))
-                         .map(char::len_utf8)
-                         .sum();
-        }
-        let text = s.buf.drain(s.pos..old_pos).collect();
+    if let Some(pos) = prev_word_pos(s, test) {
+        let text = s.buf.drain(pos..s.pos).collect();
+        s.pos = pos;
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -563,8 +583,7 @@ fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
     }
 }
 
-/// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
+fn next_word_pos(s: &State) -> Option<(usize, usize)> {
     if s.pos < s.buf.len() {
         let mut pos = s.pos;
         // eat any spaces
@@ -573,6 +592,7 @@ fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
                    .take_while(|ch| !ch.is_alphanumeric())
                    .map(char::len_utf8)
                    .sum();
+        let start = pos;
         if pos < s.buf.len() {
             // eat any non-spaces
             pos += s.buf[pos..]
@@ -581,12 +601,64 @@ fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
                        .map(char::len_utf8)
                        .sum();
         }
+        Some((start, pos))
+    } else {
+        None
+    }
+}
 
-        let text = s.buf.drain(s.pos..pos).collect();
+fn edit_move_to_next_word(s: &mut State) -> Result<()> {
+    if let Some((_, end)) = next_word_pos(s) {
+        s.pos = end;
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
+/// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
+fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
+    if let Some((_, end)) = next_word_pos(s) {
+        let text = s.buf.drain(s.pos..end).collect();
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
         Ok(None)
+    }
+}
+
+enum WordAction {
+    CAPITALIZE,
+    LOWERCASE,
+    UPPERCASE,
+}
+
+fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
+    if let Some((start, end)) = next_word_pos(s) {
+        if start == end {
+            return Ok(());
+        }
+        s.backup();
+        s.buf.clear();
+        s.buf.push_str(&s.snapshot[..start]);
+        match a {
+            WordAction::CAPITALIZE => {
+                if let Some(ch) = s.snapshot[start..end].chars().next() {
+                    let cap = ch.to_uppercase().collect::<String>();
+                    s.buf.push_str(&cap);
+                    s.buf.push_str(&s.snapshot[start + ch.len_utf8()..end]);
+                } else {
+                    s.buf.push_str(&s.snapshot[start..end]);
+                }
+            }
+            WordAction::LOWERCASE => s.buf.push_str(&s.snapshot[start..end].to_lowercase()),
+            WordAction::UPPERCASE => s.buf.push_str(&s.snapshot[start..end].to_uppercase()),
+        }
+        s.buf.push_str(&s.snapshot[end..]);
+        s.pos = end;
+        s.refresh_line()
+    } else {
+        Ok(())
     }
 }
 
@@ -784,19 +856,19 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
             _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
         }
     } else {
-        // TODO ESC-B (b): move backward a word (https://github.com/antirez/linenoise/pull/64, https://github.com/antirez/linenoise/pull/6)
-        // TODO ESC-C (c): capitalize word after point
-        // TODO ESC-F (f): move forward a word
-        // TODO ESC-L (l): lowercase word after point
         // TODO ESC-N (n): search history forward not interactively
         // TODO ESC-P (p): search history backward not interactively
         // TODO ESC-R (r): Undo all changes made to this line.
         // TODO EST-T (t): transpose words
-        // TODO ESC-U (u): uppercase word after point
         // TODO ESC-<: move to first entry in history
         // TODO ESC->: move to last entry in history
         match seq1 {
+            'b' | 'B' => Ok(KeyPress::ESC_B),
+            'c' | 'C' => Ok(KeyPress::ESC_C),
             'd' | 'D' => Ok(KeyPress::ESC_D),
+            'f' | 'F' => Ok(KeyPress::ESC_F),
+            'l' | 'L' => Ok(KeyPress::ESC_L),
+            'u' | 'U' => Ok(KeyPress::ESC_U),
             'y' | 'Y' => Ok(KeyPress::ESC_Y),
             '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
             _ => {
@@ -953,6 +1025,19 @@ fn readline_edit(prompt: &str,
                     try!(edit_yank(&mut s, text))
                 }
             }
+            KeyPress::CTRL_Z => {
+                try!(disable_raw_mode(original_termios));
+                try!(signal::raise(signal::SIGSTOP));
+                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(s.refresh_line())
+            }
+            // TODO CTRL-_ // undo
+            KeyPress::ENTER | KeyPress::CTRL_J => {
+                // Accept the line regardless of where the cursor is.
+                kill_ring.reset();
+                try!(edit_move_end(&mut s));
+                break;
+            }
             KeyPress::ESC_BACKSPACE => {
                 // kill one word backward
                 // Kill from the cursor the start of the current word, or, if between words, to the start of the previous word.
@@ -961,17 +1046,36 @@ fn readline_edit(prompt: &str,
                     kill_ring.kill(&text, false)
                 }
             }
+            KeyPress::ESC_B => {
+                // move backwards one word
+                kill_ring.reset();
+                try!(edit_move_to_prev_word(&mut s))
+            }
+            KeyPress::ESC_C => {
+                // capitalize word after point
+                kill_ring.reset();
+                try!(edit_word(&mut s, WordAction::CAPITALIZE))
+            }
             KeyPress::ESC_D => {
                 // kill one word forward
                 if let Some(text) = try!(edit_delete_word(&mut s)) {
                     kill_ring.kill(&text, true)
                 }
             }
-            KeyPress::CTRL_Z => {
-                try!(disable_raw_mode(original_termios));
-                try!(signal::raise(signal::SIGSTOP));
-                try!(enable_raw_mode()); // TODO original_termios may have changed
-                try!(s.refresh_line())
+            KeyPress::ESC_F => {
+                // move forwards one word
+                kill_ring.reset();
+                try!(edit_move_to_next_word(&mut s))
+            }
+            KeyPress::ESC_L => {
+                // lowercase word after point
+                kill_ring.reset();
+                try!(edit_word(&mut s, WordAction::LOWERCASE))
+            }
+            KeyPress::ESC_U => {
+                // uppercase word after point
+                kill_ring.reset();
+                try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
             KeyPress::ESC_Y => {
                 // yank-pop
@@ -979,16 +1083,9 @@ fn readline_edit(prompt: &str,
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            // TODO CTRL-_ // undo
             KeyPress::ESC_SEQ_DELETE => {
                 kill_ring.reset();
                 try!(edit_delete(&mut s))
-            }
-            KeyPress::ENTER | KeyPress::CTRL_J => {
-                // Accept the line regardless of where the cursor is.
-                kill_ring.reset();
-                try!(edit_move_end(&mut s));
-                break;
             }
             _ => {
                 kill_ring.reset();
@@ -1149,7 +1246,7 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
-    use super::Result;
+    use super::{Result, WordAction};
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1254,6 +1351,15 @@ mod test {
     }
 
     #[test]
+    fn move_to_prev_word() {
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ß  c", 6, 80);
+        super::edit_move_to_prev_word(&mut s).unwrap();
+        assert_eq!("a ß  c", s.buf);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
     fn delete_prev_word() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "a ß  c", 6, 80);
@@ -1264,6 +1370,15 @@ mod test {
     }
 
     #[test]
+    fn move_to_next_word() {
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ß  c", 1, 80);
+        super::edit_move_to_next_word(&mut s).unwrap();
+        assert_eq!("a ß  c", s.buf);
+        assert_eq!(4, s.pos);
+    }
+
+    #[test]
     fn delete_word() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "a ß  c", 1, 80);
@@ -1271,6 +1386,27 @@ mod test {
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
+    }
+
+    #[test]
+    fn edit_word() {
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ßeta  c", 1, 80);
+        super::edit_word(&mut s, WordAction::UPPERCASE).unwrap();
+        assert_eq!("a SSETA  c", s.buf);
+        assert_eq!(7, s.pos);
+
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ßetA  c", 1, 80);
+        super::edit_word(&mut s, WordAction::LOWERCASE).unwrap();
+        assert_eq!("a ßeta  c", s.buf);
+        assert_eq!(7, s.pos);
+
+        let mut out = ::std::io::sink();
+        let mut s = init_state(&mut out, "a ßeta  c", 1, 80);
+        super::edit_word(&mut s, WordAction::CAPITALIZE).unwrap();
+        assert_eq!("a SSeta  c", s.buf);
+        assert_eq!(7, s.pos);
     }
 
     #[test]

@@ -30,7 +30,12 @@ pub enum KeyPress {
     UNKNOWN_ESC_SEQ,
     ESC_SEQ_DELETE,
     ESC_BACKSPACE,
+    ESC_B,
+    ESC_C,
     ESC_D,
+    ESC_F,
+    ESC_L,
+    ESC_U,
     ESC_Y,
 }
 

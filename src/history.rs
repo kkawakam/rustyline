@@ -48,9 +48,11 @@ impl History {
         true
     }
 
+    /// Returns the number of entries in the history.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+    /// Returns true if the history has no entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

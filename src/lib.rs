@@ -113,10 +113,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         use std::fmt::Write;
 
-        let end_pos = calculate_position(self.line.as_str(), prompt_size, self.cols);
-        let cursor = calculate_position(&self.line.as_str()[..self.line.pos()],
-                                        prompt_size,
-                                        self.cols);
+        let end_pos = calculate_position(&self.line, prompt_size, self.cols);
+        let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
         let mut ab = String::new();
         let cursor_row_movement = self.cursor.row - self.prompt_size.row;
@@ -129,7 +127,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         // display the prompt
         ab.push_str(prompt);
         // display the input line
-        ab.push_str(self.line.as_str());
+        ab.push_str(&self.line);
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 {
             ab.push_str("\n");
@@ -525,7 +523,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
                               s: &mut State,
                               completer: &Completer)
                               -> Result<Option<char>> {
-    let (start, candidates) = try!(completer.complete(s.line.as_str(), s.line.pos()));
+    let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     if candidates.is_empty() {
         try!(beep());
         Ok(None)
@@ -1101,30 +1099,30 @@ mod test {
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, false).unwrap();
-            assert_eq!(line, s.line.as_str());
+            assert_eq!(line, &s.line);
         }
 
         super::edit_history_next(&mut s, &history, true).unwrap();
-        assert_eq!(line, s.snapshot.as_str());
+        assert_eq!(line, &s.snapshot);
         assert_eq!(1, s.history_index);
-        assert_eq!("line1", s.line.as_str());
+        assert_eq!("line1", &s.line);
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, true).unwrap();
-            assert_eq!(line, s.snapshot.as_str());
+            assert_eq!(line, &s.snapshot);
             assert_eq!(0, s.history_index);
-            assert_eq!("line0", s.line.as_str());
+            assert_eq!("line0", &s.line);
         }
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        assert_eq!(line, s.snapshot.as_str());
+        assert_eq!(line, &s.snapshot);
         assert_eq!(1, s.history_index);
-        assert_eq!("line1", s.line.as_str());
+        assert_eq!("line1", &s.line);
 
         super::edit_history_next(&mut s, &history, false).unwrap();
         // assert_eq!(line, s.snapshot);
         assert_eq!(2, s.history_index);
-        assert_eq!(line, s.line.as_str());
+        assert_eq!(line, &s.line);
     }
 
     struct SimpleCompleter;
@@ -1145,7 +1143,7 @@ mod test {
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);
-        assert_eq!("rust", s.line.as_str());
+        assert_eq!("rust", &s.line);
         assert_eq!(4, s.line.pos());
     }
 

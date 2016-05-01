@@ -1,4 +1,5 @@
 //! Line buffer with current cursor position
+use std::ops::Deref;
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -380,6 +381,14 @@ impl LineBuffer {
             insert_str(&mut self.buf, idx, s);
             false
         }
+    }
+}
+
+impl Deref for LineBuffer {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        self.as_str()
     }
 }
 

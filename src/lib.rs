@@ -482,7 +482,7 @@ fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
 }
 
 fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
-    if s.line.edit_word(&mut s.snapshot, a) {
+    if s.line.edit_word(a) {
         s.refresh_line()
     } else {
         Ok(())
@@ -530,23 +530,20 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
         try!(beep());
         Ok(None)
     } else {
+        // Save the current edited line before to overwrite it
+        s.backup();
         let mut ch;
         let mut i = 0;
         loop {
             // Show completion or original buffer
             if i < candidates.len() {
-                // Save the current edited line before to overwrite it
-                s.backup();
-                let (tmp_buf, tmp_pos) = completer.update(s.line.as_str(),
-                                                          s.line.pos(),
-                                                          start,
-                                                          &candidates[i]);
-                s.line.update(&tmp_buf, tmp_pos);
+                completer.update(&mut s.line, start, &candidates[i]);
                 try!(s.refresh_line());
-                // Restore current edited line (but no refresh)
-                s.snapshot();
             } else {
+                // Restore current edited line
+                s.snapshot();
                 try!(s.refresh_line());
+                s.snapshot();
             }
 
             ch = try!(chars.next().unwrap());
@@ -560,20 +557,13 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
                 }
                 KeyPress::ESC => {
                     // Re-show original buffer
+                    s.snapshot();
                     if i < candidates.len() {
                         try!(s.refresh_line());
                     }
                     return Ok(None);
                 }
                 _ => {
-                    // Update buffer and return
-                    if i < candidates.len() {
-                        let (buf, pos) = completer.update(s.line.as_str(),
-                                                          s.line.pos(),
-                                                          start,
-                                                          &candidates[i]);
-                        s.line.update(&buf, pos);
-                    }
                     break;
                 }
             }

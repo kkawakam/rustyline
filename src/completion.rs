@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{self, Path};
 
 use super::Result;
+use line_buffer::LineBuffer;
 
 // TODO: let the implementers choose/find word boudaries ???
 // (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion ("select t.na| from tbl as t")
@@ -16,17 +17,10 @@ pub trait Completer {
     /// returns the start position and the completion candidates for the partial word to be completed.
     /// "ls /usr/loc" => Ok((3, vec!["/usr/local/"]))
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
-    /// Takes the currently edited `line` with the cursor `pos`ition and
-    /// the `elected` candidate.
-    /// Returns the new line content and cursor position.
-    fn update(&self, line: &str, pos: usize, start: usize, elected: &str) -> (String, usize) {
-        let mut buf = String::with_capacity(start + elected.len() + line.len() - pos);
-        buf.push_str(&line[..start]);
-        buf.push_str(elected);
-        // buf.push(' ');
-        let new_pos = buf.len();
-        buf.push_str(&line[pos..]);
-        (buf, new_pos)
+    /// Updates the edited `line` with the `elected` candidate.
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+        let end = line.pos();
+        line.replace(start, end, elected)
     }
 }
 

@@ -125,12 +125,8 @@ impl LineBuffer {
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
         }
-        let push = self.pos == self.buf.len();
-        if self.pos == self.buf.len() {
-            self.buf.push_str(text);
-        } else {
-            insert_str(&mut self.buf, self.pos, text);
-        }
+        let pos = self.pos;
+        let push = self.insert_str(pos, text);
         self.pos += shift;
         Some(push)
     }
@@ -289,9 +285,9 @@ impl LineBuffer {
         where F: Fn(char) -> bool
     {
         if let Some(pos) = self.prev_word_pos(test) {
-            let text = self.buf.drain(pos..self.pos).collect();
+            let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
-            Some(text)
+            Some(word)
         } else {
             None
         }
@@ -335,42 +331,53 @@ impl LineBuffer {
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
     pub fn delete_word(&mut self) -> Option<String> {
         if let Some((_, end)) = self.next_word_pos() {
-            let text = self.buf.drain(self.pos..end).collect();
-            Some(text)
+            let word = self.buf.drain(self.pos..end).collect();
+            Some(word)
         } else {
             None
         }
     }
 
     /// Alter the next word.
-    pub fn edit_word(&mut self, snapshot: &mut LineBuffer, a: WordAction) -> bool {
+    pub fn edit_word(&mut self, a: WordAction) -> bool {
         if let Some((start, end)) = self.next_word_pos() {
             if start == end {
                 return false;
             }
-            snapshot.backup(self);
-            self.buf.truncate(start);
-            match a {
+            let word = self.buf.drain(start..end).collect::<String>();
+            let result = match a {
                 WordAction::CAPITALIZE => {
-                    if let Some(ch) = snapshot.buf[start..end].chars().next() {
+                    if let Some(ch) = word.chars().next() {
                         let cap = ch.to_uppercase().collect::<String>();
-                        self.buf.push_str(&cap);
-                        self.buf.push_str(&snapshot.buf[start + ch.len_utf8()..end]);
+                        cap + &word[ch.len_utf8()..]
                     } else {
-                        self.buf.push_str(&snapshot.buf[start..end]);
+                        word
                     }
                 }
-                WordAction::LOWERCASE => {
-                    self.buf.push_str(&snapshot.buf[start..end].to_lowercase())
-                }
-                WordAction::UPPERCASE => {
-                    self.buf.push_str(&snapshot.buf[start..end].to_uppercase())
-                }
+                WordAction::LOWERCASE => word.to_lowercase(),
+                WordAction::UPPERCASE => word.to_uppercase(),
             };
-            self.buf.push_str(&snapshot.buf[end..]);
-            self.pos = end;
+            self.insert_str(start, &result);
+            self.pos = start + result.len();
             true
         } else {
+            false
+        }
+    }
+
+    /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
+    pub fn replace(&mut self, start: usize, end: usize, text: &str) {
+        self.buf.drain(start..end);
+        self.insert_str(start, text);
+        self.pos = start + text.len();
+    }
+
+    fn insert_str(&mut self, idx: usize, s: &str) -> bool {
+        if idx == self.buf.len() {
+            self.buf.push_str(s);
+            true
+        } else {
+            insert_str(&mut self.buf, idx, s);
             false
         }
     }
@@ -526,19 +533,18 @@ mod test {
 
     #[test]
     fn edit_word() {
-        let mut snapshot = LineBuffer::with_capacity(100);
         let mut s = LineBuffer::init("a ßeta  c", 1);
-        assert!(s.edit_word(&mut snapshot, WordAction::UPPERCASE));
+        assert!(s.edit_word(WordAction::UPPERCASE));
         assert_eq!("a SSETA  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßetA  c", 1);
-        assert!(s.edit_word(&mut snapshot, WordAction::LOWERCASE));
+        assert!(s.edit_word(WordAction::LOWERCASE));
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßeta  c", 1);
-        assert!(s.edit_word(&mut snapshot, WordAction::CAPITALIZE));
+        assert!(s.edit_word(WordAction::CAPITALIZE));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
     }

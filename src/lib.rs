@@ -1099,30 +1099,30 @@ mod test {
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, false).unwrap();
-            assert_eq!(line, &s.line);
+            assert_eq!(line, s.line.as_str());
         }
 
         super::edit_history_next(&mut s, &history, true).unwrap();
-        assert_eq!(line, &s.snapshot);
+        assert_eq!(line, s.snapshot.as_str());
         assert_eq!(1, s.history_index);
-        assert_eq!("line1", &s.line);
+        assert_eq!("line1", s.line.as_str());
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, true).unwrap();
-            assert_eq!(line, &s.snapshot);
+            assert_eq!(line, s.snapshot.as_str());
             assert_eq!(0, s.history_index);
-            assert_eq!("line0", &s.line);
+            assert_eq!("line0", s.line.as_str());
         }
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        assert_eq!(line, &s.snapshot);
+        assert_eq!(line, s.snapshot.as_str());
         assert_eq!(1, s.history_index);
-        assert_eq!("line1", &s.line);
+        assert_eq!("line1", s.line.as_str());
 
         super::edit_history_next(&mut s, &history, false).unwrap();
         // assert_eq!(line, s.snapshot);
         assert_eq!(2, s.history_index);
-        assert_eq!(line, &s.line);
+        assert_eq!(line, s.line.as_str());
     }
 
     struct SimpleCompleter;
@@ -1143,7 +1143,7 @@ mod test {
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);
-        assert_eq!("rust", &s.line);
+        assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }
 

@@ -9,7 +9,6 @@ use line_buffer::LineBuffer;
 // TODO: let the implementers choose/find word boudaries ???
 // (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion ("select t.na| from tbl as t")
 // TOOD: make &self &mut self ???
-// TODO: change update signature: _line: Into<String>
 
 /// To be called for tab-completion.
 pub trait Completer {

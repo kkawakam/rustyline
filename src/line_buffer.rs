@@ -225,9 +225,11 @@ impl LineBuffer {
 
     /// Exchange the char before cursor with the character at cursor.
     pub fn transpose_chars(&mut self) -> bool {
-        if self.pos == 0 || self.pos == self.buf.len() {
-            // TODO should work even if s.pos == s.buf.len()
+        if self.pos == 0 || self.buf.chars().count() < 2 {
             return false;
+        }
+        if self.pos == self.buf.len() {
+            self.move_left();
         }
         let ch = self.buf.remove(self.pos);
         let size = ch.len_utf8();
@@ -498,6 +500,13 @@ mod test {
 
         s.buf = String::from("aßc");
         s.pos = 3;
+        let ok = s.transpose_chars();
+        assert_eq!("acß", s.buf);
+        assert_eq!(2, s.pos);
+        assert_eq!(true, ok);
+
+        s.buf = String::from("aßc");
+        s.pos = 4;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
         assert_eq!(2, s.pos);

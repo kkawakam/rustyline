@@ -833,7 +833,13 @@ fn readline_edit(prompt: &str,
                     kill_ring.kill(&text, false)
                 }
             }
-            // TODO CTRL_V // Quoted insert
+            KeyPress::CTRL_V => {
+                // Quoted insert
+                kill_ring.reset();
+                let c = chars.next().unwrap();
+                let ch = try!(c);
+                try!(edit_insert(&mut s, ch))
+            }
             KeyPress::CTRL_W => {
                 // Kill the word behind point, using white space as a word boundary
                 if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {

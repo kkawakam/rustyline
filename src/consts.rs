@@ -36,6 +36,7 @@ pub enum KeyPress {
     ESC_D,
     ESC_F,
     ESC_L,
+    ESC_T,
     ESC_U,
     ESC_Y,
 }

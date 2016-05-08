@@ -487,6 +487,14 @@ fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
     }
 }
 
+fn edit_transpose_words(s: &mut State) -> Result<()> {
+    if s.line.transpose_words() {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 /// Substitute the currently edited line with the next or previous history
 /// entry.
 fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()> {
@@ -680,7 +688,6 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
         // TODO ESC-N (n): search history forward not interactively
         // TODO ESC-P (p): search history backward not interactively
         // TODO ESC-R (r): Undo all changes made to this line.
-        // TODO EST-T (t): transpose words
         // TODO ESC-<: move to first entry in history
         // TODO ESC->: move to last entry in history
         match seq1 {
@@ -689,6 +696,7 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
             'd' | 'D' => Ok(KeyPress::ESC_D),
             'f' | 'F' => Ok(KeyPress::ESC_F),
             'l' | 'L' => Ok(KeyPress::ESC_L),
+            't' | 'T' => Ok(KeyPress::ESC_T),
             'u' | 'U' => Ok(KeyPress::ESC_U),
             'y' | 'Y' => Ok(KeyPress::ESC_Y),
             '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
@@ -898,6 +906,11 @@ fn readline_edit(prompt: &str,
                 // lowercase word after point
                 kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
+            }
+            KeyPress::ESC_T => {
+                // transpose words
+                kill_ring.reset();
+                try!(edit_transpose_words(&mut s))
             }
             KeyPress::ESC_U => {
                 // uppercase word after point

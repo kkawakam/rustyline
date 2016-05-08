@@ -65,8 +65,9 @@ rustyline = "0.2.2"
  - History search ([Searching for Commands in the History](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8))
  - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
  - Multi line mode
+ - Word commands
 
 ## ToDo
 
- - Word commands
+ - Show completion list
  - expose an API callable from C

@@ -246,13 +246,13 @@ impl LineBuffer {
         true
     }
 
-    fn prev_word_pos<F>(&self, test: F) -> Option<usize>
+    fn prev_word_pos<F>(&self, pos: usize, test: F) -> Option<usize>
         where F: Fn(char) -> bool
     {
-        if self.pos == 0 {
+        if pos == 0 {
             return None;
         }
-        let mut pos = self.pos;
+        let mut pos = pos;
         // eat any spaces on the left
         pos -= self.buf[..pos]
                    .chars()
@@ -274,7 +274,7 @@ impl LineBuffer {
 
     /// Moves the cursor to the beginning of previous word.
     pub fn move_to_prev_word(&mut self) -> bool {
-        if let Some(pos) = self.prev_word_pos(|ch| !ch.is_alphanumeric()) {
+        if let Some(pos) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
             self.pos = pos;
             true
         } else {
@@ -287,7 +287,7 @@ impl LineBuffer {
     pub fn delete_prev_word<F>(&mut self, test: F) -> Option<String>
         where F: Fn(char) -> bool
     {
-        if let Some(pos) = self.prev_word_pos(test) {
+        if let Some(pos) = self.prev_word_pos(self.pos, test) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
             Some(word)
@@ -297,9 +297,9 @@ impl LineBuffer {
     }
 
     /// Returns the position (start, end) of the next word.
-    pub fn next_word_pos(&self) -> Option<(usize, usize)> {
-        if self.pos < self.buf.len() {
-            let mut pos = self.pos;
+    pub fn next_word_pos(&self, pos: usize) -> Option<(usize, usize)> {
+        if pos < self.buf.len() {
+            let mut pos = pos;
             // eat any spaces
             pos += self.buf[pos..]
                        .chars()
@@ -323,7 +323,7 @@ impl LineBuffer {
 
     /// Moves the cursor to the end of next word.
     pub fn move_to_next_word(&mut self) -> bool {
-        if let Some((_, end)) = self.next_word_pos() {
+        if let Some((_, end)) = self.next_word_pos(self.pos) {
             self.pos = end;
             true
         } else {
@@ -333,7 +333,7 @@ impl LineBuffer {
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
     pub fn delete_word(&mut self) -> Option<String> {
-        if let Some((_, end)) = self.next_word_pos() {
+        if let Some((_, end)) = self.next_word_pos(self.pos) {
             let word = self.buf.drain(self.pos..end).collect();
             Some(word)
         } else {
@@ -343,7 +343,7 @@ impl LineBuffer {
 
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some((start, end)) = self.next_word_pos() {
+        if let Some((start, end)) = self.next_word_pos(self.pos) {
             if start == end {
                 return false;
             }
@@ -366,6 +366,45 @@ impl LineBuffer {
         } else {
             false
         }
+    }
+
+    /// Transpose two words
+    pub fn transpose_words(&mut self) -> bool {
+        // prevword___oneword__
+        // ^          ^       ^
+        // prev_start start   self.pos/end
+        if let Some(start) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
+            if let Some(prev_start) = self.prev_word_pos(start, |ch| !ch.is_alphanumeric()) {
+                let (_, prev_end) = self.next_word_pos(prev_start).unwrap();
+                if prev_end >= start {
+                    return false;
+                }
+                let (_, mut end) = self.next_word_pos(start).unwrap();
+                if end < self.pos {
+                    if self.pos < self.buf.len() {
+                        let (s, _) = self.next_word_pos(self.pos).unwrap();
+                        end = s;
+                    } else {
+                        end = self.pos;
+                    }
+                }
+
+                let oneword = self.buf.drain(start..end).collect::<String>();
+                let sep = self.buf.drain(prev_end..start).collect::<String>();
+                let prevword = self.buf.drain(prev_start..prev_end).collect::<String>();
+
+                let mut idx = prev_start;
+                self.insert_str(idx, &oneword);
+                idx += oneword.len();
+                self.insert_str(idx, &sep);
+                idx += sep.len();
+                self.insert_str(idx, &prevword);
+
+                self.pos = idx + prevword.len();
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
@@ -565,5 +604,24 @@ mod test {
         assert!(s.edit_word(WordAction::CAPITALIZE));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
+    }
+
+    #[test]
+    fn transpose_words() {
+        let mut s = LineBuffer::init("ßeta / δelta__", 15);
+        assert!(s.transpose_words());
+        assert_eq!("δelta__ / ßeta", s.buf);
+        assert_eq!(16, s.pos);
+
+        let mut s = LineBuffer::init("ßeta / δelta", 14);
+        assert!(s.transpose_words());
+        assert_eq!("δelta / ßeta", s.buf);
+        assert_eq!(14, s.pos);
+
+        let mut s = LineBuffer::init(" / δelta", 8);
+        assert!(!s.transpose_words());
+
+        let mut s = LineBuffer::init("ßeta / __", 9);
+        assert!(!s.transpose_words());
     }
 }

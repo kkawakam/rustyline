@@ -589,6 +589,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
 
     let mut search_buf = String::new();
     let mut history_idx = history.len() - 1;
+    let mut reverse = true;
     let mut success = true;
 
     let mut ch;
@@ -616,8 +617,18 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
                     continue;
                 }
                 KeyPress::CTRL_R => {
+                    reverse = true;
                     if history_idx > 0 {
                         history_idx -= 1;
+                    } else {
+                        success = false;
+                        continue;
+                    }
+                }
+                KeyPress::CTRL_S => {
+                    reverse = false;
+                    if history_idx < history.len() - 1 {
+                        history_idx += 1;
                     } else {
                         success = false;
                         continue;
@@ -632,7 +643,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
                 _ => break,
             }
         }
-        success = match history.search(&search_buf, history_idx, true) {
+        success = match history.search(&search_buf, history_idx, reverse) {
             Some(idx) => {
                 history_idx = idx;
                 let entry = history.get(idx).unwrap();
@@ -875,7 +886,7 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::ESC_BACKSPACE => {
                 // kill one word backward
-                // Kill from the cursor the start of the current word, or, if between words, to the start of the previous word.
+                // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
                 if let Some(text) = try!(edit_delete_prev_word(&mut s,
                                                                |ch| !ch.is_alphanumeric())) {
                     kill_ring.kill(&text, false)

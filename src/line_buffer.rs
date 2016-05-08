@@ -352,7 +352,7 @@ impl LineBuffer {
                 WordAction::CAPITALIZE => {
                     if let Some(ch) = word.chars().next() {
                         let cap = ch.to_uppercase().collect::<String>();
-                        cap + &word[ch.len_utf8()..]
+                        cap + &word[ch.len_utf8()..].to_lowercase()
                     } else {
                         word
                     }
@@ -404,7 +404,7 @@ impl LineBuffer {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
@@ -600,7 +600,7 @@ mod test {
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(7, s.pos);
 
-        let mut s = LineBuffer::init("a ßeta  c", 1);
+        let mut s = LineBuffer::init("a ßETA  c", 1);
         assert!(s.edit_word(WordAction::CAPITALIZE));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);

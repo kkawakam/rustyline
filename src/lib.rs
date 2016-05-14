@@ -46,7 +46,7 @@ use nix::sys::termios;
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
-use line_buffer::{LineBuffer, WordAction, MAX_LINE};
+use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::KillRing;
 
 /// The error type for I/O and Linux Syscalls (Errno)
@@ -154,14 +154,14 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
-         .field("prompt", &self.prompt)
-         .field("prompt_size", &self.prompt_size)
-         .field("buf", &self.line)
-         .field("cursor", &self.cursor)
-         .field("cols", &self.cols)
-         .field("history_index", &self.history_index)
-         .field("snapshot", &self.snapshot)
-         .finish()
+            .field("prompt", &self.prompt)
+            .field("prompt_size", &self.prompt_size)
+            .field("buf", &self.line)
+            .field("cursor", &self.cursor)
+            .field("cols", &self.cols)
+            .field("history_index", &self.history_index)
+            .field("snapshot", &self.snapshot)
+            .finish()
     }
 }
 
@@ -194,8 +194,8 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
 
 /// Enable raw mode for the TERM
 fn enable_raw_mode() -> Result<termios::Termios> {
-    use nix::sys::termios::{BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, CS8, ECHO, ICANON, IEXTEN,
-                            ISIG, VMIN, VTIME};
+    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
+                            OPOST, VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
         return Err(from_errno(Errno::ENOTTY));
     }
@@ -1071,9 +1071,9 @@ impl<'completer> Default for Editor<'completer> {
 impl<'completer> fmt::Debug for Editor<'completer> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
-         .field("unsupported_term", &self.unsupported_term)
-         .field("stdin_isatty", &self.stdin_isatty)
-         .finish()
+            .field("unsupported_term", &self.unsupported_term)
+            .field("stdin_isatty", &self.stdin_isatty)
+            .finish()
     }
 }
 

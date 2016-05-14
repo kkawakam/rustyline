@@ -115,10 +115,10 @@ impl History {
         }
         if reverse {
             let index = self.entries
-                            .iter()
-                            .rev()
-                            .skip(self.entries.len() - 1 - start)
-                            .position(|entry| entry.contains(term));
+                .iter()
+                .rev()
+                .skip(self.entries.len() - 1 - start)
+                .position(|entry| entry.contains(term));
             index.and_then(|index| Some(start - index))
         } else {
             let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));

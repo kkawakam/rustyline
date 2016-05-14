@@ -255,19 +255,19 @@ impl LineBuffer {
         let mut pos = pos;
         // eat any spaces on the left
         pos -= self.buf[..pos]
-                   .chars()
-                   .rev()
-                   .take_while(|ch| test(*ch))
-                   .map(char::len_utf8)
-                   .sum();
+            .chars()
+            .rev()
+            .take_while(|ch| test(*ch))
+            .map(char::len_utf8)
+            .sum();
         if pos > 0 {
             // eat any non-spaces on the left
             pos -= self.buf[..pos]
-                       .chars()
-                       .rev()
-                       .take_while(|ch| !test(*ch))
-                       .map(char::len_utf8)
-                       .sum();
+                .chars()
+                .rev()
+                .take_while(|ch| !test(*ch))
+                .map(char::len_utf8)
+                .sum();
         }
         Some(pos)
     }
@@ -302,18 +302,18 @@ impl LineBuffer {
             let mut pos = pos;
             // eat any spaces
             pos += self.buf[pos..]
-                       .chars()
-                       .take_while(|ch| !ch.is_alphanumeric())
-                       .map(char::len_utf8)
-                       .sum();
+                .chars()
+                .take_while(|ch| !ch.is_alphanumeric())
+                .map(char::len_utf8)
+                .sum();
             let start = pos;
             if pos < self.buf.len() {
                 // eat any non-spaces
                 pos += self.buf[pos..]
-                           .chars()
-                           .take_while(|ch| ch.is_alphanumeric())
-                           .map(char::len_utf8)
-                           .sum();
+                    .chars()
+                    .take_while(|ch| ch.is_alphanumeric())
+                    .map(char::len_utf8)
+                    .sum();
             }
             Some((start, pos))
         } else {
@@ -454,7 +454,7 @@ fn insert_str(buf: &mut String, idx: usize, s: &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{LineBuffer, WordAction, MAX_LINE};
+    use super::{LineBuffer, MAX_LINE, WordAction};
 
     #[test]
     fn insert() {

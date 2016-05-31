@@ -16,13 +16,13 @@
 //! ```
 #![feature(io)]
 #![feature(iter_arith)]
-#![feature(unicode)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate libc;
 extern crate nix;
 extern crate unicode_width;
+extern crate encode_unicode;
 
 pub mod completion;
 #[allow(non_camel_case_types)]
@@ -42,6 +42,7 @@ use std::sync::atomic;
 use nix::errno::Errno;
 use nix::sys::signal;
 use nix::sys::termios;
+use encode_unicode::CharExt;
 
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
@@ -327,9 +328,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
         if push {
             if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
-                let bits = ch.encode_utf8();
-                let bits = bits.as_slice();
-                write_and_flush(s.out, bits)
+                write_and_flush(s.out, ch.to_utf8().as_bytes())
             } else {
                 s.refresh_line()
             }

@@ -1,5 +1,5 @@
 //! Line buffer with current cursor position
-use std::ops::Deref;
+use std::ops::{Add, Deref};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -259,7 +259,7 @@ impl LineBuffer {
             .rev()
             .take_while(|ch| test(*ch))
             .map(char::len_utf8)
-            .sum();
+            .fold(0, Add::add);
         if pos > 0 {
             // eat any non-spaces on the left
             pos -= self.buf[..pos]
@@ -267,7 +267,7 @@ impl LineBuffer {
                 .rev()
                 .take_while(|ch| !test(*ch))
                 .map(char::len_utf8)
-                .sum();
+                .fold(0, Add::add);
         }
         Some(pos)
     }
@@ -305,7 +305,7 @@ impl LineBuffer {
                 .chars()
                 .take_while(|ch| !ch.is_alphanumeric())
                 .map(char::len_utf8)
-                .sum();
+                .fold(0, Add::add);
             let start = pos;
             if pos < self.buf.len() {
                 // eat any non-spaces
@@ -313,7 +313,7 @@ impl LineBuffer {
                     .chars()
                     .take_while(|ch| ch.is_alphanumeric())
                     .map(char::len_utf8)
-                    .sum();
+                    .fold(0, Add::add);
             }
             Some((start, pos))
         } else {

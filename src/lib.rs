@@ -14,7 +14,6 @@
 //!     Err(_)   => println!("No input"),
 //! }
 //! ```
-#![feature(io)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
@@ -30,9 +29,10 @@ pub mod error;
 pub mod history;
 mod kill_ring;
 pub mod line_buffer;
+mod char_iter;
 
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
@@ -525,7 +525,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 }
 
 /// Completes the line/word
-fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
+fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
                               s: &mut State,
                               completer: &Completer)
                               -> Result<Option<char>> {
@@ -578,7 +578,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
 
 /// Incremental search
 #[cfg_attr(feature="clippy", allow(if_not_else))]
-fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
+fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
                                            s: &mut State,
                                            history: &History)
                                            -> Result<Option<KeyPress>> {
@@ -655,7 +655,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
     Ok(Some(key))
 }
 
-fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
+fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPress> {
     // Read the next two bytes representing the escape sequence.
     let seq1 = try!(chars.next().unwrap());
     if seq1 == '[' {
@@ -733,7 +733,7 @@ fn readline_edit(prompt: &str,
     kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
     let stdin = io::stdin();
-    let mut chars = stdin.lock().chars();
+    let mut chars = char_iter::chars(stdin.lock());
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
@@ -1162,12 +1162,10 @@ mod test {
 
     #[test]
     fn complete_line() {
-        use std::io::Read;
-
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let mut chars = input.chars();
+        let mut chars = ::char_iter::chars(&input[..]);
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);

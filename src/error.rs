@@ -4,6 +4,8 @@ use std::error;
 use std::fmt;
 use nix;
 
+use char_iter;
+
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
 #[derive(Debug)]
@@ -13,7 +15,7 @@ pub enum ReadlineError {
     /// Error from syscall
     Errno(nix::Error),
     /// Chars Error
-    Char(io::CharsError),
+    Char(char_iter::CharsError),
     /// EOF (Ctrl-d)
     Eof,
     /// Ctrl-C
@@ -56,8 +58,8 @@ impl From<nix::Error> for ReadlineError {
     }
 }
 
-impl From<io::CharsError> for ReadlineError {
-    fn from(err: io::CharsError) -> ReadlineError {
+impl From<char_iter::CharsError> for ReadlineError {
+    fn from(err: char_iter::CharsError) -> ReadlineError {
         ReadlineError::Char(err)
     }
 }

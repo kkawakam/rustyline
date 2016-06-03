@@ -14,15 +14,13 @@
 //!     Err(_)   => println!("No input"),
 //! }
 //! ```
-#![feature(io)]
-#![feature(iter_arith)]
-#![feature(unicode)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate libc;
 extern crate nix;
 extern crate unicode_width;
+extern crate encode_unicode;
 
 pub mod completion;
 #[allow(non_camel_case_types)]
@@ -31,9 +29,10 @@ pub mod error;
 pub mod history;
 mod kill_ring;
 pub mod line_buffer;
+mod char_iter;
 
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
@@ -42,6 +41,7 @@ use std::sync::atomic;
 use nix::errno::Errno;
 use nix::sys::signal;
 use nix::sys::termios;
+use encode_unicode::CharExt;
 
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
@@ -327,9 +327,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
         if push {
             if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
-                let bits = ch.encode_utf8();
-                let bits = bits.as_slice();
-                write_and_flush(s.out, bits)
+                write_and_flush(s.out, ch.to_utf8().as_bytes())
             } else {
                 s.refresh_line()
             }
@@ -527,7 +525,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 }
 
 /// Completes the line/word
-fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
+fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
                               s: &mut State,
                               completer: &Completer)
                               -> Result<Option<char>> {
@@ -580,7 +578,7 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
 
 /// Incremental search
 #[cfg_attr(feature="clippy", allow(if_not_else))]
-fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
+fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
                                            s: &mut State,
                                            history: &History)
                                            -> Result<Option<KeyPress>> {
@@ -657,7 +655,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
     Ok(Some(key))
 }
 
-fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
+fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPress> {
     // Read the next two bytes representing the escape sequence.
     let seq1 = try!(chars.next().unwrap());
     if seq1 == '[' {
@@ -735,7 +733,7 @@ fn readline_edit(prompt: &str,
     kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
     let stdin = io::stdin();
-    let mut chars = stdin.lock().chars();
+    let mut chars = char_iter::chars(stdin.lock());
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
@@ -1164,12 +1162,10 @@ mod test {
 
     #[test]
     fn complete_line() {
-        use std::io::Read;
-
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let mut chars = input.chars();
+        let mut chars = ::char_iter::chars(&input[..]);
         let completer = SimpleCompleter;
         let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);

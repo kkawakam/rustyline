@@ -1,6 +1,7 @@
 //! An iterator over the `char`s of a reader.
 //!
 //! A copy of the unstable code from the stdlib's std::io::Read::chars.
+//! TODO: Remove this once [Read::chars](https://github.com/rust-lang/rust/issues/27802) has been stabilized
 
 use std::error;
 use std::fmt;

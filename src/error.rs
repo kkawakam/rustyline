@@ -63,3 +63,9 @@ impl From<char_iter::CharsError> for ReadlineError {
         ReadlineError::Char(err)
     }
 }
+
+impl ReadlineError {
+    pub fn from_errno(errno: nix::errno::Errno) -> ReadlineError {
+        ReadlineError::from(nix::Error::from_errno(errno))
+    }
+}

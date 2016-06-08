@@ -23,10 +23,10 @@ extern crate encode_unicode;
 pub mod completion;
 #[allow(non_camel_case_types)]
 mod consts;
-pub mod error;
-pub mod history;
+mod error;
+mod history;
 mod kill_ring;
-pub mod line_buffer;
+mod line_buffer;
 mod char_iter;
 
 use std::fmt;

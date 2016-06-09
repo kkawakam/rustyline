@@ -828,6 +828,7 @@ fn readline_edit(prompt: &str,
                     try!(edit_yank(&mut s, text))
                 }
             }
+            #[cfg(unix)]
             KeyPress::CTRL_Z => {
                 try!(tty::disable_raw_mode(original_termios));
                 try!(signal::raise(signal::SIGSTOP));

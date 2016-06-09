@@ -23,11 +23,21 @@ extern crate encode_unicode;
 pub mod completion;
 #[allow(non_camel_case_types)]
 mod consts;
-mod error;
-mod history;
+pub mod error;
+pub mod history;
 mod kill_ring;
 mod line_buffer;
 mod char_iter;
+
+// Depending on the platform, load the correct
+// tty modules
+#[cfg(unix)]
+#[path = "tty/unix.rs"] mod tty;
+
+#[cfg(windows)]
+#[path = "tty/windows.rs"] mod tty;
+
+#[path = "tty/common.rs"] mod tty_common;
 
 use std::fmt;
 use std::io::{self, Write};
@@ -36,7 +46,6 @@ use std::path::Path;
 use std::result;
 use std::sync;
 use std::sync::atomic;
-use nix::errno::Errno;
 use nix::sys::signal;
 use nix::sys::termios;
 use encode_unicode::CharExt;
@@ -161,56 +170,6 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("snapshot", &self.snapshot)
             .finish()
     }
-}
-
-/// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
-
-/// Check to see if `fd` is a TTY
-fn is_a_tty(fd: libc::c_int) -> bool {
-    unsafe { libc::isatty(fd) != 0 }
-}
-
-/// Check to see if the current `TERM` is unsupported
-fn is_unsupported_term() -> bool {
-    use std::ascii::AsciiExt;
-    match std::env::var("TERM") {
-        Ok(term) => {
-            let mut unsupported = false;
-            for iter in &UNSUPPORTED_TERM {
-                unsupported = (*iter).eq_ignore_ascii_case(&term)
-            }
-            unsupported
-        }
-        Err(_) => false,
-    }
-}
-
-
-/// Enable raw mode for the TERM
-fn enable_raw_mode() -> Result<termios::Termios> {
-    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /*OPOST, */VMIN, VTIME};
-    if !is_a_tty(libc::STDIN_FILENO) {
-        return Err(error::ReadlineError::from_errno(Errno::ENOTTY));
-    }
-    let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
-    let mut raw = original_term;
-    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
-    // we don't want raw output, it turns newlines into straight linefeeds
-    //raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
-    raw.c_cc[VMIN] = 1; // One character-at-a-time input
-    raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
-    Ok(original_term)
-}
-
-/// Disable Raw mode for the term
-fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
-    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
@@ -870,9 +829,9 @@ fn readline_edit(prompt: &str,
                 }
             }
             KeyPress::CTRL_Z => {
-                try!(disable_raw_mode(original_termios));
+                try!(tty::disable_raw_mode(original_termios));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(tty::enable_raw_mode()); // TODO original_termios may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -952,7 +911,7 @@ struct Guard(termios::Termios);
 impl Drop for Guard {
     fn drop(&mut self) {
         let Guard(termios) = *self;
-        disable_raw_mode(termios);
+        tty::disable_raw_mode(termios);
     }
 }
 
@@ -963,7 +922,7 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let original_termios = try!(enable_raw_mode());
+    let original_termios = try!(tty::enable_raw_mode());
     let guard = Guard(original_termios);
     let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
     drop(guard); // try!(disable_raw_mode(original_termios));
@@ -996,9 +955,9 @@ impl<'completer> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
-            unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(libc::STDIN_FILENO),
-            stdout_isatty: is_a_tty(libc::STDOUT_FILENO),
+            unsupported_term: tty::is_unsupported_term(),
+            stdin_isatty: tty_common::is_a_tty(libc::STDIN_FILENO),
+            stdout_isatty: tty_common::is_a_tty(libc::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),

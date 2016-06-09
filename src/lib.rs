@@ -1039,6 +1039,7 @@ impl<'completer> fmt::Debug for Editor<'completer> {
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+#[cfg(unix)]
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
@@ -1047,6 +1048,13 @@ fn install_sigwinch_handler() {
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
+
+// no-op on windows
+#[cfg(windows)]
+fn install_sigwinch_handler() {
+}
+
+
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }

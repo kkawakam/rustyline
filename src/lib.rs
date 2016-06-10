@@ -220,8 +220,12 @@ fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 const TIOCGWINSZ: libc::c_ulong = 0x40087468;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "android"))]
 const TIOCGWINSZ: libc::c_ulong = 0x5413;
+
+#[cfg(all(target_os = "linux", target_env = "musl"))]
+const TIOCGWINSZ: libc::c_int = 0x5413;
+
 
 /// Try to get the number of columns in the current terminal,
 /// or assume 80 if it fails.

@@ -28,7 +28,7 @@ mod consts;
 pub mod error;
 pub mod history;
 mod kill_ring;
-mod line_buffer;
+pub mod line_buffer;
 mod char_iter;
 
 // Depending on the platform, load the correct

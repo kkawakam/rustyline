@@ -12,11 +12,46 @@ use tty_common::Terminal;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+const TIOCGWINSZ: libc::c_ulong = 0x40087468;
+
+#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "android"))]
+const TIOCGWINSZ: libc::c_ulong = 0x5413;
+
+#[cfg(all(target_os = "linux", target_env = "musl"))]
+const TIOCGWINSZ: libc::c_int = 0x5413;
+
+/// Try to get the number of columns in the current terminal,
+/// or assume 80 if it fails.
+pub fn get_columns() -> usize {
+    use std::mem::zeroed;
+    use libc::c_ushort;
+    use libc;
+
+    unsafe {
+        #[repr(C)]
+        struct winsize {
+            ws_row: c_ushort,
+            ws_col: c_ushort,
+            ws_xpixel: c_ushort,
+            ws_ypixel: c_ushort,
+        }
+
+        let mut size: winsize = zeroed();
+        match libc::ioctl(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
+            0 => size.ws_col as usize, // TODO getCursorPosition
+            _ => 80,
+        }
+    }
+}
+
 /// Get UnixTerminal struct
 pub fn get_terminal() -> UnixTerminal {
     UnixTerminal{ original_termios: None }
 }
 
+/// Check TERM environment variable to see if current term is in our
+/// unsupported list
 pub fn is_unsupported_term() -> bool {
     use std::ascii::AsciiExt;
     match std::env::var("TERM") {
@@ -31,7 +66,7 @@ pub fn is_unsupported_term() -> bool {
     }
 }
 
-
+/// Structure that will contain the original termios before enabling RAW mode
 pub struct UnixTerminal {
     original_termios: Option<termios::Termios>
 }
@@ -71,6 +106,7 @@ impl tty_common::Terminal for UnixTerminal {
     }
 }
 
+/// Ensure that RAW mode is disabled even in the case of a panic!
 #[allow(unused_must_use)]
 impl Drop for UnixTerminal {
     fn drop(&mut self) {

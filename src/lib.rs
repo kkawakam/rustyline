@@ -173,43 +173,6 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-const TIOCGWINSZ: libc::c_ulong = 0x40087468;
-
-#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "android"))]
-const TIOCGWINSZ: libc::c_ulong = 0x5413;
-
-#[cfg(all(target_os = "linux", target_env = "musl"))]
-const TIOCGWINSZ: libc::c_int = 0x5413;
-
-
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-#[cfg(any(target_os = "linux",
-          target_os = "android",
-          target_os = "macos",
-          target_os = "freebsd"))]
-fn get_columns() -> usize {
-    use std::mem::zeroed;
-    use libc::c_ushort;
-    use libc;
-
-    unsafe {
-        #[repr(C)]
-        struct winsize {
-            ws_row: c_ushort,
-            ws_col: c_ushort,
-            ws_xpixel: c_ushort,
-            ws_ypixel: c_ushort,
-        }
-
-        let mut size: winsize = zeroed();
-        match libc::ioctl(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
-            0 => size.ws_col as usize, // TODO getCursorPosition
-            _ => 80,
-        }
-    }
-}
 
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     try!(w.write_all(buf));
@@ -691,13 +654,13 @@ fn readline_edit<T: tty_common::Terminal>(prompt: &str,
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
     kill_ring.reset();
-    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
+    let mut s = State::new(&mut stdout, prompt, MAX_LINE, tty::get_columns(), history.len());
     let stdin = io::stdin();
     let mut chars = char_iter::chars(stdin.lock());
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
-            s.cols = get_columns();
+            s.cols = tty::get_columns();
             try!(s.refresh_line());
             continue;
         }

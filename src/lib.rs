@@ -49,9 +49,8 @@ use std::result;
 use std::sync;
 use std::sync::atomic;
 use nix::sys::signal;
-use nix::sys::termios;
 use encode_unicode::CharExt;
-
+use tty_common::Terminal;
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
@@ -682,11 +681,11 @@ fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPr
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
-fn readline_edit(prompt: &str,
+fn readline_edit<T: tty_common::Terminal>(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
-                 original_termios: termios::Termios)
+                 mut term: T)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
@@ -832,9 +831,9 @@ fn readline_edit(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::CTRL_Z => {
-                try!(tty::disable_raw_mode(original_termios));
+                try!(term.disable_raw_mode());
                 try!(signal::raise(signal::SIGSTOP));
-                try!(tty::enable_raw_mode()); // TODO original_termios may have changed
+                try!(term.enable_raw_mode()); // TODO term may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -908,16 +907,6 @@ fn readline_edit(prompt: &str,
     Ok(s.line.into_string())
 }
 
-struct Guard(termios::Termios);
-
-#[allow(unused_must_use)]
-impl Drop for Guard {
-    fn drop(&mut self) {
-        let Guard(termios) = *self;
-        tty::disable_raw_mode(termios);
-    }
-}
-
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
@@ -925,10 +914,9 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let original_termios = try!(tty::enable_raw_mode());
-    let guard = Guard(original_termios);
-    let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
-    drop(guard); // try!(disable_raw_mode(original_termios));
+    let mut term = tty::get_terminal();
+    try!(term.enable_raw_mode());
+    let user_input = readline_edit(prompt, history, completer, kill_ring, term);
     println!("");
     user_input
 }

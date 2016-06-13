@@ -4,10 +4,9 @@ extern crate libc;
 use std;
 use nix::sys::termios;
 use nix::errno::Errno;
-use super::Result;
-use super::tty_common;
-use super::error;
-use tty_common::Terminal;
+use super::Terminal;
+use ::Result;
+use ::error;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
@@ -71,12 +70,12 @@ pub struct UnixTerminal {
     original_termios: Option<termios::Termios>
 }
 
-impl tty_common::Terminal for UnixTerminal {
+impl Terminal for UnixTerminal {
     /// Enable raw mode for the TERM
     fn enable_raw_mode(&mut self) -> Result<()> {
         use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                                 OPOST, VMIN, VTIME};
-        if !tty_common::is_a_tty(libc::STDIN_FILENO) {
+        if !super::is_a_tty(libc::STDIN_FILENO) {
             return Err(error::ReadlineError::from_errno(Errno::ENOTTY));
         }
         let original_termios = try!(termios::tcgetattr(libc::STDIN_FILENO));

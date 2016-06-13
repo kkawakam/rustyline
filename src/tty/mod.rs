@@ -2,6 +2,16 @@
 extern crate libc;
 use super::Result;
 
+// If on Windows platform import Windows TTY module 
+// and re-export into mod.rs scope
+#[cfg(windows)] mod windows;
+#[cfg(windows)] pub use self::windows::*;
+
+// If on Unix platform import Unix TTY module 
+// and re-export into mod.rs scope
+#[cfg(unix)] mod unix;
+#[cfg(unix)] pub use self::unix::*;
+
 /// Trait that should be for each TTY/Terminal on various platforms
 /// (e.g. unix & windows)
 pub trait Terminal {

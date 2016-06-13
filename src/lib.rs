@@ -31,15 +31,7 @@ mod kill_ring;
 pub mod line_buffer;
 mod char_iter;
 
-// Depending on the platform, load the correct
-// tty modules
-#[cfg(unix)]
-#[path = "tty/unix.rs"] mod tty;
-
-#[cfg(windows)]
-#[path = "tty/windows.rs"] mod tty;
-
-#[path = "tty/common.rs"] mod tty_common;
+mod tty;
 
 use std::fmt;
 use std::io::{self, Write};
@@ -50,7 +42,7 @@ use std::sync;
 use std::sync::atomic;
 use nix::sys::signal;
 use encode_unicode::CharExt;
-use tty_common::Terminal;
+use tty::Terminal;
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
@@ -644,7 +636,7 @@ fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPr
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
-fn readline_edit<T: tty_common::Terminal>(prompt: &str,
+fn readline_edit<T: tty::Terminal>(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
@@ -910,8 +902,8 @@ impl<'completer> Editor<'completer> {
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
             unsupported_term: tty::is_unsupported_term(),
-            stdin_isatty: tty_common::is_a_tty(libc::STDIN_FILENO),
-            stdout_isatty: tty_common::is_a_tty(libc::STDOUT_FILENO),
+            stdin_isatty: tty::is_a_tty(libc::STDIN_FILENO),
+            stdout_isatty: tty::is_a_tty(libc::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),

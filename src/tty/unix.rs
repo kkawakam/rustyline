@@ -114,7 +114,7 @@ impl Terminal for UnixTerminal {
     fn disable_raw_mode(&self) -> Result<()> {
         try!(termios::tcsetattr(libc::STDIN_FILENO,
                                 termios::TCSAFLUSH,
-                                &self.original_termios.expect("RAW was not enabled previously")));
+                                &self.original_termios.expect("RAW MODE was not enabled previously")));
         Ok(())
     }
 }

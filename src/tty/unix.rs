@@ -5,6 +5,7 @@ use std;
 use nix::sys::termios;
 use nix::errno::Errno;
 use super::Terminal;
+use super::StandardStream;
 use ::Result;
 use ::error;
 
@@ -65,6 +66,19 @@ pub fn is_unsupported_term() -> bool {
     }
 }
 
+
+/// Return whether or not STDIN, STDOUT or STDERR is a TTY
+pub fn is_a_tty(stream: StandardStream) -> bool {
+    extern crate libc;
+
+    let fd = match stream {
+            StandardStream::StdIn => libc::STDIN_FILENO,
+            StandardStream::StdOut => libc::STDOUT_FILENO,
+        };
+
+    unsafe { libc::isatty(fd) != 0 }
+}
+
 /// Structure that will contain the original termios before enabling RAW mode
 pub struct UnixTerminal {
     original_termios: Option<termios::Termios>
@@ -75,7 +89,7 @@ impl Terminal for UnixTerminal {
     fn enable_raw_mode(&mut self) -> Result<()> {
         use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                                 OPOST, VMIN, VTIME};
-        if !super::is_a_tty(libc::STDIN_FILENO) {
+        if !is_a_tty(StandardStream::StdIn) {
             return Err(error::ReadlineError::from_errno(Errno::ENOTTY));
         }
         let original_termios = try!(termios::tcgetattr(libc::STDIN_FILENO));

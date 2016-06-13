@@ -900,8 +900,8 @@ impl<'completer> Editor<'completer> {
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
             unsupported_term: tty::is_unsupported_term(),
-            stdin_isatty: tty::is_a_tty(libc::STDIN_FILENO),
-            stdout_isatty: tty::is_a_tty(libc::STDOUT_FILENO),
+            stdin_isatty: tty::is_a_tty(tty::StandardStream::StdIn),
+            stdout_isatty: tty::is_a_tty(tty::StandardStream::StdOut),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),

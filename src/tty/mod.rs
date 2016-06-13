@@ -22,8 +22,12 @@ pub trait Terminal {
     fn disable_raw_mode(&self) -> Result<()>;
 }
 
-/// Check to see if `fd` is a TTY
-pub fn is_a_tty(fd: libc::c_int) -> bool {
-    unsafe { libc::isatty(fd) != 0 }
+/// Enum for Standard Streams 
+///
+/// libc::STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO is not defined for the
+/// Windows platform.  We will use this enum instead when calling isatty
+/// function
+pub enum StandardStream {
+    StdIn,
+    StdOut,
 }
-

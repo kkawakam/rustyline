@@ -40,6 +40,8 @@ use std::path::Path;
 use std::result;
 use std::sync;
 use std::sync::atomic;
+
+#[cfg(unix)]
 use nix::sys::signal;
 use encode_unicode::CharExt;
 use tty::Terminal;
@@ -997,7 +999,7 @@ fn install_sigwinch_handler() {
 fn install_sigwinch_handler() {
 }
 
-
+#[cfg(unix)]
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }

@@ -13,13 +13,14 @@ environment:
   - TARGET: nightly-x86_64-pc-windows-gnu
   - TARGET: nightly-i686-pc-windows-gnu
 install:
-  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-${env:TARGET}.exe" -FileName "rust-install.exe"
-  - ps: .\rust-install.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-${env:TARGET}.exe"
+  - rust-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
   - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
   - SET PATH=%PATH%;C:\MinGW\bin
   - rustc -V
   - cargo -V
-build_script:
-  - cargo build
+
+build: false
+
 test_script:
-  - cargo test
+  - cargo test --verbose

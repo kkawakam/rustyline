@@ -13,3 +13,6 @@ Cargo.lock
 
 # vim swap file
 *.swp
+
+# default history file
+history.txt

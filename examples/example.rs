@@ -4,6 +4,15 @@ use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+// On unix platforms you can use ANSI escape sequences
+#[cfg(unix)]
+static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
+
+// Windows consoles typically don't support ANSI escape sequences out 
+// of the box
+#[cfg(windows)]
+static PROMPT: &'static str = ">> ";
+
 fn main() {
     let c = FilenameCompleter::new();
     let mut rl = Editor::new();
@@ -12,7 +21,7 @@ fn main() {
         println!("No previous history.");
     }
     loop {
-        let readline = rl.readline("\x1b[1;32m>>\x1b[0m ");
+        let readline = rl.readline(PROMPT);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);

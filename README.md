@@ -1,5 +1,7 @@
 # RustyLine
 [![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
+[![Clippy Linting Result](https://clippy.bashy.io/github/kkawakam/rustyline/master/badge.svg)](https://clippy.bashy.io/github/kkawakam/rustyline/master/log)
+[![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 

@@ -15,7 +15,6 @@
 //! }
 //! ```
 #![feature(io)]
-#![feature(iter_arith)]
 #![feature(unicode)]
 
 extern crate libc;
@@ -193,14 +192,15 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
 /// Enable raw mode for the TERM
 fn enable_raw_mode() -> Result<termios::Termios> {
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            OPOST, VMIN, VTIME};
+                            /*OPOST, */VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
         return Err(from_errno(Errno::ENOTTY));
     }
     let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
     let mut raw = original_term;
     raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
-    raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+    // we don't want raw output, it turns newlines into straight linefeeds
+    //raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
     raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
     raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
     raw.c_cc[VMIN] = 1; // One character-at-a-time input

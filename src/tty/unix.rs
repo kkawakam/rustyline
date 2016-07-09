@@ -88,7 +88,7 @@ impl Terminal for UnixTerminal {
     /// Enable raw mode for the TERM
     fn enable_raw_mode(&mut self) -> Result<()> {
         use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                                OPOST, VMIN, VTIME};
+                                /*OPOST, */VMIN, VTIME};
         if !is_a_tty(StandardStream::StdIn) {
             return Err(error::ReadlineError::from_errno(Errno::ENOTTY));
         }
@@ -97,7 +97,8 @@ impl Terminal for UnixTerminal {
         // disable BREAK interrupt, CR to NL conversion on input, 
         // input parity check, strip high bit (bit 8), output flow control
         raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-        raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        // we don't want raw output, it turns newlines into straight linefeeds
+        //raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing    
         raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
         // disable echoing, canonical mode, extended input processing and signals
         raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);

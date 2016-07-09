@@ -2,10 +2,16 @@
 [![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
 [![Clippy Linting Result](https://clippy.bashy.io/github/kkawakam/rustyline/master/badge.svg)](https://clippy.bashy.io/github/kkawakam/rustyline/master/log)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
+[![Build status](https://ci.appveyor.com/api/projects/status/ls7sty8nt25rdfkq/branch/master?svg=true)](https://ci.appveyor.com/project/kkawakam/rustyline/branch/master)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
 [Documentation](https://kkawakam.github.io/rustyline)
+
+
+**Supported Platforms**
+* Linux
+* Windows - Work in Progress (Issue #37), modifier keys do not work
 
 ## Build
 This project uses Cargo and Rust Nightly

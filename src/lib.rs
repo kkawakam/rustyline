@@ -16,6 +16,7 @@
 //! ```
 
 extern crate libc;
+#[cfg(unix)]
 extern crate nix;
 extern crate unicode_width;
 extern crate encode_unicode;
@@ -29,18 +30,21 @@ mod kill_ring;
 pub mod line_buffer;
 mod char_iter;
 
+mod tty;
+
 use std::fmt;
 use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+#[cfg(unix)]
 use std::sync;
 use std::sync::atomic;
-use nix::errno::Errno;
-use nix::sys::signal;
-use nix::sys::termios;
-use encode_unicode::CharExt;
 
+#[cfg(unix)]
+use nix::sys::signal;
+use encode_unicode::CharExt;
+use tty::Terminal;
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
 use history::History;
@@ -163,96 +167,6 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-/// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
-
-/// Check to see if `fd` is a TTY
-fn is_a_tty(fd: libc::c_int) -> bool {
-    unsafe { libc::isatty(fd) != 0 }
-}
-
-/// Check to see if the current `TERM` is unsupported
-fn is_unsupported_term() -> bool {
-    use std::ascii::AsciiExt;
-    match std::env::var("TERM") {
-        Ok(term) => {
-            let mut unsupported = false;
-            for iter in &UNSUPPORTED_TERM {
-                unsupported = (*iter).eq_ignore_ascii_case(&term)
-            }
-            unsupported
-        }
-        Err(_) => false,
-    }
-}
-
-fn from_errno(errno: Errno) -> error::ReadlineError {
-    error::ReadlineError::from(nix::Error::from_errno(errno))
-}
-
-/// Enable raw mode for the TERM
-fn enable_raw_mode() -> Result<termios::Termios> {
-    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /*OPOST, */VMIN, VTIME};
-    if !is_a_tty(libc::STDIN_FILENO) {
-        return Err(from_errno(Errno::ENOTTY));
-    }
-    let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
-    let mut raw = original_term;
-    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
-    // we don't want raw output, it turns newlines into straight linefeeds
-    //raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
-    raw.c_cc[VMIN] = 1; // One character-at-a-time input
-    raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
-    Ok(original_term)
-}
-
-/// Disable Raw mode for the term
-fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
-    Ok(())
-}
-
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-const TIOCGWINSZ: libc::c_ulong = 0x40087468;
-
-#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "android"))]
-const TIOCGWINSZ: libc::c_ulong = 0x5413;
-
-#[cfg(all(target_os = "linux", target_env = "musl"))]
-const TIOCGWINSZ: libc::c_int = 0x5413;
-
-
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-#[cfg(any(target_os = "linux",
-          target_os = "android",
-          target_os = "macos",
-          target_os = "freebsd"))]
-fn get_columns() -> usize {
-    use std::mem::zeroed;
-    use libc::c_ushort;
-    use libc;
-
-    unsafe {
-        #[repr(C)]
-        struct winsize {
-            ws_row: c_ushort,
-            ws_col: c_ushort,
-            ws_xpixel: c_ushort,
-            ws_ypixel: c_ushort,
-        }
-
-        let mut size: winsize = zeroed();
-        match libc::ioctl(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
-            0 => size.ws_col as usize, // TODO getCursorPosition
-            _ => 80,
-        }
-    }
-}
 
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     try!(w.write_all(buf));
@@ -724,23 +638,23 @@ fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPr
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
-fn readline_edit(prompt: &str,
+fn readline_edit<T: tty::Terminal>(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
-                 original_termios: termios::Termios)
+                 mut term: T)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
     kill_ring.reset();
-    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
+    let mut s = State::new(&mut stdout, prompt, MAX_LINE, tty::get_columns(), history.len());
     let stdin = io::stdin();
     let mut chars = char_iter::chars(stdin.lock());
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
-            s.cols = get_columns();
+            s.cols = tty::get_columns();
             try!(s.refresh_line());
             continue;
         }
@@ -872,10 +786,11 @@ fn readline_edit(prompt: &str,
                     try!(edit_yank(&mut s, text))
                 }
             }
+            #[cfg(unix)]
             KeyPress::CTRL_Z => {
-                try!(disable_raw_mode(original_termios));
+                try!(term.disable_raw_mode());
                 try!(signal::raise(signal::SIGSTOP));
-                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(term.enable_raw_mode()); // TODO term may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -949,16 +864,6 @@ fn readline_edit(prompt: &str,
     Ok(s.line.into_string())
 }
 
-struct Guard(termios::Termios);
-
-#[allow(unused_must_use)]
-impl Drop for Guard {
-    fn drop(&mut self) {
-        let Guard(termios) = *self;
-        disable_raw_mode(termios);
-    }
-}
-
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw(prompt: &str,
@@ -966,10 +871,9 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let original_termios = try!(enable_raw_mode());
-    let guard = Guard(original_termios);
-    let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
-    drop(guard); // try!(disable_raw_mode(original_termios));
+    let mut term = tty::get_terminal();
+    try!(term.enable_raw_mode());
+    let user_input = readline_edit(prompt, history, completer, kill_ring, term);
     println!("");
     user_input
 }
@@ -999,9 +903,9 @@ impl<'completer> Editor<'completer> {
         // TODO check what is done in rl_initialize()
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
-            unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(libc::STDIN_FILENO),
-            stdout_isatty: is_a_tty(libc::STDOUT_FILENO),
+            unsupported_term: tty::is_unsupported_term(),
+            stdin_isatty: tty::is_a_tty(tty::StandardStream::StdIn),
+            stdout_isatty: tty::is_a_tty(tty::StandardStream::StdOut),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),
@@ -1078,8 +982,10 @@ impl<'completer> fmt::Debug for Editor<'completer> {
     }
 }
 
+#[cfg(unix)]
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+#[cfg(unix)]
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
@@ -1088,6 +994,13 @@ fn install_sigwinch_handler() {
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
+
+// no-op on windows
+#[cfg(windows)]
+fn install_sigwinch_handler() {
+}
+
+#[cfg(unix)]
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }

@@ -8,6 +8,11 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 
 [Documentation](https://kkawakam.github.io/rustyline)
 
+
+**Supported Platforms**
+* Linux
+* Windows - Work in Progress (Issue #37), modifier keys do not work
+
 ## Build
 This project uses Cargo and Rust Nightly
 ```bash

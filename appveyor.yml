@@ -16,3 +16,7 @@ build: false
 
 test_script:
   - cargo test --verbose
+
+cache:
+  - C:\Users\appveyor\.cargo
+

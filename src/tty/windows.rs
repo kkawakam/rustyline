@@ -1,9 +1,18 @@
 extern crate kernel32;
 extern crate winapi;
 
+use std::io;
 use super::StandardStream;
 use super::Terminal;
 use ::Result;
+
+macro_rules! check {
+    ($funcall:expr) => (
+        if $funcall == 0 {
+            return Err(From::from(io::Error::last_os_error()));
+        }
+    );
+}
 
 /// Try to get the number of columns in the current terminal, or assume 80 if it fails.
 pub fn get_columns() -> usize {
@@ -67,15 +76,15 @@ impl Terminal for WindowsTerminal {
     /// Enable raw mode for the TERM
     fn enable_raw_mode(&mut self) -> Result<()> {
         let mut original_mode: winapi::minwindef::DWORD = 0;
-        unsafe { 
+        unsafe {
             let handle = kernel32::GetStdHandle(winapi::STD_INPUT_HANDLE);
-            kernel32::GetConsoleMode(handle, &mut original_mode);
-            kernel32::SetConsoleMode(
+            check!(kernel32::GetConsoleMode(handle, &mut original_mode));
+            check!(kernel32::SetConsoleMode(
                 handle,
-                original_mode & !(winapi::wincon::ENABLE_LINE_INPUT | 
-                            winapi::wincon::ENABLE_ECHO_INPUT | 
+                original_mode & !(winapi::wincon::ENABLE_LINE_INPUT |
+                            winapi::wincon::ENABLE_ECHO_INPUT |
                             winapi::wincon::ENABLE_PROCESSED_INPUT)
-            ); 
+            ));
         };
         self.original_mode = Some(original_mode);
         Ok(())
@@ -85,8 +94,8 @@ impl Terminal for WindowsTerminal {
     fn disable_raw_mode(&self) -> Result<()> {
         unsafe {
             let handle = kernel32::GetStdHandle(winapi::STD_INPUT_HANDLE);
-            kernel32::SetConsoleMode(handle, 
-                                    self.original_mode.expect("RAW MODE was not enabled previously"));
+            check!(kernel32::SetConsoleMode(handle,
+                                    self.original_mode.expect("RAW MODE was not enabled previously")));
         }
         Ok(())
     }

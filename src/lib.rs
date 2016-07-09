@@ -16,6 +16,7 @@
 //! ```
 
 extern crate libc;
+#[cfg(unix)]
 extern crate nix;
 extern crate unicode_width;
 extern crate encode_unicode;
@@ -36,6 +37,7 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+#[cfg(unix)]
 use std::sync;
 use std::sync::atomic;
 
@@ -980,6 +982,7 @@ impl<'completer> fmt::Debug for Editor<'completer> {
     }
 }
 
+#[cfg(unix)]
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 #[cfg(unix)]

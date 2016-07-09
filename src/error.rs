@@ -2,6 +2,7 @@
 use std::io;
 use std::error;
 use std::fmt;
+#[cfg(unix)]
 use nix;
 
 use char_iter;

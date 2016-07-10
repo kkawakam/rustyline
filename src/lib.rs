@@ -249,7 +249,8 @@ fn enable_raw_mode() -> Result<Mode> {
 }
 #[cfg(windows)]
 fn enable_raw_mode() -> Result<Mode> {
-    let handle = unsafe { libc::get_osfhandle(fd) };
+    use winapi::winnt::HANDLE;
+    let handle = unsafe { libc::get_osfhandle(STDOUT_FILENO) };
     let original_mode = try!(get_console_mode(handle));
     let raw = original_mode &
               !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |

@@ -829,15 +829,26 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     Ok(KeyPress::UNKNOWN_ESC_SEQ)
 }
 
+#[cfg(unix)]
+fn stdin() -> Result<io::Stdin> {
+    Ok(io::stdin())
+}
+#[cfg(windows)]
+fn stdin() -> Result<InputBuffer> {
+    let handle = try!(get_std_handle(STDIN_FILENO));
+    Ok(InputBuffer(handle))
+}
+
 #[cfg(windows)]
 struct InputBuffer(winapi::HANDLE);
-
 #[cfg(windows)]
 impl Read for InputBuffer {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // FIXME: ReadConsoleInputW on windows platform
         unimplemented!()
     }
 }
+
 
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
@@ -855,12 +866,7 @@ fn readline_edit(prompt: &str,
     kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
 
-    let stdin = if cfg!(target_os = "unix") {
-        io::stdin()
-    } else {
-        // FIXME: ReadConsoleInputW on windows platform
-        unimplemented!()
-    };
+    let stdin = try!(stdin());
     let mut chars = stdin.chars(); // TODO stdin.lock() ???
 
     loop {

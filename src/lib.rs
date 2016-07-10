@@ -745,7 +745,7 @@ fn readline_edit(prompt: &str,
 
     kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
-    let stdin = io::stdin();
+    let stdin = io::stdin(); // FIXME: ReadConsoleInputW on windows platform
     let mut chars = stdin.lock().chars();
     loop {
         let c = chars.next().unwrap();

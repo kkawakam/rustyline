@@ -195,9 +195,12 @@ fn from_errno(errno: Errno) -> error::ReadlineError {
     error::ReadlineError::from(nix::Error::from_errno(errno))
 }
 
+#[cfg(unix)]
+type Mode = termios::Termios;
+
 /// Enable raw mode for the TERM
 #[cfg(unix)]
-fn enable_raw_mode() -> Result<termios::Termios> {
+fn enable_raw_mode() -> Result<Mode> {
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                             /*OPOST, */VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
@@ -218,8 +221,8 @@ fn enable_raw_mode() -> Result<termios::Termios> {
 
 /// Disable Raw mode for the term
 #[cfg(unix)]
-fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
+fn disable_raw_mode(original_mode: Mode) -> Result<()> {
+    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
     Ok(())
 }
 
@@ -735,7 +738,7 @@ fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
-                 original_termios: termios::Termios)
+                 original_mode: Mode)
                  -> Result<String> {
     let mut stdout = io::stdout();
     try!(write_and_flush(&mut stdout, prompt.as_bytes()));
@@ -881,9 +884,9 @@ fn readline_edit(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::CTRL_Z => {
-                try!(disable_raw_mode(original_termios));
+                try!(disable_raw_mode(original_mode));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(enable_raw_mode()); // TODO original_termios may have changed
+                try!(enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -957,13 +960,13 @@ fn readline_edit(prompt: &str,
     Ok(s.line.into_string())
 }
 
-struct Guard(termios::Termios);
+struct Guard(Mode);
 
 #[allow(unused_must_use)]
 impl Drop for Guard {
     fn drop(&mut self) {
-        let Guard(termios) = *self;
-        disable_raw_mode(termios);
+        let Guard(mode) = *self;
+        disable_raw_mode(mode);
     }
 }
 
@@ -974,10 +977,10 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let original_termios = try!(enable_raw_mode());
-    let guard = Guard(original_termios);
-    let user_input = readline_edit(prompt, history, completer, kill_ring, original_termios);
-    drop(guard); // try!(disable_raw_mode(original_termios));
+    let original_mode = try!(enable_raw_mode());
+    let guard = Guard(original_mode);
+    let user_input = readline_edit(prompt, history, completer, kill_ring, original_mode);
+    drop(guard); // try!(disable_raw_mode(original_mode));
     println!("");
     user_input
 }

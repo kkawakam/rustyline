@@ -340,8 +340,8 @@ fn clear_screen(_: &mut Write) -> Result<()> {
     check!(kernel32::SetConsoleCursorPosition(handle, coord));
     let mut _count = 0;
     check!(kernel32::FillConsoleOutputCharacterA(handle,
-                                                 ' ',
-                                                 info.dwSize.X * info.dwSize.Y,
+                                                 ' ' as winapi::CHAR,
+                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD,
                                                  coord,
                                                  &mut _count));
     Ok(())

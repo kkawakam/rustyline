@@ -332,8 +332,19 @@ fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
 }
 #[cfg(windows)]
-fn clear_screen(out: &mut Write) -> Result<()> {
-    unimplemented!()
+fn clear_screen(_: &mut Write) -> Result<()> {
+    let handle = unsafe { kernel32::GetStdHandle(STDOUT_FILENO) };
+    let mut info = unsafe { mem::zeroed() };
+    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+    let coord = winapi::COORD { X: 0, Y: 0 };
+    check!(kernel32::SetConsoleCursorPosition(handle, coord));
+    let mut _count = 0;
+    check!(kernel32::FillConsoleOutputCharacterA(handle,
+                                                 ' ',
+                                                 info.dwSize.X * info.dwSize.Y,
+                                                 coord,
+                                                 &mut _count));
+    Ok(())
 }
 
 /// Beep, used for completion when there is nothing to complete or when all

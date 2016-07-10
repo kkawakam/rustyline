@@ -21,6 +21,8 @@ extern crate libc;
 #[cfg(unix)]
 extern crate nix;
 extern crate unicode_width;
+#[cfg(windows)]
+extern crate winapi;
 
 pub mod completion;
 #[allow(non_camel_case_types)]
@@ -38,11 +40,11 @@ use std::result;
 use std::sync;
 use std::sync::atomic;
 #[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
 use nix::sys::signal;
 #[cfg(unix)]
 use nix::sys::termios;
+#[cfg(windows)]
+use winapi;
 
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
@@ -151,6 +153,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
         write_and_flush(self.out, ab.as_bytes())
     }
+
+    #[cfg(windows)]
+    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
@@ -192,14 +199,17 @@ fn is_unsupported_term() -> bool {
 
 #[cfg(unix)]
 type Mode = termios::Termios;
+#[cfg(windows)]
+type Mode = winapi::minwindef::DWORD;
 
 /// Enable raw mode for the TERM
 #[cfg(unix)]
 fn enable_raw_mode() -> Result<Mode> {
+    use nix::errno::Errno::ENOTTY;
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                             /* OPOST, */ VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
-        try!(Err(nix::Error::from_errno(Errno::ENOTTY)));
+        try!(Err(nix::Error::from_errno(ENOTTY)));
     }
     let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
     let mut raw = original_term;
@@ -213,12 +223,20 @@ fn enable_raw_mode() -> Result<Mode> {
     try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
     Ok(original_term)
 }
+#[cfg(windows)]
+fn enable_raw_mode() -> Result<Mode> {
+    unimplemented!()
+}
 
 /// Disable Raw mode for the term
 #[cfg(unix)]
 fn disable_raw_mode(original_mode: Mode) -> Result<()> {
     try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
     Ok(())
+}
+#[cfg(windows)]
+fn disable_raw_mode(original_mode: Mode) -> Result<()> {
+    unimplemented!()
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
@@ -254,6 +272,10 @@ fn get_columns() -> usize {
         }
     }
 }
+#[cfg(windows)]
+fn get_columns() -> usize {
+    unimplemented!()
+}
 
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     try!(w.write_all(buf));
@@ -265,6 +287,10 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 #[cfg(unix)]
 fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
+}
+#[cfg(windows)]
+fn clear_screen(out: &mut Write) -> Result<()> {
+    unimplemented!()
 }
 
 /// Beep, used for completion when there is nothing to complete or when all
@@ -724,6 +750,10 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
         }
     }
 }
+#[cfg(windows)]
+fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
+    unimplemented!()
+}
 
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
@@ -1111,6 +1141,10 @@ fn install_sigwinch_handler() {
 #[cfg(unix)]
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
+}
+#[cfg(windows)]
+fn install_sigwinch_handler() {
+    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }
 
 #[cfg(test)]

@@ -175,7 +175,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     #[cfg(windows)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
-        let handle = s.output_handle;
+        let handle = self.output_handle;
         // calculate the position of the end of the input line
         let end_pos = calculate_position(&self.line, prompt_size, self.cols);
         // calculate the desired position of the cursor
@@ -184,9 +184,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         // position at the end of the prompt, clear to end of previous input
         let mut info = unsafe { mem::zeroed() };
         check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
-        info.dwCursorPosition.X = self.prompt_size.col;
-        inf.dwCursorPosition.Y -= self.cursor.row - self.prompt_size.row;
-        check!(kernel32::SetConsoleCursorPosition(handle, coord));
+        info.dwCursorPosition.X = self.prompt_size.col as i16;
+        info.dwCursorPosition.Y -= (self.cursor.row - self.prompt_size.row) as i16;
+        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
 
         self.cursor = cursor;
         unimplemented!()
@@ -1272,7 +1272,16 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
-    use super::Result;
+    use super::{Handle, Result};
+
+    #[cfg(unix)]
+    fn default_handle() -> Handle {
+        ()
+    }
+    #[cfg(windows)]
+    fn default_handle() -> Handle {
+        ::std::ptr::null_mut()
+    }
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1288,7 +1297,7 @@ mod test {
             cols: cols,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
-            output_handle: Default::default(),
+            output_handle: default_handle(),
         }
     }
 

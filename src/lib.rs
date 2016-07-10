@@ -202,7 +202,7 @@ type Mode = termios::Termios;
 #[cfg(unix)]
 fn enable_raw_mode() -> Result<Mode> {
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /*OPOST, */VMIN, VTIME};
+                            /* OPOST, */ VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
         return Err(from_errno(Errno::ENOTTY));
     }
@@ -745,8 +745,20 @@ fn readline_edit(prompt: &str,
 
     kill_ring.reset();
     let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
-    let stdin = io::stdin(); // FIXME: ReadConsoleInputW on windows platform
-    let mut chars = stdin.lock().chars();
+
+    let stdin = if cfg!(target_os = "unix") {
+        io::stdin()
+    } else {
+        // FIXME: ReadConsoleInputW on windows platform
+        unimplemented!()
+    };
+    let stdin_lock = if cfg!(target_os = "unix") {
+        stdin.lock()
+    } else {
+        unimplemented!()
+    };
+    let mut chars = stdin_lock.chars();
+
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {

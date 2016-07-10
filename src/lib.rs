@@ -66,6 +66,8 @@ struct State<'out, 'prompt> {
     cols: usize, // Number of columns in terminal
     history_index: usize, // The history index we are currently editing.
     snapshot: LineBuffer, // Current edited line before history browsing/completion
+    #[cfg(windows)]
+    output_handle: winapi::HANDLE,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -75,14 +77,15 @@ struct Position {
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
+    #[cfg(unix)]
     fn new(out: &'out mut Write,
            prompt: &'prompt str,
-           capacity: usize,
-           cols: usize,
            history_index: usize)
-           -> State<'out, 'prompt> {
+           -> Result<State<'out, 'prompt>> {
+        let capacity = MAX_LINE;
+        let cols = get_columns();
         let prompt_size = calculate_position(prompt, Default::default(), cols);
-        State {
+        let state = State {
             out: out,
             prompt: prompt,
             prompt_size: prompt_size,
@@ -91,7 +94,30 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             cols: cols,
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
-        }
+        };
+        Ok(state)
+    }
+    #[cfg(windows)]
+    fn new(out: &'out mut Write,
+           prompt: &'prompt str,
+           history_index: usize)
+           -> Result<State<'out, 'prompt>> {
+        let handle = try!(get_std_handle(STDOUT_FILENO));
+        let capacity = MAX_LINE;
+        let cols = get_columns(handle);
+        let prompt_size = calculate_position(prompt, Default::default(), cols);
+        let state = State {
+            out: out,
+            prompt: prompt,
+            prompt_size: prompt_size,
+            line: LineBuffer::with_capacity(capacity),
+            cursor: prompt_size,
+            cols: cols,
+            history_index: history_index,
+            snapshot: LineBuffer::with_capacity(capacity),
+            output_handle: handle,
+        };
+        Ok(state)
     }
 
     fn snapshot(&mut self) {
@@ -158,6 +184,16 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     #[cfg(windows)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         unimplemented!()
+    }
+
+    #[cfg(unix)]
+    fn update_columns(&mut self) {
+        self.cols = get_columns();
+    }
+
+    #[cfg(windows)]
+    fn update_columns(&mut self) {
+        self.cols = get_columns(self.output_handle);
     }
 }
 
@@ -327,12 +363,7 @@ fn get_columns() -> usize {
     }
 }
 #[cfg(windows)]
-fn get_columns() -> usize {
-    let handle = get_std_handle(STDOUT_FILENO);
-    if handle.is_err() {
-        return 80;
-    }
-    let handle = handle.unwrap();
+fn get_columns(handle: winapi::HANDLE) -> usize {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => 80,
@@ -348,12 +379,12 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 
 /// Clear the screen. Used to handle ctrl+l
 #[cfg(unix)]
-fn clear_screen(out: &mut Write) -> Result<()> {
-    write_and_flush(out, b"\x1b[H\x1b[2J")
+fn clear_screen(s: &mut State) -> Result<()> {
+    write_and_flush(s.out, b"\x1b[H\x1b[2J")
 }
 #[cfg(windows)]
-fn clear_screen(_: &mut Write) -> Result<()> {
-    let handle = try!(get_std_handle(STDOUT_FILENO));
+fn clear_screen(s: &mut State) -> Result<()> {
+    let handle = s.output_handle;
     let mut info = unsafe { mem::zeroed() };
     check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
     let coord = winapi::COORD { X: 0, Y: 0 };
@@ -849,7 +880,6 @@ impl Read for InputBuffer {
     }
 }
 
-
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -861,10 +891,10 @@ fn readline_edit(prompt: &str,
                  original_mode: Mode)
                  -> Result<String> {
     let mut stdout = io::stdout();
-    try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
     kill_ring.reset();
-    let mut s = State::new(&mut stdout, prompt, MAX_LINE, get_columns(), history.len());
+    let mut s = try!(State::new(&mut stdout, prompt, history.len()));
+    try!(s.refresh_line());
 
     let stdin = try!(stdin());
     let mut chars = stdin.chars(); // TODO stdin.lock() ???
@@ -872,7 +902,7 @@ fn readline_edit(prompt: &str,
     loop {
         let c = chars.next().unwrap();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
-            s.cols = get_columns();
+            s.update_columns();
             try!(s.refresh_line());
             continue;
         }
@@ -961,7 +991,7 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::CTRL_L => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(clear_screen(s.out));
+                try!(clear_screen(&mut s));
                 try!(s.refresh_line())
             }
             KeyPress::CTRL_N => {
@@ -1241,6 +1271,7 @@ mod test {
     use State;
     use super::Result;
 
+    #[cfg(unix)]
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
                         pos: usize,
@@ -1255,6 +1286,25 @@ mod test {
             cols: cols,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
+        }
+    }
+    #[cfg(windows)]
+    fn init_state<'out>(out: &'out mut Write,
+                        line: &str,
+                        pos: usize,
+                        cols: usize)
+                        -> State<'out, 'static> {
+        use std::ptr;
+        State {
+            out: out,
+            prompt: "",
+            prompt_size: Default::default(),
+            line: LineBuffer::init(line, pos),
+            cursor: Default::default(),
+            cols: cols,
+            history_index: 0,
+            snapshot: LineBuffer::with_capacity(100),
+            output_handle: ptr::null_mut(),
         }
     }
 

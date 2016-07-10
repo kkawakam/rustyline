@@ -316,7 +316,7 @@ fn get_columns() -> usize {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => 80,
-        _ => info.dwSize.X,
+        _ => info.dwSize.X as usize,
     }
 }
 

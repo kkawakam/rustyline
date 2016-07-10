@@ -184,8 +184,8 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 #[cfg(windows)]
-fn is_a_tty(fd: libc::c_int) -> bool {
-    let handle = unsafe { libc::get_osfhandle(fd) };
+fn is_a_tty(fd: winapi::DWORD) -> bool {
+    let handle = unsafe { kernel32::GetStdHandle(fd) };
     // If this function doesn't fail then fd is a TTY
     get_console_mode(handle).is_ok()
 }
@@ -212,11 +212,11 @@ const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 #[cfg(unix)]
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 #[cfg(windows)]
-type Mode = winapi::minwindef::DWORD;
+type Mode = winapi::DWORD;
 #[cfg(windows)]
-const STDIN_FILENO: libc::c_int = 0;
+const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
 #[cfg(windows)]
-const STDOUT_FILENO: libc::c_int = 1;
+const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
 #[cfg(windows)]
 macro_rules! check {
     ($funcall:expr) => (
@@ -249,21 +249,18 @@ fn enable_raw_mode() -> Result<Mode> {
 }
 #[cfg(windows)]
 fn enable_raw_mode() -> Result<Mode> {
-    use winapi::winnt::HANDLE;
-    let handle = unsafe { libc::get_osfhandle(STDOUT_FILENO) };
+    let handle = unsafe { kernel32::GetStdHandle(STDIN_FILENO) };
     let original_mode = try!(get_console_mode(handle));
     let raw = original_mode &
               !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
                 winapi::wincon::ENABLE_PROCESSED_INPUT);
-    check!(kernel32::SetConsoleMode(handle as HANDLE, raw));
+    check!(kernel32::SetConsoleMode(handle, raw));
     Ok(original_mode)
 }
 #[cfg(windows)]
-fn get_console_mode(handle: libc::intptr_t) -> Result<Mode> {
-    use winapi::winnt::HANDLE;
-
+fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
     let mut original_mode = 0;
-    check!(kernel32::GetConsoleMode(handle as HANDLE, &mut original_mode));
+    check!(kernel32::GetConsoleMode(handle, &mut original_mode));
     Ok(original_mode)
 }
 
@@ -275,7 +272,9 @@ fn disable_raw_mode(original_mode: Mode) -> Result<()> {
 }
 #[cfg(windows)]
 fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    unimplemented!()
+    let handle = unsafe { kernel32::GetStdHandle(STDIN_FILENO) };
+    check!(kernel32::SetConsoleMode(handle, original_mode));
+    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

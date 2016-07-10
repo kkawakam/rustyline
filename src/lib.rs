@@ -23,6 +23,8 @@ extern crate nix;
 extern crate unicode_width;
 #[cfg(windows)]
 extern crate winapi;
+#[cfg(windows)]
+extern crate kernel32;
 
 pub mod completion;
 #[allow(non_camel_case_types)]
@@ -37,6 +39,7 @@ use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+#[cfg(unix)]
 use std::sync;
 use std::sync::atomic;
 #[cfg(unix)]
@@ -176,8 +179,21 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
 /// Check to see if `fd` is a TTY
+#[cfg(unix)]
 fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
+}
+#[cfg(windows)]
+fn is_a_tty(fd: libc::c_int) -> bool {
+    use libc::get_osfhandle;
+    use kernel32::GetConsoleMode;
+    use winapi::winnt::HANDLE;
+    let mut out = 0;
+    // If this function doesn't fail then fd is a TTY
+    match unsafe { GetConsoleMode(get_osfhandle(fd) as HANDLE, &mut out) } {
+        0 => false,
+        _ => true,
+    }
 }
 
 /// Check to see if the current `TERM` is unsupported
@@ -758,7 +774,7 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
 }
 #[cfg(windows)]
 fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
-    unimplemented!()
+    Ok(KeyPress::UNKNOWN_ESC_SEQ)
 }
 
 /// Handles reading and editting the readline buffer.

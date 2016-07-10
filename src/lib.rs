@@ -18,6 +18,7 @@
 #![feature(unicode)]
 
 extern crate libc;
+#[cfg(unix)]
 extern crate nix;
 extern crate unicode_width;
 
@@ -36,8 +37,11 @@ use std::path::Path;
 use std::result;
 use std::sync;
 use std::sync::atomic;
+#[cfg(unix)]
 use nix::errno::Errno;
+#[cfg(unix)]
 use nix::sys::signal;
+#[cfg(unix)]
 use nix::sys::termios;
 
 use completion::Completer;
@@ -107,6 +111,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         self.refresh(prompt, prompt_size)
     }
 
+    #[cfg(unix)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         use std::fmt::Write;
 
@@ -185,11 +190,13 @@ fn is_unsupported_term() -> bool {
     }
 }
 
+#[cfg(unix)]
 fn from_errno(errno: Errno) -> error::ReadlineError {
     error::ReadlineError::from(nix::Error::from_errno(errno))
 }
 
 /// Enable raw mode for the TERM
+#[cfg(unix)]
 fn enable_raw_mode() -> Result<termios::Termios> {
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                             /*OPOST, */VMIN, VTIME};
@@ -210,6 +217,7 @@ fn enable_raw_mode() -> Result<termios::Termios> {
 }
 
 /// Disable Raw mode for the term
+#[cfg(unix)]
 fn disable_raw_mode(original_termios: termios::Termios) -> Result<()> {
     try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_termios));
     Ok(())
@@ -256,6 +264,7 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
+#[cfg(unix)]
 fn clear_screen(out: &mut Write) -> Result<()> {
     write_and_flush(out, b"\x1b[H\x1b[2J")
 }
@@ -655,6 +664,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
     Ok(Some(key))
 }
 
+#[cfg(unix)]
 fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     // Read the next two bytes representing the escape sequence.
     let seq1 = try!(chars.next().unwrap());
@@ -869,6 +879,7 @@ fn readline_edit(prompt: &str,
                     try!(edit_yank(&mut s, text))
                 }
             }
+            #[cfg(unix)]
             KeyPress::CTRL_Z => {
                 try!(disable_raw_mode(original_termios));
                 try!(signal::raise(signal::SIGSTOP));
@@ -1075,8 +1086,10 @@ impl<'completer> fmt::Debug for Editor<'completer> {
     }
 }
 
+#[cfg(unix)]
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+#[cfg(unix)]
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
@@ -1085,6 +1098,7 @@ fn install_sigwinch_handler() {
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
+#[cfg(unix)]
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }

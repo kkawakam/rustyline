@@ -2,6 +2,7 @@
 use std::io;
 use std::error;
 use std::fmt;
+#[cfg(unix)]
 use nix;
 
 /// The error type for Rustyline errors that can arise from
@@ -11,6 +12,7 @@ pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),
     /// Error from syscall
+    #[cfg(unix)]
     Errno(nix::Error),
     /// Chars Error
     Char(io::CharsError),
@@ -24,6 +26,7 @@ impl fmt::Display for ReadlineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReadlineError::Io(ref err) => err.fmt(f),
+            #[cfg(unix)]
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
             ReadlineError::Char(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
@@ -36,6 +39,7 @@ impl error::Error for ReadlineError {
     fn description(&self) -> &str {
         match *self {
             ReadlineError::Io(ref err) => err.description(),
+            #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.errno().desc(),
             ReadlineError::Char(ref err) => err.description(),
             ReadlineError::Eof => "EOF",
@@ -50,6 +54,7 @@ impl From<io::Error> for ReadlineError {
     }
 }
 
+#[cfg(unix)]
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> ReadlineError {
         ReadlineError::Errno(err)

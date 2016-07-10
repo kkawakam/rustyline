@@ -43,8 +43,6 @@ use std::sync::atomic;
 use nix::sys::signal;
 #[cfg(unix)]
 use nix::sys::termios;
-#[cfg(windows)]
-use winapi;
 
 use completion::Completer;
 use consts::{KeyPress, char_to_key_press};
@@ -199,8 +197,16 @@ fn is_unsupported_term() -> bool {
 
 #[cfg(unix)]
 type Mode = termios::Termios;
+#[cfg(unix)]
+const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
+#[cfg(unix)]
+const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 #[cfg(windows)]
 type Mode = winapi::minwindef::DWORD;
+#[cfg(windows)]
+const STDIN_FILENO: libc::c_int = 0;
+#[cfg(windows)]
+const STDOUT_FILENO: libc::c_int = 1;
 
 /// Enable raw mode for the TERM
 #[cfg(unix)]
@@ -208,10 +214,10 @@ fn enable_raw_mode() -> Result<Mode> {
     use nix::errno::Errno::ENOTTY;
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                             /* OPOST, */ VMIN, VTIME};
-    if !is_a_tty(libc::STDIN_FILENO) {
+    if !is_a_tty(STDIN_FILENO) {
         try!(Err(nix::Error::from_errno(ENOTTY)));
     }
-    let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
+    let original_term = try!(termios::tcgetattr(STDIN_FILENO));
     let mut raw = original_term;
     raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
     // we don't want raw output, it turns newlines into straight linefeeds
@@ -220,7 +226,7 @@ fn enable_raw_mode() -> Result<Mode> {
     raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
     raw.c_cc[VMIN] = 1; // One character-at-a-time input
     raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &raw));
+    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &raw));
     Ok(original_term)
 }
 #[cfg(windows)]
@@ -231,7 +237,7 @@ fn enable_raw_mode() -> Result<Mode> {
 /// Disable Raw mode for the term
 #[cfg(unix)]
 fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    try!(termios::tcsetattr(libc::STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
+    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
     Ok(())
 }
 #[cfg(windows)]
@@ -266,7 +272,7 @@ fn get_columns() -> usize {
         }
 
         let mut size: winsize = zeroed();
-        match libc::ioctl(libc::STDOUT_FILENO, TIOCGWINSZ, &mut size) {
+        match libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size) {
             0 => size.ws_col as usize, // TODO getCursorPosition
             _ => 80,
         }
@@ -1048,8 +1054,8 @@ impl<'completer> Editor<'completer> {
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
             unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(libc::STDIN_FILENO),
-            stdout_isatty: is_a_tty(libc::STDOUT_FILENO),
+            stdin_isatty: is_a_tty(STDIN_FILENO),
+            stdout_isatty: is_a_tty(STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),

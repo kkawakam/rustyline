@@ -181,15 +181,33 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         // calculate the desired position of the cursor
         let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
-        // position at the end of the prompt, clear to end of previous input
+        // position at the start of the prompt, clear to end of previous input
         let mut info = unsafe { mem::zeroed() };
         check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
-        info.dwCursorPosition.X = self.prompt_size.col as i16;
-        info.dwCursorPosition.Y -= (self.cursor.row - self.prompt_size.row) as i16;
+        info.dwCursorPosition.X = 0;
+        info.dwCursorPosition.Y -= self.cursor.row as i16;
+        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
+        let mut _count = 0;
+        check!(kernel32::FillConsoleOutputCharacterA(handle,
+                                                 ' ' as winapi::CHAR,
+                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD, // FIXME
+                                                 info.dwCursorPosition,
+                                                 &mut _count));
+        let mut ab = String::new();
+        // display the prompt
+        ab.push_str(prompt);
+        // display the input line
+        ab.push_str(&self.line);
+        try!(write_and_flush(self.out, ab.as_bytes()));
+
+        // position the cursor
+        check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+        info.dwCursorPosition.X = cursor.col as i16;
+        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
         check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
 
         self.cursor = cursor;
-        unimplemented!()
+        Ok(())
     }
 
     fn update_columns(&mut self) {

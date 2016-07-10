@@ -185,15 +185,9 @@ fn is_a_tty(fd: libc::c_int) -> bool {
 }
 #[cfg(windows)]
 fn is_a_tty(fd: libc::c_int) -> bool {
-    use libc::get_osfhandle;
-    use kernel32::GetConsoleMode;
-    use winapi::winnt::HANDLE;
-    let mut out = 0;
+    let handle = unsafe { libc::get_osfhandle(fd) };
     // If this function doesn't fail then fd is a TTY
-    match unsafe { GetConsoleMode(get_osfhandle(fd) as HANDLE, &mut out) } {
-        0 => false,
-        _ => true,
-    }
+    get_console_mode(handle).is_ok()
 }
 
 /// Check to see if the current `TERM` is unsupported
@@ -223,6 +217,14 @@ type Mode = winapi::minwindef::DWORD;
 const STDIN_FILENO: libc::c_int = 0;
 #[cfg(windows)]
 const STDOUT_FILENO: libc::c_int = 1;
+#[cfg(windows)]
+macro_rules! check {
+    ($funcall:expr) => (
+        if unsafe { $funcall } == 0 {
+            try!(Err(io::Error::last_os_error()));
+        }
+    );
+}
 
 /// Enable raw mode for the TERM
 #[cfg(unix)]
@@ -247,7 +249,21 @@ fn enable_raw_mode() -> Result<Mode> {
 }
 #[cfg(windows)]
 fn enable_raw_mode() -> Result<Mode> {
-    unimplemented!()
+    let handle = unsafe { libc::get_osfhandle(fd) };
+    let original_mode = try!(get_console_mode(handle));
+    let raw = original_mode &
+              !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
+                winapi::wincon::ENABLE_PROCESSED_INPUT);
+    check!(kernel32::SetConsoleMode(handle as HANDLE, raw));
+    Ok(original_mode)
+}
+#[cfg(windows)]
+fn get_console_mode(handle: libc::intptr_t) -> Result<Mode> {
+    use winapi::winnt::HANDLE;
+
+    let mut original_mode = 0;
+    check!(kernel32::GetConsoleMode(handle as HANDLE, &mut original_mode));
+    Ok(original_mode)
 }
 
 /// Disable Raw mode for the term

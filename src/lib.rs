@@ -312,7 +312,12 @@ fn get_columns() -> usize {
 }
 #[cfg(windows)]
 fn get_columns() -> usize {
-    unimplemented!()
+    let handle = unsafe { kernel32::GetStdHandle(STDOUT_FILENO) };
+    let mut info = unsafe { mem::zeroed() };
+    match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
+        0 => 80,
+        _ => info.dwSize.X,
+    }
 }
 
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {

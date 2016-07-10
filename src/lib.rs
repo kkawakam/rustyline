@@ -185,9 +185,14 @@ fn is_a_tty(fd: libc::c_int) -> bool {
 }
 #[cfg(windows)]
 fn is_a_tty(fd: winapi::DWORD) -> bool {
-    let handle = unsafe { kernel32::GetStdHandle(fd) };
-    // If this function doesn't fail then fd is a TTY
-    get_console_mode(handle).is_ok()
+    let handle = get_std_handle(fd);
+    match handle {
+        Ok(handle) => {
+            // If this function doesn't fail then fd is a TTY
+            get_console_mode(handle).is_ok()
+        }
+        Err(_) => false,
+    }
 }
 
 /// Check to see if the current `TERM` is unsupported
@@ -225,6 +230,17 @@ macro_rules! check {
         }
     );
 }
+#[cfg(windows)]
+fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
+    let handle = unsafe { kernel32::GetStdHandle(fd) };
+    if handle == winapi::INVALID_HANDLE_VALUE {
+        try!(Err(io::Error::last_os_error()));
+    } else if handle.is_null() {
+        try!(Err(io::Error::new(io::ErrorKind::Other,
+                                "no stdio handle available for this process")));
+    }
+    Ok(handle)
+}
 
 /// Enable raw mode for the TERM
 #[cfg(unix)]
@@ -249,7 +265,7 @@ fn enable_raw_mode() -> Result<Mode> {
 }
 #[cfg(windows)]
 fn enable_raw_mode() -> Result<Mode> {
-    let handle = unsafe { kernel32::GetStdHandle(STDIN_FILENO) };
+    let handle = try!(get_std_handle(STDIN_FILENO));
     let original_mode = try!(get_console_mode(handle));
     let raw = original_mode &
               !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
@@ -272,7 +288,7 @@ fn disable_raw_mode(original_mode: Mode) -> Result<()> {
 }
 #[cfg(windows)]
 fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    let handle = unsafe { kernel32::GetStdHandle(STDIN_FILENO) };
+    let handle = try!(get_std_handle(STDIN_FILENO));
     check!(kernel32::SetConsoleMode(handle, original_mode));
     Ok(())
 }
@@ -312,7 +328,11 @@ fn get_columns() -> usize {
 }
 #[cfg(windows)]
 fn get_columns() -> usize {
-    let handle = unsafe { kernel32::GetStdHandle(STDOUT_FILENO) };
+    let handle = get_std_handle(STDOUT_FILENO);
+    if handle.is_err() {
+        return 80;
+    }
+    let handle = handle.unwrap();
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => 80,
@@ -333,7 +353,7 @@ fn clear_screen(out: &mut Write) -> Result<()> {
 }
 #[cfg(windows)]
 fn clear_screen(_: &mut Write) -> Result<()> {
-    let handle = unsafe { kernel32::GetStdHandle(STDOUT_FILENO) };
+    let handle = try!(get_std_handle(STDOUT_FILENO));
     let mut info = unsafe { mem::zeroed() };
     check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
     let coord = winapi::COORD { X: 0, Y: 0 };
@@ -809,6 +829,16 @@ fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
     Ok(KeyPress::UNKNOWN_ESC_SEQ)
 }
 
+#[cfg(windows)]
+struct InputBuffer(winapi::HANDLE);
+
+#[cfg(windows)]
+impl Read for InputBuffer {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        unimplemented!()
+    }
+}
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -831,12 +861,7 @@ fn readline_edit(prompt: &str,
         // FIXME: ReadConsoleInputW on windows platform
         unimplemented!()
     };
-    let stdin_lock = if cfg!(target_os = "unix") {
-        stdin.lock()
-    } else {
-        unimplemented!()
-    };
-    let mut chars = stdin_lock.chars();
+    let mut chars = stdin.chars(); // TODO stdin.lock() ???
 
     loop {
         let c = chars.next().unwrap();

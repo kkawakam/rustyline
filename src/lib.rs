@@ -191,11 +191,6 @@ fn is_unsupported_term() -> bool {
 }
 
 #[cfg(unix)]
-fn from_errno(errno: Errno) -> error::ReadlineError {
-    error::ReadlineError::from(nix::Error::from_errno(errno))
-}
-
-#[cfg(unix)]
 type Mode = termios::Termios;
 
 /// Enable raw mode for the TERM
@@ -204,7 +199,7 @@ fn enable_raw_mode() -> Result<Mode> {
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
                             /* OPOST, */ VMIN, VTIME};
     if !is_a_tty(libc::STDIN_FILENO) {
-        return Err(from_errno(Errno::ENOTTY));
+        try!(Err(nix::Error::from_errno(Errno::ENOTTY)));
     }
     let original_term = try!(termios::tcgetattr(libc::STDIN_FILENO));
     let mut raw = original_term;

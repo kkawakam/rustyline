@@ -1219,6 +1219,16 @@ impl<'completer> Editor<'completer> {
         }
     }
 
+    pub fn history_ignore_space(mut self, yes: bool) -> Editor<'completer> {
+        self.history.ignore_space(yes);
+        self
+    }
+
+    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<'completer> {
+        self.history.ignore_dups(yes);
+        self
+    }
+
     /// Load the history from the specified file.
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)
@@ -1302,7 +1312,7 @@ mod test {
     #[cfg(windows)]
     fn default_handle() -> Handle {
         ::std::ptr::null_mut()
-        //super::get_std_handle(super::STDOUT_FILENO).expect("Valid stdout")
+        // super::get_std_handle(super::STDOUT_FILENO).expect("Valid stdout")
     }
 
     fn init_state<'out>(out: &'out mut Write,

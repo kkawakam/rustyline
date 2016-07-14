@@ -6,7 +6,7 @@ use rustyline::Editor;
 
 fn main() {
     let c = FilenameCompleter::new();
-    let mut rl = Editor::new();
+    let mut rl = Editor::new().history_ignore_space(true);
     rl.set_completer(Some(&c));
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");

@@ -9,6 +9,8 @@ use super::Result;
 pub struct History {
     entries: VecDeque<String>,
     max_len: usize,
+    ignore_space: bool,
+    ignore_dups: bool,
 }
 
 const DEFAULT_HISTORY_MAX_LEN: usize = 100;
@@ -18,7 +20,17 @@ impl History {
         History {
             entries: VecDeque::new(),
             max_len: DEFAULT_HISTORY_MAX_LEN,
+            ignore_space: true,
+            ignore_dups: true,
         }
+    }
+
+    pub fn ignore_space(&mut self, yes: bool) {
+        self.ignore_space = yes;
+    }
+
+    pub fn ignore_dups(&mut self, yes: bool) {
+        self.ignore_dups = yes;
     }
 
     /// Return the history entry at position `index`, starting from 0.
@@ -31,14 +43,15 @@ impl History {
         if self.max_len == 0 {
             return false;
         }
-        if line.is_empty() || line.chars().next().map_or(true, |c| c.is_whitespace()) {
-            // ignorespace
+        if line.is_empty() ||
+           (self.ignore_space && line.chars().next().map_or(true, |c| c.is_whitespace())) {
             return false;
         }
-        if let Some(s) = self.entries.back() {
-            if s == line {
-                // ignoredups
-                return false;
+        if self.ignore_dups {
+            if let Some(s) = self.entries.back() {
+                if s == line {
+                    return false;
+                }
             }
         }
         if self.entries.len() == self.max_len {

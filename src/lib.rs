@@ -355,7 +355,6 @@ const TIOCGWINSZ: libc::c_ulong = 0x5413;
           target_os = "macos",
           target_os = "freebsd"))]
 fn get_columns(_: Handle) -> usize {
-    use std::mem::zeroed;
     use libc::c_ushort;
     use libc;
 
@@ -368,7 +367,7 @@ fn get_columns(_: Handle) -> usize {
             ws_ypixel: c_ushort,
         }
 
-        let mut size: winsize = zeroed();
+        let mut size: winsize = mem::zeroed();
         match libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size) {
             0 => size.ws_col as usize, // TODO getCursorPosition
             _ => 80,
@@ -898,8 +897,29 @@ struct InputBuffer(winapi::HANDLE);
 #[cfg(windows)]
 impl Read for InputBuffer {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // FIXME: ReadConsoleInputW on windows platform
-        unimplemented!()
+        let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
+        let mut count = 0;
+        loop {
+            check!(kernel32::ReadConsoleInputW(self.0, &mut rec, 1 as winapi::DWORD, &mut count));
+
+            // TODO ENABLE_WINDOW_INPUT ???
+            if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
+                SIGWINCH.store(true, atomic::Ordering::SeqCst);
+                return Err(io::Error::new(io::ErrorKind::Other, "WINDOW_BUFFER_SIZE_EVENT"));
+            } else if rec.EventType != winapi::KEY_EVENT {
+                continue;
+            }
+            let key_event = unsafe { rec.KeyEvent() };
+            if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
+                continue;
+            }
+
+            if key_event.UnicodeChar != 0 {
+            }
+            // TODO dwControlKeyState
+            // TODO wVirtualKeyCode WORD & winapi::VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_DELETE, VK_HOME, VK_END, VK_PRIOR, VK_NEXT c_int
+            unimplemented!()
+        }
     }
 }
 

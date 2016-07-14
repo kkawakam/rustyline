@@ -895,10 +895,18 @@ fn stdout_handle() -> Result<Handle> {
 #[cfg(windows)]
 struct InputBuffer(winapi::HANDLE);
 #[cfg(windows)]
+impl InputBuffer {
+    fn single_byte(c: u8, buf: &mut [u8]) -> io::Result<usize> {
+        buf[0] = c;
+        Ok(1)
+    }
+}
+#[cfg(windows)]
 impl Read for InputBuffer {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
+        let mut esc_seen = false;
         loop {
             check!(kernel32::ReadConsoleInputW(self.0, &mut rec, 1 as winapi::DWORD, &mut count));
 
@@ -910,14 +918,43 @@ impl Read for InputBuffer {
                 continue;
             }
             let key_event = unsafe { rec.KeyEvent() };
-            if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
+            if key_event.bKeyDown == 0 &&
+               key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
                 continue;
             }
 
-            if key_event.UnicodeChar != 0 {
+            let ctrl = key_event.dwControlKeyState &
+                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
+                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
+            let meta = (key_event.dwControlKeyState &
+                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) ==
+                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
+                       esc_seen;
+
+            let utf16 = key_event.UnicodeChar;
+            if utf16 == 0 {
+                match key_event.wVirtualKeyCode as i32 {
+                    winapi::VK_LEFT => return InputBuffer::single_byte(b'\x02', buf),
+                    winapi::VK_RIGHT => return InputBuffer::single_byte(b'\x06', buf),
+                    winapi::VK_UP => return InputBuffer::single_byte(b'\x10', buf),
+                    winapi::VK_DOWN => return InputBuffer::single_byte(b'\x0e', buf),
+                    // winapi::VK_DELETE => b"\x1b[3~",
+                    winapi::VK_HOME => return InputBuffer::single_byte(b'\x01', buf),
+                    winapi::VK_END => return InputBuffer::single_byte(b'\x05', buf),
+                    _ => continue,
+                };
+            } else if utf16 == 27 {
+                esc_seen = true;
+                continue;
+            } else {
+                if ctrl {
+
+                } else if meta {
+
+                } else {
+                    // return utf8.read(buf);
+                }
             }
-            // TODO dwControlKeyState
-            // TODO wVirtualKeyCode WORD & winapi::VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_DELETE, VK_HOME, VK_END, VK_PRIOR, VK_NEXT c_int
             unimplemented!()
         }
     }

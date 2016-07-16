@@ -936,6 +936,16 @@ impl<'completer> Editor<'completer> {
         }
     }
 
+    pub fn history_ignore_space(mut self, yes: bool) -> Editor<'completer> {
+        self.history.ignore_space(yes);
+        self
+    }
+
+    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<'completer> {
+        self.history.ignore_dups(yes);
+        self
+    }
+
     /// Load the history from the specified file.
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)

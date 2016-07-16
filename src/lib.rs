@@ -1400,6 +1400,7 @@ mod test {
             line: LineBuffer::init(line, pos),
             cursor: Default::default(),
             cols: cols,
+            old_rows: 0,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             output_handle: default_handle(),

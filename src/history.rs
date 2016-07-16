@@ -169,6 +169,7 @@ mod tests {
     #[test]
     fn add() {
         let mut history = super::History::new();
+        history.ignore_space(true);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));

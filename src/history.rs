@@ -20,7 +20,7 @@ impl History {
         History {
             entries: VecDeque::new(),
             max_len: DEFAULT_HISTORY_MAX_LEN,
-            ignore_space: true,
+            ignore_space: false,
             ignore_dups: true,
         }
     }

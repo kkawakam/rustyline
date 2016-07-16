@@ -202,7 +202,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let mut _count = 0;
         check!(kernel32::FillConsoleOutputCharacterA(handle,
                                                  ' ' as winapi::CHAR,
-                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD, // FIXME
+                                                 (info.dwSize.X * (self.old_rows as i16 +1)) as winapi::DWORD,
                                                  info.dwCursorPosition,
                                                  &mut _count));
         let mut ab = String::new();
@@ -219,6 +219,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
 
         self.cursor = cursor;
+        self.old_rows = end_pos.row;
+
         Ok(())
     }
 

@@ -107,3 +107,13 @@ Alt-BackSpace | Kill from the start of the current word, or, if between words, t
 
  - Show completion list
  - expose an API callable from C
+
+## Wine
+
+```sh
+$ cargo run --example example --target 'x86_64-pc-windows-gnu'
+...
+Error: Io(Error { repr: Os { code: 6, message: "Invalid handle." } })
+$ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/example.exe
+...
+```

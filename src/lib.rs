@@ -62,11 +62,15 @@ type Handle = ();
 type Handle = winapi::HANDLE;
 #[cfg(windows)]
 macro_rules! check {
-    ($funcall:expr) => (
-        if unsafe { $funcall } == 0 {
+    ($funcall:expr) => {
+        {
+        let rc = unsafe { $funcall };
+        if rc == 0 {
             try!(Err(io::Error::last_os_error()));
         }
-    );
+        rc
+        }
+    };
 }
 
 // Represent the state during line editing.
@@ -207,7 +211,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                                                  &mut _count));
         let mut ab = String::new();
         // display the prompt
-        ab.push_str(prompt);
+        ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
         // display the input line
         ab.push_str(&self.line);
         try!(write_and_flush(self.out, ab.as_bytes()));
@@ -917,6 +921,20 @@ impl InputBuffer {
         buf[0] = c;
         Ok(1)
     }
+    fn wide_char_to_multi_byte(c: u16) -> io::Result<([u8; 4], usize)> {
+        use std::ptr;
+        const WC_COMPOSITECHECK: winapi::DWORD = 0x00000200; // use composite chars
+        let mut bytes = [0u8; 4];
+        let len = check!(kernel32::WideCharToMultiByte(winapi::CP_ACP,
+                                                       WC_COMPOSITECHECK,
+                                                       &c,
+                                                       1,
+                                                       (&mut bytes).as_mut_ptr() as *mut i8,
+                                                       4,
+                                                       ptr::null(),
+                                                       ptr::null_mut()));
+        Ok((bytes, len as usize))
+    }
 }
 #[cfg(windows)]
 impl Read for InputBuffer {
@@ -965,12 +983,13 @@ impl Read for InputBuffer {
                 esc_seen = true;
                 continue;
             } else {
+                let (bytes, len) = try!(InputBuffer::wide_char_to_multi_byte(utf16));
                 if ctrl {
 
                 } else if meta {
 
                 } else {
-                    // return utf8.read(buf);
+                    return (&bytes[..len]).read(buf);
                 }
             }
             unimplemented!()

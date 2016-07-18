@@ -23,6 +23,42 @@ pub trait Completer {
     }
 }
 
+impl Completer for () {
+    fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+        Ok((0, Vec::new()))
+    }
+    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
+        unreachable!()
+    }
+}
+
+impl<'c, C: ?Sized + Completer> Completer for &'c C {
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+        (**self).complete(line, pos)
+    }
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+        (**self).update(line, start, elected)
+    }
+}
+macro_rules! box_completer {
+    ($($id: ident)*) => {
+        $(
+            impl<C: ?Sized + Completer> Completer for $id<C> {
+                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+                    (**self).complete(line, pos)
+                }
+                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+                    (**self).update(line, start, elected)
+                }
+            }
+        )*
+    }
+}
+
+use std::sync::Arc;
+use std::rc::Rc;
+box_completer! { Box Rc Arc }
+
 pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
 }

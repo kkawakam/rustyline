@@ -62,7 +62,8 @@ struct State<'out, 'prompt> {
     line: LineBuffer, // Edited line buffer
     cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
-    history_index: usize, // The history index we are currently editing.
+    old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
+    history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
 }
 
@@ -87,6 +88,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
             cols: cols,
+            old_rows: prompt_size.row,
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
         }
@@ -119,13 +121,19 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
         let mut ab = String::new();
-        let cursor_row_movement = self.cursor.row - self.prompt_size.row;
-        // move the cursor up as required
+
+        let cursor_row_movement = self.old_rows - self.cursor.row;
+        // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
+            write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();
         }
-        // position at the start of the prompt, clear to end of screen
-        ab.push_str("\r\x1b[J");
+        // clear old rows
+        for _ in 0..self.old_rows {
+            ab.push_str("\r\x1b[0K\x1b[1A");
+        }
+        // clear the line
+        ab.push_str("\r\x1b[0K");
+
         // display the prompt
         ab.push_str(prompt);
         // display the input line
@@ -148,6 +156,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
 
         self.cursor = cursor;
+        self.old_rows = end_pos.row;
 
         write_and_flush(self.out, ab.as_bytes())
     }
@@ -161,6 +170,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("buf", &self.line)
             .field("cursor", &self.cursor)
             .field("cols", &self.cols)
+            .field("old_rows", &self.old_rows)
             .field("history_index", &self.history_index)
             .field("snapshot", &self.snapshot)
             .finish()
@@ -244,6 +254,8 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
         if push {
             if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
+                let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
+                s.cursor = cursor;
                 write_and_flush(s.out, ch.to_utf8().as_bytes())
             } else {
                 s.refresh_line()
@@ -499,6 +511,9 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
                                            s: &mut State,
                                            history: &History)
                                            -> Result<Option<KeyPress>> {
+    if history.is_empty() {
+        return Ok(None);
+    }
     // Save the current edited line (and cursor position) before to overwrite it
     s.snapshot();
 
@@ -627,7 +642,7 @@ fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPr
             'y' | 'Y' => Ok(KeyPress::ESC_Y),
             '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
             _ => {
-                writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
+                // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::ESC, seq1).unwrap();
                 Ok(KeyPress::UNKNOWN_ESC_SEQ)
             }
         }
@@ -1038,6 +1053,7 @@ mod test {
             line: LineBuffer::init(line, pos),
             cursor: Default::default(),
             cols: cols,
+            old_rows: 0,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
         }

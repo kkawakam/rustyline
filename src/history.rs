@@ -20,7 +20,7 @@ impl History {
         History {
             entries: VecDeque::new(),
             max_len: DEFAULT_HISTORY_MAX_LEN,
-            ignore_space: true,
+            ignore_space: false,
             ignore_dups: true,
         }
     }
@@ -169,6 +169,7 @@ mod tests {
     #[test]
     fn add() {
         let mut history = super::History::new();
+        history.ignore_space(true);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));

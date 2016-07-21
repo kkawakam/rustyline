@@ -34,10 +34,14 @@ pub mod history;
 mod kill_ring;
 pub mod line_buffer;
 
+#[cfg(windows)]
+use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
+#[cfg(windows)]
+use std::rc::Rc;
 use std::result;
 #[cfg(unix)]
 use std::sync;
@@ -48,7 +52,7 @@ use nix::sys::signal;
 use nix::sys::termios;
 
 use completion::Completer;
-use consts::{KeyPress, char_to_key_press};
+use consts::KeyPress;
 use history::History;
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::KillRing;
@@ -693,10 +697,10 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 }
 
 /// Completes the line/word
-fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
-                              s: &mut State,
-                              completer: &Completer)
-                              -> Result<Option<char>> {
+fn complete_line<R: Read>(rdr: &mut RawReader<R>,
+                          s: &mut State,
+                          completer: &Completer)
+                          -> Result<Option<char>> {
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     if candidates.is_empty() {
         try!(beep());
@@ -718,8 +722,8 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
                 s.snapshot();
             }
 
-            ch = try!(chars.next().unwrap());
-            let key = char_to_key_press(ch);
+            ch = try!(rdr.next());
+            let key = rdr.char_to_key_press(ch);
             match key {
                 KeyPress::TAB => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -746,10 +750,10 @@ fn complete_line<R: io::Read>(chars: &mut io::Chars<R>,
 
 /// Incremental search
 #[cfg_attr(feature="clippy", allow(if_not_else))]
-fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
-                                           s: &mut State,
-                                           history: &History)
-                                           -> Result<Option<KeyPress>> {
+fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
+                                       s: &mut State,
+                                       history: &History)
+                                       -> Result<Option<KeyPress>> {
     if history.is_empty() {
         return Ok(None);
     }
@@ -772,13 +776,13 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        ch = try!(chars.next().unwrap());
-        if !ch.is_control() {
+        ch = try!(rdr.next());
+        if !rdr.is_control(ch) {
             search_buf.push(ch);
         } else {
-            key = char_to_key_press(ch);
+            key = rdr.char_to_key_press(ch);
             if key == KeyPress::ESC {
-                key = try!(escape_sequence(chars));
+                key = try!(rdr.escape_sequence());
             }
             match key {
                 KeyPress::CTRL_H | KeyPress::BACKSPACE => {
@@ -826,97 +830,145 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut io::Chars<R>,
     Ok(Some(key))
 }
 
+/// Console input reader
 #[cfg(unix)]
-fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
-    // Read the next two bytes representing the escape sequence.
-    let seq1 = try!(chars.next().unwrap());
-    if seq1 == '[' {
-        // ESC [ sequences.
-        let seq2 = try!(chars.next().unwrap());
-        if seq2.is_digit(10) {
-            // Extended escape, read additional byte.
-            let seq3 = try!(chars.next().unwrap());
-            if seq3 == '~' {
-                match seq2 {
-                    '3' => Ok(KeyPress::ESC_SEQ_DELETE),
-                    // TODO '1' // Home
-                    // TODO '4' // End
-                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+struct RawReader<R> {
+    chars: io::Chars<R>,
+}
+
+#[cfg(unix)]
+impl<R: Read> RawReader<R> {
+    fn new(stdin: R) -> Result<RawReader<R>> {
+        Ok(RawReader { chars: stdin.chars() })
+    }
+
+    fn next(&mut self) -> Result<char> {
+        match self.chars.next() {
+            Some(c) => {
+                Ok(try!(c)) // TODO SIGWINCH
+            }
+            None => Err(error::ReadlineError::Eof),
+        }
+    }
+
+    fn is_control(&self, c: char) -> bool {
+        c.is_control()
+    }
+
+    fn char_to_key_press(&self, c: char) -> KeyPress {
+        use consts::char_to_key_press;
+        char_to_key_press(c) // TODO directly handle ESC + escape_sequence
+    }
+
+    fn escape_sequence(&mut self) -> Result<KeyPress> {
+        // Read the next two bytes representing the escape sequence.
+        let seq1 = try!(self.next());
+        if seq1 == '[' {
+            // ESC [ sequences.
+            let seq2 = try!(self.next());
+            if seq2.is_digit(10) {
+                // Extended escape, read additional byte.
+                let seq3 = try!(self.next());
+                if seq3 == '~' {
+                    match seq2 {
+                        '3' => Ok(KeyPress::ESC_SEQ_DELETE),
+                        // TODO '1' // Home
+                        // TODO '4' // End
+                        _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                    }
+                } else {
+                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
                 }
             } else {
-                Ok(KeyPress::UNKNOWN_ESC_SEQ)
+                match seq2 {
+                    'A' => Ok(KeyPress::CTRL_P), // Up
+                    'B' => Ok(KeyPress::CTRL_N), // Down
+                    'C' => Ok(KeyPress::CTRL_F), // Right
+                    'D' => Ok(KeyPress::CTRL_B), // Left
+                    'F' => Ok(KeyPress::CTRL_E), // End
+                    'H' => Ok(KeyPress::CTRL_A), // Home
+                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                }
             }
-        } else {
+        } else if seq1 == 'O' {
+            // ESC O sequences.
+            let seq2 = try!(self.next());
             match seq2 {
-                'A' => Ok(KeyPress::CTRL_P), // Up
-                'B' => Ok(KeyPress::CTRL_N), // Down
-                'C' => Ok(KeyPress::CTRL_F), // Right
-                'D' => Ok(KeyPress::CTRL_B), // Left
-                'F' => Ok(KeyPress::CTRL_E), // End
-                'H' => Ok(KeyPress::CTRL_A), // Home
+                'F' => Ok(KeyPress::CTRL_E),
+                'H' => Ok(KeyPress::CTRL_A),
                 _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
             }
-        }
-    } else if seq1 == 'O' {
-        // ESC O sequences.
-        let seq2 = try!(chars.next().unwrap());
-        match seq2 {
-            'F' => Ok(KeyPress::CTRL_E),
-            'H' => Ok(KeyPress::CTRL_A),
-            _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-        }
-    } else {
-        // TODO ESC-N (n): search history forward not interactively
-        // TODO ESC-P (p): search history backward not interactively
-        // TODO ESC-R (r): Undo all changes made to this line.
-        // TODO ESC-<: move to first entry in history
-        // TODO ESC->: move to last entry in history
-        match seq1 {
-            'b' | 'B' => Ok(KeyPress::ESC_B),
-            'c' | 'C' => Ok(KeyPress::ESC_C),
-            'd' | 'D' => Ok(KeyPress::ESC_D),
-            'f' | 'F' => Ok(KeyPress::ESC_F),
-            'l' | 'L' => Ok(KeyPress::ESC_L),
-            't' | 'T' => Ok(KeyPress::ESC_T),
-            'u' | 'U' => Ok(KeyPress::ESC_U),
-            'y' | 'Y' => Ok(KeyPress::ESC_Y),
-            '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
-            _ => {
-                // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::ESC, seq1).unwrap();
-                Ok(KeyPress::UNKNOWN_ESC_SEQ)
+        } else {
+            // TODO ESC-N (n): search history forward not interactively
+            // TODO ESC-P (p): search history backward not interactively
+            // TODO ESC-R (r): Undo all changes made to this line.
+            // TODO ESC-<: move to first entry in history
+            // TODO ESC->: move to last entry in history
+            match seq1 {
+                'b' | 'B' => Ok(KeyPress::ESC_B),
+                'c' | 'C' => Ok(KeyPress::ESC_C),
+                'd' | 'D' => Ok(KeyPress::ESC_D),
+                'f' | 'F' => Ok(KeyPress::ESC_F),
+                'l' | 'L' => Ok(KeyPress::ESC_L),
+                't' | 'T' => Ok(KeyPress::ESC_T),
+                'u' | 'U' => Ok(KeyPress::ESC_U),
+                'y' | 'Y' => Ok(KeyPress::ESC_Y),
+                '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
+                _ => {
+                    // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::ESC, seq1).unwrap();
+                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
+                }
             }
         }
     }
 }
-#[cfg(windows)]
-fn escape_sequence<R: io::Read>(chars: &mut io::Chars<R>) -> Result<KeyPress> {
-    Ok(KeyPress::UNKNOWN_ESC_SEQ)
-}
 
-#[cfg(unix)]
-fn stdin() -> Result<io::Stdin> {
-    Ok(io::stdin())
+#[cfg(windows)]
+struct RawReader<R> {
+    handle: winapi::HANDLE,
+    key_state: Rc<RefCell<KeyState>>,
+    chars: io::Chars<R>,
 }
 #[cfg(windows)]
-fn stdin() -> Result<InputBuffer> {
-    let handle = try!(get_std_handle(STDIN_FILENO));
-    Ok(InputBuffer(handle))
-}
-
-#[cfg(unix)]
-fn stdout_handle() -> Result<Handle> {
-    Ok(())
-}
-#[cfg(windows)]
-fn stdout_handle() -> Result<Handle> {
-    let handle = try!(get_std_handle(STDOUT_FILENO));
-    Ok(handle)
+struct KeyState {
+    ctrl: bool,
+    meta: bool,
 }
 
 #[cfg(windows)]
-struct InputBuffer(winapi::HANDLE);
-#[cfg(windows)]
-impl InputBuffer {
+impl<R: Read> RawReader<R> {
+    fn new() -> Result<RawReader<R>> {
+        let handle = try!(get_std_handle(STDIN_FILENO));
+        Ok(RawReader {
+            handle: handle,
+            key_state: Rc::new(RefCell::new(KeyState {
+                ctrl: false,
+                meta: false,
+            })),
+        })
+    }
+
+    fn next(&mut self) -> Result<char> {
+        match self.chars.next() {
+            Some(c) => {
+                Ok(try!(c)) // TODO SIGWINCH
+            }
+            None => Err(error::ReadlineError::Eof),
+        }
+    }
+
+    fn is_control(&self, c: char) -> bool {
+        c.is_control() || self.key_state.borrow().ctrl
+    }
+
+    fn char_to_key_press(&self, c: char) -> KeyPress {
+        unimplemented!()
+    }
+
+    fn escape_sequence(&mut self) -> Result<KeyPress> {
+        Ok(KeyPress::UNKNOWN_ESC_SEQ)
+    }
+
     fn single_byte(c: u8, buf: &mut [u8]) -> io::Result<usize> {
         buf[0] = c;
         Ok(1)
@@ -936,8 +988,9 @@ impl InputBuffer {
         Ok((bytes, len as usize))
     }
 }
+
 #[cfg(windows)]
-impl Read for InputBuffer {
+impl Read for RawReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
@@ -958,43 +1011,47 @@ impl Read for InputBuffer {
                 continue;
             }
 
-            let ctrl = key_event.dwControlKeyState &
-                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
-                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
-            let meta = (key_event.dwControlKeyState &
-                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) ==
-                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
-                       esc_seen;
+            let key_state = self.key_state.borrow_mut();
+            key_state.ctrl = key_event.dwControlKeyState &
+                             (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
+                             (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
+            key_state.meta = (key_event.dwControlKeyState &
+                              (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) ==
+                              (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
+                             esc_seen;
 
             // TODO How to support surrogate pair ?
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => return InputBuffer::single_byte(b'\x02', buf),
-                    winapi::VK_RIGHT => return InputBuffer::single_byte(b'\x06', buf),
-                    winapi::VK_UP => return InputBuffer::single_byte(b'\x10', buf),
-                    winapi::VK_DOWN => return InputBuffer::single_byte(b'\x0e', buf),
+                    winapi::VK_LEFT => return RawReader::single_byte(b'\x02', buf),
+                    winapi::VK_RIGHT => return RawReader::single_byte(b'\x06', buf),
+                    winapi::VK_UP => return RawReader::single_byte(b'\x10', buf),
+                    winapi::VK_DOWN => return RawReader::single_byte(b'\x0e', buf),
                     // winapi::VK_DELETE => b"\x1b[3~",
-                    winapi::VK_HOME => return InputBuffer::single_byte(b'\x01', buf),
-                    winapi::VK_END => return InputBuffer::single_byte(b'\x05', buf),
+                    winapi::VK_HOME => return RawReader::single_byte(b'\x01', buf),
+                    winapi::VK_END => return RawReader::single_byte(b'\x05', buf),
                     _ => continue,
                 };
             } else if utf16 == 27 {
                 esc_seen = true;
                 continue;
             } else {
-                let (bytes, len) = try!(InputBuffer::wide_char_to_multi_byte(utf16));
-                if ctrl {
-
-                } else if meta {
-
-                } else {
-                    return (&bytes[..len]).read(buf);
-                }
+                let (bytes, len) = try!(RawReader::wide_char_to_multi_byte(utf16));
+                return (&bytes[..len]).read(buf);
             }
-            unimplemented!()
         }
     }
+}
+
+#[cfg(unix)]
+fn stdout_handle() -> Result<Handle> {
+    Ok(())
+}
+#[cfg(windows)]
+fn stdout_handle() -> Result<Handle> {
+    let handle = try!(get_std_handle(STDOUT_FILENO));
+    Ok(handle)
 }
 
 /// Handles reading and editting the readline buffer.
@@ -1014,41 +1071,40 @@ fn readline_edit(prompt: &str,
     let mut s = State::new(&mut stdout, stdout_handle, prompt, history.len());
     try!(s.refresh_line());
 
-    let stdin = try!(stdin());
-    let mut chars = stdin.chars(); // TODO stdin.lock() ???
+    let mut rdr = try!(RawReader::new(io::stdin()));
 
     loop {
-        let c = chars.next().unwrap();
+        let c = rdr.next();
         if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
             s.update_columns();
             try!(s.refresh_line());
             continue;
         }
         let mut ch = try!(c);
-        if !ch.is_control() {
+        if !rdr.is_control(ch) {
             kill_ring.reset();
             try!(edit_insert(&mut s, ch));
             continue;
         }
 
-        let mut key = char_to_key_press(ch);
+        let mut key = rdr.char_to_key_press(ch);
         // autocomplete
         if key == KeyPress::TAB && completer.is_some() {
-            let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
+            let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap()));
             if next.is_some() {
                 kill_ring.reset();
                 ch = next.unwrap();
-                if !ch.is_control() {
+                if !rdr.is_control(ch) {
                     try!(edit_insert(&mut s, ch));
                     continue;
                 }
-                key = char_to_key_press(ch);
+                key = rdr.char_to_key_press(ch);
             } else {
                 continue;
             }
         } else if key == KeyPress::CTRL_R {
             // Search history backward
-            let next = try!(reverse_incremental_search(&mut chars, &mut s, history));
+            let next = try!(reverse_incremental_search(&mut rdr, &mut s, history));
             if next.is_some() {
                 key = next.unwrap();
             } else {
@@ -1056,7 +1112,7 @@ fn readline_edit(prompt: &str,
             }
         } else if key == KeyPress::ESC {
             // escape sequence
-            key = try!(escape_sequence(&mut chars));
+            key = try!(rdr.escape_sequence());
             if key == KeyPress::UNKNOWN_ESC_SEQ {
                 continue;
             }
@@ -1136,7 +1192,7 @@ fn readline_edit(prompt: &str,
             KeyPress::CTRL_V => {
                 // Quoted insert
                 kill_ring.reset();
-                let c = chars.next().unwrap();
+                let c = rdr.next();
                 let ch = try!(c);
                 try!(edit_insert(&mut s, ch))
             }
@@ -1397,7 +1453,7 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
-    use super::{Handle, Result};
+    use super::{Handle, RawReader, Result};
 
     #[cfg(unix)]
     fn default_handle() -> Handle {
@@ -1475,14 +1531,12 @@ mod test {
 
     #[test]
     fn complete_line() {
-        use std::io::Read;
-
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let mut chars = input.chars();
+        let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
-        let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
+        let ch = super::complete_line(&mut rdr, &mut s, &completer).unwrap();
         assert_eq!(Some('\n'), ch);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

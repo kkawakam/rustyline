@@ -1,5 +1,6 @@
 # RustyLine
 [![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
+[![Build Status](https://ci.appveyor.com/api/projects/status/github/gwenn/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/gwenn/rustyline)
 [![Clippy Linting Result](https://clippy.bashy.io/github/kkawakam/rustyline/master/badge.svg)](https://clippy.bashy.io/github/kkawakam/rustyline/master/log)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 
@@ -106,6 +107,8 @@ Alt-BackSpace | Kill from the start of the current word, or, if between words, t
 ## ToDo
 
  - Show completion list
+ - Undos
+ - Read input with timeout to properly handle single ESC key
  - expose an API callable from C
 
 ## Wine

@@ -839,7 +839,7 @@ impl<R: Read> RawReader<R> {
     fn next_key(&mut self) -> Result<KeyPress> {
         use consts::char_to_key_press;
 
-        let c = try!(self.next());
+        let c = try!(self.next_char());
         if !c.is_control() {
             return Ok(KeyPress::Char(c));
         }
@@ -852,7 +852,7 @@ impl<R: Read> RawReader<R> {
         Ok(key)
     }
 
-    fn next(&mut self) -> Result<char> {
+    fn next_char(&mut self) -> Result<char> {
         match self.chars.next() {
             Some(c) => {
                 Ok(try!(c)) // TODO SIGWINCH
@@ -863,13 +863,13 @@ impl<R: Read> RawReader<R> {
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
         // Read the next two bytes representing the escape sequence.
-        let seq1 = try!(self.next());
+        let seq1 = try!(self.next_char());
         if seq1 == '[' {
             // ESC [ sequences.
-            let seq2 = try!(self.next());
+            let seq2 = try!(self.next_char());
             if seq2.is_digit(10) {
                 // Extended escape, read additional byte.
-                let seq3 = try!(self.next());
+                let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     match seq2 {
                         '3' => Ok(KeyPress::ESC_SEQ_DELETE),
@@ -893,7 +893,7 @@ impl<R: Read> RawReader<R> {
             }
         } else if seq1 == 'O' {
             // ESC O sequences.
-            let seq2 = try!(self.next());
+            let seq2 = try!(self.next_char());
             match seq2 {
                 'F' => Ok(KeyPress::CTRL_E),
                 'H' => Ok(KeyPress::CTRL_A),

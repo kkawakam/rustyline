@@ -700,7 +700,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 fn complete_line<R: Read>(rdr: &mut RawReader<R>,
                           s: &mut State,
                           completer: &Completer)
-                          -> Result<Option<char>> {
+                          -> Result<Option<KeyPress>> {
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     if candidates.is_empty() {
         try!(beep());
@@ -708,7 +708,7 @@ fn complete_line<R: Read>(rdr: &mut RawReader<R>,
     } else {
         // Save the current edited line before to overwrite it
         s.backup();
-        let mut ch;
+        let mut key;
         let mut i = 0;
         loop {
             // Show completion or original buffer
@@ -722,8 +722,7 @@ fn complete_line<R: Read>(rdr: &mut RawReader<R>,
                 s.snapshot();
             }
 
-            ch = try!(rdr.next());
-            let key = rdr.char_to_key_press(ch);
+            key = try!(rdr.next_key());
             match key {
                 KeyPress::TAB => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -744,7 +743,7 @@ fn complete_line<R: Read>(rdr: &mut RawReader<R>,
                 }
             }
         }
-        Ok(Some(ch))
+        Ok(Some(key))
     }
 }
 
@@ -765,7 +764,6 @@ fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
     let mut reverse = true;
     let mut success = true;
 
-    let mut ch;
     let mut key;
     // Display the reverse-i-search prompt and process chars
     loop {
@@ -776,14 +774,10 @@ fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        ch = try!(rdr.next());
-        if !rdr.is_control(ch) {
-            search_buf.push(ch);
+        key = try!(rdr.next_key());
+        if let KeyPress::Char(c) = key {
+            search_buf.push(c);
         } else {
-            key = rdr.char_to_key_press(ch);
-            if key == KeyPress::ESC {
-                key = try!(rdr.escape_sequence());
-            }
             match key {
                 KeyPress::CTRL_H | KeyPress::BACKSPACE => {
                     search_buf.pop();
@@ -842,6 +836,22 @@ impl<R: Read> RawReader<R> {
         Ok(RawReader { chars: stdin.chars() })
     }
 
+    fn next_key(&mut self) -> Result<KeyPress> {
+        use consts::char_to_key_press;
+
+        let c = try!(self.next());
+        if !c.is_control() {
+            return Ok(KeyPress::Char(c));
+        }
+
+        let mut key = char_to_key_press(c);
+        if key == KeyPress::ESC {
+            // escape sequence
+            key = try!(self.escape_sequence());
+        }
+        Ok(key)
+    }
+
     fn next(&mut self) -> Result<char> {
         match self.chars.next() {
             Some(c) => {
@@ -849,15 +859,6 @@ impl<R: Read> RawReader<R> {
             }
             None => Err(error::ReadlineError::Eof),
         }
-    }
-
-    fn is_control(&self, c: char) -> bool {
-        c.is_control()
-    }
-
-    fn char_to_key_press(&self, c: char) -> KeyPress {
-        use consts::char_to_key_press;
-        char_to_key_press(c) // TODO directly handle ESC + escape_sequence
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
@@ -1074,31 +1075,29 @@ fn readline_edit(prompt: &str,
     let mut rdr = try!(RawReader::new(io::stdin()));
 
     loop {
-        let c = rdr.next();
-        if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+        let rk = rdr.next_key();
+        if rk.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
             s.update_columns();
             try!(s.refresh_line());
             continue;
         }
-        let mut ch = try!(c);
-        if !rdr.is_control(ch) {
+        let mut key = try!(rk);
+        if let KeyPress::Char(c) = key {
             kill_ring.reset();
-            try!(edit_insert(&mut s, ch));
+            try!(edit_insert(&mut s, c));
             continue;
         }
 
-        let mut key = rdr.char_to_key_press(ch);
         // autocomplete
         if key == KeyPress::TAB && completer.is_some() {
             let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap()));
             if next.is_some() {
                 kill_ring.reset();
-                ch = next.unwrap();
-                if !rdr.is_control(ch) {
-                    try!(edit_insert(&mut s, ch));
+                key = next.unwrap();
+                if let KeyPress::Char(c) = key {
+                    try!(edit_insert(&mut s, c));
                     continue;
                 }
-                key = rdr.char_to_key_press(ch);
             } else {
                 continue;
             }
@@ -1110,12 +1109,8 @@ fn readline_edit(prompt: &str,
             } else {
                 continue;
             }
-        } else if key == KeyPress::ESC {
-            // escape sequence
-            key = try!(rdr.escape_sequence());
-            if key == KeyPress::UNKNOWN_ESC_SEQ {
-                continue;
-            }
+        } else if key == KeyPress::UNKNOWN_ESC_SEQ {
+            continue;
         }
 
         match key {
@@ -1278,8 +1273,7 @@ fn readline_edit(prompt: &str,
             }
             _ => {
                 kill_ring.reset();
-                // Insert the character typed.
-                try!(edit_insert(&mut s, ch))
+                // Ignore the character typed.
             }
         }
     }
@@ -1452,6 +1446,7 @@ mod test {
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
+    use consts::KeyPress;
     use State;
     use super::{Handle, RawReader, Result};
 
@@ -1536,8 +1531,8 @@ mod test {
         let input = b"\n";
         let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
-        let ch = super::complete_line(&mut rdr, &mut s, &completer).unwrap();
-        assert_eq!(Some('\n'), ch);
+        let key = super::complete_line(&mut rdr, &mut s, &completer).unwrap();
+        assert_eq!(Some(KeyPress::CTRL_J), key);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }

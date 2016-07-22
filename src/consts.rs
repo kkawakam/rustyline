@@ -39,11 +39,15 @@ pub enum KeyPress {
     ESC_T,
     ESC_U,
     ESC_Y,
+    Char(char),
 }
 
 #[cfg_attr(feature="clippy", allow(match_same_arms))]
 #[cfg(unix)]
 pub fn char_to_key_press(c: char) -> KeyPress {
+    if !c.is_control() {
+        return KeyPress::Char(c);
+    }
     match c {
         '\x00' => KeyPress::NULL,
         '\x01' => KeyPress::CTRL_A,

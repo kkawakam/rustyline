@@ -931,7 +931,7 @@ struct RawReader<R> {
 
 #[cfg(windows)]
 impl<R: Read> RawReader<R> {
-    fn new(stdin: R) -> Result<RawReader<R>> {
+    fn new(_: R) -> Result<RawReader<R>> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(RawReader {
             handle: handle,
@@ -1418,7 +1418,9 @@ mod test {
     use std::io::Write;
     use line_buffer::LineBuffer;
     use history::History;
+    #[cfg(unix)]
     use completion::Completer;
+    #[cfg(unix)]
     use consts::KeyPress;
     use State;
     use super::{Handle, RawReader, Result};
@@ -1490,7 +1492,9 @@ mod test {
         assert_eq!(line, s.line.as_str());
     }
 
+    #[cfg(unix)]
     struct SimpleCompleter;
+    #[cfg(unix)]
     impl Completer for SimpleCompleter {
         fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
             Ok((0, vec![line.to_string() + "t"]))

@@ -34,14 +34,12 @@ pub mod history;
 mod kill_ring;
 pub mod line_buffer;
 
-#[cfg(windows)]
-use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Read, Write};
+#[cfg(windows)]
+use std::marker::PhantomData;
 use std::mem;
 use std::path::Path;
-#[cfg(windows)]
-use std::rc::Rc;
 use std::result;
 #[cfg(unix)]
 use std::sync;
@@ -927,72 +925,23 @@ impl<R: Read> RawReader<R> {
 #[cfg(windows)]
 struct RawReader<R> {
     handle: winapi::HANDLE,
-    key_state: Rc<RefCell<KeyState>>,
-    chars: io::Chars<R>,
-}
-#[cfg(windows)]
-struct KeyState {
-    ctrl: bool,
-    meta: bool,
+    buf: Option<u16>,
+    phantom: PhantomData<R>,
 }
 
 #[cfg(windows)]
 impl<R: Read> RawReader<R> {
-    fn new() -> Result<RawReader<R>> {
+    fn new(stdin: R) -> Result<RawReader<R>> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(RawReader {
             handle: handle,
-            key_state: Rc::new(RefCell::new(KeyState {
-                ctrl: false,
-                meta: false,
-            })),
+            buf: None,
         })
     }
 
-    fn next(&mut self) -> Result<char> {
-        match self.chars.next() {
-            Some(c) => {
-                Ok(try!(c)) // TODO SIGWINCH
-            }
-            None => Err(error::ReadlineError::Eof),
-        }
-    }
+    fn next_key(&mut self) -> Result<KeyPress> {
+        use std::char::decode_utf16;
 
-    fn is_control(&self, c: char) -> bool {
-        c.is_control() || self.key_state.borrow().ctrl
-    }
-
-    fn char_to_key_press(&self, c: char) -> KeyPress {
-        unimplemented!()
-    }
-
-    fn escape_sequence(&mut self) -> Result<KeyPress> {
-        Ok(KeyPress::UNKNOWN_ESC_SEQ)
-    }
-
-    fn single_byte(c: u8, buf: &mut [u8]) -> io::Result<usize> {
-        buf[0] = c;
-        Ok(1)
-    }
-    fn wide_char_to_multi_byte(c: u16) -> io::Result<([u8; 4], usize)> {
-        use std::ptr;
-        const WC_COMPOSITECHECK: winapi::DWORD = 0x00000200; // use composite chars
-        let mut bytes = [0u8; 4];
-        let len = check!(kernel32::WideCharToMultiByte(winapi::CP_ACP,
-                                                       WC_COMPOSITECHECK,
-                                                       &c,
-                                                       1,
-                                                       (&mut bytes).as_mut_ptr() as *mut i8,
-                                                       4,
-                                                       ptr::null(),
-                                                       ptr::null_mut()));
-        Ok((bytes, len as usize))
-    }
-}
-
-#[cfg(windows)]
-impl Read for RawReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
         let mut esc_seen = false;
@@ -1002,7 +951,7 @@ impl Read for RawReader<R> {
             // TODO ENABLE_WINDOW_INPUT ???
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
-                return Err(io::Error::new(io::ErrorKind::Other, "WINDOW_BUFFER_SIZE_EVENT"));
+                return Err(error::ReadlineError::BufferSizeEvent);
             } else if rec.EventType != winapi::KEY_EVENT {
                 continue;
             }
@@ -1013,35 +962,56 @@ impl Read for RawReader<R> {
             }
 
             let key_state = self.key_state.borrow_mut();
-            key_state.ctrl = key_event.dwControlKeyState &
-                             (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
-                             (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
-            key_state.meta = (key_event.dwControlKeyState &
-                              (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) ==
-                              (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
-                             esc_seen;
+            let ctrl = key_event.dwControlKeyState &
+                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
+                       (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
+            let meta = (key_event.dwControlKeyState &
+                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) ==
+                        (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
+                       esc_seen;
 
             // TODO How to support surrogate pair ?
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => return RawReader::single_byte(b'\x02', buf),
-                    winapi::VK_RIGHT => return RawReader::single_byte(b'\x06', buf),
-                    winapi::VK_UP => return RawReader::single_byte(b'\x10', buf),
-                    winapi::VK_DOWN => return RawReader::single_byte(b'\x0e', buf),
-                    // winapi::VK_DELETE => b"\x1b[3~",
-                    winapi::VK_HOME => return RawReader::single_byte(b'\x01', buf),
-                    winapi::VK_END => return RawReader::single_byte(b'\x05', buf),
+                    winapi::VK_LEFT => return Ok(KeyPress::CTRL_B),
+                    winapi::VK_RIGHT => return Ok(KeyPress::CTRL_F),
+                    winapi::VK_UP => return Ok(KeyPress::CTRL_P),
+                    winapi::VK_DOWN => return Ok(KeyPress::CTRL_N),
+                    winapi::VK_DELETE => return Ok(KeyPress::ESC_SEQ_DELETE),
+                    winapi::VK_HOME => return Ok(KeyPress::CTRL_A),
+                    winapi::VK_END => return Ok(KeyPress::CTRL_E),
                     _ => continue,
                 };
             } else if utf16 == 27 {
                 esc_seen = true;
                 continue;
             } else {
+                if ctrl {
+                    unimplemented!()
+                } else if meta {
+                    unimplemented!()
+                } else {
+                    self.buf = Some(utf16);
+                    match decode_utf16(self).next() {
+                        Some(item) => Ok(KeyPress::Char(try!(item))),
+                        None => return Err(error::ReadlineError::Eof),
+                    }
+                }
                 let (bytes, len) = try!(RawReader::wide_char_to_multi_byte(utf16));
                 return (&bytes[..len]).read(buf);
             }
         }
+    }
+}
+#[cfg(windows)]
+impl<R: Read> Iterator for RawReader<R> {
+    type Item = u16;
+
+    fn next(&mut self) -> Option<u16> {
+        let buf = self.buf;
+        self.buf = None;
+        buf
     }
 }
 
@@ -1187,9 +1157,11 @@ fn readline_edit(prompt: &str,
             KeyPress::CTRL_V => {
                 // Quoted insert
                 kill_ring.reset();
-                let c = rdr.next();
-                let ch = try!(c);
-                try!(edit_insert(&mut s, ch))
+                let rk = rdr.next_key();
+                let key = try!(rk);
+                if let KeyPress::Char(c) = key {
+                    try!(edit_insert(&mut s, c))
+                }
             }
             KeyPress::CTRL_W => {
                 // Kill the word behind point, using white space as a word boundary

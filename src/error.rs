@@ -20,6 +20,8 @@ pub enum ReadlineError {
     Eof,
     /// Ctrl-C
     Interrupted,
+    #[cfg(windows)]
+    BufferSizeEvent,
 }
 
 impl fmt::Display for ReadlineError {
@@ -31,6 +33,8 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Char(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
+            #[cfg(windows)]
+            ReadlineError::BufferSizeEvent => write!(f, "BufferSizeEvent"),
         }
     }
 }
@@ -44,6 +48,8 @@ impl error::Error for ReadlineError {
             ReadlineError::Char(ref err) => err.description(),
             ReadlineError::Eof => "EOF",
             ReadlineError::Interrupted => "Interrupted",
+            #[cfg(windows)]
+            ReadlineError::BufferSizeEvent => "BufferSizeEvent",
         }
     }
 }

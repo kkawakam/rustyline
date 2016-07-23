@@ -836,11 +836,8 @@ impl<R: Read> RawReader<R> {
 
     fn next_key(&mut self) -> Result<KeyPress> {
         let c = try!(self.next_char());
-        if !c.is_control() {
-            return Ok(KeyPress::Char(c));
-        }
 
-        let mut key = Self::char_to_key_press(c);
+        let mut key = consts::char_to_key_press(c);
         if key == KeyPress::ESC {
             // escape sequence
             key = try!(self.escape_sequence());
@@ -854,42 +851,6 @@ impl<R: Read> RawReader<R> {
                 Ok(try!(c)) // TODO SIGWINCH
             }
             None => Err(error::ReadlineError::Eof),
-        }
-    }
-
-    #[cfg_attr(feature="clippy", allow(match_same_arms))]
-    fn char_to_key_press(c: char) -> KeyPress {
-        if !c.is_control() {
-            return KeyPress::Char(c);
-        }
-        match c {
-            '\x00' => KeyPress::NULL,
-            '\x01' => KeyPress::CTRL_A,
-            '\x02' => KeyPress::CTRL_B,
-            '\x03' => KeyPress::CTRL_C,
-            '\x04' => KeyPress::CTRL_D,
-            '\x05' => KeyPress::CTRL_E,
-            '\x06' => KeyPress::CTRL_F,
-            '\x07' => KeyPress::CTRL_G,
-            '\x08' => KeyPress::CTRL_H,
-            '\x09' => KeyPress::TAB,
-            '\x0a' => KeyPress::CTRL_J,
-            '\x0b' => KeyPress::CTRL_K,
-            '\x0c' => KeyPress::CTRL_L,
-            '\x0d' => KeyPress::ENTER,
-            '\x0e' => KeyPress::CTRL_N,
-            '\x10' => KeyPress::CTRL_P,
-            '\x12' => KeyPress::CTRL_R,
-            '\x13' => KeyPress::CTRL_S,
-            '\x14' => KeyPress::CTRL_T,
-            '\x15' => KeyPress::CTRL_U,
-            '\x16' => KeyPress::CTRL_V,
-            '\x17' => KeyPress::CTRL_W,
-            '\x19' => KeyPress::CTRL_Y,
-            '\x1a' => KeyPress::CTRL_Z,
-            '\x1b' => KeyPress::ESC,
-            '\x7f' => KeyPress::BACKSPACE,
-            _ => KeyPress::NULL,
         }
     }
 
@@ -1071,7 +1032,7 @@ impl<R: Read> RawReader<R> {
                         _ => return Ok(KeyPress::UNKNOWN_ESC_SEQ),
                     }
                 } else {
-                    return Ok(KeyPress::Char(c));
+                    return Ok(consts::char_to_key_press(c));
                 }
             }
         }

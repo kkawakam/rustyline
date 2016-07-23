@@ -127,3 +127,4 @@ $ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/examp
  - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
  - [liner](https://github.com/peterh/liner) (Go)
  - [readline](https://github.com/chzyer/readline) (Go)
+ - [haskeline](https://github.com/judah/haskeline) (Haskell)

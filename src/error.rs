@@ -23,7 +23,7 @@ pub enum ReadlineError {
     /// Ctrl-C
     Interrupted,
     #[cfg(windows)]
-    BufferSizeEvent,
+    WindowResize,
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
 }
@@ -38,7 +38,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(windows)]
-            ReadlineError::BufferSizeEvent => write!(f, "BufferSizeEvent"),
+            ReadlineError::WindowResize => write!(f, "WindowResize"),
             #[cfg(windows)]
             ReadlineError::Decode(ref err) => err.fmt(f),
         }
@@ -55,7 +55,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Eof => "EOF",
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(windows)]
-            ReadlineError::BufferSizeEvent => "BufferSizeEvent",
+            ReadlineError::WindowResize => "WindowResize",
             #[cfg(windows)]
             ReadlineError::Decode(ref err) => err.description(),
         }

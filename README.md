@@ -1,7 +1,7 @@
 # RustyLine
-[![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
+[![Build Status](https://travis-ci.org/gwenn/rustyline.svg?branch=master)](https://travis-ci.org/gwenn/rustyline)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/gwenn/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/gwenn/rustyline)
-[![Clippy Linting Result](https://clippy.bashy.io/github/kkawakam/rustyline/master/badge.svg)](https://clippy.bashy.io/github/kkawakam/rustyline/master/log)
+[![Clippy Linting Result](https://clippy.bashy.io/github/gwenn/rustyline/master/badge.svg)](https://clippy.bashy.io/github/gwenn/rustyline/master/log)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
@@ -120,3 +120,10 @@ Error: Io(Error { repr: Os { code: 6, message: "Invalid handle." } })
 $ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/example.exe
 ...
 ```
+
+## Similar projects
+
+ - [copperline](https://github.com/srijs/rust-copperline) (Rust)
+ - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
+ - [liner](https://github.com/peterh/liner) (Go)
+ - [readline](https://github.com/chzyer/readline) (Go)

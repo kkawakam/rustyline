@@ -994,9 +994,9 @@ impl<R: Read> RawReader<R> {
                     // TODO How to support surrogate pair ?
                     self.buf = Some(utf16);
                     match decode_utf16(self).next() {
-                        Some(item) => Ok(KeyPress::Char(try!(item))),
+                        Some(item) => return Ok(KeyPress::Char(try!(item))),
                         None => return Err(error::ReadlineError::Eof),
-                    }
+                    };
                 }
             }
         }

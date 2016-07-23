@@ -947,7 +947,10 @@ impl<R: Read> RawReader<R> {
         let mut count = 0;
         let mut esc_seen = false;
         loop {
-            check!(kernel32::ReadConsoleInputW(self.handle, &mut rec, 1 as winapi::DWORD, &mut count));
+            check!(kernel32::ReadConsoleInputW(self.handle,
+                                               &mut rec,
+                                               1 as winapi::DWORD,
+                                               &mut count));
 
             // TODO ENABLE_WINDOW_INPUT ???
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
@@ -1495,6 +1498,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(unix)]
     fn complete_line() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);

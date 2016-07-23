@@ -936,6 +936,7 @@ impl<R: Read> RawReader<R> {
         Ok(RawReader {
             handle: handle,
             buf: None,
+            phantom: PhantomData,
         })
     }
 
@@ -946,7 +947,7 @@ impl<R: Read> RawReader<R> {
         let mut count = 0;
         let mut esc_seen = false;
         loop {
-            check!(kernel32::ReadConsoleInputW(self.0, &mut rec, 1 as winapi::DWORD, &mut count));
+            check!(kernel32::ReadConsoleInputW(self.handle, &mut rec, 1 as winapi::DWORD, &mut count));
 
             // TODO ENABLE_WINDOW_INPUT ???
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
@@ -961,7 +962,6 @@ impl<R: Read> RawReader<R> {
                 continue;
             }
 
-            let key_state = self.key_state.borrow_mut();
             let ctrl = key_event.dwControlKeyState &
                        (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) ==
                        (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED);
@@ -970,7 +970,6 @@ impl<R: Read> RawReader<R> {
                         (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED)) ||
                        esc_seen;
 
-            // TODO How to support surrogate pair ?
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
@@ -992,14 +991,13 @@ impl<R: Read> RawReader<R> {
                 } else if meta {
                     unimplemented!()
                 } else {
+                    // TODO How to support surrogate pair ?
                     self.buf = Some(utf16);
                     match decode_utf16(self).next() {
                         Some(item) => Ok(KeyPress::Char(try!(item))),
                         None => return Err(error::ReadlineError::Eof),
                     }
                 }
-                let (bytes, len) = try!(RawReader::wide_char_to_multi_byte(utf16));
-                return (&bytes[..len]).read(buf);
             }
         }
     }

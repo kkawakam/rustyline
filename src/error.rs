@@ -1,4 +1,6 @@
 //! Contains error type for handling I/O and Errno errors
+#[cfg(windows)]
+use std::char;
 use std::io;
 use std::error;
 use std::fmt;
@@ -22,6 +24,8 @@ pub enum ReadlineError {
     Interrupted,
     #[cfg(windows)]
     BufferSizeEvent,
+    #[cfg(windows)]
+    Decode(char::DecodeUtf16Error),
 }
 
 impl fmt::Display for ReadlineError {
@@ -35,6 +39,8 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(windows)]
             ReadlineError::BufferSizeEvent => write!(f, "BufferSizeEvent"),
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => err.fmt(f),
         }
     }
 }
@@ -50,6 +56,8 @@ impl error::Error for ReadlineError {
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(windows)]
             ReadlineError::BufferSizeEvent => "BufferSizeEvent",
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => err.description(),
         }
     }
 }
@@ -67,8 +75,16 @@ impl From<nix::Error> for ReadlineError {
     }
 }
 
+#[cfg(unix)]
 impl From<io::CharsError> for ReadlineError {
     fn from(err: io::CharsError) -> ReadlineError {
         ReadlineError::Char(err)
+    }
+}
+
+#[cfg(windows)]
+impl From<char::DecodeUtf16Error> for ReadlineError {
+    fn from(err: char::DecodeUtf16Error) -> ReadlineError {
+        ReadlineError::Decode(err)
     }
 }

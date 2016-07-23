@@ -991,35 +991,7 @@ impl<R: Read> RawReader<R> {
                     return Err(error::ReadlineError::Eof);
                 }
                 let c = try!(orc.unwrap());
-                if ctrl {
-                    match c {
-                        'a' | 'A' => return Ok(KeyPress::CTRL_A),
-                        'b' | 'B' => return Ok(KeyPress::CTRL_B),
-                        'c' | 'C' => return Ok(KeyPress::CTRL_C),
-                        'd' | 'D' => return Ok(KeyPress::CTRL_D),
-                        'e' | 'E' => return Ok(KeyPress::CTRL_E),
-                        'f' | 'F' => return Ok(KeyPress::CTRL_F),
-                        'g' | 'G' => return Ok(KeyPress::CTRL_G),
-                        // TODO ctrl + meta + H
-                        'h' | 'H' => return Ok(KeyPress::CTRL_H),
-                        'i' | 'I' => return Ok(KeyPress::TAB),
-                        'j' | 'J' => return Ok(KeyPress::CTRL_J),
-                        'k' | 'K' => return Ok(KeyPress::CTRL_K),
-                        'l' | 'L' => return Ok(KeyPress::CTRL_L),
-                        'm' | 'M' => return Ok(KeyPress::ENTER),
-                        'n' | 'N' => return Ok(KeyPress::CTRL_N),
-                        'p' | 'P' => return Ok(KeyPress::CTRL_P),
-                        'r' | 'R' => return Ok(KeyPress::CTRL_R),
-                        's' | 'S' => return Ok(KeyPress::CTRL_S),
-                        't' | 'T' => return Ok(KeyPress::CTRL_T),
-                        'u' | 'U' => return Ok(KeyPress::CTRL_U),
-                        'v' | 'V' => return Ok(KeyPress::CTRL_V),
-                        'w' | 'W' => return Ok(KeyPress::CTRL_W),
-                        'y' | 'Y' => return Ok(KeyPress::CTRL_Y),
-                        'z' | 'Z' => return Ok(KeyPress::CTRL_Z),
-                        _ => return Ok(KeyPress::UNKNOWN_ESC_SEQ),
-                    }
-                } else if meta {
+                if meta {
                     match c {
                         'b' | 'B' => return Ok(KeyPress::ESC_B),
                         'c' | 'C' => return Ok(KeyPress::ESC_C),

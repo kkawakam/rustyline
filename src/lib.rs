@@ -690,7 +690,34 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     } else {
         // Restore current edited line
         s.snapshot();
-    };
+    }
+    s.refresh_line()
+}
+
+/// Substitute the currently edited line with the first/last history entry.
+fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
+    if history.is_empty() {
+        return Ok(());
+    }
+    if s.history_index == history.len() {
+        if first {
+            // Save the current edited line before to overwrite it
+            s.snapshot();
+        } else {
+            return Ok(());
+        }
+    } else if s.history_index == 0 && first {
+        return Ok(());
+    }
+    if first {
+        s.history_index = 0;
+        let buf = history.get(s.history_index).unwrap();
+        s.line.update(buf, buf.len());
+    } else {
+        s.history_index = history.len();
+        // Restore current edited line
+        s.snapshot();
+    }
     s.refresh_line()
 }
 
@@ -897,9 +924,10 @@ impl<R: Read> RawReader<R> {
             // TODO ESC-N (n): search history forward not interactively
             // TODO ESC-P (p): search history backward not interactively
             // TODO ESC-R (r): Undo all changes made to this line.
-            // TODO ESC-<: move to first entry in history
-            // TODO ESC->: move to last entry in history
             match seq1 {
+                '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
+                '<' => Ok(KeyPress::Meta('<')),
+                '>' => Ok(KeyPress::Meta('>')),
                 'b' | 'B' => Ok(KeyPress::Meta('B')),
                 'c' | 'C' => Ok(KeyPress::Meta('C')),
                 'd' | 'D' => Ok(KeyPress::Meta('D')),
@@ -908,7 +936,6 @@ impl<R: Read> RawReader<R> {
                 't' | 'T' => Ok(KeyPress::Meta('T')),
                 'u' | 'U' => Ok(KeyPress::Meta('U')),
                 'y' | 'Y' => Ok(KeyPress::Meta('Y')),
-                '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
                 '\x7f' => Ok(KeyPress::Meta('\x7f')), // Delete
                 _ => {
                     // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
@@ -1213,6 +1240,16 @@ fn readline_edit(prompt: &str,
                                                                |ch| !ch.is_alphanumeric())) {
                     kill_ring.kill(&text, false)
                 }
+            }
+            KeyPress::Meta('<') => {
+                // move to first entry in history
+                kill_ring.reset();
+                try!(edit_history(&mut s, history, true))
+            }
+            KeyPress::Meta('>') => {
+                // move to last entry in history
+                kill_ring.reset();
+                try!(edit_history(&mut s, history, false))
             }
             KeyPress::Meta('B') => {
                 // move backwards one word

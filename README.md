@@ -82,7 +82,7 @@ Ctrl-D       | (if line *is* empty) End of File
 Ctrl-E, End  | Move cursor to end of line
 Ctrl-F, Right| Move cursor one character right
 Ctrl-H, BackSpace | Delete character before cursor
-Ctrl-I, Tab          | Next completion
+Ctrl-I, Tab  | Next completion
 Ctrl-J, Ctrl-M, Enter | Finish the line entry
 Ctrl-K       | Delete from cursor to end of line
 Ctrl-L       | Clear screen
@@ -94,14 +94,16 @@ Ctrl-U       | Delete from start of line to cursor
 Ctrl-V       | Insert any special character without perfoming its associated action
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
 Ctrl-Y       | Paste from Yank buffer (Meta-Y to paste next yank instead)
+Meta-<       | Move to first entry in history
+Meta->       | Move to last entry in history
 Meta-B, Alt-Left | Move cursor to previous word
-Meta-C        | Capitalize the current word
-Meta-D        | Delete forwards one word
+Meta-C       | Capitalize the current word
+Meta-D       | Delete forwards one word
 Meta-F, Alt-Right | Move cursor to next word
-Meta-L        | Lower-case the next word
-Meta-T        | Transpose words
-Meta-U        | Upper-case the next word
-Meta-Y        | See Ctrl-Y
+Meta-L       | Lower-case the next word
+Meta-T       | Transpose words
+Meta-U       | Upper-case the next word
+Meta-Y       | See Ctrl-Y
 Meta-BackSpace | Kill from the start of the current word, or, if between words, to the start of the previous word
 
 ## ToDo

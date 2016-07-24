@@ -747,7 +747,7 @@ fn complete_line<R: Read>(rdr: &mut RawReader<R>,
                 s.snapshot();
             }
 
-            key = try!(rdr.next_key());
+            key = try!(rdr.next_key(false));
             match key {
                 KeyPress::Tab => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -799,7 +799,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        key = try!(rdr.next_key());
+        key = try!(rdr.next_key(true));
         if let KeyPress::Char(c) = key {
             search_buf.push(c);
         } else {
@@ -862,11 +862,13 @@ impl<R: Read> RawReader<R> {
         Ok(RawReader { chars: stdin.chars() })
     }
 
-    fn next_key(&mut self) -> Result<KeyPress> {
+    // As there is no read timeout to properly handle single ESC key,
+    // we make possible to deactivate escape sequence processing.
+    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if key == KeyPress::Esc {
+        if esc_seq && key == KeyPress::Esc {
             // escape sequence
             key = try!(self.escape_sequence());
         }
@@ -964,13 +966,14 @@ impl<R: Read> RawReader<R> {
         })
     }
 
-    fn next_key(&mut self) -> Result<KeyPress> {
+    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
 
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
         let mut esc_seen = false;
         loop {
+            // TODO GetNumberOfConsoleInputEvents
             check!(kernel32::ReadConsoleInputW(self.handle,
                                                &mut rec,
                                                1 as winapi::DWORD,
@@ -1080,7 +1083,7 @@ fn readline_edit(prompt: &str,
     let mut rdr = try!(RawReader::new(io::stdin()));
 
     loop {
-        let rk = rdr.next_key();
+        let rk = rdr.next_key(true);
         if rk.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
             s.update_columns();
             try!(s.refresh_line());
@@ -1196,14 +1199,12 @@ fn readline_edit(prompt: &str,
                     kill_ring.kill(&text, false)
                 }
             }
+            #[cfg(unix)]
             KeyPress::Ctrl('V') => {
                 // Quoted insert
                 kill_ring.reset();
-                let rk = rdr.next_key();
-                let key = try!(rk);
-                if let KeyPress::Char(c) = key {
-                    try!(edit_insert(&mut s, c))
-                }
+                let c = try!(rdr.next_char());
+                try!(edit_insert(&mut s, c)) // FIXME
             }
             KeyPress::Ctrl('W') => {
                 // Kill the word behind point, using white space as a word boundary

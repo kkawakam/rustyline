@@ -50,7 +50,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x19' => KeyPress::Ctrl('Y'),
         '\x1a' => KeyPress::Ctrl('Z'),
         '\x1b' => KeyPress::Esc,
-        '\x7f' => KeyPress::Delete,
+        '\x7f' => KeyPress::Backspace, // TODO Validate
         _ => KeyPress::Null,
     }
 }

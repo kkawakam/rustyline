@@ -20,6 +20,10 @@ extern crate libc;
 extern crate nix;
 extern crate unicode_width;
 extern crate encode_unicode;
+#[cfg(windows)]
+extern crate winapi;
+#[cfg(windows)]
+extern crate kernel32;
 
 pub mod completion;
 #[allow(non_camel_case_types)]
@@ -33,20 +37,19 @@ mod char_iter;
 mod tty;
 
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
 #[cfg(unix)]
 use std::sync;
 use std::sync::atomic;
-
 #[cfg(unix)]
 use nix::sys::signal;
+
 use encode_unicode::CharExt;
-use tty::Terminal;
 use completion::Completer;
-use consts::{KeyPress, char_to_key_press};
+use consts::KeyPress;
 use history::History;
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::KillRing;
@@ -62,8 +65,10 @@ struct State<'out, 'prompt> {
     line: LineBuffer, // Edited line buffer
     cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
-    history_index: usize, // The history index we are currently editing.
+    old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
+    history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
+    output_handle: tty::Handle, // output handle (for windows)
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -74,11 +79,12 @@ struct Position {
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(out: &'out mut Write,
+           output_handle: tty::Handle,
            prompt: &'prompt str,
-           capacity: usize,
-           cols: usize,
            history_index: usize)
            -> State<'out, 'prompt> {
+        let capacity = MAX_LINE;
+        let cols = tty::get_columns(output_handle);
         let prompt_size = calculate_position(prompt, Default::default(), cols);
         State {
             out: out,
@@ -87,8 +93,10 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
             cols: cols,
+            old_rows: prompt_size.row,
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
+            output_handle: output_handle,
         }
     }
 
@@ -112,20 +120,29 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         self.refresh(prompt, prompt_size)
     }
 
+    #[cfg(unix)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         use std::fmt::Write;
 
+        // calculate the position of the end of the input line
         let end_pos = calculate_position(&self.line, prompt_size, self.cols);
+        // calculate the desired position of the cursor
         let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
         let mut ab = String::new();
-        let cursor_row_movement = self.cursor.row - self.prompt_size.row;
-        // move the cursor up as required
+
+        let cursor_row_movement = self.old_rows - self.cursor.row;
+        // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
+            write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();
         }
-        // position at the start of the prompt, clear to end of screen
-        ab.push_str("\r\x1b[J");
+        // clear old rows
+        for _ in 0..self.old_rows {
+            ab.push_str("\r\x1b[0K\x1b[1A");
+        }
+        // clear the line
+        ab.push_str("\r\x1b[0K");
+
         // display the prompt
         ab.push_str(prompt);
         // display the input line
@@ -148,8 +165,55 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
 
         self.cursor = cursor;
+        self.old_rows = end_pos.row;
 
         write_and_flush(self.out, ab.as_bytes())
+    }
+
+    #[cfg(windows)]
+    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
+        let handle = self.output_handle;
+        if cfg!(test) && handle.is_null() {
+            return Ok(());
+        }
+        // calculate the position of the end of the input line
+        let end_pos = calculate_position(&self.line, prompt_size, self.cols);
+        // calculate the desired position of the cursor
+        let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
+
+        // position at the start of the prompt, clear to end of previous input
+        let mut info = unsafe { mem::zeroed() };
+        check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+        info.dwCursorPosition.X = 0;
+        info.dwCursorPosition.Y -= self.cursor.row as i16;
+        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
+        let mut _count = 0;
+        check!(kernel32::FillConsoleOutputCharacterA(handle,
+                                                 ' ' as winapi::CHAR,
+                                                 (info.dwSize.X * (self.old_rows as i16 +1)) as winapi::DWORD,
+                                                 info.dwCursorPosition,
+                                                 &mut _count));
+        let mut ab = String::new();
+        // display the prompt
+        ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
+        // display the input line
+        ab.push_str(&self.line);
+        try!(write_and_flush(self.out, ab.as_bytes()));
+
+        // position the cursor
+        check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+        info.dwCursorPosition.X = cursor.col as i16;
+        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
+        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
+
+        self.cursor = cursor;
+        self.old_rows = end_pos.row;
+
+        Ok(())
+    }
+
+    fn update_columns(&mut self) {
+        self.cols = tty::get_columns(self.output_handle);
     }
 }
 
@@ -161,12 +225,12 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("buf", &self.line)
             .field("cursor", &self.cursor)
             .field("cols", &self.cols)
+            .field("old_rows", &self.old_rows)
             .field("history_index", &self.history_index)
             .field("snapshot", &self.snapshot)
             .finish()
     }
 }
-
 
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     try!(w.write_all(buf));
@@ -175,8 +239,24 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-fn clear_screen(out: &mut Write) -> Result<()> {
-    write_and_flush(out, b"\x1b[H\x1b[2J")
+#[cfg(unix)]
+fn clear_screen(s: &mut State) -> Result<()> {
+    write_and_flush(s.out, b"\x1b[H\x1b[2J")
+}
+#[cfg(windows)]
+fn clear_screen(s: &mut State) -> Result<()> {
+    let handle = s.output_handle;
+    let mut info = unsafe { mem::zeroed() };
+    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+    let coord = winapi::COORD { X: 0, Y: 0 };
+    check!(kernel32::SetConsoleCursorPosition(handle, coord));
+    let mut _count = 0;
+    check!(kernel32::FillConsoleOutputCharacterA(handle,
+                                                 ' ' as winapi::CHAR,
+                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD,
+                                                 coord,
+                                                 &mut _count));
+    Ok(())
 }
 
 /// Beep, used for completion when there is nothing to complete or when all
@@ -244,6 +324,8 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
         if push {
             if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
+                let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
+                s.cursor = cursor;
                 write_and_flush(s.out, ch.to_utf8().as_bytes())
             } else {
                 s.refresh_line()
@@ -437,15 +519,42 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     } else {
         // Restore current edited line
         s.snapshot();
-    };
+    }
+    s.refresh_line()
+}
+
+/// Substitute the currently edited line with the first/last history entry.
+fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
+    if history.is_empty() {
+        return Ok(());
+    }
+    if s.history_index == history.len() {
+        if first {
+            // Save the current edited line before to overwrite it
+            s.snapshot();
+        } else {
+            return Ok(());
+        }
+    } else if s.history_index == 0 && first {
+        return Ok(());
+    }
+    if first {
+        s.history_index = 0;
+        let buf = history.get(s.history_index).unwrap();
+        s.line.update(buf, buf.len());
+    } else {
+        s.history_index = history.len();
+        // Restore current edited line
+        s.snapshot();
+    }
     s.refresh_line()
 }
 
 /// Completes the line/word
-fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
-                              s: &mut State,
-                              completer: &Completer)
-                              -> Result<Option<char>> {
+fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
+                          s: &mut State,
+                          completer: &Completer)
+                          -> Result<Option<KeyPress>> {
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     if candidates.is_empty() {
         try!(beep());
@@ -453,7 +562,7 @@ fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
     } else {
         // Save the current edited line before to overwrite it
         s.backup();
-        let mut ch;
+        let mut key;
         let mut i = 0;
         loop {
             // Show completion or original buffer
@@ -467,16 +576,15 @@ fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
                 s.snapshot();
             }
 
-            ch = try!(chars.next().unwrap());
-            let key = char_to_key_press(ch);
+            key = try!(rdr.next_key(false));
             match key {
-                KeyPress::TAB => {
+                KeyPress::Tab => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
                         try!(beep());
                     }
                 }
-                KeyPress::ESC => {
+                KeyPress::Esc => {
                     // Re-show original buffer
                     s.snapshot();
                     if i < candidates.len() {
@@ -489,16 +597,19 @@ fn complete_line<R: io::Read>(chars: &mut char_iter::Chars<R>,
                 }
             }
         }
-        Ok(Some(ch))
+        Ok(Some(key))
     }
 }
 
 /// Incremental search
 #[cfg_attr(feature="clippy", allow(if_not_else))]
-fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
-                                           s: &mut State,
-                                           history: &History)
-                                           -> Result<Option<KeyPress>> {
+fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
+                                       s: &mut State,
+                                       history: &History)
+                                       -> Result<Option<KeyPress>> {
+    if history.is_empty() {
+        return Ok(None);
+    }
     // Save the current edited line (and cursor position) before to overwrite it
     s.snapshot();
 
@@ -507,7 +618,6 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
     let mut reverse = true;
     let mut success = true;
 
-    let mut ch;
     let mut key;
     // Display the reverse-i-search prompt and process chars
     loop {
@@ -518,20 +628,17 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        ch = try!(chars.next().unwrap());
-        if !ch.is_control() {
-            search_buf.push(ch);
+        key = try!(rdr.next_key(true));
+        if let KeyPress::Char(c) = key {
+            search_buf.push(c);
         } else {
-            key = char_to_key_press(ch);
-            if key == KeyPress::ESC {
-                key = try!(escape_sequence(chars));
-            }
             match key {
-                KeyPress::CTRL_H | KeyPress::BACKSPACE => {
+                KeyPress::Ctrl('H') |
+                KeyPress::Backspace => {
                     search_buf.pop();
                     continue;
                 }
-                KeyPress::CTRL_R => {
+                KeyPress::Ctrl('R') => {
                     reverse = true;
                     if history_idx > 0 {
                         history_idx -= 1;
@@ -540,7 +647,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
                         continue;
                     }
                 }
-                KeyPress::CTRL_S => {
+                KeyPress::Ctrl('S') => {
                     reverse = false;
                     if history_idx < history.len() - 1 {
                         history_idx += 1;
@@ -549,7 +656,7 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
                         continue;
                     }
                 }
-                KeyPress::CTRL_G => {
+                KeyPress::Ctrl('G') => {
                     // Restore current edited line (before search)
                     s.snapshot();
                     try!(s.refresh_line());
@@ -572,146 +679,82 @@ fn reverse_incremental_search<R: io::Read>(chars: &mut char_iter::Chars<R>,
     Ok(Some(key))
 }
 
-fn escape_sequence<R: io::Read>(chars: &mut char_iter::Chars<R>) -> Result<KeyPress> {
-    // Read the next two bytes representing the escape sequence.
-    let seq1 = try!(chars.next().unwrap());
-    if seq1 == '[' {
-        // ESC [ sequences.
-        let seq2 = try!(chars.next().unwrap());
-        if seq2.is_digit(10) {
-            // Extended escape, read additional byte.
-            let seq3 = try!(chars.next().unwrap());
-            if seq3 == '~' {
-                match seq2 {
-                    '3' => Ok(KeyPress::ESC_SEQ_DELETE),
-                    // TODO '1' // Home
-                    // TODO '4' // End
-                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-                }
-            } else {
-                Ok(KeyPress::UNKNOWN_ESC_SEQ)
-            }
-        } else {
-            match seq2 {
-                'A' => Ok(KeyPress::CTRL_P), // Up
-                'B' => Ok(KeyPress::CTRL_N), // Down
-                'C' => Ok(KeyPress::CTRL_F), // Right
-                'D' => Ok(KeyPress::CTRL_B), // Left
-                'F' => Ok(KeyPress::CTRL_E), // End
-                'H' => Ok(KeyPress::CTRL_A), // Home
-                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-            }
-        }
-    } else if seq1 == 'O' {
-        // ESC O sequences.
-        let seq2 = try!(chars.next().unwrap());
-        match seq2 {
-            'F' => Ok(KeyPress::CTRL_E),
-            'H' => Ok(KeyPress::CTRL_A),
-            _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-        }
-    } else {
-        // TODO ESC-N (n): search history forward not interactively
-        // TODO ESC-P (p): search history backward not interactively
-        // TODO ESC-R (r): Undo all changes made to this line.
-        // TODO ESC-<: move to first entry in history
-        // TODO ESC->: move to last entry in history
-        match seq1 {
-            'b' | 'B' => Ok(KeyPress::ESC_B),
-            'c' | 'C' => Ok(KeyPress::ESC_C),
-            'd' | 'D' => Ok(KeyPress::ESC_D),
-            'f' | 'F' => Ok(KeyPress::ESC_F),
-            'l' | 'L' => Ok(KeyPress::ESC_L),
-            't' | 'T' => Ok(KeyPress::ESC_T),
-            'u' | 'U' => Ok(KeyPress::ESC_U),
-            'y' | 'Y' => Ok(KeyPress::ESC_Y),
-            '\x08' | '\x7f' => Ok(KeyPress::ESC_BACKSPACE),
-            _ => {
-                writeln!(io::stderr(), "key: {:?}, seq1, {:?}", KeyPress::ESC, seq1).unwrap();
-                Ok(KeyPress::UNKNOWN_ESC_SEQ)
-            }
-        }
-    }
-}
-
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
-fn readline_edit<T: tty::Terminal>(prompt: &str,
+fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
-                 mut term: T)
+                 original_mode: tty::Mode)
                  -> Result<String> {
     let mut stdout = io::stdout();
-    try!(write_and_flush(&mut stdout, prompt.as_bytes()));
+    let stdout_handle = try!(tty::stdout_handle());
 
     kill_ring.reset();
-    let mut s = State::new(&mut stdout, prompt, MAX_LINE, tty::get_columns(), history.len());
-    let stdin = io::stdin();
-    let mut chars = char_iter::chars(stdin.lock());
+    let mut s = State::new(&mut stdout, stdout_handle, prompt, history.len());
+    try!(s.refresh_line());
+
+    let mut rdr = try!(tty::RawReader::new(io::stdin()));
+
     loop {
-        let c = chars.next().unwrap();
-        if c.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
-            s.cols = tty::get_columns();
+        let rk = rdr.next_key(true);
+        if rk.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+            s.update_columns();
             try!(s.refresh_line());
             continue;
         }
-        let mut ch = try!(c);
-        if !ch.is_control() {
+        let mut key = try!(rk);
+        if let KeyPress::Char(c) = key {
             kill_ring.reset();
-            try!(edit_insert(&mut s, ch));
+            try!(edit_insert(&mut s, c));
             continue;
         }
 
-        let mut key = char_to_key_press(ch);
         // autocomplete
-        if key == KeyPress::TAB && completer.is_some() {
-            let next = try!(complete_line(&mut chars, &mut s, completer.unwrap()));
+        if key == KeyPress::Tab && completer.is_some() {
+            let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap()));
             if next.is_some() {
                 kill_ring.reset();
-                ch = next.unwrap();
-                if !ch.is_control() {
-                    try!(edit_insert(&mut s, ch));
+                key = next.unwrap();
+                if let KeyPress::Char(c) = key {
+                    try!(edit_insert(&mut s, c));
                     continue;
                 }
-                key = char_to_key_press(ch);
             } else {
                 continue;
             }
-        } else if key == KeyPress::CTRL_R {
+        } else if key == KeyPress::Ctrl('R') {
             // Search history backward
-            let next = try!(reverse_incremental_search(&mut chars, &mut s, history));
+            let next = try!(reverse_incremental_search(&mut rdr, &mut s, history));
             if next.is_some() {
                 key = next.unwrap();
             } else {
                 continue;
             }
-        } else if key == KeyPress::ESC {
-            // escape sequence
-            key = try!(escape_sequence(&mut chars));
-            if key == KeyPress::UNKNOWN_ESC_SEQ {
-                continue;
-            }
+        } else if key == KeyPress::UNKNOWN_ESC_SEQ {
+            continue;
         }
 
         match key {
-            KeyPress::CTRL_A => {
+            KeyPress::Ctrl('A') |
+            KeyPress::Home => {
                 kill_ring.reset();
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
-            KeyPress::CTRL_B => {
+            KeyPress::Ctrl('B') |
+            KeyPress::Left => {
                 kill_ring.reset();
                 // Move back a character.
                 try!(edit_move_left(&mut s))
             }
-            KeyPress::CTRL_C => {
+            KeyPress::Ctrl('C') => {
                 kill_ring.reset();
                 return Err(error::ReadlineError::Interrupted);
             }
-            KeyPress::CTRL_D => {
+            KeyPress::Ctrl('D') => {
                 kill_ring.reset();
                 if s.line.is_empty() {
                     return Err(error::ReadlineError::Eof);
@@ -720,87 +763,94 @@ fn readline_edit<T: tty::Terminal>(prompt: &str,
                     try!(edit_delete(&mut s))
                 }
             }
-            KeyPress::CTRL_E => {
+            KeyPress::Ctrl('E') |
+            KeyPress::End => {
                 kill_ring.reset();
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
-            KeyPress::CTRL_F => {
+            KeyPress::Ctrl('F') |
+            KeyPress::Right => {
                 kill_ring.reset();
                 // Move forward a character.
                 try!(edit_move_right(&mut s))
             }
-            KeyPress::CTRL_H | KeyPress::BACKSPACE => {
+            KeyPress::Ctrl('H') |
+            KeyPress::Backspace => {
                 kill_ring.reset();
                 // Delete one character backward.
                 try!(edit_backspace(&mut s))
             }
-            KeyPress::CTRL_K => {
+            KeyPress::Ctrl('K') => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     kill_ring.kill(&text, true)
                 }
             }
-            KeyPress::CTRL_L => {
+            KeyPress::Ctrl('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(clear_screen(s.out));
+                try!(clear_screen(&mut s));
                 try!(s.refresh_line())
             }
-            KeyPress::CTRL_N => {
+            KeyPress::Ctrl('N') |
+            KeyPress::Down => {
                 kill_ring.reset();
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, history, false))
             }
-            KeyPress::CTRL_P => {
+            KeyPress::Ctrl('P') |
+            KeyPress::Up => {
                 kill_ring.reset();
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, history, true))
             }
-            KeyPress::CTRL_T => {
+            KeyPress::Ctrl('T') => {
                 kill_ring.reset();
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
-            KeyPress::CTRL_U => {
+            KeyPress::Ctrl('U') => {
                 // Kill backward from point to the beginning of the line.
                 if let Some(text) = try!(edit_discard_line(&mut s)) {
                     kill_ring.kill(&text, false)
                 }
             }
-            KeyPress::CTRL_V => {
+            #[cfg(unix)]
+            KeyPress::Ctrl('V') => {
                 // Quoted insert
                 kill_ring.reset();
-                let c = chars.next().unwrap();
-                let ch = try!(c);
-                try!(edit_insert(&mut s, ch))
+                let c = try!(rdr.next_char());
+                try!(edit_insert(&mut s, c)) // FIXME
             }
-            KeyPress::CTRL_W => {
+            KeyPress::Ctrl('W') => {
                 // Kill the word behind point, using white space as a word boundary
                 if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
                     kill_ring.kill(&text, false)
                 }
             }
-            KeyPress::CTRL_Y => {
+            KeyPress::Ctrl('Y') => {
                 // retrieve (yank) last item killed
                 if let Some(text) = kill_ring.yank() {
                     try!(edit_yank(&mut s, text))
                 }
             }
             #[cfg(unix)]
-            KeyPress::CTRL_Z => {
-                try!(term.disable_raw_mode());
+            KeyPress::Ctrl('Z') => {
+                try!(tty::disable_raw_mode(original_mode));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(term.enable_raw_mode()); // TODO term may have changed
+                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
-            KeyPress::ENTER | KeyPress::CTRL_J => {
+            KeyPress::Enter |
+            KeyPress::Ctrl('J') => {
                 // Accept the line regardless of where the cursor is.
                 kill_ring.reset();
                 try!(edit_move_end(&mut s));
                 break;
             }
-            KeyPress::ESC_BACKSPACE => {
+            KeyPress::Meta('\x08') |
+            KeyPress::Meta('\x7f') => {
                 // kill one word backward
                 // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
                 if let Some(text) = try!(edit_delete_prev_word(&mut s,
@@ -808,60 +858,79 @@ fn readline_edit<T: tty::Terminal>(prompt: &str,
                     kill_ring.kill(&text, false)
                 }
             }
-            KeyPress::ESC_B => {
+            KeyPress::Meta('<') => {
+                // move to first entry in history
+                kill_ring.reset();
+                try!(edit_history(&mut s, history, true))
+            }
+            KeyPress::Meta('>') => {
+                // move to last entry in history
+                kill_ring.reset();
+                try!(edit_history(&mut s, history, false))
+            }
+            KeyPress::Meta('B') => {
                 // move backwards one word
                 kill_ring.reset();
                 try!(edit_move_to_prev_word(&mut s))
             }
-            KeyPress::ESC_C => {
+            KeyPress::Meta('C') => {
                 // capitalize word after point
                 kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            KeyPress::ESC_D => {
+            KeyPress::Meta('D') => {
                 // kill one word forward
                 if let Some(text) = try!(edit_delete_word(&mut s)) {
                     kill_ring.kill(&text, true)
                 }
             }
-            KeyPress::ESC_F => {
+            KeyPress::Meta('F') => {
                 // move forwards one word
                 kill_ring.reset();
                 try!(edit_move_to_next_word(&mut s))
             }
-            KeyPress::ESC_L => {
+            KeyPress::Meta('L') => {
                 // lowercase word after point
                 kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
-            KeyPress::ESC_T => {
+            KeyPress::Meta('T') => {
                 // transpose words
                 kill_ring.reset();
                 try!(edit_transpose_words(&mut s))
             }
-            KeyPress::ESC_U => {
+            KeyPress::Meta('U') => {
                 // uppercase word after point
                 kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
-            KeyPress::ESC_Y => {
+            KeyPress::Meta('Y') => {
                 // yank-pop
                 if let Some((yank_size, text)) = kill_ring.yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            KeyPress::ESC_SEQ_DELETE => {
+            KeyPress::Delete => {
                 kill_ring.reset();
                 try!(edit_delete(&mut s))
             }
             _ => {
                 kill_ring.reset();
-                // Insert the character typed.
-                try!(edit_insert(&mut s, ch))
+                // Ignore the character typed.
             }
         }
     }
     Ok(s.line.into_string())
+}
+
+struct Guard(tty::Mode);
+
+#[allow(unused_must_use)]
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let Guard(mode) = *self;
+        tty::disable_raw_mode(mode);
+    }
 }
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
@@ -871,9 +940,10 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let mut term = tty::get_terminal();
-    try!(term.enable_raw_mode());
-    let user_input = readline_edit(prompt, history, completer, kill_ring, term);
+    let original_mode = try!(tty::enable_raw_mode());
+    let guard = Guard(original_mode);
+    let user_input = readline_edit(prompt, history, completer, kill_ring, original_mode);
+    drop(guard); // try!(disable_raw_mode(original_mode));
     println!("");
     user_input
 }
@@ -904,8 +974,8 @@ impl<C> Editor<C> {
         // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
             unsupported_term: tty::is_unsupported_term(),
-            stdin_isatty: tty::is_a_tty(tty::StandardStream::StdIn),
-            stdout_isatty: tty::is_a_tty(tty::StandardStream::StdOut),
+            stdin_isatty: tty::is_a_tty(tty::STDIN_FILENO),
+            stdout_isatty: tty::is_a_tty(tty::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),
@@ -916,13 +986,13 @@ impl<C> Editor<C> {
         editor
     }
 
-    pub fn history_ignore_space(mut self, yes: bool) -> Editor<C> {
-        self.history.ignore_space(yes);
+    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<C> {
+        self.history.ignore_dups(yes);
         self
     }
 
-    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<C> {
-        self.history.ignore_dups(yes);
+    pub fn history_ignore_space(mut self, yes: bool) -> Editor<C> {
+        self.history.ignore_space(yes);
         self
     }
 
@@ -1006,15 +1076,13 @@ fn install_sigwinch_handler() {
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
-
-// no-op on windows
-#[cfg(windows)]
-fn install_sigwinch_handler() {
-}
-
 #[cfg(unix)]
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
+}
+#[cfg(windows)]
+fn install_sigwinch_handler() {
+    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }
 
 #[cfg(test)]
@@ -1022,9 +1090,23 @@ mod test {
     use std::io::Write;
     use line_buffer::LineBuffer;
     use history::History;
+    #[cfg(unix)]
     use completion::Completer;
+    #[cfg(unix)]
+    use consts::KeyPress;
     use State;
     use super::Result;
+    use tty::{Handle, RawReader};
+
+    #[cfg(unix)]
+    fn default_handle() -> Handle {
+        ()
+    }
+    #[cfg(windows)]
+    fn default_handle() -> Handle {
+        ::std::ptr::null_mut()
+        // super::get_std_handle(super::STDOUT_FILENO).expect("Valid stdout")
+    }
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1038,8 +1120,10 @@ mod test {
             line: LineBuffer::init(line, pos),
             cursor: Default::default(),
             cols: cols,
+            old_rows: 0,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
+            output_handle: default_handle(),
         }
     }
 
@@ -1081,7 +1165,9 @@ mod test {
         assert_eq!(line, s.line.as_str());
     }
 
+    #[cfg(unix)]
     struct SimpleCompleter;
+    #[cfg(unix)]
     impl Completer for SimpleCompleter {
         fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
             Ok((0, vec![line.to_string() + "t"]))
@@ -1089,14 +1175,15 @@ mod test {
     }
 
     #[test]
+    #[cfg(unix)]
     fn complete_line() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let mut chars = ::char_iter::chars(&input[..]);
+        let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
-        let ch = super::complete_line(&mut chars, &mut s, &completer).unwrap();
-        assert_eq!(Some('\n'), ch);
+        let key = super::complete_line(&mut rdr, &mut s, &completer).unwrap();
+        assert_eq!(Some(KeyPress::Ctrl('J')), key);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }

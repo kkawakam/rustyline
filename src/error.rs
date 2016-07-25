@@ -1,4 +1,6 @@
 //! Contains error type for handling I/O and Errno errors
+#[cfg(windows)]
+use std::char;
 use std::io;
 use std::error;
 use std::fmt;
@@ -22,6 +24,10 @@ pub enum ReadlineError {
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
+    #[cfg(windows)]
+    WindowResize,
+    #[cfg(windows)]
+    Decode(char::DecodeUtf16Error),
 }
 
 impl fmt::Display for ReadlineError {
@@ -33,6 +39,10 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
+            #[cfg(windows)]
+            ReadlineError::WindowResize => write!(f, "WindowResize"),
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => err.fmt(f),
         }
     }
 }
@@ -46,6 +56,10 @@ impl error::Error for ReadlineError {
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.errno().desc(),
+            #[cfg(windows)]
+            ReadlineError::WindowResize => "WindowResize",
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => err.description(),
         }
     }
 }
@@ -63,15 +77,16 @@ impl From<nix::Error> for ReadlineError {
     }
 }
 
+#[cfg(unix)]
 impl From<char_iter::CharsError> for ReadlineError {
     fn from(err: char_iter::CharsError) -> ReadlineError {
         ReadlineError::Char(err)
     }
 }
 
-impl ReadlineError {
-    #[cfg(unix)]
-    pub fn from_errno(errno: nix::errno::Errno) -> ReadlineError {
-        ReadlineError::from(nix::Error::from_errno(errno))
+#[cfg(windows)]
+impl From<char::DecodeUtf16Error> for ReadlineError {
+    fn from(err: char::DecodeUtf16Error) -> ReadlineError {
+        ReadlineError::Decode(err)
     }
 }

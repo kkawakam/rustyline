@@ -8,7 +8,7 @@ use rustyline::Editor;
 #[cfg(unix)]
 static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 
-// Windows consoles typically don't support ANSI escape sequences out 
+// Windows consoles typically don't support ANSI escape sequences out
 // of the box
 #[cfg(windows)]
 static PROMPT: &'static str = ">> ";

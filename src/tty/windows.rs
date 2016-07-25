@@ -1,9 +1,16 @@
 use std::io;
+use std::io::Read;
 use std::marker::PhantomData;
+use std::mem;
+use std::sync::atomic;
+
 use kernel32;
 use winapi;
 
+use consts::{self, KeyPress};
+use ::error;
 use ::Result;
+use SIGWINCH;
 
 pub type Handle = winapi::HANDLE;
 pub type Mode = winapi::DWORD;

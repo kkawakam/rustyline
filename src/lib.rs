@@ -34,6 +34,7 @@ mod kill_ring;
 pub mod line_buffer;
 mod char_iter;
 
+#[macro_use]
 mod tty;
 
 use std::fmt;

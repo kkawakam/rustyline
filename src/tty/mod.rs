@@ -3,7 +3,9 @@ extern crate libc;
 
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope
-#[cfg(windows)]mod windows;
+#[macro_use]
+#[cfg(windows)]
+mod windows;
 #[cfg(windows)]
 pub use self::windows::*;
 

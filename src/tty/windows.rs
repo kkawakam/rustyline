@@ -1,8 +1,8 @@
-extern crate kernel32;
-extern crate winapi;
-
 use std::io;
 use std::marker::PhantomData;
+use kernel32;
+use winapi;
+
 use ::Result;
 
 pub type Handle = winapi::HANDLE;
@@ -21,6 +21,7 @@ fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
     Ok(handle)
 }
 
+#[macro_export]
 macro_rules! check {
     ($funcall:expr) => {
         {

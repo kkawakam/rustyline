@@ -1,9 +1,9 @@
-extern crate nix;
-extern crate libc;
-
 use std;
 use std::io::Read;
+use libc;
+use nix;
 use nix::sys::termios;
+
 use char_iter;
 use consts::{self, KeyPress};
 use ::Result;

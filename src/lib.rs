@@ -32,7 +32,6 @@ pub mod error;
 pub mod history;
 mod kill_ring;
 pub mod line_buffer;
-mod char_iter;
 
 #[macro_use]
 mod tty;
@@ -1093,11 +1092,10 @@ mod test {
     use history::History;
     #[cfg(unix)]
     use completion::Completer;
-    #[cfg(unix)]
-    use consts::KeyPress;
     use State;
+    #[cfg(unix)]
     use super::Result;
-    use tty::{Handle, RawReader};
+    use tty::Handle;
 
     #[cfg(unix)]
     fn default_handle() -> Handle {
@@ -1178,6 +1176,9 @@ mod test {
     #[test]
     #[cfg(unix)]
     fn complete_line() {
+        use consts::KeyPress;
+        use tty::RawReader;
+
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";

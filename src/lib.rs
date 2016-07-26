@@ -32,6 +32,8 @@ pub mod error;
 pub mod history;
 mod kill_ring;
 pub mod line_buffer;
+#[cfg(unix)]
+mod char_iter;
 
 #[macro_use]
 mod tty;

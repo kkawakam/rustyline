@@ -175,9 +175,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     #[cfg(windows)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         let handle = self.output_handle;
-        if cfg!(test) && handle.is_null() {
-            return Ok(());
-        }
         // calculate the position of the end of the input line
         let end_pos = calculate_position(&self.line, prompt_size, self.cols);
         // calculate the desired position of the cursor
@@ -1129,6 +1126,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(unix)]
     fn edit_history_next() {
         let mut out = ::std::io::sink();
         let line = "current edited line";

@@ -191,9 +191,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     #[cfg(windows)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
         let handle = self.output_handle;
-        if cfg!(test) && handle.is_null() {
-            return Ok(());
-        }
         // calculate the position of the end of the input line
         let end_pos = calculate_position(&self.line, prompt_size, self.cols);
         // calculate the desired position of the cursor
@@ -993,9 +990,9 @@ impl<R: Read> RawReader<R> {
                 continue;
             }
 
-            let ctrl = key_event.dwControlKeyState &
+            /*let ctrl = key_event.dwControlKeyState &
                        (winapi::LEFT_CTRL_PRESSED | winapi::RIGHT_CTRL_PRESSED) !=
-                       0;
+                       0;*/
             let meta = (key_event.dwControlKeyState &
                         (winapi::LEFT_ALT_PRESSED | winapi::RIGHT_ALT_PRESSED) !=
                         0) || esc_seen;
@@ -1474,10 +1471,8 @@ mod test {
     use history::History;
     #[cfg(unix)]
     use completion::Completer;
-    #[cfg(unix)]
-    use consts::KeyPress;
     use State;
-    use super::{Handle, RawReader, Result};
+    use super::{Handle, Result};
 
     #[cfg(unix)]
     fn default_handle() -> Handle {
@@ -1509,6 +1504,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(unix)]
     fn edit_history_next() {
         let mut out = ::std::io::sink();
         let line = "current edited line";
@@ -1558,6 +1554,9 @@ mod test {
     #[test]
     #[cfg(unix)]
     fn complete_line() {
+        use consts::KeyPress;
+        use super::RawReader;
+
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";

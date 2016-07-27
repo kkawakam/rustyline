@@ -1,5 +1,4 @@
 //! This module implements and describes common TTY methods & traits
-extern crate libc;
 
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope

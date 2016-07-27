@@ -31,7 +31,6 @@ const TIOCGWINSZ: libc::c_int = 0x5413;
 pub fn get_columns(_: Handle) -> usize {
     use std::mem::zeroed;
     use libc::c_ushort;
-    use libc;
 
     unsafe {
         #[repr(C)]

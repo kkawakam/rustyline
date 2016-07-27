@@ -55,7 +55,7 @@ pub fn is_unsupported_term() -> bool {
     false
 }
 
-pub fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
+fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
     let mut original_mode = 0;
     check!(kernel32::GetConsoleMode(handle, &mut original_mode));
     Ok(original_mode)

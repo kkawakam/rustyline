@@ -971,6 +971,7 @@ impl<R: Read> RawReader<R> {
 
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
+        use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
 
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
@@ -996,9 +997,12 @@ impl<R: Read> RawReader<R> {
                 continue;
             }
 
-            let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) == (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
-            let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) == (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);
+            let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) ==
+                         (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
+            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) ==
+                      (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
+            let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) ==
+                       (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);
             let meta = alt || esc_seen;
 
             let utf16 = key_event.UnicodeChar;

@@ -102,6 +102,21 @@ pub fn stdout_handle() -> Result<Handle> {
     Ok(handle)
 }
 
+/// Clear the screen. Used to handle ctrl+l
+pub fn clear_screen(_: &mut Write, handle: Handle) -> Result<()> {
+    let mut info = unsafe { mem::zeroed() };
+    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+    let coord = winapi::COORD { X: 0, Y: 0 };
+    check!(kernel32::SetConsoleCursorPosition(handle, coord));
+    let mut _count = 0;
+    check!(kernel32::FillConsoleOutputCharacterA(handle,
+                                                 ' ' as winapi::CHAR,
+                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD,
+                                                 coord,
+                                                 &mut _count));
+    Ok(())
+}
+
 /// Console input reader
 pub struct RawReader<R> {
     handle: winapi::HANDLE,
@@ -121,7 +136,7 @@ impl<R: Read> RawReader<R> {
 
     pub fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
-        //use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
+        // use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
         use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};
 
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };

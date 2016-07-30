@@ -1,5 +1,5 @@
 use std;
-use std::io::Read;
+use std::io::{Read, Write};
 use libc;
 use nix;
 use nix::sys::termios;
@@ -102,6 +102,13 @@ pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
 }
 
 pub fn stdout_handle() -> Result<Handle> {
+    Ok(())
+}
+
+/// Clear the screen. Used to handle ctrl+l
+pub fn clear_screen(w: &mut Write, _: Handle) -> Result<()> {
+    try!(w.write_all(b"\x1b[H\x1b[2J"));
+    try!(w.flush());
     Ok(())
 }
 

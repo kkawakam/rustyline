@@ -237,27 +237,6 @@ fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Clear the screen. Used to handle ctrl+l
-#[cfg(unix)]
-fn clear_screen(s: &mut State) -> Result<()> {
-    write_and_flush(s.out, b"\x1b[H\x1b[2J")
-}
-#[cfg(windows)]
-fn clear_screen(s: &mut State) -> Result<()> {
-    let handle = s.output_handle;
-    let mut info = unsafe { mem::zeroed() };
-    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
-    let coord = winapi::COORD { X: 0, Y: 0 };
-    check!(kernel32::SetConsoleCursorPosition(handle, coord));
-    let mut _count = 0;
-    check!(kernel32::FillConsoleOutputCharacterA(handle,
-                                                 ' ' as winapi::CHAR,
-                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD,
-                                                 coord,
-                                                 &mut _count));
-    Ok(())
-}
-
 /// Beep, used for completion when there is nothing to complete or when all
 /// the choices were already shown.
 fn beep() -> Result<()> {
@@ -788,7 +767,7 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::Ctrl('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(clear_screen(&mut s));
+                try!(tty::clear_screen(&mut s.out, s.output_handle));
                 try!(s.refresh_line())
             }
             KeyPress::Ctrl('N') |

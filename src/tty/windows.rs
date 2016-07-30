@@ -1,5 +1,5 @@
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::mem;
 use std::sync::atomic;

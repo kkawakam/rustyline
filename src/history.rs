@@ -25,10 +25,14 @@ impl History {
         }
     }
 
+    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// By default, they are saved.
     pub fn ignore_space(&mut self, yes: bool) {
         self.ignore_space = yes;
     }
 
+    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// By default, they are ignored.
     pub fn ignore_dups(&mut self, yes: bool) {
         self.ignore_dups = yes;
     }
@@ -122,6 +126,9 @@ impl History {
     }
 
     /// Search history (start position inclusive [0, len-1])
+    /// Return the absolute index of the nearest history entry that matches `term`.
+    /// Return None if no entry contains `term` between [start, len -1] for forward search
+    /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, reverse: bool) -> Option<usize> {
         if term.is_empty() || start >= self.len() {
             return None;

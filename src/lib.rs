@@ -936,20 +936,17 @@ fn readline_direct() -> Result<String> {
 }
 
 /// Line editor
-pub struct Editor<C> {
+pub struct Editor<C: Completer> {
     unsupported_term: bool,
     stdin_isatty: bool,
     stdout_isatty: bool,
-    // cols: usize, // Number of columns in terminal
     history: History,
     completer: Option<C>,
     kill_ring: KillRing,
 }
 
-impl<C> Editor<C> {
+impl<C: Completer> Editor<C> {
     pub fn new() -> Editor<C> {
-        // TODO check what is done in rl_initialize()
-        // if the number of columns is stored here, we need a SIGWINCH handler...
         let editor = Editor {
             unsupported_term: tty::is_unsupported_term(),
             stdin_isatty: tty::is_a_tty(tty::STDIN_FILENO),
@@ -964,11 +961,35 @@ impl<C> Editor<C> {
         editor
     }
 
+    /// This method will read a line from STDIN and will display a `prompt`
+    #[cfg_attr(feature="clippy", allow(if_not_else))]
+    pub fn readline(&mut self, prompt: &str) -> Result<String> {
+        if self.unsupported_term {
+            // Write prompt and flush it to stdout
+            let mut stdout = io::stdout();
+            try!(write_and_flush(&mut stdout, prompt.as_bytes()));
+
+            readline_direct()
+        } else if !self.stdin_isatty {
+            // Not a tty: read from file / pipe.
+            readline_direct()
+        } else {
+            readline_raw(prompt,
+                         &mut self.history,
+                         self.completer.as_ref().map(|c| c as &Completer),
+                         &mut self.kill_ring)
+        }
+    }
+
+    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// By default, they are ignored.
     pub fn history_ignore_dups(mut self, yes: bool) -> Editor<C> {
         self.history.ignore_dups(yes);
         self
     }
 
+    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// By default, they are saved.
     pub fn history_ignore_space(mut self, yes: bool) -> Editor<C> {
         self.history.ignore_space(yes);
         self
@@ -998,28 +1019,6 @@ impl<C> Editor<C> {
     pub fn get_history(&mut self) -> &mut History {
         &mut self.history
     }
-}
-
-impl<C: Completer> Editor<C> {
-    /// This method will read a line from STDIN and will display a `prompt`
-    #[cfg_attr(feature="clippy", allow(if_not_else))]
-    pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        if self.unsupported_term {
-            // Write prompt and flush it to stdout
-            let mut stdout = io::stdout();
-            try!(write_and_flush(&mut stdout, prompt.as_bytes()));
-
-            readline_direct()
-        } else if !self.stdin_isatty {
-            // Not a tty: read from file / pipe.
-            readline_direct()
-        } else {
-            readline_raw(prompt,
-                         &mut self.history,
-                         self.completer.as_ref().map(|c| c as &Completer),
-                         &mut self.kill_ring)
-        }
-    }
 
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<C>) {
@@ -1027,13 +1026,13 @@ impl<C: Completer> Editor<C> {
     }
 }
 
-impl<C> Default for Editor<C> {
+impl<C: Completer> Default for Editor<C> {
     fn default() -> Editor<C> {
         Editor::new()
     }
 }
 
-impl<C> fmt::Debug for Editor<C> {
+impl<C: Completer> fmt::Debug for Editor<C> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
             .field("unsupported_term", &self.unsupported_term)

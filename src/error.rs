@@ -16,7 +16,7 @@ use char_iter;
 pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),
-    /// EOF (Ctrl-d)
+    /// EOF (Ctrl-D)
     Eof,
     /// Ctrl-C
     Interrupted,

@@ -1063,26 +1063,18 @@ fn install_sigwinch_handler() {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }
 
-#[cfg(test)]
+#[cfg(all(unix,test))]
 mod test {
     use std::io::Write;
     use line_buffer::LineBuffer;
     use history::History;
-    #[cfg(unix)]
     use completion::Completer;
     use State;
-    #[cfg(unix)]
     use super::Result;
     use tty::Handle;
 
-    #[cfg(unix)]
     fn default_handle() -> Handle {
         ()
-    }
-    #[cfg(windows)]
-    fn default_handle() -> Handle {
-        ::std::ptr::null_mut()
-        // super::get_std_handle(super::STDOUT_FILENO).expect("Valid stdout")
     }
 
     fn init_state<'out>(out: &'out mut Write,
@@ -1105,7 +1097,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(unix)]
     fn edit_history_next() {
         let mut out = ::std::io::sink();
         let line = "current edited line";
@@ -1143,9 +1134,7 @@ mod test {
         assert_eq!(line, s.line.as_str());
     }
 
-    #[cfg(unix)]
     struct SimpleCompleter;
-    #[cfg(unix)]
     impl Completer for SimpleCompleter {
         fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
             Ok((0, vec![line.to_string() + "t"]))
@@ -1153,7 +1142,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(unix)]
     fn complete_line() {
         use consts::KeyPress;
         use tty::RawReader;

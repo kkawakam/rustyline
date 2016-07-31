@@ -108,9 +108,10 @@ pub fn clear_screen(_: &mut Write, handle: Handle) -> Result<()> {
     let coord = winapi::COORD { X: 0, Y: 0 };
     check!(kernel32::SetConsoleCursorPosition(handle, coord));
     let mut _count = 0;
+    let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
     check!(kernel32::FillConsoleOutputCharacterA(handle,
                                                  ' ' as winapi::CHAR,
-                                                 (info.dwSize.X * info.dwSize.Y) as winapi::DWORD,
+                                                 n,
                                                  coord,
                                                  &mut _count));
     Ok(())

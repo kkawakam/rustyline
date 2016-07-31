@@ -138,7 +138,7 @@ impl<R: Read> RawReader<R> {
     pub fn next_char(&mut self) -> Result<char> {
         match self.chars.next() {
             Some(c) => {
-                Ok(try!(c)) // TODO SIGWINCH
+                Ok(try!(c))
             }
             None => Err(error::ReadlineError::Eof),
         }

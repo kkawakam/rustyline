@@ -224,6 +224,6 @@ impl<R: Read> Iterator for RawReader<R> {
 
 pub static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
-fn install_sigwinch_handler() {
+pub fn install_sigwinch_handler() {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }

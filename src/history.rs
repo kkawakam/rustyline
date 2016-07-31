@@ -89,6 +89,8 @@ impl History {
     }
 
     /// Save the history in the specified file.
+    /// TODO append_history http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
+    /// TODO history_truncate_file http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
@@ -121,7 +123,10 @@ impl History {
         self.entries.clear()
     }
 
-    /// Search history (start position inclusive [0, len-1])
+    /// Search history (start position inclusive [0, len-1]).
+    /// Return the absolute index of the nearest history entry that matches `term`.
+    /// Return None if no entry contains `term` between [start, len -1] for forward search
+    /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, reverse: bool) -> Option<usize> {
         if term.is_empty() || start >= self.len() {
             return None;

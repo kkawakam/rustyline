@@ -23,6 +23,42 @@ pub trait Completer {
     }
 }
 
+impl Completer for () {
+    fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+        Ok((0, Vec::new()))
+    }
+    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
+        unreachable!()
+    }
+}
+
+impl<'c, C: ?Sized + Completer> Completer for &'c C {
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+        (**self).complete(line, pos)
+    }
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+        (**self).update(line, start, elected)
+    }
+}
+macro_rules! box_completer {
+    ($($id: ident)*) => {
+        $(
+            impl<C: ?Sized + Completer> Completer for $id<C> {
+                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+                    (**self).complete(line, pos)
+                }
+                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+                    (**self).update(line, start, elected)
+                }
+            }
+        )*
+    }
+}
+
+use std::sync::Arc;
+use std::rc::Rc;
+box_completer! { Box Rc Arc }
+
 pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
 }
@@ -98,6 +134,10 @@ fn filename_complete(path: &str) -> Result<Vec<String>> {
     Ok(entries)
 }
 
+/// Given a `line` and a cursor `pos`ition,
+/// try to find backward the start of a word.
+/// Return (0, `line[..pos]`) if no break char has been found.
+/// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
 pub fn extract_word<'l>(line: &'l str,
                         pos: usize,
                         break_chars: &BTreeSet<char>)

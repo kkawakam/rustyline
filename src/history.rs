@@ -25,10 +25,14 @@ impl History {
         }
     }
 
+    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// By default, they are saved.
     pub fn ignore_space(&mut self, yes: bool) {
         self.ignore_space = yes;
     }
 
+    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// By default, they are ignored.
     pub fn ignore_dups(&mut self, yes: bool) {
         self.ignore_dups = yes;
     }

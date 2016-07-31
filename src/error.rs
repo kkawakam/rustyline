@@ -13,16 +13,16 @@ use nix;
 pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),
-    /// Error from syscall
-    #[cfg(unix)]
-    Errno(nix::Error),
-    /// Chars Error
-    #[cfg(unix)]
-    Char(io::CharsError),
-    /// EOF (Ctrl-d)
+    /// EOF (Ctrl-D)
     Eof,
     /// Ctrl-C
     Interrupted,
+    /// Chars Error
+    #[cfg(unix)]
+    Char(io::CharsError),
+    /// Unix Error from syscall
+    #[cfg(unix)]
+    Errno(nix::Error),
     #[cfg(windows)]
     WindowResize,
     #[cfg(windows)]
@@ -33,12 +33,12 @@ impl fmt::Display for ReadlineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReadlineError::Io(ref err) => err.fmt(f),
-            #[cfg(unix)]
-            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
-            #[cfg(unix)]
-            ReadlineError::Char(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
+            #[cfg(unix)]
+            ReadlineError::Char(ref err) => err.fmt(f),
+            #[cfg(unix)]
+            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
             #[cfg(windows)]
@@ -51,12 +51,12 @@ impl error::Error for ReadlineError {
     fn description(&self) -> &str {
         match *self {
             ReadlineError::Io(ref err) => err.description(),
-            #[cfg(unix)]
-            ReadlineError::Errno(ref err) => err.errno().desc(),
-            #[cfg(unix)]
-            ReadlineError::Char(ref err) => err.description(),
             ReadlineError::Eof => "EOF",
             ReadlineError::Interrupted => "Interrupted",
+            #[cfg(unix)]
+            ReadlineError::Char(ref err) => err.description(),
+            #[cfg(unix)]
+            ReadlineError::Errno(ref err) => err.errno().desc(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
             #[cfg(windows)]

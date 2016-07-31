@@ -7,7 +7,7 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::new();
+//! let mut rl = rustyline::Editor::<()>::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -34,20 +34,17 @@ pub mod history;
 mod kill_ring;
 pub mod line_buffer;
 
+#[macro_use]
+mod tty;
+
 use std::fmt;
 use std::io::{self, Read, Write};
-#[cfg(windows)]
-use std::marker::PhantomData;
 use std::mem;
 use std::path::Path;
 use std::result;
-#[cfg(unix)]
-use std::sync;
 use std::sync::atomic;
 #[cfg(unix)]
 use nix::sys::signal;
-#[cfg(unix)]
-use nix::sys::termios;
 
 use completion::Completer;
 use consts::KeyPress;
@@ -57,23 +54,6 @@ use kill_ring::KillRing;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
-
-#[cfg(unix)]
-type Handle = ();
-#[cfg(windows)]
-type Handle = winapi::HANDLE;
-#[cfg(windows)]
-macro_rules! check {
-    ($funcall:expr) => {
-        {
-        let rc = unsafe { $funcall };
-        if rc == 0 {
-            try!(Err(io::Error::last_os_error()));
-        }
-        rc
-        }
-    };
-}
 
 // Represent the state during line editing.
 struct State<'out, 'prompt> {
@@ -86,7 +66,7 @@ struct State<'out, 'prompt> {
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
-    output_handle: Handle, // output handle (for windows)
+    output_handle: tty::Handle, // output handle (for windows)
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -97,12 +77,12 @@ struct Position {
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(out: &'out mut Write,
-           output_handle: Handle,
+           output_handle: tty::Handle,
            prompt: &'prompt str,
            history_index: usize)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
-        let cols = get_columns(output_handle);
+        let cols = tty::get_columns(output_handle);
         let prompt_size = calculate_position(prompt, Default::default(), cols);
         State {
             out: out,
@@ -228,7 +208,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn update_columns(&mut self) {
-        self.cols = get_columns(self.output_handle);
+        self.cols = tty::get_columns(self.output_handle);
     }
 }
 
@@ -247,188 +227,9 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-/// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
-
-/// Check to see if `fd` is a TTY
-#[cfg(unix)]
-fn is_a_tty(fd: libc::c_int) -> bool {
-    unsafe { libc::isatty(fd) != 0 }
-}
-#[cfg(windows)]
-fn is_a_tty(fd: winapi::DWORD) -> bool {
-    let handle = get_std_handle(fd);
-    match handle {
-        Ok(handle) => {
-            // If this function doesn't fail then fd is a TTY
-            get_console_mode(handle).is_ok()
-        }
-        Err(_) => false,
-    }
-}
-
-/// Check to see if the current `TERM` is unsupported
-fn is_unsupported_term() -> bool {
-    use std::ascii::AsciiExt;
-    match std::env::var("TERM") {
-        Ok(term) => {
-            let mut unsupported = false;
-            for iter in &UNSUPPORTED_TERM {
-                unsupported = (*iter).eq_ignore_ascii_case(&term)
-            }
-            unsupported
-        }
-        Err(_) => false,
-    }
-}
-
-#[cfg(unix)]
-type Mode = termios::Termios;
-#[cfg(unix)]
-const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
-#[cfg(unix)]
-const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
-#[cfg(windows)]
-type Mode = winapi::DWORD;
-#[cfg(windows)]
-const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
-#[cfg(windows)]
-const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
-#[cfg(windows)]
-fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
-    let handle = unsafe { kernel32::GetStdHandle(fd) };
-    if handle == winapi::INVALID_HANDLE_VALUE {
-        try!(Err(io::Error::last_os_error()));
-    } else if handle.is_null() {
-        try!(Err(io::Error::new(io::ErrorKind::Other,
-                                "no stdio handle available for this process")));
-    }
-    Ok(handle)
-}
-
-/// Enable raw mode for the TERM
-#[cfg(unix)]
-fn enable_raw_mode() -> Result<Mode> {
-    use nix::errno::Errno::ENOTTY;
-    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /* OPOST, */ VMIN, VTIME};
-    if !is_a_tty(STDIN_FILENO) {
-        try!(Err(nix::Error::from_errno(ENOTTY)));
-    }
-    let original_term = try!(termios::tcgetattr(STDIN_FILENO));
-    let mut raw = original_term;
-    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON); // disable BREAK interrupt, CR to NL conversion on input, input parity check, strip high bit (bit 8), output flow control
-    // we don't want raw output, it turns newlines into straight linefeeds
-    //raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG); // disable echoing, canonical mode, extended input processing and signals
-    raw.c_cc[VMIN] = 1; // One character-at-a-time input
-    raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &raw));
-    Ok(original_term)
-}
-#[cfg(windows)]
-fn enable_raw_mode() -> Result<Mode> {
-    let handle = try!(get_std_handle(STDIN_FILENO));
-    let original_mode = try!(get_console_mode(handle));
-    // Disable these modes
-    let raw = original_mode &
-              !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
-                winapi::wincon::ENABLE_PROCESSED_INPUT);
-    // Enable these modes
-    let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
-    let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
-    let raw = raw | winapi::wincon::ENABLE_QUICK_EDIT_MODE;
-    let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
-    check!(kernel32::SetConsoleMode(handle, raw));
-    Ok(original_mode)
-}
-#[cfg(windows)]
-fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
-    let mut original_mode = 0;
-    check!(kernel32::GetConsoleMode(handle, &mut original_mode));
-    Ok(original_mode)
-}
-
-/// Disable Raw mode for the term
-#[cfg(unix)]
-fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
-    Ok(())
-}
-#[cfg(windows)]
-fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    let handle = try!(get_std_handle(STDIN_FILENO));
-    check!(kernel32::SetConsoleMode(handle, original_mode));
-    Ok(())
-}
-
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-const TIOCGWINSZ: libc::c_ulong = 0x40087468;
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const TIOCGWINSZ: libc::c_ulong = 0x5413;
-
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-#[cfg(any(target_os = "linux",
-          target_os = "android",
-          target_os = "macos",
-          target_os = "freebsd"))]
-fn get_columns(_: Handle) -> usize {
-    use libc::c_ushort;
-    use libc;
-
-    unsafe {
-        #[repr(C)]
-        struct winsize {
-            ws_row: c_ushort,
-            ws_col: c_ushort,
-            ws_xpixel: c_ushort,
-            ws_ypixel: c_ushort,
-        }
-
-        let mut size: winsize = mem::zeroed();
-        match libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size) {
-            0 => size.ws_col as usize, // TODO getCursorPosition
-            _ => 80,
-        }
-    }
-}
-#[cfg(windows)]
-fn get_columns(handle: Handle) -> usize {
-    let mut info = unsafe { mem::zeroed() };
-    match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
-        0 => 80,
-        _ => info.dwSize.X as usize,
-    }
-}
-
 fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
     try!(w.write_all(buf));
     try!(w.flush());
-    Ok(())
-}
-
-/// Clear the screen. Used to handle ctrl+l
-#[cfg(unix)]
-fn clear_screen(s: &mut State) -> Result<()> {
-    write_and_flush(s.out, b"\x1b[H\x1b[2J")
-}
-#[cfg(windows)]
-fn clear_screen(s: &mut State) -> Result<()> {
-    let handle = s.output_handle;
-    let mut info = unsafe { mem::zeroed() };
-    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
-    let coord = winapi::COORD { X: 0, Y: 0 };
-    check!(kernel32::SetConsoleCursorPosition(handle, coord));
-    let mut _count = 0;
-    let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
-    check!(kernel32::FillConsoleOutputCharacterA(handle,
-                                                 ' ' as winapi::CHAR,
-                                                 n,
-                                                 coord,
-                                                 &mut _count));
     Ok(())
 }
 
@@ -726,7 +527,7 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: Read>(rdr: &mut RawReader<R>,
+fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
                           s: &mut State,
                           completer: &Completer)
                           -> Result<Option<KeyPress>> {
@@ -778,7 +579,7 @@ fn complete_line<R: Read>(rdr: &mut RawReader<R>,
 
 /// Incremental search
 #[cfg_attr(feature="clippy", allow(if_not_else))]
-fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
+fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
                                        s: &mut State,
                                        history: &History)
                                        -> Result<Option<KeyPress>> {
@@ -854,222 +655,6 @@ fn reverse_incremental_search<R: Read>(rdr: &mut RawReader<R>,
     Ok(Some(key))
 }
 
-/// Console input reader
-#[cfg(unix)]
-struct RawReader<R> {
-    chars: io::Chars<R>,
-}
-
-#[cfg(unix)]
-impl<R: Read> RawReader<R> {
-    fn new(stdin: R) -> Result<RawReader<R>> {
-        Ok(RawReader { chars: stdin.chars() })
-    }
-
-    // As there is no read timeout to properly handle single ESC key,
-    // we make possible to deactivate escape sequence processing.
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
-        let c = try!(self.next_char());
-
-        let mut key = consts::char_to_key_press(c);
-        if esc_seq && key == KeyPress::Esc {
-            // escape sequence
-            key = try!(self.escape_sequence());
-        }
-        Ok(key)
-    }
-
-    fn next_char(&mut self) -> Result<char> {
-        match self.chars.next() {
-            Some(c) => {
-                Ok(try!(c)) // TODO SIGWINCH
-            }
-            None => Err(error::ReadlineError::Eof),
-        }
-    }
-
-    fn escape_sequence(&mut self) -> Result<KeyPress> {
-        // Read the next two bytes representing the escape sequence.
-        let seq1 = try!(self.next_char());
-        if seq1 == '[' {
-            // ESC [ sequences.
-            let seq2 = try!(self.next_char());
-            if seq2.is_digit(10) {
-                // Extended escape, read additional byte.
-                let seq3 = try!(self.next_char());
-                if seq3 == '~' {
-                    match seq2 {
-                        '3' => Ok(KeyPress::Delete),
-                        // TODO '1' // Home
-                        // TODO '4' // End
-                        _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-                    }
-                } else {
-                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
-                }
-            } else {
-                match seq2 {
-                    'A' => Ok(KeyPress::Up),
-                    'B' => Ok(KeyPress::Down),
-                    'C' => Ok(KeyPress::Right),
-                    'D' => Ok(KeyPress::Left),
-                    'F' => Ok(KeyPress::End),
-                    'H' => Ok(KeyPress::Home),
-                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-                }
-            }
-        } else if seq1 == 'O' {
-            // ESC O sequences.
-            let seq2 = try!(self.next_char());
-            match seq2 {
-                'F' => Ok(KeyPress::End),
-                'H' => Ok(KeyPress::Home),
-                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
-            }
-        } else {
-            // TODO ESC-N (n): search history forward not interactively
-            // TODO ESC-P (p): search history backward not interactively
-            // TODO ESC-R (r): Undo all changes made to this line.
-            match seq1 {
-                '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
-                '<' => Ok(KeyPress::Meta('<')),
-                '>' => Ok(KeyPress::Meta('>')),
-                'b' | 'B' => Ok(KeyPress::Meta('B')),
-                'c' | 'C' => Ok(KeyPress::Meta('C')),
-                'd' | 'D' => Ok(KeyPress::Meta('D')),
-                'f' | 'F' => Ok(KeyPress::Meta('F')),
-                'l' | 'L' => Ok(KeyPress::Meta('L')),
-                't' | 'T' => Ok(KeyPress::Meta('T')),
-                'u' | 'U' => Ok(KeyPress::Meta('U')),
-                'y' | 'Y' => Ok(KeyPress::Meta('Y')),
-                '\x7f' => Ok(KeyPress::Meta('\x7f')), // Delete
-                _ => {
-                    // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
-                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
-                }
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct RawReader<R> {
-    handle: winapi::HANDLE,
-    buf: Option<u16>,
-    phantom: PhantomData<R>,
-}
-
-#[cfg(windows)]
-impl<R: Read> RawReader<R> {
-    fn new(_: R) -> Result<RawReader<R>> {
-        let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(RawReader {
-            handle: handle,
-            buf: None,
-            phantom: PhantomData,
-        })
-    }
-
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
-        use std::char::decode_utf16;
-        //use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
-        use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};
-
-        let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
-        let mut count = 0;
-        let mut esc_seen = false;
-        loop {
-            // TODO GetNumberOfConsoleInputEvents
-            check!(kernel32::ReadConsoleInputW(self.handle,
-                                               &mut rec,
-                                               1 as winapi::DWORD,
-                                               &mut count));
-
-            // TODO ENABLE_WINDOW_INPUT ???
-            if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
-                SIGWINCH.store(true, atomic::Ordering::SeqCst);
-                return Err(error::ReadlineError::WindowResize);
-            } else if rec.EventType != winapi::KEY_EVENT {
-                continue;
-            }
-            let key_event = unsafe { rec.KeyEvent() };
-            // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
-            if key_event.bKeyDown == 0 &&
-               key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
-                continue;
-            }
-
-            /*let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) ==
-                         (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);*/
-            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) ==
-                      (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
-            /*let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) ==
-                       (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);*/
-            let meta = alt || esc_seen;
-
-            let utf16 = key_event.UnicodeChar;
-            if utf16 == 0 {
-                match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => return Ok(KeyPress::Left),
-                    winapi::VK_RIGHT => return Ok(KeyPress::Right),
-                    winapi::VK_UP => return Ok(KeyPress::Up),
-                    winapi::VK_DOWN => return Ok(KeyPress::Down),
-                    winapi::VK_DELETE => return Ok(KeyPress::Delete),
-                    winapi::VK_HOME => return Ok(KeyPress::Home),
-                    winapi::VK_END => return Ok(KeyPress::End),
-                    _ => continue,
-                };
-            } else if utf16 == 27 {
-                esc_seen = true;
-                continue;
-            } else {
-                // TODO How to support surrogate pair ?
-                self.buf = Some(utf16);
-                let orc = decode_utf16(self).next();
-                if orc.is_none() {
-                    return Err(error::ReadlineError::Eof);
-                }
-                let c = try!(orc.unwrap());
-                if meta {
-                    match c {
-                        'b' | 'B' => return Ok(KeyPress::Meta('B')),
-                        'c' | 'C' => return Ok(KeyPress::Meta('C')),
-                        'd' | 'D' => return Ok(KeyPress::Meta('D')),
-                        'f' | 'F' => return Ok(KeyPress::Meta('F')),
-                        'l' | 'L' => return Ok(KeyPress::Meta('L')),
-                        't' | 'T' => return Ok(KeyPress::Meta('T')),
-                        'u' | 'U' => return Ok(KeyPress::Meta('U')),
-                        'y' | 'Y' => return Ok(KeyPress::Meta('Y')),
-                        _ => return Ok(KeyPress::UNKNOWN_ESC_SEQ),
-                    }
-                } else {
-                    return Ok(consts::char_to_key_press(c));
-                }
-            }
-        }
-    }
-}
-#[cfg(windows)]
-impl<R: Read> Iterator for RawReader<R> {
-    type Item = u16;
-
-    fn next(&mut self) -> Option<u16> {
-        let buf = self.buf;
-        self.buf = None;
-        buf
-    }
-}
-
-#[cfg(unix)]
-fn stdout_handle() -> Result<Handle> {
-    Ok(())
-}
-#[cfg(windows)]
-fn stdout_handle() -> Result<Handle> {
-    let handle = try!(get_std_handle(STDOUT_FILENO));
-    Ok(handle)
-}
-
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -1078,20 +663,20 @@ fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
                  kill_ring: &mut KillRing,
-                 original_mode: Mode)
+                 original_mode: tty::Mode)
                  -> Result<String> {
     let mut stdout = io::stdout();
-    let stdout_handle = try!(stdout_handle());
+    let stdout_handle = try!(tty::stdout_handle());
 
     kill_ring.reset();
     let mut s = State::new(&mut stdout, stdout_handle, prompt, history.len());
     try!(s.refresh_line());
 
-    let mut rdr = try!(RawReader::new(io::stdin()));
+    let mut rdr = try!(tty::RawReader::new(io::stdin()));
 
     loop {
         let rk = rdr.next_key(true);
-        if rk.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+        if rk.is_err() && tty::SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
             s.update_columns();
             try!(s.refresh_line());
             continue;
@@ -1180,7 +765,7 @@ fn readline_edit(prompt: &str,
             }
             KeyPress::Ctrl('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(clear_screen(&mut s));
+                try!(tty::clear_screen(&mut s.out, s.output_handle));
                 try!(s.refresh_line())
             }
             KeyPress::Ctrl('N') |
@@ -1227,9 +812,9 @@ fn readline_edit(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
-                try!(disable_raw_mode(original_mode));
+                try!(tty::disable_raw_mode(original_mode));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(enable_raw_mode()); // TODO original_mode may have changed
+                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -1314,13 +899,13 @@ fn readline_edit(prompt: &str,
     Ok(s.line.into_string())
 }
 
-struct Guard(Mode);
+struct Guard(tty::Mode);
 
 #[allow(unused_must_use)]
 impl Drop for Guard {
     fn drop(&mut self) {
         let Guard(mode) = *self;
-        disable_raw_mode(mode);
+        tty::disable_raw_mode(mode);
     }
 }
 
@@ -1331,7 +916,7 @@ fn readline_raw(prompt: &str,
                 completer: Option<&Completer>,
                 kill_ring: &mut KillRing)
                 -> Result<String> {
-    let original_mode = try!(enable_raw_mode());
+    let original_mode = try!(tty::enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, history, completer, kill_ring, original_mode);
     drop(guard); // try!(disable_raw_mode(original_mode));
@@ -1349,30 +934,27 @@ fn readline_direct() -> Result<String> {
 }
 
 /// Line editor
-pub struct Editor<'completer> {
+pub struct Editor<C: Completer> {
     unsupported_term: bool,
     stdin_isatty: bool,
     stdout_isatty: bool,
-    // cols: usize, // Number of columns in terminal
     history: History,
-    completer: Option<&'completer Completer>,
+    completer: Option<C>,
     kill_ring: KillRing,
 }
 
-impl<'completer> Editor<'completer> {
-    pub fn new() -> Editor<'completer> {
-        // TODO check what is done in rl_initialize()
-        // if the number of columns is stored here, we need a SIGWINCH handler...
+impl<C: Completer> Editor<C> {
+    pub fn new() -> Editor<C> {
         let editor = Editor {
-            unsupported_term: is_unsupported_term(),
-            stdin_isatty: is_a_tty(STDIN_FILENO),
-            stdout_isatty: is_a_tty(STDOUT_FILENO),
+            unsupported_term: tty::is_unsupported_term(),
+            stdin_isatty: tty::is_a_tty(tty::STDIN_FILENO),
+            stdout_isatty: tty::is_a_tty(tty::STDOUT_FILENO),
             history: History::new(),
             completer: None,
             kill_ring: KillRing::new(60),
         };
         if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
-            install_sigwinch_handler();
+            tty::install_sigwinch_handler();
         }
         editor
     }
@@ -1392,18 +974,22 @@ impl<'completer> Editor<'completer> {
         } else {
             readline_raw(prompt,
                          &mut self.history,
-                         self.completer,
+                         self.completer.as_ref().map(|c| c as &Completer),
                          &mut self.kill_ring)
         }
     }
 
-    pub fn history_ignore_space(mut self, yes: bool) -> Editor<'completer> {
-        self.history.ignore_space(yes);
+    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// By default, they are ignored.
+    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<C> {
+        self.history.ignore_dups(yes);
         self
     }
 
-    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<'completer> {
-        self.history.ignore_dups(yes);
+    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// By default, they are saved.
+    pub fn history_ignore_space(mut self, yes: bool) -> Editor<C> {
+        self.history.ignore_space(yes);
         self
     }
 
@@ -1433,45 +1019,24 @@ impl<'completer> Editor<'completer> {
     }
 
     /// Register a callback function to be called for tab-completion.
-    pub fn set_completer(&mut self, completer: Option<&'completer Completer>) {
+    pub fn set_completer(&mut self, completer: Option<C>) {
         self.completer = completer;
     }
 }
 
-impl<'completer> Default for Editor<'completer> {
-    fn default() -> Editor<'completer> {
+impl<C: Completer> Default for Editor<C> {
+    fn default() -> Editor<C> {
         Editor::new()
     }
 }
 
-impl<'completer> fmt::Debug for Editor<'completer> {
+impl<C: Completer> fmt::Debug for Editor<C> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("State")
             .field("unsupported_term", &self.unsupported_term)
             .field("stdin_isatty", &self.stdin_isatty)
             .finish()
     }
-}
-
-#[cfg(unix)]
-static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
-#[cfg(unix)]
-fn install_sigwinch_handler() {
-    SIGWINCH_ONCE.call_once(|| unsafe {
-        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlag::empty(),
-                                              signal::SigSet::empty());
-        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
-    });
-}
-#[cfg(unix)]
-extern "C" fn sigwinch_handler(_: signal::SigNum) {
-    SIGWINCH.store(true, atomic::Ordering::SeqCst);
-}
-#[cfg(windows)]
-fn install_sigwinch_handler() {
-    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }
 
 #[cfg(all(unix,test))]
@@ -1481,7 +1046,8 @@ mod test {
     use history::History;
     use completion::Completer;
     use State;
-    use super::{Handle, Result};
+    use super::Result;
+    use tty::Handle;
 
     fn default_handle() -> Handle {
         ()
@@ -1554,7 +1120,7 @@ mod test {
     #[test]
     fn complete_line() {
         use consts::KeyPress;
-        use super::RawReader;
+        use tty::RawReader;
 
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);

@@ -8,6 +8,11 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 
 [Documentation](https://kkawakam.github.io/rustyline)
 
+
+**Supported Platforms**
+* Linux
+* Windows - Work in Progress (Issue #37), modifier keys do not work
+
 ## Build
 This project uses Cargo and Rust Nightly
 ```bash
@@ -22,7 +27,8 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 fn main() {
-    let mut rl = Editor::new();
+    // `()` can be used when no completer is required
+    let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");
     }
@@ -57,7 +63,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "0.2.2"
+rustyline = "0.2.3"
 ```
 
 ## Features

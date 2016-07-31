@@ -43,8 +43,6 @@ use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
-#[cfg(unix)]
-use std::sync;
 use std::sync::atomic;
 #[cfg(unix)]
 use nix::sys::signal;
@@ -678,7 +676,7 @@ fn readline_edit(prompt: &str,
 
     loop {
         let rk = rdr.next_key(true);
-        if rk.is_err() && SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+        if rk.is_err() && tty::SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
             s.update_columns();
             try!(s.refresh_line());
             continue;
@@ -956,7 +954,7 @@ impl<C: Completer> Editor<C> {
             kill_ring: KillRing::new(60),
         };
         if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
-            install_sigwinch_handler();
+            tty::install_sigwinch_handler();
         }
         editor
     }
@@ -1039,27 +1037,6 @@ impl<C: Completer> fmt::Debug for Editor<C> {
             .field("stdin_isatty", &self.stdin_isatty)
             .finish()
     }
-}
-
-#[cfg(unix)]
-static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
-#[cfg(unix)]
-fn install_sigwinch_handler() {
-    SIGWINCH_ONCE.call_once(|| unsafe {
-        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlag::empty(),
-                                              signal::SigSet::empty());
-        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
-    });
-}
-#[cfg(unix)]
-extern "C" fn sigwinch_handler(_: signal::SigNum) {
-    SIGWINCH.store(true, atomic::Ordering::SeqCst);
-}
-#[cfg(windows)]
-fn install_sigwinch_handler() {
-    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }
 
 #[cfg(all(unix,test))]

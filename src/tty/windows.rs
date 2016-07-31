@@ -10,7 +10,6 @@ use winapi;
 use consts::{self, KeyPress};
 use ::error;
 use ::Result;
-use SIGWINCH;
 
 pub type Handle = winapi::HANDLE;
 pub type Mode = winapi::DWORD;
@@ -149,7 +148,6 @@ impl<R: Read> RawReader<R> {
                                                1 as winapi::DWORD,
                                                &mut count));
 
-            // TODO ENABLE_WINDOW_INPUT ???
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
                 return Err(error::ReadlineError::WindowResize);
@@ -222,4 +220,10 @@ impl<R: Read> Iterator for RawReader<R> {
         self.buf = None;
         buf
     }
+}
+
+pub static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+
+fn install_sigwinch_handler() {
+    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
 }

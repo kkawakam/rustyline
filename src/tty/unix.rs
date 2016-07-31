@@ -1,7 +1,10 @@
 use std;
 use std::io::{Read, Write};
+use std::sync;
+use std::sync::atomic;
 use libc;
 use nix;
+use nix::sys::signal;
 use nix::sys::termios;
 
 use char_iter;
@@ -137,9 +140,7 @@ impl<R: Read> RawReader<R> {
 
     pub fn next_char(&mut self) -> Result<char> {
         match self.chars.next() {
-            Some(c) => {
-                Ok(try!(c))
-            }
+            Some(c) => Ok(try!(c)),
             None => Err(error::ReadlineError::Eof),
         }
     }
@@ -206,4 +207,20 @@ impl<R: Read> RawReader<R> {
             }
         }
     }
+}
+
+static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
+pub static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+
+pub fn install_sigwinch_handler() {
+    SIGWINCH_ONCE.call_once(|| unsafe {
+        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
+                                              signal::SaFlag::empty(),
+                                              signal::SigSet::empty());
+        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
+    });
+}
+
+extern "C" fn sigwinch_handler(_: signal::SigNum) {
+    SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }

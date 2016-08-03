@@ -88,7 +88,8 @@ Ctrl-D       | (if line *is* empty) End of File
 Ctrl-E, End  | Move cursor to end of line
 Ctrl-F, Right| Move cursor one character right
 Ctrl-H, BackSpace | Delete character before cursor
-Ctrl-J, Return | Finish the line entry
+Ctrl-I, Tab  | Next completion
+Ctrl-J, Ctrl-M, Enter | Finish the line entry
 Ctrl-K       | Delete from cursor to end of line
 Ctrl-L       | Clear screen
 Ctrl-N, Down | Next match from history
@@ -98,19 +99,41 @@ Ctrl-T       | Transpose previous character with current character
 Ctrl-U       | Delete from start of line to cursor
 Ctrl-V       | Insert any special character without perfoming its associated action
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
-Ctrl-Y       | Paste from Yank buffer (Alt-Y to paste next yank instead)
-Tab          | Next completion
-Alt-B, Alt-Left | Move cursor to previous word
-Alt-C        | Capitalize the current word
-Alt-D        | Delete forwards one word
-Alt-F, Alt-Right | Move cursor to next word
-Alt-L        | Lower-case the next word
-Alt-T        | Transpose words
-Alt-U        | Upper-case the next word
-Alt-Y        | See Ctrl-Y
-Alt-BackSpace | Kill from the start of the current word, or, if between words, to the start of the previous word
+Ctrl-Y       | Paste from Yank buffer (Meta-Y to paste next yank instead)
+Meta-<       | Move to first entry in history
+Meta->       | Move to last entry in history
+Meta-B, Alt-Left | Move cursor to previous word
+Meta-C       | Capitalize the current word
+Meta-D       | Delete forwards one word
+Meta-F, Alt-Right | Move cursor to next word
+Meta-L       | Lower-case the next word
+Meta-T       | Transpose words
+Meta-U       | Upper-case the next word
+Meta-Y       | See Ctrl-Y
+Meta-BackSpace | Kill from the start of the current word, or, if between words, to the start of the previous word
 
 ## ToDo
 
  - Show completion list
+ - Undos
+ - Read input with timeout to properly handle single ESC key
  - expose an API callable from C
+
+## Wine
+
+```sh
+$ cargo run --example example --target 'x86_64-pc-windows-gnu'
+...
+Error: Io(Error { repr: Os { code: 6, message: "Invalid handle." } })
+$ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/example.exe
+...
+```
+
+## Similar projects
+
+ - [copperline](https://github.com/srijs/rust-copperline) (Rust)
+ - [liner](https://github.com/MovingtoMars/liner) (Rust)
+ - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
+ - [liner](https://github.com/peterh/liner) (Go)
+ - [readline](https://github.com/chzyer/readline) (Go)
+ - [haskeline](https://github.com/judah/haskeline) (Haskell)

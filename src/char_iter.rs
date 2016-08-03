@@ -9,7 +9,9 @@ use std::io;
 use std::io::Read;
 use std::str;
 
-pub fn chars<R: Read>(read: R) -> Chars<R> where R: Sized {
+pub fn chars<R: Read>(read: R) -> Chars<R>
+    where R: Sized
+{
     Chars { inner: read }
 }
 
@@ -60,8 +62,12 @@ impl<R: Read> Iterator for Chars<R> {
             Err(e) => return Some(Err(CharsError::Other(e))),
         };
         let width = utf8_char_width(first_byte);
-        if width == 1 { return Some(Ok(first_byte as char)) }
-        if width == 0 { return Some(Err(CharsError::NotUtf8)) }
+        if width == 1 {
+            return Some(Ok(first_byte as char));
+        }
+        if width == 0 {
+            return Some(Err(CharsError::NotUtf8));
+        }
         let mut buf = [first_byte, 0, 0, 0];
         {
             let mut start = 1;
@@ -98,9 +104,7 @@ impl error::Error for CharsError {
 impl fmt::Display for CharsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            CharsError::NotUtf8 => {
-                "byte stream did not contain valid utf8".fmt(f)
-            }
+            CharsError::NotUtf8 => "byte stream did not contain valid utf8".fmt(f),
             CharsError::Other(ref e) => e.fmt(f),
         }
     }

@@ -1,7 +1,7 @@
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum KeyPress {
-    UNKNOWN_ESC_SEQ,
+    UnknownEscSeq,
     Backspace,
     Char(char),
     Ctrl(char),
@@ -19,7 +19,7 @@ pub enum KeyPress {
     Up,
 }
 
-#[cfg_attr(feature="clippy", allow(match_same_arms))]
+#[allow(match_same_arms)]
 pub fn char_to_key_press(c: char) -> KeyPress {
     if !c.is_control() {
         return KeyPress::Char(c);

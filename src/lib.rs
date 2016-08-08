@@ -14,6 +14,7 @@
 //!     Err(_)   => println!("No input"),
 //! }
 //! ```
+#![allow(unknown_lints)]
 
 extern crate libc;
 #[cfg(unix)]
@@ -26,7 +27,6 @@ extern crate winapi;
 extern crate kernel32;
 
 pub mod completion;
-#[allow(non_camel_case_types)]
 mod consts;
 pub mod error;
 pub mod history;
@@ -245,7 +245,7 @@ fn beep() -> Result<()> {
 /// starting at `orig`.
 /// Control characters are treated as having zero width.
 /// Characters with 2 column width are correctly handled (not splitted).
-#[cfg_attr(feature="clippy", allow(if_same_then_else))]
+#[allow(if_same_then_else)]
 fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
     let mut pos = orig;
     let mut esc_seq = 0;
@@ -578,7 +578,6 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
 }
 
 /// Incremental search
-#[cfg_attr(feature="clippy", allow(if_not_else))]
 fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
                                        s: &mut State,
                                        history: &History)
@@ -658,7 +657,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-#[cfg_attr(feature="clippy", allow(cyclomatic_complexity))]
+#[allow(let_unit_value)]
 fn readline_edit(prompt: &str,
                  history: &mut History,
                  completer: Option<&Completer>,
@@ -709,7 +708,7 @@ fn readline_edit(prompt: &str,
             } else {
                 continue;
             }
-        } else if key == KeyPress::UNKNOWN_ESC_SEQ {
+        } else if key == KeyPress::UnknownEscSeq {
             continue;
         }
 
@@ -960,7 +959,6 @@ impl<C: Completer> Editor<C> {
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
-    #[cfg_attr(feature="clippy", allow(if_not_else))]
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         if self.unsupported_term {
             // Write prompt and flush it to stdout

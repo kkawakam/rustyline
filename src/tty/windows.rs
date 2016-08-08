@@ -203,7 +203,7 @@ impl<R: Read> RawReader<R> {
                         't' | 'T' => return Ok(KeyPress::Meta('T')),
                         'u' | 'U' => return Ok(KeyPress::Meta('U')),
                         'y' | 'Y' => return Ok(KeyPress::Meta('Y')),
-                        _ => return Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                        _ => return Ok(KeyPress::UnknownEscSeq),
                     }
                 } else {
                     return Ok(consts::char_to_key_press(c));

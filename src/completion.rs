@@ -86,7 +86,6 @@ impl Completer for FilenameCompleter {
     }
 }
 
-#[cfg_attr(feature="clippy", allow(single_char_pattern))]
 fn filename_complete(path: &str) -> Result<Vec<String>> {
     use std::env::{current_dir, home_dir};
 

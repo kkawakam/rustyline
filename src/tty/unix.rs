@@ -159,10 +159,10 @@ impl<R: Read> RawReader<R> {
                         '3' => Ok(KeyPress::Delete),
                         // TODO '1' // Home
                         // TODO '4' // End
-                        _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                        _ => Ok(KeyPress::UnknownEscSeq),
                     }
                 } else {
-                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
+                    Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
                 match seq2 {
@@ -172,7 +172,7 @@ impl<R: Read> RawReader<R> {
                     'D' => Ok(KeyPress::Left),
                     'F' => Ok(KeyPress::End),
                     'H' => Ok(KeyPress::Home),
-                    _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                    _ => Ok(KeyPress::UnknownEscSeq),
                 }
             }
         } else if seq1 == 'O' {
@@ -181,7 +181,7 @@ impl<R: Read> RawReader<R> {
             match seq2 {
                 'F' => Ok(KeyPress::End),
                 'H' => Ok(KeyPress::Home),
-                _ => Ok(KeyPress::UNKNOWN_ESC_SEQ),
+                _ => Ok(KeyPress::UnknownEscSeq),
             }
         } else {
             // TODO ESC-N (n): search history forward not interactively
@@ -202,7 +202,7 @@ impl<R: Read> RawReader<R> {
                 '\x7f' => Ok(KeyPress::Meta('\x7f')), // Delete
                 _ => {
                     // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
-                    Ok(KeyPress::UNKNOWN_ESC_SEQ)
+                    Ok(KeyPress::UnknownEscSeq)
                 }
             }
         }

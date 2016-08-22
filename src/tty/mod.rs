@@ -10,6 +10,7 @@ pub use self::windows::*;
 
 // If on Unix platform import Unix TTY module
 // and re-export into mod.rs scope
-#[cfg(unix)]mod unix;
+#[cfg(unix)]
+mod unix;
 #[cfg(unix)]
 pub use self::unix::*;

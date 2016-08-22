@@ -1,20 +1,22 @@
 # RustyLine
 [![Build Status](https://travis-ci.org/gwenn/rustyline.svg?branch=master)](https://travis-ci.org/gwenn/rustyline)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/gwenn/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/gwenn/rustyline)
-[![Clippy Linting Result](https://clippy.bashy.io/github/gwenn/rustyline/master/badge.svg)](https://clippy.bashy.io/github/gwenn/rustyline/master/log)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
 [Documentation](https://kkawakam.github.io/rustyline)
 
-
 **Supported Platforms**
-* Linux
-* Windows - Work in Progress (Issue #37), modifier keys do not work
+* Unix
+* Windows
+   * cmd.exe
+   * Powershell
+
+**Note**: Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
 
 ## Build
-This project uses Cargo and Rust Nightly
+This project uses Cargo and Rust nightly
 ```bash
 cargo build --release
 ```
@@ -63,7 +65,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "0.2.3"
+rustyline = "1.0.0"
 ```
 
 ## Features

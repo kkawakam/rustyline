@@ -1,8 +1,8 @@
 //! History API
 
 use std::collections::VecDeque;
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 
 use super::Result;
 

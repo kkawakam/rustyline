@@ -55,8 +55,8 @@ macro_rules! box_completer {
     }
 }
 
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 box_completer! { Box Rc Arc }
 
 pub struct FilenameCompleter {

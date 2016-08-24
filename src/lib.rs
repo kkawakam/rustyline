@@ -595,7 +595,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it and return to main loop
             if lcp.len() > s.line.pos() - start {
-                completer.update(&mut s.line, start, &lcp);
+                completer.update(&mut s.line, start, lcp);
                 try!(s.refresh_line());
                 return Ok(None);
             }

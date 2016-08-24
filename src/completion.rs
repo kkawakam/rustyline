@@ -159,6 +159,33 @@ pub fn extract_word<'l>(line: &'l str,
     }
 }
 
+pub fn longest_common_prefix(candidates: &[String]) -> Option<String> {
+    if candidates.is_empty() {
+        return None;
+    } else if candidates.len() == 1 {
+        return Some(candidates[0].clone());
+    }
+    let mut longest_common_prefix = 0;
+    'o: loop {
+        for i in 0..candidates.len() - 1 {
+            let b1 = candidates[i].as_bytes();
+            let b2 = candidates[i + 1].as_bytes();
+            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
+               b1[i] != b2[i] {
+                break 'o;
+            }
+        }
+        longest_common_prefix += 1;
+    }
+    while !candidates[0].is_char_boundary(longest_common_prefix) {
+        longest_common_prefix -= 1;
+    }
+    if longest_common_prefix == 0 {
+        return None;
+    }
+    Some(String::from(&candidates[0][0..longest_common_prefix]))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -169,5 +196,27 @@ mod tests {
         let line = "ls '/usr/local/b";
         assert_eq!((4, "/usr/local/b"),
                    super::extract_word(line, line.len(), &break_chars));
+    }
+
+    #[test]
+    pub fn longest_common_prefix() {
+        let mut candidates = vec![];
+        let lcp = super::longest_common_prefix(&candidates);
+        assert!(lcp.is_none());
+
+        let c1 = String::from("User");
+        candidates.push(c1.clone());
+        let lcp = super::longest_common_prefix(&candidates);
+        assert_eq!(Some(c1.clone()), lcp);
+
+        let c2 = String::from("Users");
+        candidates.push(c2.clone());
+        let lcp = super::longest_common_prefix(&candidates);
+        assert_eq!(Some(c1), lcp);
+
+        let c3 = String::from("");
+        candidates.push(c3.clone());
+        let lcp = super::longest_common_prefix(&candidates);
+        assert!(lcp.is_none());
     }
 }

@@ -46,7 +46,7 @@ use std::sync::atomic;
 #[cfg(unix)]
 use nix::sys::signal;
 
-use completion::Completer;
+use completion::{Completer, longest_common_prefix};
 use consts::KeyPress;
 use history::History;
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
@@ -587,8 +587,22 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
             }
         }
         Ok(Some(key))
-    } else {
+    } else if CompletionMode::List == completion_mode {
+        // beep if ambiguous
+        if candidates.len() > 1 {
+            try!(beep());
+        }
+        if let Some(lcp) = longest_common_prefix(&candidates) {
+            // if we can extend the item, extend it and return to main loop
+            if lcp.len() > s.line.pos() - start {
+                completer.update(&mut s.line, start, &lcp);
+                try!(s.refresh_line());
+                return Ok(None);
+            }
+        }
         // TODO ...
+        Ok(None)
+    } else {
         Ok(None)
     }
 }

@@ -123,7 +123,7 @@ fn filename_complete(path: &str) -> Result<Vec<String>> {
     };
 
     let mut entries: Vec<String> = Vec::new();
-    for entry in try!(fs::read_dir(dir)) {
+    for entry in try!(dir.read_dir()) {
         let entry = try!(entry);
         if let Some(s) = entry.file_name().to_str() {
             if s.starts_with(file_name) {

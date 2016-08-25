@@ -7,7 +7,8 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::<()>::new();
+//! let config = rustyline::Config::default();
+//! let mut rl = rustyline::Editor::<()>::new(config);
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -34,6 +35,7 @@ mod kill_ring;
 pub mod line_buffer;
 #[cfg(unix)]
 mod char_iter;
+pub mod config;
 
 #[macro_use]
 mod tty;
@@ -53,6 +55,7 @@ use consts::KeyPress;
 use history::History;
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::KillRing;
+pub use config::{CompletionType, Config, HistoryDuplicates};
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -85,7 +88,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let cols = tty::get_columns(output_handle);
-        let prompt_size = calculate_position(prompt, Default::default(), cols);
+        let prompt_size = calculate_position(prompt, Position::default(), cols);
         State {
             out: out,
             prompt: prompt,
@@ -116,7 +119,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = calculate_position(prompt, Default::default(), self.cols);
+        let prompt_size = calculate_position(prompt, Position::default(), self.cols);
         self.refresh(prompt, prompt_size)
     }
 
@@ -526,21 +529,11 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
     s.refresh_line()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CompletionMode {
-    /// Complete the next full match (like in Vim by default)
-    Circular,
-    /// Complete till longest match.
-    /// When more than one match, list all matches
-    /// (like in Bash/Readline).
-    List,
-}
-
 /// Completes the line/word
 fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
                           s: &mut State,
                           completer: &Completer,
-                          completion_mode: CompletionMode)
+                          completion_type: CompletionType)
                           -> Result<Option<KeyPress>> {
     // get a list of completions
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
@@ -548,7 +541,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
     if candidates.is_empty() {
         try!(beep());
         Ok(None)
-    } else if CompletionMode::Circular == completion_mode {
+    } else if CompletionType::Circular == completion_type {
         // Save the current edited line before to overwrite it
         s.backup();
         let mut key;
@@ -587,7 +580,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
             }
         }
         Ok(Some(key))
-    } else if CompletionMode::List == completion_mode {
+    } else if CompletionType::List == completion_type {
         // beep if ambiguous
         if candidates.len() > 1 {
             try!(beep());
@@ -604,7 +597,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
         let key = try!(rdr.next_key(false));
         // if any character other than tab, pass it to the main loop
         if key != KeyPress::Tab {
-            return Ok(Some(key))
+            return Ok(Some(key));
         }
         // we got a second tab, maybe show list of possible completions
         // TODO ...
@@ -726,8 +719,10 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         // autocomplete
         if key == KeyPress::Tab && completer.is_some() {
-            let next =
-                try!(complete_line(&mut rdr, &mut s, completer.unwrap(), editor.completion_mode));
+            let next = try!(complete_line(&mut rdr,
+                                          &mut s,
+                                          completer.unwrap(),
+                                          editor.config.completion_type()));
             if next.is_some() {
                 editor.kill_ring.reset();
                 key = next.unwrap();
@@ -974,19 +969,19 @@ pub struct Editor<C: Completer> {
     history: History,
     completer: Option<C>,
     kill_ring: KillRing,
-    completion_mode: CompletionMode,
+    config: Config,
 }
 
 impl<C: Completer> Editor<C> {
-    pub fn new() -> Editor<C> {
+    pub fn new(config: Config) -> Editor<C> {
         let editor = Editor {
             unsupported_term: tty::is_unsupported_term(),
             stdin_isatty: tty::is_a_tty(tty::STDIN_FILENO),
             stdout_isatty: tty::is_a_tty(tty::STDOUT_FILENO),
-            history: History::new(),
+            history: History::new(config),
             completer: None,
             kill_ring: KillRing::new(60),
-            completion_mode: CompletionMode::Circular,
+            config: config,
         };
         if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
             tty::install_sigwinch_handler();
@@ -1010,20 +1005,6 @@ impl<C: Completer> Editor<C> {
         }
     }
 
-    /// Tell if lines which match the previous history entry are saved or not in the history list.
-    /// By default, they are ignored.
-    pub fn history_ignore_dups(mut self, yes: bool) -> Editor<C> {
-        self.history.ignore_dups(yes);
-        self
-    }
-
-    /// Tell if lines which begin with a space character are saved or not in the history list.
-    /// By default, they are saved.
-    pub fn history_ignore_space(mut self, yes: bool) -> Editor<C> {
-        self.history.ignore_space(yes);
-        self
-    }
-
     /// Load the history from the specified file.
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)
@@ -1035,10 +1016,6 @@ impl<C: Completer> Editor<C> {
     /// Add a new entry in the history.
     pub fn add_history_entry(&mut self, line: &str) -> bool {
         self.history.add(line)
-    }
-    /// Set the maximum length for the history.
-    pub fn set_history_max_len(&mut self, max_len: usize) {
-        self.history.set_max_len(max_len)
     }
     /// Clear history.
     pub fn clear_history(&mut self) {
@@ -1052,17 +1029,6 @@ impl<C: Completer> Editor<C> {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<C>) {
         self.completer = completer;
-    }
-
-    /// Set completion mode.
-    pub fn set_completion_mode(&mut self, completion_mode: CompletionMode) {
-        self.completion_mode = completion_mode;
-    }
-}
-
-impl<C: Completer> Default for Editor<C> {
-    fn default() -> Editor<C> {
-        Editor::new()
     }
 }
 
@@ -1081,8 +1047,8 @@ mod test {
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
-    use CompletionMode;
-    use State;
+    use config::{Config, CompletionType};
+    use {Position, State};
     use super::Result;
     use tty::Handle;
 
@@ -1098,9 +1064,9 @@ mod test {
         State {
             out: out,
             prompt: "",
-            prompt_size: Default::default(),
+            prompt_size: Position::default(),
             line: LineBuffer::init(line, pos),
-            cursor: Default::default(),
+            cursor: Position::default(),
             cols: cols,
             old_rows: 0,
             history_index: 0,
@@ -1114,7 +1080,7 @@ mod test {
         let mut out = ::std::io::sink();
         let line = "current edited line";
         let mut s = init_state(&mut out, line, 6, 80);
-        let mut history = History::new();
+        let mut history = History::new(Config::default());
         history.add("line0");
         history.add("line1");
         s.history_index = history.len();
@@ -1164,7 +1130,7 @@ mod test {
         let input = b"\n";
         let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
-        let key = super::complete_line(&mut rdr, &mut s, &completer, CompletionMode::Circular)
+        let key = super::complete_line(&mut rdr, &mut s, &completer, CompletionType::Circular)
             .unwrap();
         assert_eq!(Some(KeyPress::Ctrl('J')), key);
         assert_eq!("rust", s.line.as_str());
@@ -1173,7 +1139,7 @@ mod test {
 
     #[test]
     fn prompt_with_ansi_escape_codes() {
-        let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Default::default(), 80);
+        let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }

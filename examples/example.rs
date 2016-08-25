@@ -2,7 +2,7 @@ extern crate rustyline;
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::{Config, Editor};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -14,8 +14,11 @@ static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 static PROMPT: &'static str = ">> ";
 
 fn main() {
+    let config = Config::builder()
+        .history_ignore_space(true)
+        .build();
     let c = FilenameCompleter::new();
-    let mut rl = Editor::new().history_ignore_space(true);
+    let mut rl = Editor::new(config);
     rl.set_completer(Some(c));
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");

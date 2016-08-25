@@ -600,6 +600,13 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
                 return Ok(None);
             }
         }
+        // we can't complete any further, wait for second tab
+        let key = try!(rdr.next_key(false));
+        // if any character other than tab, pass it to the main loop
+        if key != KeyPress::Tab {
+            return Ok(Some(key))
+        }
+        // we got a second tab, maybe show list of possible completions
         // TODO ...
         Ok(None)
     } else {

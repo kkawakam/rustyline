@@ -171,7 +171,7 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
             let b1 = candidates[i].as_bytes();
             let b2 = candidates[i + 1].as_bytes();
             if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
-               b1[i] != b2[i] {
+               b1[longest_common_prefix] != b2[longest_common_prefix] {
                 break 'o;
             }
         }
@@ -227,5 +227,9 @@ mod tests {
             let lcp = super::longest_common_prefix(&candidates);
             assert!(lcp.is_none());
         }
+
+        let candidates = vec![String::from("fée"), String::from("fête")];
+        let lcp = super::longest_common_prefix(&candidates);
+        assert_eq!(Some("f"), lcp);
     }
 }

@@ -31,6 +31,18 @@ const TIOCGWINSZ: libc::c_int = 0x5413;
 /// Try to get the number of columns in the current terminal,
 /// or assume 80 if it fails.
 pub fn get_columns(_: Handle) -> usize {
+    let (cols, _) = get_win_size();
+    cols
+}
+
+/// Try to get the number of rows in the current terminal,
+/// or assume 24 if it fails.
+pub fn get_rows(_: Handle) -> usize {
+    let (_, rows) = get_win_size();
+    rows
+}
+
+fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
     use libc::c_ushort;
 
@@ -45,8 +57,8 @@ pub fn get_columns(_: Handle) -> usize {
 
         let mut size: winsize = zeroed();
         match libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size) {
-            0 => size.ws_col as usize, // TODO getCursorPosition
-            _ => 80,
+            0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
+            _ => (80, 24),
         }
     }
 }

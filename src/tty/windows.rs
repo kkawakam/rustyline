@@ -43,22 +43,22 @@ macro_rules! check {
 /// Try to get the number of columns in the current terminal,
 /// or assume 80 if it fails.
 pub fn get_columns(handle: Handle) -> usize {
-    let (cols, _) = get_win_size();
+    let (cols, _) = get_win_size(handle);
     cols
 }
 
 /// Try to get the number of rows in the current terminal,
 /// or assume 24 if it fails.
-pub fn get_rows(_: Handle) -> usize {
-    let (_, rows) = get_win_size();
+pub fn get_rows(handle: Handle) -> usize {
+    let (_, rows) = get_win_size(handle);
     rows
 }
 
-fn get_win_size() -> (usize, usize) {
+fn get_win_size(handle: Handle) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
-        _ => (info.dwSize.X as usize, 1 + inf.srWindow.Bottom - inf.srWindow.Top),
+        _ => (info.dwSize.X as usize, 1 + info.srWindow.Bottom - info.srWindow.Top),
     }
 }
 

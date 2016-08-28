@@ -47,6 +47,10 @@ impl LineBuffer {
     pub fn pos(&self) -> usize {
         self.pos
     }
+    pub fn set_pos(&mut self, pos: usize) {
+        assert!(pos <= self.buf.len());
+        self.pos = pos;
+    }
 
     /// Returns the length of this buffer, in bytes.
     pub fn len(&self) -> usize {

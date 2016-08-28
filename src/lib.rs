@@ -533,7 +533,7 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
                           s: &mut State,
                           completer: &Completer,
-                          completion_type: CompletionType)
+                          config: &Config)
                           -> Result<Option<KeyPress>> {
     // get a list of completions
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
@@ -541,7 +541,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
     if candidates.is_empty() {
         try!(beep());
         Ok(None)
-    } else if CompletionType::Circular == completion_type {
+    } else if CompletionType::Circular == config.completion_type() {
         // Save the current edited line before to overwrite it
         s.backup();
         let mut key;
@@ -580,7 +580,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
             }
         }
         Ok(Some(key))
-    } else if CompletionType::List == completion_type {
+    } else if CompletionType::List == config.completion_type() {
         // beep if ambiguous
         if candidates.len() > 1 {
             try!(beep());
@@ -594,17 +594,48 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
             }
         }
         // we can't complete any further, wait for second tab
-        let key = try!(rdr.next_key(false));
+        let mut key = try!(rdr.next_key(false));
         // if any character other than tab, pass it to the main loop
         if key != KeyPress::Tab {
             return Ok(Some(key));
         }
         // we got a second tab, maybe show list of possible completions
-        // TODO ...
-        Ok(None)
+        let mut show_completions = true;
+        if candidates.len() > config.completion_prompt_limit() {
+            // move cursor to EOL to avoid overwriting the command line
+            let save_pos = s.line.pos();
+            try!(edit_move_end(s));
+            s.line.set_pos(save_pos);
+            let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
+            try!(write_and_flush(s.out, msg.as_bytes()));
+            s.old_rows += 1;
+            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
+                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
+                  key != KeyPress::Backspace {
+                key = try!(rdr.next_key(true));
+            }
+            show_completions = match key {
+                KeyPress::Char('y') |
+                KeyPress::Char('Y') => true,
+                _ => false,
+            };
+        }
+        if show_completions {
+            page_completions(rdr, s)
+        } else {
+            try!(s.refresh_line());
+            Ok(None)
+        }
     } else {
         Ok(None)
     }
+}
+
+fn page_completions<R: Read>(r: &mut tty::RawReader<R>,
+                                s: &mut State)
+                                -> Result<Option<KeyPress>> {
+    // TODO
+    Ok(None)
 }
 
 /// Incremental search
@@ -719,10 +750,7 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         // autocomplete
         if key == KeyPress::Tab && completer.is_some() {
-            let next = try!(complete_line(&mut rdr,
-                                          &mut s,
-                                          completer.unwrap(),
-                                          editor.config.completion_type()));
+            let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
             if next.is_some() {
                 editor.kill_ring.reset();
                 key = next.unwrap();
@@ -1047,7 +1075,7 @@ mod test {
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
-    use config::{Config, CompletionType};
+    use config::Config;
     use {Position, State};
     use super::Result;
     use tty::Handle;
@@ -1130,8 +1158,7 @@ mod test {
         let input = b"\n";
         let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
-        let key = super::complete_line(&mut rdr, &mut s, &completer, CompletionType::Circular)
-            .unwrap();
+        let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
         assert_eq!(Some(KeyPress::Ctrl('J')), key);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

@@ -58,7 +58,7 @@ fn get_win_size(handle: Handle) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
-        _ => (info.dwSize.X as usize, 1 + info.srWindow.Bottom - info.srWindow.Top),
+        _ => (info.dwSize.X as usize, (1 + info.srWindow.Bottom - info.srWindow.Top) as usize),
     }
 }
 

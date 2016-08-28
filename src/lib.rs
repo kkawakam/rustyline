@@ -599,13 +599,13 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
         if key != KeyPress::Tab {
             return Ok(Some(key));
         }
+        // move cursor to EOL to avoid overwriting the command line
+        let save_pos = s.line.pos();
+        try!(edit_move_end(s));
+        s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
         let mut show_completions = true;
         if candidates.len() > config.completion_prompt_limit() {
-            // move cursor to EOL to avoid overwriting the command line
-            let save_pos = s.line.pos();
-            try!(edit_move_end(s));
-            s.line.set_pos(save_pos);
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(write_and_flush(s.out, msg.as_bytes()));
             s.old_rows += 1;
@@ -621,7 +621,7 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
             };
         }
         if show_completions {
-            page_completions(rdr, s)
+            page_completions(rdr, s, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -631,9 +631,66 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
     }
 }
 
-fn page_completions<R: Read>(r: &mut tty::RawReader<R>,
-                                s: &mut State)
-                                -> Result<Option<KeyPress>> {
+fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
+                             s: &mut State,
+                             candidates: &[String])
+                             -> Result<Option<KeyPress>> {
+    use std::cmp;
+    use unicode_width::UnicodeWidthStr;
+
+    let min_col_pad = 2;
+    let max_width = cmp::min(s.cols,
+                             candidates.into_iter()
+                                 .map(|s| UnicodeWidthStr::width(s.as_str()))
+                                 .max()
+                                 .unwrap() + min_col_pad);
+    let num_cols = s.cols / max_width;
+
+    let mut pause_row = tty::get_rows(s.output_handle) - 1;
+    let num_rows = (candidates.len() + num_cols - 1) / num_cols;
+    let mut ab = String::new();
+    for row in 0..num_rows {
+        if row == pause_row {
+            try!(write_and_flush(s.out, b"\n--More--"));
+            let mut key = KeyPress::Null;
+            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
+                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
+                  key != KeyPress::Char('q') &&
+                  key != KeyPress::Char('Q') &&
+                  key != KeyPress::Char(' ') &&
+                  key != KeyPress::Backspace && key != KeyPress::Enter {
+                key = try!(rdr.next_key(true));
+            }
+            match key {
+                KeyPress::Char('y') |
+                KeyPress::Char('Y') |
+                KeyPress::Char(' ') => {
+                    pause_row += tty::get_rows(s.output_handle) - 1;
+                }
+                KeyPress::Enter => {
+                    pause_row += 1;
+                }
+                _ => break,
+            }
+        } else {
+            try!(write_and_flush(s.out, b"\n"));
+        }
+        ab.clear();
+        for col in 0..num_cols {
+            let i = (col * num_rows) + row;
+            if i < candidates.len() {
+                let candidate = &candidates[i];
+                ab.push_str(candidate);
+                let width = UnicodeWidthStr::width(candidate.as_str());
+                if ((col + 1) * num_rows) + row < candidates.len() {
+                    for _ in width..max_width {
+                        ab.push(' ');
+                    }
+                }
+            }
+        }
+        try!(write_and_flush(s.out, ab.as_bytes()));
+    }
     // TODO
     Ok(None)
 }

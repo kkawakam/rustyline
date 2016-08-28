@@ -40,12 +40,25 @@ macro_rules! check {
     };
 }
 
-/// Try to get the number of columns in the current terminal, or assume 80 if it fails.
+/// Try to get the number of columns in the current terminal,
+/// or assume 80 if it fails.
 pub fn get_columns(handle: Handle) -> usize {
+    let (cols, _) = get_win_size();
+    cols
+}
+
+/// Try to get the number of rows in the current terminal,
+/// or assume 24 if it fails.
+pub fn get_rows(_: Handle) -> usize {
+    let (_, rows) = get_win_size();
+    rows
+}
+
+fn get_win_size() -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
-        0 => 80,
-        _ => info.dwSize.X as usize,
+        0 => (80, 24),
+        _ => (info.dwSize.X as usize, 1 + inf.srWindow.Bottom - inf.srWindow.Top),
     }
 }
 

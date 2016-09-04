@@ -2,7 +2,7 @@ extern crate rustyline;
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::{Config, Editor};
+use rustyline::{Config, CompletionType, Editor};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -16,6 +16,7 @@ static PROMPT: &'static str = ">> ";
 fn main() {
     let config = Config::builder()
         .history_ignore_space(true)
+        .completion_type(CompletionType::List)
         .build();
     let c = FilenameCompleter::new();
     let mut rl = Editor::new(config);

@@ -672,6 +672,7 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
                 }
                 _ => break,
             }
+            try!(write_and_flush(s.out, b"\n"));
         } else {
             try!(write_and_flush(s.out, b"\n"));
         }
@@ -691,7 +692,8 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
         }
         try!(write_and_flush(s.out, ab.as_bytes()));
     }
-    // TODO
+    try!(write_and_flush(s.out, b"\n"));
+    try!(s.refresh_line());
     Ok(None)
 }
 

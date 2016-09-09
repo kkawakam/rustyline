@@ -12,10 +12,9 @@ use consts::{self, KeyPress};
 use ::Result;
 use ::error;
 
-pub type Handle = ();
 pub type Mode = termios::Termios;
-pub const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
-pub const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
+const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
+const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
@@ -31,14 +30,14 @@ const TIOCGWINSZ: libc::c_int = 0x5413;
 
 /// Try to get the number of columns in the current terminal,
 /// or assume 80 if it fails.
-pub fn get_columns(_: Handle) -> usize {
+fn get_columns() -> usize {
     let (cols, _) = get_win_size();
     cols
 }
 
 /// Try to get the number of rows in the current terminal,
 /// or assume 24 if it fails.
-pub fn get_rows(_: Handle) -> usize {
+fn get_rows() -> usize {
     let (_, rows) = get_win_size();
     rows
 }
@@ -66,7 +65,7 @@ fn get_win_size() -> (usize, usize) {
 
 /// Check TERM environment variable to see if current term is in our
 /// unsupported list
-pub fn is_unsupported_term() -> bool {
+fn is_unsupported_term() -> bool {
     use std::ascii::AsciiExt;
     match std::env::var("TERM") {
         Ok(term) => {
@@ -82,11 +81,10 @@ pub fn is_unsupported_term() -> bool {
 
 
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
-pub fn is_a_tty(fd: libc::c_int) -> bool {
+fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
-/// Enable raw mode for the TERM
 pub fn enable_raw_mode() -> Result<Mode> {
     use nix::errno::Errno::ENOTTY;
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
@@ -110,18 +108,12 @@ pub fn enable_raw_mode() -> Result<Mode> {
     Ok(original_mode)
 }
 
-/// Disable Raw mode for the term
 pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
     try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
     Ok(())
 }
 
-pub fn stdout_handle() -> Result<Handle> {
-    Ok(())
-}
-
-/// Clear the screen. Used to handle ctrl+l
-pub fn clear_screen(w: &mut Write, _: Handle) -> Result<()> {
+fn clear_screen(w: &mut Write) -> Result<()> {
     try!(w.write_all(b"\x1b[H\x1b[2J"));
     try!(w.flush());
     Ok(())
@@ -222,9 +214,9 @@ impl<R: Read> RawReader<R> {
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
-pub static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
-pub fn install_sigwinch_handler() {
+fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
                                               signal::SaFlag::empty(),
@@ -235,4 +227,80 @@ pub fn install_sigwinch_handler() {
 
 extern "C" fn sigwinch_handler(_: signal::SigNum) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
+}
+
+pub type Terminal = PosixTerminal;
+
+#[derive(Debug)]
+pub struct PosixTerminal {
+    unsupported: bool,
+    stdin_isatty: bool,
+}
+
+impl PosixTerminal {
+    pub fn new() -> PosixTerminal {
+        let term = PosixTerminal {
+            unsupported: is_unsupported_term(),
+            stdin_isatty: is_a_tty(STDIN_FILENO),
+        };
+        if !term.unsupported && term.stdin_isatty && is_a_tty(STDOUT_FILENO) {
+            install_sigwinch_handler();
+        }
+        term
+    }
+
+    // Init checks:
+
+    /// Check if current terminal can provide a rich line-editing user interface.
+    pub fn is_unsupported(&self) -> bool {
+        self.unsupported
+    }
+
+    /// check if stdin is connected to a terminal.
+    pub fn is_stdin_tty(&self) -> bool {
+        self.stdin_isatty
+    }
+
+    // Init if terminal-style mode:
+
+    // pub fn load_capabilities(&mut self) -> Result<()> {
+    // Ok(())
+    // }
+
+    // Interactive loop:
+
+    /// Enable RAW mode for the terminal.
+    pub fn enable_raw_mode(&mut self) -> Result<Mode> {
+        enable_raw_mode()
+    }
+
+    /// Disable RAW mode for the terminal.
+    pub fn disable_raw_mode(&mut self, mode: Mode) -> Result<()> {
+        disable_raw_mode(mode)
+    }
+
+    /// Get the number of columns in the current terminal.
+    pub fn get_columns(&self) -> usize {
+        get_columns()
+    }
+
+    /// Get the number of rows in the current terminal.
+    pub fn get_rows(&self) -> usize {
+        get_rows()
+    }
+
+    /// Create a RAW reader
+    pub fn create_reader(&self) -> Result<RawReader<std::io::Stdin>> {
+        RawReader::new(std::io::stdin())
+    }
+
+    /// Check if a SIGWINCH signal has been received
+    pub fn sigwinch(&self) -> bool {
+        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+    }
+
+    /// Clear the screen. Used to handle ctrl+l
+    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
+        clear_screen(w)
+    }
 }

@@ -36,17 +36,18 @@ mod kill_ring;
 pub mod line_buffer;
 pub mod config;
 
-#[macro_use]
 mod tty;
 
+use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
+use std::rc::Rc;
 use std::result;
-use std::sync::atomic;
 #[cfg(unix)]
 use nix::sys::signal;
+use tty::Terminal;
 
 use completion::{Completer, longest_common_prefix};
 use consts::KeyPress;
@@ -69,7 +70,7 @@ struct State<'out, 'prompt> {
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
-    output_handle: tty::Handle, // output handle (for windows)
+    term: Rc<RefCell<Terminal>>, // terminal
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -80,12 +81,12 @@ struct Position {
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(out: &'out mut Write,
-           output_handle: tty::Handle,
+           term: Rc<RefCell<Terminal>>,
            prompt: &'prompt str,
            history_index: usize)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
-        let cols = tty::get_columns(output_handle);
+        let cols = term.borrow().get_columns();
         let prompt_size = calculate_position(prompt, Position::default(), cols);
         State {
             out: out,
@@ -97,7 +98,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             old_rows: prompt_size.row,
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
-            output_handle: output_handle,
+            term: term,
         }
     }
 
@@ -173,24 +174,21 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     #[cfg(windows)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
-        let handle = self.output_handle;
         // calculate the position of the end of the input line
         let end_pos = calculate_position(&self.line, prompt_size, self.cols);
         // calculate the desired position of the cursor
         let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
+        let mut term = self.term.borrow_mut();
         // position at the start of the prompt, clear to end of previous input
-        let mut info = unsafe { mem::zeroed() };
-        check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+        let mut info = try!(term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= self.cursor.row as i16;
-        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
+        try!(term.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
-        check!(kernel32::FillConsoleOutputCharacterA(handle,
-                                                 ' ' as winapi::CHAR,
-                                                 (info.dwSize.X * (self.old_rows as i16 +1)) as winapi::DWORD,
-                                                 info.dwCursorPosition,
-                                                 &mut _count));
+        try!(term.fill_console_output_character(
+                                                 (info.dwSize.X * (self.old_rows as i16 +1)) as u32,
+                                                 info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -199,10 +197,10 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         try!(write_and_flush(self.out, ab.as_bytes()));
 
         // position the cursor
-        check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+        let mut info = try!(term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = cursor.col as i16;
         info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        check!(kernel32::SetConsoleCursorPosition(handle, info.dwCursorPosition));
+        try!(term.set_console_cursor_position(info.dwCursorPosition));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
@@ -211,7 +209,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn update_columns(&mut self) {
-        self.cols = tty::get_columns(self.output_handle);
+        self.cols = self.term.borrow().get_columns();
     }
 }
 
@@ -646,7 +644,7 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
                                  .unwrap() + min_col_pad);
     let num_cols = s.cols / max_width;
 
-    let mut pause_row = tty::get_rows(s.output_handle) - 1;
+    let mut pause_row = s.term.borrow().get_rows() - 1;
     let num_rows = (candidates.len() + num_cols - 1) / num_cols;
     let mut ab = String::new();
     for row in 0..num_rows {
@@ -665,7 +663,7 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
                 KeyPress::Char('y') |
                 KeyPress::Char('Y') |
                 KeyPress::Char(' ') => {
-                    pause_row += tty::get_rows(s.output_handle) - 1;
+                    pause_row += s.term.borrow().get_rows() - 1;
                 }
                 KeyPress::Enter => {
                     pause_row += 1;
@@ -785,17 +783,16 @@ fn readline_edit<C: Completer>(prompt: &str,
     let completer = editor.completer.as_ref().map(|c| c as &Completer);
 
     let mut stdout = io::stdout();
-    let stdout_handle = try!(tty::stdout_handle());
 
     editor.kill_ring.reset();
-    let mut s = State::new(&mut stdout, stdout_handle, prompt, editor.history.len());
+    let mut s = State::new(&mut stdout, editor.term.clone(), prompt, editor.history.len());
     try!(s.refresh_line());
 
-    let mut rdr = try!(tty::RawReader::new(io::stdin()));
+    let mut rdr = try!(s.term.borrow().create_reader());
 
     loop {
         let rk = rdr.next_key(true);
-        if rk.is_err() && tty::SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst) {
+        if rk.is_err() && s.term.borrow().sigwinch() {
             s.update_columns();
             try!(s.refresh_line());
             continue;
@@ -884,7 +881,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             KeyPress::Ctrl('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(tty::clear_screen(&mut s.out, s.output_handle));
+                try!(s.term.borrow_mut().clear_screen(&mut s.out));
                 try!(s.refresh_line())
             }
             KeyPress::Ctrl('N') |
@@ -931,9 +928,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
-                try!(tty::disable_raw_mode(original_mode));
+                try!(s.term.borrow_mut().disable_raw_mode(original_mode));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
+                try!(s.term.borrow_mut().enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -1050,9 +1047,7 @@ fn readline_direct() -> Result<String> {
 
 /// Line editor
 pub struct Editor<C: Completer> {
-    unsupported_term: bool,
-    stdin_isatty: bool,
-    stdout_isatty: bool,
+    term: Rc<RefCell<Terminal>>,
     history: History,
     completer: Option<C>,
     kill_ring: KillRing,
@@ -1061,30 +1056,25 @@ pub struct Editor<C: Completer> {
 
 impl<C: Completer> Editor<C> {
     pub fn new(config: Config) -> Editor<C> {
-        let editor = Editor {
-            unsupported_term: tty::is_unsupported_term(),
-            stdin_isatty: tty::is_a_tty(tty::STDIN_FILENO),
-            stdout_isatty: tty::is_a_tty(tty::STDOUT_FILENO),
+        let term = Rc::new(RefCell::new(Terminal::new()));
+        Editor {
+            term: term,
             history: History::new(config),
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
-        };
-        if !editor.unsupported_term && editor.stdin_isatty && editor.stdout_isatty {
-            tty::install_sigwinch_handler();
         }
-        editor
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        if self.unsupported_term {
+        if self.term.borrow().is_unsupported() {
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
             readline_direct()
-        } else if !self.stdin_isatty {
+        } else if !self.term.borrow().is_stdin_tty() {
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {
@@ -1121,33 +1111,32 @@ impl<C: Completer> Editor<C> {
 
 impl<C: Completer> fmt::Debug for Editor<C> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("State")
-            .field("unsupported_term", &self.unsupported_term)
-            .field("stdin_isatty", &self.stdin_isatty)
+        f.debug_struct("Editor")
+            .field("term", &self.term)
+            .field("config", &self.config)
             .finish()
     }
 }
 
 #[cfg(all(unix,test))]
 mod test {
+    use std::cell::RefCell;
     use std::io::Write;
+    use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
     use config::Config;
     use {Position, State};
     use super::Result;
-    use tty::Handle;
-
-    fn default_handle() -> Handle {
-        ()
-    }
+    use tty::Terminal;
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
                         pos: usize,
                         cols: usize)
                         -> State<'out, 'static> {
+        let term = Rc::new(RefCell::new(Terminal::new()));
         State {
             out: out,
             prompt: "",
@@ -1158,7 +1147,7 @@ mod test {
             old_rows: 0,
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
-            output_handle: default_handle(),
+            term: term,
         }
     }
 

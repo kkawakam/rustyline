@@ -2,7 +2,6 @@
 
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope
-#[macro_use]
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]

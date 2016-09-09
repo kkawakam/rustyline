@@ -11,10 +11,9 @@ use consts::{self, KeyPress};
 use ::error;
 use ::Result;
 
-pub type Handle = winapi::HANDLE;
 pub type Mode = winapi::DWORD;
-pub const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
-pub const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
+const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
+const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
 
 fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
     let handle = unsafe { kernel32::GetStdHandle(fd) };
@@ -40,31 +39,22 @@ macro_rules! check {
     };
 }
 
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-pub fn get_columns(handle: Handle) -> usize {
+fn get_columns(handle: winapi::HANDLE) -> usize {
     let (cols, _) = get_win_size(handle);
     cols
 }
 
-/// Try to get the number of rows in the current terminal,
-/// or assume 24 if it fails.
-pub fn get_rows(handle: Handle) -> usize {
+fn get_rows(handle: winapi::HANDLE) -> usize {
     let (_, rows) = get_win_size(handle);
     rows
 }
 
-fn get_win_size(handle: Handle) -> (usize, usize) {
+fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
         _ => (info.dwSize.X as usize, (1 + info.srWindow.Bottom - info.srWindow.Top) as usize),
     }
-}
-
-/// Checking for an unsupported TERM in windows is a no-op
-pub fn is_unsupported_term() -> bool {
-    false
 }
 
 fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
@@ -74,7 +64,7 @@ fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
 }
 
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
-pub fn is_a_tty(fd: winapi::DWORD) -> bool {
+fn is_a_tty(fd: winapi::DWORD) -> bool {
     let handle = get_std_handle(fd);
     match handle {
         Ok(handle) => {
@@ -85,7 +75,6 @@ pub fn is_a_tty(fd: winapi::DWORD) -> bool {
     }
 }
 
-/// Enable raw mode for the TERM
 pub fn enable_raw_mode() -> Result<Mode> {
     let handle = try!(get_std_handle(STDIN_FILENO));
     let original_mode = try!(get_console_mode(handle));
@@ -102,20 +91,14 @@ pub fn enable_raw_mode() -> Result<Mode> {
     Ok(original_mode)
 }
 
-/// Disable Raw mode for the term
 pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
     let handle = try!(get_std_handle(STDIN_FILENO));
     check!(kernel32::SetConsoleMode(handle, original_mode));
     Ok(())
 }
 
-pub fn stdout_handle() -> Result<Handle> {
-    let handle = try!(get_std_handle(STDOUT_FILENO));
-    Ok(handle)
-}
-
 /// Clear the screen. Used to handle ctrl+l
-pub fn clear_screen(_: &mut Write, handle: Handle) -> Result<()> {
+fn clear_screen(_: &mut Write, handle: winapi::HANDLE) -> Result<()> {
     let mut info = unsafe { mem::zeroed() };
     check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
     let coord = winapi::COORD { X: 0, Y: 0 };
@@ -236,8 +219,95 @@ impl<R: Read> Iterator for RawReader<R> {
     }
 }
 
-pub static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
-pub fn install_sigwinch_handler() {
+pub type Terminal = Console;
+
+#[derive(Debug)]
+pub struct Console {
+    stdin_isatty: bool,
+    stdout_handle: winapi::HANDLE,
+}
+
+impl Console {
+    pub fn new() -> Console {
+        use std::ptr;
+        let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
+        Console {
+            stdin_isatty: is_a_tty(STDIN_FILENO),
+            stdout_handle: stdout_handle,
+        }
+    }
+
+    /// Checking for an unsupported TERM in windows is a no-op
+    pub fn is_unsupported(&self) -> bool {
+        false
+    }
+
+    pub fn is_stdin_tty(&self) -> bool {
+        self.stdin_isatty
+    }
+
+    // pub fn install_sigwinch_handler(&mut self) {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
+    // }
+
+    pub fn load_capabilities(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Enable raw mode for the TERM
+    pub fn enable_raw_mode(&mut self) -> Result<Mode> {
+        enable_raw_mode()
+    }
+
+    /// Disable Raw mode for the term
+    pub fn disable_raw_mode(&mut self, mode: Mode) -> Result<()> {
+        disable_raw_mode(mode)
+    }
+
+    /// Try to get the number of columns in the current terminal,
+    /// or assume 80 if it fails.
+    pub fn get_columns(&self) -> usize {
+        get_columns(self.stdout_handle)
+    }
+
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
+    pub fn get_rows(&self) -> usize {
+        get_rows(self.stdout_handle)
+    }
+
+    pub fn create_reader(&self) -> Result<RawReader<io::Stdin>> {
+        RawReader::new(io::stdin()) // FIXME
+    }
+
+    pub fn sigwinch(&self) -> bool {
+        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+    }
+
+    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
+        clear_screen(w, self.stdout_handle)
+    }
+
+    pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
+        let mut info = unsafe { mem::zeroed() };
+        check!(kernel32::GetConsoleScreenBufferInfo(self.stdout_handle, &mut info));
+        Ok(info)
+    }
+
+    pub fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
+        check!(kernel32::SetConsoleCursorPosition(self.stdout_handle, pos));
+        Ok(())
+    }
+
+    pub fn fill_console_output_character(&mut self, length: winapi::DWORD, pos: winapi::COORD) -> Result<()> {
+        let mut _count = 0;
+        check!(kernel32::FillConsoleOutputCharacterA(self.stdout_handle,
+                                                 ' ' as winapi::CHAR,
+                                                 length,
+                                                 pos,
+                                                 &mut _count));
+        Ok(())
+    }
 }

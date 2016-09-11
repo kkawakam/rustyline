@@ -50,9 +50,9 @@ use nix::sys::signal;
 use encode_unicode::CharExt;
 use completion::Completer;
 use consts::KeyPress;
-use history::History;
+use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use kill_ring::KillRing;
+use kill_ring::{Mode, KillRing};
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -590,7 +590,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
 
     let mut search_buf = String::new();
     let mut history_idx = history.len() - 1;
-    let mut reverse = true;
+    let mut direction = Direction::Reverse;
     let mut success = true;
 
     let mut key;
@@ -614,7 +614,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
                     continue;
                 }
                 KeyPress::Ctrl('R') => {
-                    reverse = true;
+                    direction = Direction::Reverse;
                     if history_idx > 0 {
                         history_idx -= 1;
                     } else {
@@ -623,7 +623,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
                     }
                 }
                 KeyPress::Ctrl('S') => {
-                    reverse = false;
+                    direction = Direction::Forward;
                     if history_idx < history.len() - 1 {
                         history_idx += 1;
                     } else {
@@ -640,7 +640,7 @@ fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
                 _ => break,
             }
         }
-        success = match history.search(&search_buf, history_idx, reverse) {
+        success = match history.search(&search_buf, history_idx, direction) {
             Some(idx) => {
                 history_idx = idx;
                 let entry = history.get(idx).unwrap();
@@ -759,7 +759,7 @@ fn readline_edit(prompt: &str,
             KeyPress::Ctrl('K') => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
-                    kill_ring.kill(&text, true)
+                    kill_ring.kill(&text, Mode::Append)
                 }
             }
             KeyPress::Ctrl('L') => {
@@ -787,7 +787,7 @@ fn readline_edit(prompt: &str,
             KeyPress::Ctrl('U') => {
                 // Kill backward from point to the beginning of the line.
                 if let Some(text) = try!(edit_discard_line(&mut s)) {
-                    kill_ring.kill(&text, false)
+                    kill_ring.kill(&text, Mode::Prepend)
                 }
             }
             #[cfg(unix)]
@@ -800,7 +800,7 @@ fn readline_edit(prompt: &str,
             KeyPress::Ctrl('W') => {
                 // Kill the word behind point, using white space as a word boundary
                 if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
-                    kill_ring.kill(&text, false)
+                    kill_ring.kill(&text, Mode::Prepend)
                 }
             }
             KeyPress::Ctrl('Y') => {
@@ -830,7 +830,7 @@ fn readline_edit(prompt: &str,
                 // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
                 if let Some(text) = try!(edit_delete_prev_word(&mut s,
                                                                |ch| !ch.is_alphanumeric())) {
-                    kill_ring.kill(&text, false)
+                    kill_ring.kill(&text, Mode::Prepend)
                 }
             }
             KeyPress::Meta('<') => {
@@ -856,7 +856,7 @@ fn readline_edit(prompt: &str,
             KeyPress::Meta('D') => {
                 // kill one word forward
                 if let Some(text) = try!(edit_delete_word(&mut s)) {
-                    kill_ring.kill(&text, true)
+                    kill_ring.kill(&text, Mode::Append)
                 }
             }
             KeyPress::Meta('F') => {

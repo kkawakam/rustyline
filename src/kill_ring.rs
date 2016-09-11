@@ -7,6 +7,12 @@ enum Action {
     Other,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    Append,
+    Prepend,
+}
+
 pub struct KillRing {
     slots: Vec<String>,
     index: usize,
@@ -29,20 +35,19 @@ impl KillRing {
     }
 
     /// Add `text` to the kill-ring.
-    pub fn kill(&mut self, text: &str, forward: bool) {
+    pub fn kill(&mut self, text: &str, dir: Mode) {
         match self.last_action {
             Action::Kill => {
                 if self.slots.capacity() == 0 {
                     // disabled
                     return;
                 }
-                if forward {
-                    // append
-                    self.slots[self.index].push_str(text);
-                } else {
-                    // prepend
-                    self.slots[self.index] = String::from(text) + &self.slots[self.index];
-                }
+                match dir {
+                    Mode::Append => self.slots[self.index].push_str(text),
+                    Mode::Prepend => {
+                        self.slots[self.index] = String::from(text) + &self.slots[self.index]
+                    }
+                };
             }
             _ => {
                 self.last_action = Action::Kill;
@@ -99,12 +104,12 @@ impl KillRing {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, KillRing};
+    use super::{Action, Mode, KillRing};
 
     #[test]
     fn disabled() {
         let mut kill_ring = KillRing::new(0);
-        kill_ring.kill("text", true);
+        kill_ring.kill("text", Mode::Append);
         assert!(kill_ring.slots.is_empty());
         assert_eq!(0, kill_ring.index);
         assert_eq!(Action::Kill, kill_ring.last_action);
@@ -116,7 +121,7 @@ mod tests {
     #[test]
     fn one_kill() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
+        kill_ring.kill("word1", Mode::Append);
         assert_eq!(0, kill_ring.index);
         assert_eq!(1, kill_ring.slots.len());
         assert_eq!("word1", kill_ring.slots[0]);
@@ -124,10 +129,10 @@ mod tests {
     }
 
     #[test]
-    fn kill_kill_forward() {
+    fn kill_append() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
-        kill_ring.kill(" word2", true);
+        kill_ring.kill("word1", Mode::Append);
+        kill_ring.kill(" word2", Mode::Append);
         assert_eq!(0, kill_ring.index);
         assert_eq!(1, kill_ring.slots.len());
         assert_eq!("word1 word2", kill_ring.slots[0]);
@@ -135,10 +140,10 @@ mod tests {
     }
 
     #[test]
-    fn kill_kill_backward() {
+    fn kill_backward() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", false);
-        kill_ring.kill("word2 ", false);
+        kill_ring.kill("word1", Mode::Prepend);
+        kill_ring.kill("word2 ", Mode::Prepend);
         assert_eq!(0, kill_ring.index);
         assert_eq!(1, kill_ring.slots.len());
         assert_eq!("word2 word1", kill_ring.slots[0]);
@@ -148,9 +153,9 @@ mod tests {
     #[test]
     fn kill_other_kill() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
+        kill_ring.kill("word1", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("word2", true);
+        kill_ring.kill("word2", Mode::Append);
         assert_eq!(1, kill_ring.index);
         assert_eq!(2, kill_ring.slots.len());
         assert_eq!("word1", kill_ring.slots[0]);
@@ -161,13 +166,13 @@ mod tests {
     #[test]
     fn many_kill() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
+        kill_ring.kill("word1", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("word2", true);
+        kill_ring.kill("word2", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("word3", true);
+        kill_ring.kill("word3", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("word4", true);
+        kill_ring.kill("word4", Mode::Append);
         assert_eq!(1, kill_ring.index);
         assert_eq!(2, kill_ring.slots.len());
         assert_eq!("word3", kill_ring.slots[0]);
@@ -178,9 +183,9 @@ mod tests {
     #[test]
     fn yank() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
+        kill_ring.kill("word1", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("word2", true);
+        kill_ring.kill("word2", Mode::Append);
 
         assert_eq!(Some(&"word2".to_string()), kill_ring.yank());
         assert_eq!(Action::Yank(5), kill_ring.last_action);
@@ -191,9 +196,9 @@ mod tests {
     #[test]
     fn yank_pop() {
         let mut kill_ring = KillRing::new(2);
-        kill_ring.kill("word1", true);
+        kill_ring.kill("word1", Mode::Append);
         kill_ring.reset();
-        kill_ring.kill("longword2", true);
+        kill_ring.kill("longword2", Mode::Append);
 
         assert_eq!(None, kill_ring.yank_pop());
         kill_ring.yank();

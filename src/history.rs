@@ -7,6 +7,12 @@ use std::path::Path;
 use super::Result;
 use config::{Config, HistoryDuplicates};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Forward,
+    Reverse,
+}
+
 pub struct History {
     entries: VecDeque<String>,
     max_len: usize,
@@ -118,20 +124,23 @@ impl History {
     /// Return the absolute index of the nearest history entry that matches `term`.
     /// Return None if no entry contains `term` between [start, len -1] for forward search
     /// or between [0, start] for reverse search.
-    pub fn search(&self, term: &str, start: usize, reverse: bool) -> Option<usize> {
+    pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
         if term.is_empty() || start >= self.len() {
             return None;
         }
-        if reverse {
-            let index = self.entries
-                .iter()
-                .rev()
-                .skip(self.entries.len() - 1 - start)
-                .position(|entry| entry.contains(term));
-            index.and_then(|index| Some(start - index))
-        } else {
-            let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));
-            index.and_then(|index| Some(index + start))
+        match dir {
+            Direction::Reverse => {
+                let index = self.entries
+                    .iter()
+                    .rev()
+                    .skip(self.entries.len() - 1 - start)
+                    .position(|entry| entry.contains(term));
+                index.and_then(|index| Some(start - index))
+            }
+            Direction::Forward => {
+                let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));
+                index.and_then(|index| Some(index + start))
+            }
         }
     }
 }
@@ -141,9 +150,10 @@ mod tests {
     extern crate tempdir;
     use std::path::Path;
     use config::Config;
+    use super::{Direction, History};
 
-    fn init() -> super::History {
-        let mut history = super::History::new(Config::default());
+    fn init() -> History {
+        let mut history = History::new(Config::default());
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
@@ -153,7 +163,7 @@ mod tests {
     #[test]
     fn new() {
         let config = Config::default();
-        let history = super::History::new(config);
+        let history = History::new(config);
         assert_eq!(config.max_history_size(), history.max_len);
         assert_eq!(0, history.entries.len());
     }
@@ -163,7 +173,7 @@ mod tests {
         let config = Config::builder()
             .history_ignore_space(true)
             .build();
-        let mut history = super::History::new(config);
+        let mut history = History::new(config);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));
@@ -193,24 +203,24 @@ mod tests {
     #[test]
     fn search() {
         let history = init();
-        assert_eq!(None, history.search("", 0, false));
-        assert_eq!(None, history.search("none", 0, false));
-        assert_eq!(None, history.search("line", 3, false));
+        assert_eq!(None, history.search("", 0, Direction::Forward));
+        assert_eq!(None, history.search("none", 0, Direction::Forward));
+        assert_eq!(None, history.search("line", 3, Direction::Forward));
 
-        assert_eq!(Some(0), history.search("line", 0, false));
-        assert_eq!(Some(1), history.search("line", 1, false));
-        assert_eq!(Some(2), history.search("line3", 1, false));
+        assert_eq!(Some(0), history.search("line", 0, Direction::Forward));
+        assert_eq!(Some(1), history.search("line", 1, Direction::Forward));
+        assert_eq!(Some(2), history.search("line3", 1, Direction::Forward));
     }
 
     #[test]
     fn reverse_search() {
         let history = init();
-        assert_eq!(None, history.search("", 2, true));
-        assert_eq!(None, history.search("none", 2, true));
-        assert_eq!(None, history.search("line", 3, true));
+        assert_eq!(None, history.search("", 2, Direction::Reverse));
+        assert_eq!(None, history.search("none", 2, Direction::Reverse));
+        assert_eq!(None, history.search("line", 3, Direction::Reverse));
 
-        assert_eq!(Some(2), history.search("line", 2, true));
-        assert_eq!(Some(1), history.search("line", 1, true));
-        assert_eq!(Some(0), history.search("line1", 1, true));
+        assert_eq!(Some(2), history.search("line", 2, Direction::Reverse));
+        assert_eq!(Some(1), history.search("line", 1, Direction::Reverse));
+        assert_eq!(Some(0), history.search("line1", 1, Direction::Reverse));
     }
 }

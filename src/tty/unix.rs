@@ -1,5 +1,8 @@
 use std;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::rc::Rc;
 use std::sync;
 use std::sync::atomic;
 use libc;
@@ -85,6 +88,7 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
+/// Enable RAW mode for the terminal.
 pub fn enable_raw_mode() -> Result<Mode> {
     use nix::errno::Errno::ENOTTY;
     use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
@@ -108,6 +112,7 @@ pub fn enable_raw_mode() -> Result<Mode> {
     Ok(original_mode)
 }
 
+/// Disable RAW mode for the terminal.
 pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
     try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
     Ok(())
@@ -122,11 +127,17 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 /// Console input reader
 pub struct RawReader<R> {
     chars: char_iter::Chars<R>,
+    terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>,
 }
 
 impl<R: Read> RawReader<R> {
-    pub fn new(stdin: R) -> Result<RawReader<R>> {
-        Ok(RawReader { chars: char_iter::chars(stdin) })
+    pub fn new(stdin: R,
+               terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>)
+               -> Result<RawReader<R>> {
+        Ok(RawReader {
+            chars: char_iter::chars(stdin),
+            terminfo_keys: terminfo_keys,
+        })
     }
 
     // As there is no read timeout to properly handle single ESC key,
@@ -231,22 +242,25 @@ extern "C" fn sigwinch_handler(_: signal::SigNum) {
 
 pub type Terminal = PosixTerminal;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
+    terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>,
 }
 
 impl PosixTerminal {
-    pub fn new() -> PosixTerminal {
-        let term = PosixTerminal {
+    pub fn new() -> Result<PosixTerminal> {
+        let mut term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
+            terminfo_keys: Rc::new(RefCell::new(HashMap::new())),
         };
         if !term.unsupported && term.stdin_isatty && is_a_tty(STDOUT_FILENO) {
             install_sigwinch_handler();
+            try!(term.load_capabilities());
         }
-        term
+        Ok(term)
     }
 
     // Init checks:
@@ -263,21 +277,17 @@ impl PosixTerminal {
 
     // Init if terminal-style mode:
 
-    // pub fn load_capabilities(&mut self) -> Result<()> {
-    // Ok(())
-    // }
+    fn load_capabilities(&mut self) -> Result<()> {
+        use term::terminfo::TermInfo;
+        let term_info = try!(TermInfo::from_env());
+        let mut terminfo_keys = self.terminfo_keys.borrow_mut();
+        for (key, val) in term_info.strings.into_iter() {
+            terminfo_keys.insert(val.clone(), key.clone());
+        }
+        Ok(())
+    }
 
     // Interactive loop:
-
-    /// Enable RAW mode for the terminal.
-    pub fn enable_raw_mode(&mut self) -> Result<Mode> {
-        enable_raw_mode()
-    }
-
-    /// Disable RAW mode for the terminal.
-    pub fn disable_raw_mode(&mut self, mode: Mode) -> Result<()> {
-        disable_raw_mode(mode)
-    }
 
     /// Get the number of columns in the current terminal.
     pub fn get_columns(&self) -> usize {
@@ -291,7 +301,7 @@ impl PosixTerminal {
 
     /// Create a RAW reader
     pub fn create_reader(&self) -> Result<RawReader<std::io::Stdin>> {
-        RawReader::new(std::io::stdin())
+        RawReader::new(std::io::stdin(), self.terminfo_keys.clone())
     }
 
     /// Check if a SIGWINCH signal has been received

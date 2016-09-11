@@ -8,7 +8,7 @@
 //!
 //! ```
 //! let config = rustyline::Config::default();
-//! let mut rl = rustyline::Editor::<()>::new(config);
+//! let mut rl = rustyline::Editor::<()>::new(config).expect("Cannot create line editor");
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -20,6 +20,8 @@
 extern crate libc;
 #[cfg(unix)]
 extern crate nix;
+#[cfg(unix)]
+extern crate term;
 extern crate unicode_width;
 extern crate encode_unicode;
 #[cfg(windows)]
@@ -39,12 +41,10 @@ pub mod config;
 
 mod tty;
 
-use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::mem;
 use std::path::Path;
-use std::rc::Rc;
 use std::result;
 #[cfg(unix)]
 use nix::sys::signal;
@@ -72,7 +72,7 @@ struct State<'out, 'prompt> {
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
-    term: Rc<RefCell<Terminal>>, // terminal
+    term: Terminal, // terminal
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -83,12 +83,12 @@ struct Position {
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(out: &'out mut Write,
-           term: Rc<RefCell<Terminal>>,
+           term: Terminal,
            prompt: &'prompt str,
            history_index: usize)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
-        let cols = term.borrow().get_columns();
+        let cols = term.get_columns();
         let prompt_size = calculate_position(prompt, Position::default(), cols);
         State {
             out: out,
@@ -181,16 +181,15 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         // calculate the desired position of the cursor
         let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
 
-        let mut term = self.term.borrow_mut();
         // position at the start of the prompt, clear to end of previous input
-        let mut info = try!(term.get_console_screen_buffer_info());
+        let mut info = try!(self.term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= self.cursor.row as i16;
-        try!(term.set_console_cursor_position(info.dwCursorPosition));
+        try!(self.term.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
-        try!(term.fill_console_output_character(
-                                                 (info.dwSize.X * (self.old_rows as i16 +1)) as u32,
-                                                 info.dwCursorPosition));
+        try!(self.term
+            .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as u32,
+                                           info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -199,10 +198,10 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         try!(write_and_flush(self.out, ab.as_bytes()));
 
         // position the cursor
-        let mut info = try!(term.get_console_screen_buffer_info());
+        let mut info = try!(self.term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = cursor.col as i16;
         info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        try!(term.set_console_cursor_position(info.dwCursorPosition));
+        try!(self.term.set_console_cursor_position(info.dwCursorPosition));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
@@ -211,7 +210,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn update_columns(&mut self) {
-        self.cols = self.term.borrow().get_columns();
+        self.cols = self.term.get_columns();
     }
 }
 
@@ -644,7 +643,7 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
                                  .unwrap() + min_col_pad);
     let num_cols = s.cols / max_width;
 
-    let mut pause_row = s.term.borrow().get_rows() - 1;
+    let mut pause_row = s.term.get_rows() - 1;
     let num_rows = (candidates.len() + num_cols - 1) / num_cols;
     let mut ab = String::new();
     for row in 0..num_rows {
@@ -663,7 +662,7 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
                 KeyPress::Char('y') |
                 KeyPress::Char('Y') |
                 KeyPress::Char(' ') => {
-                    pause_row += s.term.borrow().get_rows() - 1;
+                    pause_row += s.term.get_rows() - 1;
                 }
                 KeyPress::Enter => {
                     pause_row += 1;
@@ -785,14 +784,17 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut stdout = io::stdout();
 
     editor.kill_ring.reset();
-    let mut s = State::new(&mut stdout, editor.term.clone(), prompt, editor.history.len());
+    let mut s = State::new(&mut stdout,
+                           editor.term.clone(),
+                           prompt,
+                           editor.history.len());
     try!(s.refresh_line());
 
-    let mut rdr = try!(s.term.borrow().create_reader());
+    let mut rdr = try!(s.term.create_reader());
 
     loop {
         let rk = rdr.next_key(true);
-        if rk.is_err() && s.term.borrow().sigwinch() {
+        if rk.is_err() && s.term.sigwinch() {
             s.update_columns();
             try!(s.refresh_line());
             continue;
@@ -881,7 +883,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             KeyPress::Ctrl('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(s.term.borrow_mut().clear_screen(&mut s.out));
+                try!(s.term.clear_screen(&mut s.out));
                 try!(s.refresh_line())
             }
             KeyPress::Ctrl('N') |
@@ -928,9 +930,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
-                try!(s.term.borrow_mut().disable_raw_mode(original_mode));
+                try!(tty::disable_raw_mode(original_mode));
                 try!(signal::raise(signal::SIGSTOP));
-                try!(s.term.borrow_mut().enable_raw_mode()); // TODO original_mode may have changed
+                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -1047,7 +1049,7 @@ fn readline_direct() -> Result<String> {
 
 /// Line editor
 pub struct Editor<C: Completer> {
-    term: Rc<RefCell<Terminal>>,
+    term: Terminal,
     history: History,
     completer: Option<C>,
     kill_ring: KillRing,
@@ -1055,26 +1057,26 @@ pub struct Editor<C: Completer> {
 }
 
 impl<C: Completer> Editor<C> {
-    pub fn new(config: Config) -> Editor<C> {
-        let term = Rc::new(RefCell::new(Terminal::new()));
-        Editor {
+    pub fn new(config: Config) -> Result<Editor<C>> {
+        let term = try!(Terminal::new());
+        Ok(Editor {
             term: term,
             history: History::new(config),
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
-        }
+        })
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        if self.term.borrow().is_unsupported() {
+        if self.term.is_unsupported() {
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
             readline_direct()
-        } else if !self.term.borrow().is_stdin_tty() {
+        } else if !self.term.is_stdin_tty() {
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {
@@ -1121,6 +1123,7 @@ impl<C: Completer> fmt::Debug for Editor<C> {
 #[cfg(all(unix,test))]
 mod test {
     use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::io::Write;
     use std::rc::Rc;
     use line_buffer::LineBuffer;
@@ -1136,7 +1139,7 @@ mod test {
                         pos: usize,
                         cols: usize)
                         -> State<'out, 'static> {
-        let term = Rc::new(RefCell::new(Terminal::new()));
+        let term = Terminal::new().unwrap();
         State {
             out: out,
             prompt: "",
@@ -1204,7 +1207,8 @@ mod test {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let mut rdr = RawReader::new(&input[..]).unwrap();
+        let terminfo_keys = Rc::new(RefCell::new(HashMap::new()));
+        let mut rdr = RawReader::new(&input[..], terminfo_keys).unwrap();
         let completer = SimpleCompleter;
         let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
         assert_eq!(Some(KeyPress::Ctrl('J')), key);

@@ -75,6 +75,7 @@ fn is_a_tty(fd: winapi::DWORD) -> bool {
     }
 }
 
+/// Enable raw mode for the TERM
 pub fn enable_raw_mode() -> Result<Mode> {
     let handle = try!(get_std_handle(STDIN_FILENO));
     let original_mode = try!(get_console_mode(handle));
@@ -91,6 +92,7 @@ pub fn enable_raw_mode() -> Result<Mode> {
     Ok(original_mode)
 }
 
+/// Disable Raw mode for the term
 pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
     let handle = try!(get_std_handle(STDIN_FILENO));
     check!(kernel32::SetConsoleMode(handle, original_mode));
@@ -223,20 +225,20 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
 pub type Terminal = Console;
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Console {
     stdin_isatty: bool,
     stdout_handle: winapi::HANDLE,
 }
 
 impl Console {
-    pub fn new() -> Console {
+    pub fn new() -> Result<Console> {
         use std::ptr;
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
-        Console {
+        Ok(Console {
             stdin_isatty: is_a_tty(STDIN_FILENO),
             stdout_handle: stdout_handle,
-        }
+        })
     }
 
     /// Checking for an unsupported TERM in windows is a no-op
@@ -251,20 +253,6 @@ impl Console {
     // pub fn install_sigwinch_handler(&mut self) {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
     // }
-
-    pub fn load_capabilities(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    /// Enable raw mode for the TERM
-    pub fn enable_raw_mode(&mut self) -> Result<Mode> {
-        enable_raw_mode()
-    }
-
-    /// Disable Raw mode for the term
-    pub fn disable_raw_mode(&mut self, mode: Mode) -> Result<()> {
-        disable_raw_mode(mode)
-    }
 
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
@@ -301,13 +289,16 @@ impl Console {
         Ok(())
     }
 
-    pub fn fill_console_output_character(&mut self, length: winapi::DWORD, pos: winapi::COORD) -> Result<()> {
+    pub fn fill_console_output_character(&mut self,
+                                         length: winapi::DWORD,
+                                         pos: winapi::COORD)
+                                         -> Result<()> {
         let mut _count = 0;
         check!(kernel32::FillConsoleOutputCharacterA(self.stdout_handle,
-                                                 ' ' as winapi::CHAR,
-                                                 length,
-                                                 pos,
-                                                 &mut _count));
+                                                     ' ' as winapi::CHAR,
+                                                     length,
+                                                     pos,
+                                                     &mut _count));
         Ok(())
     }
 }

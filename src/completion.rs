@@ -56,8 +56,8 @@ macro_rules! box_completer {
     }
 }
 
-use std::sync::Arc;
 use std::rc::Rc;
+use std::sync::Arc;
 box_completer! { Box Rc Arc }
 
 pub struct FilenameCompleter {
@@ -176,7 +176,7 @@ fn filename_complete(path: &str,
     };
 
     let mut entries: Vec<String> = Vec::new();
-    for entry in try!(fs::read_dir(dir)) {
+    for entry in try!(dir.read_dir()) {
         let entry = try!(entry);
         if let Some(s) = entry.file_name().to_str() {
             if s.starts_with(file_name) {
@@ -229,6 +229,33 @@ pub fn extract_word<'l>(line: &'l str,
     }
 }
 
+pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
+    if candidates.is_empty() {
+        return None;
+    } else if candidates.len() == 1 {
+        return Some(&candidates[0]);
+    }
+    let mut longest_common_prefix = 0;
+    'o: loop {
+        for i in 0..candidates.len() - 1 {
+            let b1 = candidates[i].as_bytes();
+            let b2 = candidates[i + 1].as_bytes();
+            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
+               b1[longest_common_prefix] != b2[longest_common_prefix] {
+                break 'o;
+            }
+        }
+        longest_common_prefix += 1;
+    }
+    while !candidates[0].is_char_boundary(longest_common_prefix) {
+        longest_common_prefix -= 1;
+    }
+    if longest_common_prefix == 0 {
+        return None;
+    }
+    Some(&candidates[0][0..longest_common_prefix])
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -263,5 +290,40 @@ mod tests {
         let input = String::from("/User Information");
         let result = String::from("/User\\ Information");
         assert_eq!(result, super::escape(input, Some('\\'), &break_chars));
+    }
+
+    #[test]
+    pub fn longest_common_prefix() {
+        let mut candidates = vec![];
+        {
+            let lcp = super::longest_common_prefix(&candidates);
+            assert!(lcp.is_none());
+        }
+
+        let s = "User";
+        let c1 = String::from(s);
+        candidates.push(c1.clone());
+        {
+            let lcp = super::longest_common_prefix(&candidates);
+            assert_eq!(Some(s), lcp);
+        }
+
+        let c2 = String::from("Users");
+        candidates.push(c2.clone());
+        {
+            let lcp = super::longest_common_prefix(&candidates);
+            assert_eq!(Some(s), lcp);
+        }
+
+        let c3 = String::from("");
+        candidates.push(c3.clone());
+        {
+            let lcp = super::longest_common_prefix(&candidates);
+            assert!(lcp.is_none());
+        }
+
+        let candidates = vec![String::from("fée"), String::from("fête")];
+        let lcp = super::longest_common_prefix(&candidates);
+        assert_eq!(Some("f"), lcp);
     }
 }

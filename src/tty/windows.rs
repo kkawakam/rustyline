@@ -232,13 +232,13 @@ pub struct Console {
 }
 
 impl Console {
-    pub fn new() -> Result<Console> {
+    pub fn new() -> Console {
         use std::ptr;
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
-        Ok(Console {
+        Console {
             stdin_isatty: is_a_tty(STDIN_FILENO),
             stdout_handle: stdout_handle,
-        })
+        }
     }
 
     /// Checking for an unsupported TERM in windows is a no-op

@@ -19,7 +19,7 @@ fn main() {
         .completion_type(CompletionType::List)
         .build();
     let c = FilenameCompleter::new();
-    let mut rl = Editor::new(config).expect("Cannot create line editor");
+    let mut rl = Editor::new(config);
     rl.set_completer(Some(c));
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");

@@ -1,8 +1,5 @@
 use std;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::io::{Chars, Read, Write};
-use std::rc::Rc;
 use std::sync;
 use std::sync::atomic;
 use libc;
@@ -126,17 +123,11 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 /// Console input reader
 pub struct RawReader<R> {
     chars: Chars<R>,
-    terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>,
 }
 
 impl<R: Read> RawReader<R> {
-    pub fn new(stdin: R,
-               terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>)
-               -> Result<RawReader<R>> {
-        Ok(RawReader {
-            chars: stdin.chars(),
-            terminfo_keys: terminfo_keys,
-        })
+    pub fn new(stdin: R) -> Result<RawReader<R>> {
+        Ok(RawReader { chars: stdin.chars() })
     }
 
     // As there is no read timeout to properly handle single ESC key,
@@ -170,9 +161,13 @@ impl<R: Read> RawReader<R> {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     match seq2 {
+                        // '1' => Ok(KeyPress::Home),
                         '3' => Ok(KeyPress::Delete),
-                        // TODO '1' // Home
-                        // TODO '4' // End
+                        // '4' => Ok(KeyPress::End),
+                        '5' => Ok(KeyPress::PageUp),
+                        '6' => Ok(KeyPress::PageDown),
+                        '7' => Ok(KeyPress::Home),
+                        '8' => Ok(KeyPress::End),
                         _ => Ok(KeyPress::UnknownEscSeq),
                     }
                 } else {
@@ -180,7 +175,7 @@ impl<R: Read> RawReader<R> {
                 }
             } else {
                 match seq2 {
-                    'A' => Ok(KeyPress::Up),
+                    'A' => Ok(KeyPress::Up), // ANSI
                     'B' => Ok(KeyPress::Down),
                     'C' => Ok(KeyPress::Right),
                     'D' => Ok(KeyPress::Left),
@@ -193,6 +188,10 @@ impl<R: Read> RawReader<R> {
             // ESC O sequences.
             let seq2 = try!(self.next_char());
             match seq2 {
+                'A' => Ok(KeyPress::Up),
+                'B' => Ok(KeyPress::Down),
+                'C' => Ok(KeyPress::Right),
+                'D' => Ok(KeyPress::Left),
                 'F' => Ok(KeyPress::End),
                 'H' => Ok(KeyPress::Home),
                 _ => Ok(KeyPress::UnknownEscSeq),
@@ -245,21 +244,18 @@ pub type Terminal = PosixTerminal;
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
-    terminfo_keys: Rc<RefCell<HashMap<Vec<u8>, String>>>,
 }
 
 impl PosixTerminal {
-    pub fn new() -> Result<PosixTerminal> {
-        let mut term = PosixTerminal {
+    pub fn new() -> PosixTerminal {
+        let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
-            terminfo_keys: Rc::new(RefCell::new(HashMap::new())),
         };
         if !term.unsupported && term.stdin_isatty && is_a_tty(STDOUT_FILENO) {
             install_sigwinch_handler();
-            try!(term.load_capabilities());
         }
-        Ok(term)
+        term
     }
 
     // Init checks:
@@ -272,18 +268,6 @@ impl PosixTerminal {
     /// check if stdin is connected to a terminal.
     pub fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
-    }
-
-    // Init if terminal-style mode:
-
-    fn load_capabilities(&mut self) -> Result<()> {
-        use term::terminfo::TermInfo;
-        let term_info = try!(TermInfo::from_env());
-        let mut terminfo_keys = self.terminfo_keys.borrow_mut();
-        for (key, val) in term_info.strings.into_iter() {
-            terminfo_keys.insert(val.clone(), key.clone());
-        }
-        Ok(())
     }
 
     // Interactive loop:
@@ -300,7 +284,7 @@ impl PosixTerminal {
 
     /// Create a RAW reader
     pub fn create_reader(&self) -> Result<RawReader<std::io::Stdin>> {
-        RawReader::new(std::io::stdin(), self.terminfo_keys.clone())
+        RawReader::new(std::io::stdin())
     }
 
     /// Check if a SIGWINCH signal has been received

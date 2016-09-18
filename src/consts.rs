@@ -14,6 +14,8 @@ pub enum KeyPress {
     Left,
     Meta(char),
     Null,
+    PageDown,
+    PageUp,
     Right,
     Tab, // Ctrl('I')
     Up,
@@ -33,12 +35,12 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x05' => KeyPress::Ctrl('E'),
         '\x06' => KeyPress::Ctrl('F'),
         '\x07' => KeyPress::Ctrl('G'),
-        '\x08' => KeyPress::Backspace,
+        '\x08' => KeyPress::Backspace, // '\b'
         '\x09' => KeyPress::Tab,
-        '\x0a' => KeyPress::Ctrl('J'),
+        '\x0a' => KeyPress::Ctrl('J'), // '\n' (10)
         '\x0b' => KeyPress::Ctrl('K'),
         '\x0c' => KeyPress::Ctrl('L'),
-        '\x0d' => KeyPress::Enter,
+        '\x0d' => KeyPress::Enter, // '\r' (13)
         '\x0e' => KeyPress::Ctrl('N'),
         '\x10' => KeyPress::Ctrl('P'),
         '\x12' => KeyPress::Ctrl('R'),

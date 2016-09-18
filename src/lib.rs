@@ -8,7 +8,7 @@
 //!
 //! ```
 //! let config = rustyline::Config::default();
-//! let mut rl = rustyline::Editor::<()>::new(config).expect("Cannot create line editor");
+//! let mut rl = rustyline::Editor::<()>::new(config);
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -22,8 +22,6 @@
 extern crate libc;
 #[cfg(unix)]
 extern crate nix;
-#[cfg(unix)]
-extern crate term;
 extern crate unicode_width;
 #[cfg(windows)]
 extern crate winapi;
@@ -1057,15 +1055,15 @@ pub struct Editor<C: Completer> {
 }
 
 impl<C: Completer> Editor<C> {
-    pub fn new(config: Config) -> Result<Editor<C>> {
-        let term = try!(Terminal::new());
-        Ok(Editor {
+    pub fn new(config: Config) -> Editor<C> {
+        let term = Terminal::new();
+        Editor {
             term: term,
             history: History::new(config),
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
-        })
+        }
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
@@ -1122,10 +1120,7 @@ impl<C: Completer> fmt::Debug for Editor<C> {
 
 #[cfg(all(unix,test))]
 mod test {
-    use std::cell::RefCell;
-    use std::collections::HashMap;
     use std::io::Write;
-    use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
@@ -1139,7 +1134,7 @@ mod test {
                         pos: usize,
                         cols: usize)
                         -> State<'out, 'static> {
-        let term = Terminal::new().unwrap();
+        let term = Terminal::new();
         State {
             out: out,
             prompt: "",
@@ -1207,8 +1202,7 @@ mod test {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
         let input = b"\n";
-        let terminfo_keys = Rc::new(RefCell::new(HashMap::new()));
-        let mut rdr = RawReader::new(&input[..], terminfo_keys).unwrap();
+        let mut rdr = RawReader::new(&input[..]).unwrap();
         let completer = SimpleCompleter;
         let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
         assert_eq!(Some(KeyPress::Ctrl('J')), key);

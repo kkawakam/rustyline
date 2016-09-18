@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn kill_kill_Append() {
+    fn kill_kill_append() {
         let mut kill_ring = KillRing::new(2);
         kill_ring.kill("word1", Mode::Append);
         kill_ring.kill(" word2", Mode::Append);

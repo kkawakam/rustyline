@@ -235,13 +235,13 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlag::empty(),
+                                              signal::SaFlags::empty(),
                                               signal::SigSet::empty());
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
 
-extern "C" fn sigwinch_handler(_: signal::SigNum) {
+extern "C" fn sigwinch_handler(_: libc::c_int) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }
 

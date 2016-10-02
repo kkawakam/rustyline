@@ -69,6 +69,7 @@ struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
     term: Terminal, // terminal
+    byte_buffer: [u8; 4]
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -97,6 +98,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
+            byte_buffer: [0; 4],
         }
     }
 
@@ -298,8 +300,8 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
                 s.cursor = cursor;
-                let bits = ch.encode_utf8();
-                let bits = bits.as_slice();
+                let bits = ch.encode_utf8(&mut s.byte_buffer);
+                let bits = bits.as_bytes();
                 write_and_flush(s.out, bits)
             } else {
                 s.refresh_line()

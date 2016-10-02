@@ -69,7 +69,7 @@ struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
     term: Terminal, // terminal
-    byte_buffer: [u8; 4]
+    byte_buffer: [u8; 4],
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -1148,6 +1148,7 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
+            byte_buffer: [0; 4],
         }
     }
 

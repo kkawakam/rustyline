@@ -1,10 +1,11 @@
 //! History API
 
 use std::collections::VecDeque;
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 
 use super::Result;
+use config::{Config, HistoryDuplicates};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -19,28 +20,14 @@ pub struct History {
     ignore_dups: bool,
 }
 
-const DEFAULT_HISTORY_MAX_LEN: usize = 100;
-
 impl History {
-    pub fn new() -> History {
+    pub fn new(config: Config) -> History {
         History {
             entries: VecDeque::new(),
-            max_len: DEFAULT_HISTORY_MAX_LEN,
-            ignore_space: false,
-            ignore_dups: true,
+            max_len: config.max_history_size(),
+            ignore_space: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+            ignore_dups: config.history_ignore_space(),
         }
-    }
-
-    /// Tell if lines which begin with a space character are saved or not in the history list.
-    /// By default, they are saved.
-    pub fn ignore_space(&mut self, yes: bool) {
-        self.ignore_space = yes;
-    }
-
-    /// Tell if lines which match the previous history entry are saved or not in the history list.
-    /// By default, they are ignored.
-    pub fn ignore_dups(&mut self, yes: bool) {
-        self.ignore_dups = yes;
     }
 
     /// Return the history entry at position `index`, starting from 0.
@@ -115,6 +102,9 @@ impl History {
     }
 
     /// Load the history from the specified file.
+    ///
+    /// # Failure
+    /// Will return `Err` if path does not already exist.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
@@ -156,20 +146,15 @@ impl History {
     }
 }
 
-impl Default for History {
-    fn default() -> History {
-        History::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     extern crate tempdir;
     use std::path::Path;
     use super::{Direction, History};
+    use config::Config;
 
-    fn init() -> History {
-        let mut history = History::new();
+    fn init() -> super::History {
+        let mut history = History::new(Config::default());
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
@@ -178,15 +163,18 @@ mod tests {
 
     #[test]
     fn new() {
-        let history = History::new();
-        assert_eq!(super::DEFAULT_HISTORY_MAX_LEN, history.max_len);
+        let config = Config::default();
+        let history = History::new(config);
+        assert_eq!(config.max_history_size(), history.max_len);
         assert_eq!(0, history.entries.len());
     }
 
     #[test]
     fn add() {
-        let mut history = History::new();
-        history.ignore_space(true);
+        let config = Config::builder()
+            .history_ignore_space(true)
+            .build();
+        let mut history = History::new(config);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));

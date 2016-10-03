@@ -96,6 +96,9 @@ impl History {
     }
 
     /// Load the history from the specified file.
+    ///
+    /// # Failure
+    /// Will return `Err` if path does not already exist.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 

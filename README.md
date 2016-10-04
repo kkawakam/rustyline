@@ -6,7 +6,8 @@
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
-[Documentation](https://docs.rs/rustyline)
+[Documentation (Releases)](https://docs.rs/rustyline)
+[Documentation (Master)](https://kkawakam.github.io/rustyline/rustyline/)
 
 **Supported Platforms**
 * Linux

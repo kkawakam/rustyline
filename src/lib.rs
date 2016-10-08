@@ -1109,6 +1109,25 @@ impl<C: Completer> Editor<C> {
     pub fn set_completer(&mut self, completer: Option<C>) {
         self.completer = completer;
     }
+
+    /// ```
+    /// let config = rustyline::Config::default();
+    /// let mut rl = rustyline::Editor::<()>::new(config);
+    /// for readline in rl.iter("> ") {
+    ///     match readline {
+    ///         Ok(line) => {
+    ///             println!("Line: {}", line);
+    ///         },
+    ///         Err(err) => {
+    ///             println!("Error: {:?}", err);
+    ///             break
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<C> {
+        Iter { editor: self,  prompt: prompt }
+    }
 }
 
 impl<C: Completer> fmt::Debug for Editor<C> {
@@ -1117,6 +1136,27 @@ impl<C: Completer> fmt::Debug for Editor<C> {
             .field("term", &self.term)
             .field("config", &self.config)
             .finish()
+    }
+}
+
+pub struct Iter<'a, C: Completer> where C: 'a {
+    editor: &'a mut Editor<C>,
+    prompt: &'a str,
+}
+
+impl<'a, C: Completer> Iterator for Iter<'a, C> {
+    type Item = Result<String>;
+
+    fn next(&mut self) -> Option<Result<String>> {
+        let readline = self.editor.readline(self.prompt);
+        match readline {
+            Ok(l) => {
+                self.editor.add_history_entry(&l); // TODO Validate
+                Some(Ok(l))
+            },
+            Err(error::ReadlineError::Eof) => None,
+            e @ Err(_) => Some(e),
+        }
     }
 }
 

@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn kill_kill_append() {
+    fn kill_append() {
         let mut kill_ring = KillRing::new(2);
         kill_ring.kill("word1", Mode::Append);
         kill_ring.kill(" word2", Mode::Append);
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn kill_kill_backward() {
+    fn kill_backward() {
         let mut kill_ring = KillRing::new(2);
         kill_ring.kill("word1", Mode::Prepend);
         kill_ring.kill("word2 ", Mode::Prepend);

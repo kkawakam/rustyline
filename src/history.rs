@@ -1,7 +1,10 @@
 //! History API
 
 use std::collections::VecDeque;
+use std::collections::vec_deque;
 use std::fs::File;
+use std::iter::DoubleEndedIterator;
+use std::ops::Index;
 use std::path::Path;
 
 use super::Result;
@@ -13,6 +16,7 @@ pub enum Direction {
     Reverse,
 }
 
+/// Current state of the history.
 pub struct History {
     entries: VecDeque<String>,
     max_len: usize,
@@ -33,6 +37,11 @@ impl History {
     /// Return the history entry at position `index`, starting from 0.
     pub fn get(&self, index: usize) -> Option<&String> {
         self.entries.get(index)
+    }
+
+    /// Return the last history entry (i.e. previous command)
+    pub fn last(&self) -> Option<&String> {
+        self.entries.back()
     }
 
     /// Add a new entry in the history.
@@ -144,6 +153,49 @@ impl History {
             }
         }
     }
+
+    /// Return a forward iterator.
+    pub fn iter(&self) -> Iter {
+        Iter(self.entries.iter())
+    }
+}
+
+impl Index<usize> for History {
+    type Output = String;
+
+    fn index(&self, index: usize) -> &String {
+        &self.entries[index]
+    }
+}
+
+impl<'a> IntoIterator for &'a History {
+    type Item = &'a String;
+    type IntoIter = Iter<'a>;
+
+    fn into_iter(self) -> Iter<'a> {
+        self.iter()
+    }
+}
+
+/// History iterator.
+pub struct Iter<'a>(vec_deque::Iter<'a, String>);
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a String;
+
+    fn next(&mut self) -> Option<&'a String> {
+        self.0.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl<'a> DoubleEndedIterator for Iter<'a> {
+    fn next_back(&mut self) -> Option<&'a String> {
+        self.0.next_back()
+    }
 }
 
 #[cfg(test)]
@@ -187,7 +239,7 @@ mod tests {
         let mut history = init();
         history.set_max_len(1);
         assert_eq!(1, history.entries.len());
-        assert_eq!(Some(&"line3".to_string()), history.entries.back());
+        assert_eq!(Some(&"line3".to_string()), history.last());
     }
 
     #[test]

@@ -117,7 +117,6 @@ Meta-BackSpace | Kill from the start of the current word, or, if between words, 
 
 ## ToDo
 
- - Show completion list
  - Undos
  - Read input with timeout to properly handle single ESC key
  - expose an API callable from C
@@ -135,6 +134,7 @@ $ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/examp
 ## Similar projects
 
  - [copperline](https://github.com/srijs/rust-copperline) (Rust)
+ - [linefeed](https://github.com/murarth/linefeed) (Rust)
  - [liner](https://github.com/MovingtoMars/liner) (Rust)
  - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
  - [liner](https://github.com/peterh/liner) (Go)

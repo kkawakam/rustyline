@@ -1093,7 +1093,7 @@ impl<C: Completer> Editor<C> {
         self.history.save(path)
     }
     /// Add a new entry in the history.
-    pub fn add_history_entry(&mut self, line: &str) -> bool {
+    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         self.history.add(line)
     }
     /// Clear history.
@@ -1126,7 +1126,10 @@ impl<C: Completer> Editor<C> {
     /// }
     /// ```
     pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<C> {
-        Iter { editor: self,  prompt: prompt }
+        Iter {
+            editor: self,
+            prompt: prompt,
+        }
     }
 }
 
@@ -1139,7 +1142,9 @@ impl<C: Completer> fmt::Debug for Editor<C> {
     }
 }
 
-pub struct Iter<'a, C: Completer> where C: 'a {
+pub struct Iter<'a, C: Completer>
+    where C: 'a
+{
     editor: &'a mut Editor<C>,
     prompt: &'a str,
 }
@@ -1151,9 +1156,9 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
         let readline = self.editor.readline(self.prompt);
         match readline {
             Ok(l) => {
-                self.editor.add_history_entry(&l); // TODO Validate
+                self.editor.add_history_entry(l.as_ref()); // TODO Validate
                 Some(Ok(l))
-            },
+            }
             Err(error::ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }

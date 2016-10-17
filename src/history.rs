@@ -36,17 +36,17 @@ impl History {
     }
 
     /// Add a new entry in the history.
-    pub fn add(&mut self, line: &str) -> bool {
+    pub fn add<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         if self.max_len == 0 {
             return false;
         }
-        if line.is_empty() ||
-           (self.ignore_space && line.chars().next().map_or(true, |c| c.is_whitespace())) {
+        if line.as_ref().is_empty() ||
+           (self.ignore_space && line.as_ref().chars().next().map_or(true, |c| c.is_whitespace())) {
             return false;
         }
         if self.ignore_dups {
             if let Some(s) = self.entries.back() {
-                if s == line {
+                if s == line.as_ref() {
                     return false;
                 }
             }
@@ -54,7 +54,7 @@ impl History {
         if self.entries.len() == self.max_len {
             self.entries.pop_front();
         }
-        self.entries.push_back(String::from(line));
+        self.entries.push_back(line.into());
         true
     }
 

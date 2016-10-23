@@ -10,6 +10,7 @@ use nix::sys::termios;
 use consts::{self, KeyPress};
 use ::Result;
 use ::error;
+use super::RawReader;
 
 pub type Mode = termios::Termios;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
@@ -121,33 +122,13 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 }
 
 /// Console input reader
-pub struct RawReader<R> {
+pub struct PosixRawReader<R> {
     chars: Chars<R>,
 }
 
-impl<R: Read> RawReader<R> {
-    pub fn new(stdin: R) -> Result<RawReader<R>> {
-        Ok(RawReader { chars: stdin.chars() })
-    }
-
-    // As there is no read timeout to properly handle single ESC key,
-    // we make possible to deactivate escape sequence processing.
-    pub fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
-        let c = try!(self.next_char());
-
-        let mut key = consts::char_to_key_press(c);
-        if esc_seq && key == KeyPress::Esc {
-            // escape sequence
-            key = try!(self.escape_sequence());
-        }
-        Ok(key)
-    }
-
-    pub fn next_char(&mut self) -> Result<char> {
-        match self.chars.next() {
-            Some(c) => Ok(try!(c)),
-            None => Err(error::ReadlineError::Eof),
-        }
+impl<R: Read> PosixRawReader<R> {
+    pub fn new(stdin: R) -> Result<PosixRawReader<R>> {
+        Ok(PosixRawReader { chars: stdin.chars() })
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
@@ -222,6 +203,29 @@ impl<R: Read> RawReader<R> {
     }
 }
 
+impl<R: Read> RawReader for PosixRawReader<R> {
+    // As there is no read timeout to properly handle single ESC key,
+    // we make possible to deactivate escape sequence processing.
+    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
+        let c = try!(self.next_char());
+
+        let mut key = consts::char_to_key_press(c);
+        if esc_seq && key == KeyPress::Esc {
+            // escape sequence
+            key = try!(self.escape_sequence());
+        }
+        Ok(key)
+    }
+
+    fn next_char(&mut self) -> Result<char> {
+        match self.chars.next() {
+            Some(c) => Ok(try!(c)),
+            None => Err(error::ReadlineError::Eof),
+        }
+    }
+}
+
+
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
@@ -283,8 +287,8 @@ impl PosixTerminal {
     }
 
     /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<RawReader<std::io::Stdin>> {
-        RawReader::new(std::io::stdin())
+    pub fn create_reader(&self) -> Result<PosixRawReader<std::io::Stdin>> {
+        PosixRawReader::new(std::io::stdin())
     }
 
     /// Check if a SIGWINCH signal has been received

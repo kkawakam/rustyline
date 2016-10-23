@@ -1,6 +1,5 @@
 use std::io;
-use std::io::{Read, Write};
-use std::marker::PhantomData;
+use std::io::Write;
 use std::mem;
 use std::sync::atomic;
 
@@ -10,6 +9,7 @@ use winapi;
 use consts::{self, KeyPress};
 use ::error;
 use ::Result;
+use super::RawReader;
 
 pub type Mode = winapi::DWORD;
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
@@ -100,9 +100,7 @@ pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
 }
 
 /// Clear the screen. Used to handle ctrl+l
-fn clear_screen(_: &mut Write, handle: winapi::HANDLE) -> Result<()> {
-    let mut info = unsafe { mem::zeroed() };
-    check!(kernel32::GetConsoleScreenBufferInfo(handle, &mut info));
+fn clear_screen(info: winapi::CONSOLE_SCREEN_BUFFER_INFO, handle: winapi::HANDLE) -> Result<()> {
     let coord = winapi::COORD { X: 0, Y: 0 };
     check!(kernel32::SetConsoleCursorPosition(handle, coord));
     let mut _count = 0;
@@ -116,23 +114,23 @@ fn clear_screen(_: &mut Write, handle: winapi::HANDLE) -> Result<()> {
 }
 
 /// Console input reader
-pub struct RawReader<R> {
+pub struct ConsoleRawReader {
     handle: winapi::HANDLE,
     buf: Option<u16>,
-    phantom: PhantomData<R>,
 }
 
-impl<R: Read> RawReader<R> {
-    pub fn new(_: R) -> Result<RawReader<R>> {
+impl ConsoleRawReader {
+    pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(RawReader {
+        Ok(ConsoleRawReader {
             handle: handle,
             buf: None,
-            phantom: PhantomData,
         })
     }
+}
 
-    pub fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+impl RawReader for ConsoleRawReader {
+    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
         // use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
         use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};
@@ -178,6 +176,8 @@ impl<R: Read> RawReader<R> {
                     winapi::VK_DELETE => return Ok(KeyPress::Delete),
                     winapi::VK_HOME => return Ok(KeyPress::Home),
                     winapi::VK_END => return Ok(KeyPress::End),
+                    winapi::VK_PRIOR => return Ok(KeyPress::PageUp),
+                    winapi::VK_NEXT => return Ok(KeyPress::PageDown),
                     _ => continue,
                 };
             } else if utf16 == 27 {
@@ -211,7 +211,7 @@ impl<R: Read> RawReader<R> {
     }
 }
 
-impl<R: Read> Iterator for RawReader<R> {
+impl Iterator for ConsoleRawReader {
     type Item = u16;
 
     fn next(&mut self) -> Option<u16> {
@@ -266,16 +266,17 @@ impl Console {
         get_rows(self.stdout_handle)
     }
 
-    pub fn create_reader(&self) -> Result<RawReader<io::Stdin>> {
-        RawReader::new(io::stdin()) // FIXME
+    pub fn create_reader(&self) -> Result<ConsoleRawReader> {
+        ConsoleRawReader::new()
     }
 
     pub fn sigwinch(&self) -> bool {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }
 
-    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
-        clear_screen(w, self.stdout_handle)
+    pub fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
+        let info = try!(self.get_console_screen_buffer_info());
+        clear_screen(info, self.stdout_handle)
     }
 
     pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {

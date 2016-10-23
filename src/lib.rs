@@ -40,13 +40,13 @@ pub mod config;
 mod tty;
 
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
 #[cfg(unix)]
 use nix::sys::signal;
-use tty::Terminal;
+use tty::{RawReader, Terminal};
 
 use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
@@ -525,11 +525,11 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
-                          s: &mut State,
-                          completer: &Completer,
-                          config: &Config)
-                          -> Result<Option<KeyPress>> {
+fn complete_line<R: RawReader>(rdr: &mut R,
+                               s: &mut State,
+                               completer: &Completer,
+                               config: &Config)
+                               -> Result<Option<KeyPress>> {
     // get a list of completions
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     // if no completions, we are done
@@ -626,10 +626,10 @@ fn complete_line<R: Read>(rdr: &mut tty::RawReader<R>,
     }
 }
 
-fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
-                             s: &mut State,
-                             candidates: &[String])
-                             -> Result<Option<KeyPress>> {
+fn page_completions<R: RawReader>(rdr: &mut R,
+                                  s: &mut State,
+                                  candidates: &[String])
+                                  -> Result<Option<KeyPress>> {
     use std::cmp;
     use unicode_width::UnicodeWidthStr;
 
@@ -693,10 +693,10 @@ fn page_completions<R: Read>(rdr: &mut tty::RawReader<R>,
 }
 
 /// Incremental search
-fn reverse_incremental_search<R: Read>(rdr: &mut tty::RawReader<R>,
-                                       s: &mut State,
-                                       history: &History)
-                                       -> Result<Option<KeyPress>> {
+fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
+                                            s: &mut State,
+                                            history: &History)
+                                            -> Result<Option<KeyPress>> {
     if history.is_empty() {
         return Ok(None);
     }
@@ -1121,13 +1121,16 @@ impl<C: Completer> fmt::Debug for Editor<C> {
 #[cfg(all(unix,test))]
 mod test {
     use std::io::Write;
+    use std::slice::Iter;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
     use config::Config;
+    use consts::KeyPress;
+    use error::ReadlineError;
     use {Position, State};
     use super::Result;
-    use tty::Terminal;
+    use tty::{RawReader, Terminal};
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1194,18 +1197,27 @@ mod test {
         }
     }
 
+    impl<'a> RawReader for Iter<'a, KeyPress> {
+        fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+            match self.next() {
+                Some(key) => Ok(*key),
+                None => Err(ReadlineError::Eof),
+            }
+        }
+        fn next_char(&mut self) -> Result<char> {
+            unimplemented!();
+        }
+    }
+
     #[test]
     fn complete_line() {
-        use consts::KeyPress;
-        use tty::RawReader;
-
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
-        let input = b"\n";
-        let mut rdr = RawReader::new(&input[..]).unwrap();
+        let keys = &[KeyPress::Enter];
+        let mut rdr = keys.iter();
         let completer = SimpleCompleter;
         let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
-        assert_eq!(Some(KeyPress::Ctrl('J')), key);
+        assert_eq!(Some(KeyPress::Enter), key);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }

@@ -124,12 +124,12 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 }
 
 /// Console input reader
-pub struct PosixRawReader<R> {
-    chars: char_iter::Chars<R>,
+pub struct PosixRawReader {
+    chars: char_iter::Chars<std::io::Stdin>,
 }
 
-impl<R: Read> PosixRawReader<R> {
-    pub fn new(stdin: R) -> Result<PosixRawReader<R>> {
+impl PosixRawReader {
+    pub fn new(stdin: std::io::Stdin) -> Result<PosixRawReader> {
         Ok(PosixRawReader { chars: char_iter::chars(stdin) })
     }
 
@@ -205,7 +205,7 @@ impl<R: Read> PosixRawReader<R> {
     }
 }
 
-impl<R: Read> RawReader for PosixRawReader<R> {
+impl RawReader for PosixRawReader {
     // As there is no read timeout to properly handle single ESC key,
     // we make possible to deactivate escape sequence processing.
     fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
@@ -289,7 +289,7 @@ impl PosixTerminal {
     }
 
     /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader<std::io::Stdin>> {
+    pub fn create_reader(&self) -> Result<PosixRawReader> {
         PosixRawReader::new(std::io::stdin())
     }
 

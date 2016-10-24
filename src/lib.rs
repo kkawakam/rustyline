@@ -1091,7 +1091,7 @@ impl<C: Completer> Editor<C> {
         self.history.save(path)
     }
     /// Add a new entry in the history.
-    pub fn add_history_entry(&mut self, line: &str) -> bool {
+    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         self.history.add(line)
     }
     /// Clear history.

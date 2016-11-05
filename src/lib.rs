@@ -314,7 +314,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    if let Some(_) = s.line.yank(text) {
+    if s.line.yank(text).is_some() {
         s.refresh_line()
     } else {
         Ok(())

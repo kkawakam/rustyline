@@ -572,6 +572,9 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                     return Ok(None);
                 }
                 _ => {
+                    if i == candidates.len() {
+                        s.snapshot();
+                    }
                     break;
                 }
             }

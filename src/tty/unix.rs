@@ -1,9 +1,10 @@
 use std;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync;
 use std::sync::atomic;
 use libc;
 use nix;
+use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
 
@@ -124,12 +125,12 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 }
 
 /// Console input reader
-pub struct PosixRawReader<R> {
-    chars: char_iter::Chars<R>,
+pub struct PosixRawReader {
+    chars: char_iter::Chars<std::io::Stdin>,
 }
 
-impl<R: Read> PosixRawReader<R> {
-    pub fn new(stdin: R) -> Result<PosixRawReader<R>> {
+impl PosixRawReader {
+    pub fn new(stdin: std::io::Stdin) -> Result<PosixRawReader> {
         Ok(PosixRawReader { chars: char_iter::chars(stdin) })
     }
 
@@ -205,16 +206,25 @@ impl<R: Read> PosixRawReader<R> {
     }
 }
 
-impl<R: Read> RawReader for PosixRawReader<R> {
-    // As there is no read timeout to properly handle single ESC key,
-    // we make possible to deactivate escape sequence processing.
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
+impl RawReader for PosixRawReader {
+    fn next_key(&mut self) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if esc_seq && key == KeyPress::Esc {
-            // escape sequence
-            key = try!(self.escape_sequence());
+        if key == KeyPress::Esc {
+            let mut fds =
+                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+            match poll::poll(&mut fds, 500) {
+                Ok(n) if n == 0 => {
+                    // single escape
+                }
+                Ok(_) => {
+                    // escape sequence
+                    key = try!(self.escape_sequence())
+                }
+                // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            }
         }
         Ok(key)
     }
@@ -234,13 +244,13 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlag::empty(),
+                                              signal::SaFlags::empty(),
                                               signal::SigSet::empty());
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
 
-extern "C" fn sigwinch_handler(_: signal::SigNum) {
+extern "C" fn sigwinch_handler(_: libc::c_int) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }
 
@@ -289,7 +299,7 @@ impl PosixTerminal {
     }
 
     /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader<std::io::Stdin>> {
+    pub fn create_reader(&self) -> Result<PosixRawReader> {
         PosixRawReader::new(std::io::stdin())
     }
 

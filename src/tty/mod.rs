@@ -3,7 +3,7 @@ use ::Result;
 use consts::KeyPress;
 
 pub trait RawReader: Sized {
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress>;
+    fn next_key(&mut self) -> Result<KeyPress>;
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;
 }

@@ -555,7 +555,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 s.snapshot();
             }
 
-            key = try!(rdr.next_key(false));
+            key = try!(rdr.next_key());
             match key {
                 KeyPress::Tab => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -594,7 +594,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             }
         }
         // we can't complete any further, wait for second tab
-        let mut key = try!(rdr.next_key(false));
+        let mut key = try!(rdr.next_key());
         // if any character other than tab, pass it to the main loop
         if key != KeyPress::Tab {
             return Ok(Some(key));
@@ -612,7 +612,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
                   key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
                   key != KeyPress::Backspace {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key());
             }
             show_completions = match key {
                 KeyPress::Char('y') |
@@ -659,7 +659,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                   key != KeyPress::Char('Q') &&
                   key != KeyPress::Char(' ') &&
                   key != KeyPress::Backspace && key != KeyPress::Enter {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key());
             }
             match key {
                 KeyPress::Char('y') |
@@ -723,7 +723,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        key = try!(rdr.next_key(true));
+        key = try!(rdr.next_key());
         if let KeyPress::Char(c) = key {
             search_buf.push(c);
         } else {
@@ -796,7 +796,7 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut rdr = try!(s.term.create_reader());
 
     loop {
-        let rk = rdr.next_key(true);
+        let rk = rdr.next_key();
         if rk.is_err() && s.term.sigwinch() {
             s.update_columns();
             try!(s.refresh_line());
@@ -1249,7 +1249,7 @@ mod test {
     }
 
     impl<'a> RawReader for Iter<'a, KeyPress> {
-        fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+        fn next_key(&mut self) -> Result<KeyPress> {
             match self.next() {
                 Some(key) => Ok(*key),
                 None => Err(ReadlineError::Eof),

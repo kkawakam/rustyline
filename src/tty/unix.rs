@@ -1,5 +1,5 @@
 use std;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync;
 use std::sync::atomic;
 use libc;

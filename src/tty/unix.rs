@@ -210,15 +210,16 @@ impl RawReader for PosixRawReader {
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
-            let mut fds = [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+            let mut fds =
+                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
             match poll::poll(&mut fds, 500) {
                 Ok(n) if n == 0 => {
                     // single escape
-                },
+                }
                 Ok(_) => {
                     // escape sequence
                     key = try!(self.escape_sequence())
-                },
+                }
                 // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e.into()),
             }

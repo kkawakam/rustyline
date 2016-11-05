@@ -21,7 +21,7 @@ fn main() {
     let c = FilenameCompleter::new();
     let mut rl = Editor::new(config);
     rl.set_completer(Some(c));
-    if let Err(_) = rl.load_history("history.txt") {
+    if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
     loop {

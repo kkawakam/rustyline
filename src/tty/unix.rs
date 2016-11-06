@@ -4,7 +4,6 @@ use std::sync;
 use std::sync::atomic;
 use libc;
 use nix;
-use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
 
@@ -208,28 +207,13 @@ impl RawReader for PosixRawReader {
     // As there is no read timeout to properly handle single ESC key,
     // we make possible to deactivate escape sequence processing.
     fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
+        // FIXME Stdin is buffered, so polling after reading an ESC char is useless (next available chars are already buffered)...
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if key == KeyPress::Esc {
-            if esc_seq {
-                // escape sequence
-                key = try!(self.escape_sequence());
-            } else {
-                let mut fds =
-                    [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
-                match poll::poll(&mut fds, 500) {
-                    Ok(n) if n == 0 => {
-                        // single escape
-                    }
-                    Ok(_) => {
-                        // escape sequence
-                        key = try!(self.escape_sequence())
-                    }
-                    // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                    Err(e) => return Err(e.into()),
-                }
-            }
+        if key == KeyPress::Esc && esc_seq {
+            // escape sequence
+            key = try!(self.escape_sequence());
         }
         Ok(key)
     }

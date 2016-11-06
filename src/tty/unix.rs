@@ -205,23 +205,30 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
-    fn next_key(&mut self) -> Result<KeyPress> {
+    // As there is no read timeout to properly handle single ESC key,
+    // we make possible to deactivate escape sequence processing.
+    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
-            let mut fds =
-                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
-            match poll::poll(&mut fds, 500) {
-                Ok(n) if n == 0 => {
-                    // single escape
+            if esc_seq {
+                // escape sequence
+                key = try!(self.escape_sequence());
+            } else {
+                let mut fds =
+                    [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+                match poll::poll(&mut fds, 500) {
+                    Ok(n) if n == 0 => {
+                        // single escape
+                    }
+                    Ok(_) => {
+                        // escape sequence
+                        key = try!(self.escape_sequence())
+                    }
+                    // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e.into()),
                 }
-                Ok(_) => {
-                    // escape sequence
-                    key = try!(self.escape_sequence())
-                }
-                // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
             }
         }
         Ok(key)

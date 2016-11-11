@@ -13,6 +13,8 @@ pub trait RawReader: Sized {
 
 /// Terminal contract
 pub trait Term: Clone {
+    type Reader: RawReader;
+
     fn new() -> Self;
     /// Check if current terminal can provide a rich line-editing user interface.
     fn is_unsupported(&self) -> bool;
@@ -24,6 +26,8 @@ pub trait Term: Clone {
     fn get_rows(&self) -> usize;
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
+    /// Create a RAW reader
+    fn create_reader(&self) -> Result<Self::Reader>;
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, w: &mut Write) -> Result<()>;
 }

@@ -55,11 +55,6 @@ pub struct DummyTerminal {
 }
 
 impl DummyTerminal {
-    /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<IntoIter<KeyPress>> {
-        Ok(self.keys.clone().into_iter())
-    }
-
     #[cfg(windows)]
     pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
         let dw_size = winapi::COORD { X: 80, Y: 24 };
@@ -95,6 +90,8 @@ impl DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type Reader = IntoIter<KeyPress>;
+
     fn new() -> DummyTerminal {
         DummyTerminal { keys: Vec::new() }
     }
@@ -127,6 +124,12 @@ impl Term for DummyTerminal {
     fn sigwinch(&self) -> bool {
         false
     }
+
+    /// Create a RAW reader
+    fn create_reader(&self) -> Result<IntoIter<KeyPress>> {
+        Ok(self.keys.clone().into_iter())
+    }
+
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, _: &mut Write) -> Result<()> {

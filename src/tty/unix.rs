@@ -71,11 +71,12 @@ fn is_unsupported_term() -> bool {
     use std::ascii::AsciiExt;
     match std::env::var("TERM") {
         Ok(term) => {
-            let mut unsupported = false;
             for iter in &UNSUPPORTED_TERM {
-                unsupported = (*iter).eq_ignore_ascii_case(&term)
+                if (*iter).eq_ignore_ascii_case(&term) {
+                    return true
+                }
             }
-            unsupported
+            false
         }
         Err(_) => false,
     }
@@ -332,5 +333,17 @@ impl Term for PosixTerminal {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
         clear_screen(w)
+    }
+}
+
+#[cfg(all(unix,test))]
+mod test {
+    #[test]
+    fn test_unsupported_term() {
+        ::std::env::set_var("TERM", "xterm");
+        assert_eq!(false, super::is_unsupported_term());
+
+        ::std::env::set_var("TERM", "dumb");
+        assert_eq!(true, super::is_unsupported_term());
     }
 }

@@ -1,3 +1,4 @@
+//! Unix specific definitions
 use std;
 use std::io::{Chars, Read, Write};
 use std::sync;
@@ -10,7 +11,7 @@ use nix::sys::termios;
 use consts::{self, KeyPress};
 use ::Result;
 use ::error;
-use super::RawReader;
+use super::{RawReader, Term};
 
 pub type Mode = termios::Termios;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
@@ -245,14 +246,21 @@ extern "C" fn sigwinch_handler(_: libc::c_int) {
 
 pub type Terminal = PosixTerminal;
 
-#[derive(Clone, Debug)]
+#[derive(Clone,Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
 }
 
 impl PosixTerminal {
-    pub fn new() -> PosixTerminal {
+    /// Create a RAW reader
+    pub fn create_reader(&self) -> Result<PosixRawReader> {
+        PosixRawReader::new(std::io::stdin())
+    }
+}
+
+impl Term for PosixTerminal {
+    fn new() -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
@@ -266,39 +274,34 @@ impl PosixTerminal {
     // Init checks:
 
     /// Check if current terminal can provide a rich line-editing user interface.
-    pub fn is_unsupported(&self) -> bool {
+    fn is_unsupported(&self) -> bool {
         self.unsupported
     }
 
     /// check if stdin is connected to a terminal.
-    pub fn is_stdin_tty(&self) -> bool {
+    fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
     }
 
     // Interactive loop:
 
     /// Get the number of columns in the current terminal.
-    pub fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> usize {
         get_columns()
     }
 
     /// Get the number of rows in the current terminal.
-    pub fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> usize {
         get_rows()
     }
 
-    /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader> {
-        PosixRawReader::new(std::io::stdin())
-    }
-
     /// Check if a SIGWINCH signal has been received
-    pub fn sigwinch(&self) -> bool {
+    fn sigwinch(&self) -> bool {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }
 
     /// Clear the screen. Used to handle ctrl+l
-    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
+    fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
         clear_screen(w)
     }
 }

@@ -45,7 +45,7 @@ use std::path::Path;
 use std::result;
 #[cfg(unix)]
 use nix::sys::signal;
-use tty::{RawReader, Terminal};
+use tty::{RawReader, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
 use consts::KeyPress;
@@ -1168,19 +1168,17 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
     }
 }
 
-#[cfg(all(unix,test))]
+#[cfg(test)]
 mod test {
     use std::io::Write;
-    use std::slice::Iter;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
     use config::Config;
     use consts::KeyPress;
-    use error::ReadlineError;
     use {Position, State};
-    use super::Result;
-    use tty::{RawReader, Terminal};
+    use super::{Editor, Result};
+    use tty::{Terminal, Term};
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1201,6 +1199,13 @@ mod test {
             term: term,
             byte_buffer: [0; 4],
         }
+    }
+
+    fn init_editor(keys: &[KeyPress]) -> Editor<()> {
+        let config = Config::default();
+        let mut editor = Editor::<()>::new(config);
+        editor.term.keys.extend(keys.iter().cloned());
+        editor
     }
 
     #[test]
@@ -1248,18 +1253,6 @@ mod test {
         }
     }
 
-    impl<'a> RawReader for Iter<'a, KeyPress> {
-        fn next_key(&mut self, _: bool) -> Result<KeyPress> {
-            match self.next() {
-                Some(key) => Ok(*key),
-                None => Err(ReadlineError::Eof),
-            }
-        }
-        fn next_char(&mut self) -> Result<char> {
-            unimplemented!();
-        }
-    }
-
     #[test]
     fn complete_line() {
         let mut out = ::std::io::sink();
@@ -1278,5 +1271,64 @@ mod test {
         let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
+    }
+
+    fn assert_line(keys: &[KeyPress], expected_line: &str) {
+        let mut editor = init_editor(keys);
+        let actual_line = editor.readline(&">>").unwrap();
+        assert_eq!(expected_line, actual_line);
+    }
+
+    #[test]
+    fn delete_key() {
+        assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
+                    "a");
+        assert_line(&[KeyPress::Char('a'), KeyPress::Left, KeyPress::Delete, KeyPress::Enter],
+                    "");
+    }
+
+    #[test]
+    fn down_key() {
+        assert_line(&[KeyPress::Down, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn end_key() {
+        assert_line(&[KeyPress::End, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn home_key() {
+        assert_line(&[KeyPress::Home, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn left_key() {
+        assert_line(&[KeyPress::Left, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn meta_backspace_key() {
+        assert_line(&[KeyPress::Meta('\x08'), KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn page_down_key() {
+        assert_line(&[KeyPress::PageDown, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn page_up_key() {
+        assert_line(&[KeyPress::PageUp, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn right_key() {
+        assert_line(&[KeyPress::Right, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn up_key() {
+        assert_line(&[KeyPress::Up, KeyPress::Enter], "");
     }
 }

@@ -62,18 +62,33 @@ impl DummyTerminal {
 
     #[cfg(windows)]
     pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
+        let dw_size = winapi::COORD { X: 80, Y: 24 };
+        let dw_cursor_osition = winapi::COORD { X: 0, Y: 0 };
+        let sr_window = winapi::SMALL_RECT {
+            Left: 0,
+            Top: 0,
+            Right: 0,
+            Bottom: 0,
+        };
+        let info = winapi::CONSOLE_SCREEN_BUFFER_INFO {
+            dwSize: dw_size,
+            dwCursorPosition: dw_cursor_osition,
+            wAttributes: 0,
+            srWindow: sr_window,
+            dwMaximumWindowSize: dw_size,
+        };
         Ok(info)
     }
 
     #[cfg(windows)]
-    pub fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
+    pub fn set_console_cursor_position(&mut self, _: winapi::COORD) -> Result<()> {
         Ok(())
     }
 
     #[cfg(windows)]
     pub fn fill_console_output_character(&mut self,
-                                         length: winapi::DWORD,
-                                         pos: winapi::COORD)
+                                         _: winapi::DWORD,
+                                         _: winapi::COORD)
                                          -> Result<()> {
         Ok(())
     }

@@ -106,13 +106,13 @@ pub fn enable_raw_mode() -> Result<Mode> {
     raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 1; // One character-at-a-time input
     raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &raw));
+    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
     Ok(original_mode)
 }
 
 /// Disable RAW mode for the terminal.
 pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
+    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &original_mode));
     Ok(())
 }
 

@@ -4,6 +4,9 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+#[cfg(windows)]
+use winapi;
+
 use consts::KeyPress;
 use ::error::ReadlineError;
 use ::Result;
@@ -55,6 +58,24 @@ impl DummyTerminal {
     /// Create a RAW reader
     pub fn create_reader(&self) -> Result<IntoIter<KeyPress>> {
         Ok(self.keys.clone().into_iter())
+    }
+
+    #[cfg(windows)]
+    pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
+        Ok(info)
+    }
+
+    #[cfg(windows)]
+    pub fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    pub fn fill_console_output_character(&mut self,
+                                         length: winapi::DWORD,
+                                         pos: winapi::COORD)
+                                         -> Result<()> {
+        Ok(())
     }
 }
 

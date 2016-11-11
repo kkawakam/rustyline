@@ -236,51 +236,6 @@ impl Console {
     pub fn create_reader(&self) -> Result<ConsoleRawReader> {
         ConsoleRawReader::new()
     }
-}
-
-impl Term for Console {
-    pub fn new() -> Console {
-        use std::ptr;
-        let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
-        Console {
-            stdin_isatty: is_a_tty(STDIN_FILENO),
-            stdout_handle: stdout_handle,
-        }
-    }
-
-    /// Checking for an unsupported TERM in windows is a no-op
-    pub fn is_unsupported(&self) -> bool {
-        false
-    }
-
-    pub fn is_stdin_tty(&self) -> bool {
-        self.stdin_isatty
-    }
-
-    // pub fn install_sigwinch_handler(&mut self) {
-    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
-    // }
-
-    /// Try to get the number of columns in the current terminal,
-    /// or assume 80 if it fails.
-    pub fn get_columns(&self) -> usize {
-        get_columns(self.stdout_handle)
-    }
-
-    /// Try to get the number of rows in the current terminal,
-    /// or assume 24 if it fails.
-    pub fn get_rows(&self) -> usize {
-        get_rows(self.stdout_handle)
-    }
-
-    pub fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
-    }
-
-    pub fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
-        let info = try!(self.get_console_screen_buffer_info());
-        clear_screen(info, self.stdout_handle)
-    }
 
     pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
@@ -304,5 +259,50 @@ impl Term for Console {
                                                      pos,
                                                      &mut _count));
         Ok(())
+    }
+}
+
+impl Term for Console {
+    fn new() -> Console {
+        use std::ptr;
+        let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
+        Console {
+            stdin_isatty: is_a_tty(STDIN_FILENO),
+            stdout_handle: stdout_handle,
+        }
+    }
+
+    /// Checking for an unsupported TERM in windows is a no-op
+    fn is_unsupported(&self) -> bool {
+        false
+    }
+
+    fn is_stdin_tty(&self) -> bool {
+        self.stdin_isatty
+    }
+
+    // pub fn install_sigwinch_handler(&mut self) {
+    // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
+    // }
+
+    /// Try to get the number of columns in the current terminal,
+    /// or assume 80 if it fails.
+    fn get_columns(&self) -> usize {
+        get_columns(self.stdout_handle)
+    }
+
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
+    fn get_rows(&self) -> usize {
+        get_rows(self.stdout_handle)
+    }
+
+    fn sigwinch(&self) -> bool {
+        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+    }
+
+    fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
+        let info = try!(self.get_console_screen_buffer_info());
+        clear_screen(info, self.stdout_handle)
     }
 }

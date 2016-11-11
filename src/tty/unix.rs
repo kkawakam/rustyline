@@ -281,14 +281,9 @@ pub struct PosixTerminal {
     stdin_isatty: bool,
 }
 
-impl PosixTerminal {
-    /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader> {
-        PosixRawReader::new()
-    }
-}
-
 impl Term for PosixTerminal {
+    type Reader = PosixRawReader;
+
     fn new() -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
@@ -322,6 +317,11 @@ impl Term for PosixTerminal {
     /// Get the number of rows in the current terminal.
     fn get_rows(&self) -> usize {
         get_rows()
+    }
+
+    /// Create a RAW reader
+    fn create_reader(&self) -> Result<PosixRawReader> {
+        PosixRawReader::new()
     }
 
     /// Check if a SIGWINCH signal has been received

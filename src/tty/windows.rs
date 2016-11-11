@@ -235,10 +235,6 @@ pub struct Console {
 }
 
 impl Console {
-    pub fn create_reader(&self) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::new()
-    }
-
     pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
         check!(kernel32::GetConsoleScreenBufferInfo(self.stdout_handle, &mut info));
@@ -265,6 +261,8 @@ impl Console {
 }
 
 impl Term for Console {
+    type Reader = ConsoleRawReader;
+
     fn new() -> Console {
         use std::ptr;
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
@@ -297,6 +295,10 @@ impl Term for Console {
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
         get_rows(self.stdout_handle)
+    }
+
+    fn create_reader(&self) -> Result<ConsoleRawReader> {
+        ConsoleRawReader::new()
     }
 
     fn sigwinch(&self) -> bool {

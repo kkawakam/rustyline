@@ -22,7 +22,7 @@ pub fn disable_raw_mode(_: Mode) -> Result<()> {
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(*key),
             None => Err(ReadlineError::Eof),
@@ -35,7 +35,7 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
 }
 
 impl RawReader for IntoIter<KeyPress> {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(key),
             None => Err(ReadlineError::Eof),

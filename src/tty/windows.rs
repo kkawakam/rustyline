@@ -131,7 +131,7 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
         use std::char::decode_utf16;
         // use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
         use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};

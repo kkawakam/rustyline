@@ -5,7 +5,7 @@ use consts::KeyPress;
 
 pub trait RawReader: Sized {
     /// Blocking read of key pressed.
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress>;
+    fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress>;
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;

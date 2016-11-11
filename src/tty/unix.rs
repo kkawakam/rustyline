@@ -1,10 +1,11 @@
 //! Unix specific definitions
 use std;
-use std::io::{Chars, Read, Write};
+use std::io::{self, Chars, Read, Write};
 use std::sync;
 use std::sync::atomic;
 use libc;
 use nix;
+use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
 
@@ -122,13 +123,33 @@ fn clear_screen(w: &mut Write) -> Result<()> {
     Ok(())
 }
 
+// Rust std::io::Stdin is buffered with no way to know if bytes are available.
+// So we use low-level stuff instead...
+struct StdinRaw {}
+
+impl Read for StdinRaw {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let res = unsafe {
+            libc::read(STDIN_FILENO,
+                       buf.as_mut_ptr() as *mut libc::c_void,
+                       buf.len() as libc::size_t)
+        };
+        if res == -1 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(res as usize)
+        }
+    }
+}
+
 /// Console input reader
 pub struct PosixRawReader {
-    chars: Chars<std::io::Stdin>,
+    chars: Chars<StdinRaw>,
 }
 
 impl PosixRawReader {
-    pub fn new(stdin: std::io::Stdin) -> Result<PosixRawReader> {
+    fn new() -> Result<PosixRawReader> {
+        let stdin = StdinRaw {};
         Ok(PosixRawReader { chars: stdin.chars() })
     }
 
@@ -205,16 +226,24 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
-    // As there is no read timeout to properly handle single ESC key,
-    // we make possible to deactivate escape sequence processing.
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
-        // FIXME Stdin is buffered, so polling after reading an ESC char is useless (next available chars are already buffered)...
+    fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if key == KeyPress::Esc && esc_seq {
-            // escape sequence
-            key = try!(self.escape_sequence());
+        if key == KeyPress::Esc {
+            let mut fds =
+                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+            match poll::poll(&mut fds, timeout_ms) {
+                Ok(n) if n == 0 => {
+                    // single escape
+                }
+                Ok(_) => {
+                    // escape sequence
+                    key = try!(self.escape_sequence())
+                }
+                // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            }
         }
         Ok(key)
     }
@@ -255,7 +284,7 @@ pub struct PosixTerminal {
 impl PosixTerminal {
     /// Create a RAW reader
     pub fn create_reader(&self) -> Result<PosixRawReader> {
-        PosixRawReader::new(std::io::stdin())
+        PosixRawReader::new()
     }
 }
 

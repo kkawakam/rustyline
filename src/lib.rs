@@ -555,7 +555,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 s.snapshot();
             }
 
-            key = try!(rdr.next_key(false));
+            key = try!(rdr.next_key(config.keyseq_timeout()));
             match key {
                 KeyPress::Tab => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -594,7 +594,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             }
         }
         // we can't complete any further, wait for second tab
-        let mut key = try!(rdr.next_key(false));
+        let mut key = try!(rdr.next_key(config.keyseq_timeout()));
         // if any character other than tab, pass it to the main loop
         if key != KeyPress::Tab {
             return Ok(Some(key));
@@ -612,7 +612,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
                   key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
                   key != KeyPress::Backspace {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             show_completions = match key {
                 KeyPress::Char('y') |
@@ -621,7 +621,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             };
         }
         if show_completions {
-            page_completions(rdr, s, &candidates)
+            page_completions(rdr, s, config, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -633,6 +633,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
 
 fn page_completions<R: RawReader>(rdr: &mut R,
                                   s: &mut State,
+                                  config: &Config,
                                   candidates: &[String])
                                   -> Result<Option<KeyPress>> {
     use std::cmp;
@@ -659,7 +660,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                   key != KeyPress::Char('Q') &&
                   key != KeyPress::Char(' ') &&
                   key != KeyPress::Backspace && key != KeyPress::Enter {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             match key {
                 KeyPress::Char('y') |
@@ -700,7 +701,8 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 /// Incremental search
 fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                                             s: &mut State,
-                                            history: &History)
+                                            history: &History,
+                                            config: &Config)
                                             -> Result<Option<KeyPress>> {
     if history.is_empty() {
         return Ok(None);
@@ -723,7 +725,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        key = try!(rdr.next_key(true));
+        key = try!(rdr.next_key(config.keyseq_timeout()));
         if let KeyPress::Char(c) = key {
             search_buf.push(c);
         } else {
@@ -796,7 +798,7 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut rdr = try!(s.term.create_reader());
 
     loop {
-        let rk = rdr.next_key(true);
+        let rk = rdr.next_key(editor.config.keyseq_timeout());
         if rk.is_err() && s.term.sigwinch() {
             s.update_columns();
             try!(s.refresh_line());
@@ -824,7 +826,8 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
         } else if key == KeyPress::Ctrl('R') {
             // Search history backward
-            let next = try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
+            let next =
+                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history, &editor.config));
             if next.is_some() {
                 key = next.unwrap();
             } else {

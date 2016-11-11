@@ -12,6 +12,8 @@ pub struct Config {
     /// When listing completion alternatives, only display
     /// one screen of possibilities at a time.
     completion_prompt_limit: usize,
+    /// Duration (milliseconds) Rustyline will wait for a character when reading an ambiguous key sequence.
+    keyseq_timeout: i32,
 }
 
 impl Config {
@@ -43,6 +45,10 @@ impl Config {
     pub fn completion_prompt_limit(&self) -> usize {
         self.completion_prompt_limit
     }
+
+    pub fn keyseq_timeout(&self) -> i32 {
+        self.keyseq_timeout
+    }
 }
 
 impl Default for Config {
@@ -53,6 +59,7 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
+            keyseq_timeout: 500,
         }
     }
 }
@@ -115,6 +122,12 @@ impl Builder {
 
     pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Builder {
         self.p.completion_prompt_limit = completion_prompt_limit;
+        self
+    }
+
+    /// Set `keyseq_timeout` in milliseconds.
+    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
+        self.p.keyseq_timeout = keyseq_timeout_ms;
         self
     }
 

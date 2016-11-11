@@ -56,3 +56,13 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         _ => KeyPress::Null,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{char_to_key_press, KeyPress};
+
+    #[test]
+    fn char_to_key() {
+        assert_eq!(KeyPress::Esc, char_to_key_press('\x1b'));
+    }
+}

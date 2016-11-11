@@ -1,5 +1,6 @@
+//! Unix specific definitions
 use std;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync;
 use std::sync::atomic;
 use libc;
@@ -11,7 +12,7 @@ use char_iter;
 use consts::{self, KeyPress};
 use ::Result;
 use ::error;
-use super::RawReader;
+use super::{RawReader, Term};
 
 pub type Mode = termios::Termios;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
@@ -124,12 +125,12 @@ fn clear_screen(w: &mut Write) -> Result<()> {
 }
 
 /// Console input reader
-pub struct PosixRawReader<R> {
-    chars: char_iter::Chars<R>,
+pub struct PosixRawReader {
+    chars: char_iter::Chars<std::io::Stdin>,
 }
 
-impl<R: Read> PosixRawReader<R> {
-    pub fn new(stdin: R) -> Result<PosixRawReader<R>> {
+impl PosixRawReader {
+    pub fn new(stdin: std::io::Stdin) -> Result<PosixRawReader> {
         Ok(PosixRawReader { chars: char_iter::chars(stdin) })
     }
 
@@ -205,7 +206,7 @@ impl<R: Read> PosixRawReader<R> {
     }
 }
 
-impl<R: Read> RawReader for PosixRawReader<R> {
+impl RawReader for PosixRawReader {
     // As there is no read timeout to properly handle single ESC key,
     // we make possible to deactivate escape sequence processing.
     fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
@@ -246,14 +247,21 @@ extern "C" fn sigwinch_handler(_: signal::SigNum) {
 
 pub type Terminal = PosixTerminal;
 
-#[derive(Clone, Debug)]
+#[derive(Clone,Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
 }
 
 impl PosixTerminal {
-    pub fn new() -> PosixTerminal {
+    /// Create a RAW reader
+    pub fn create_reader(&self) -> Result<PosixRawReader> {
+        PosixRawReader::new(std::io::stdin())
+    }
+}
+
+impl Term for PosixTerminal {
+    fn new() -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
@@ -267,39 +275,34 @@ impl PosixTerminal {
     // Init checks:
 
     /// Check if current terminal can provide a rich line-editing user interface.
-    pub fn is_unsupported(&self) -> bool {
+    fn is_unsupported(&self) -> bool {
         self.unsupported
     }
 
     /// check if stdin is connected to a terminal.
-    pub fn is_stdin_tty(&self) -> bool {
+    fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
     }
 
     // Interactive loop:
 
     /// Get the number of columns in the current terminal.
-    pub fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> usize {
         get_columns()
     }
 
     /// Get the number of rows in the current terminal.
-    pub fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> usize {
         get_rows()
     }
 
-    /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader<std::io::Stdin>> {
-        PosixRawReader::new(std::io::stdin())
-    }
-
     /// Check if a SIGWINCH signal has been received
-    pub fn sigwinch(&self) -> bool {
+    fn sigwinch(&self) -> bool {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }
 
     /// Clear the screen. Used to handle ctrl+l
-    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
+    fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
         clear_screen(w)
     }
 }

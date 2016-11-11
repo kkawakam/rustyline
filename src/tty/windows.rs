@@ -1,3 +1,4 @@
+//! Windows specific definitions
 use std::io;
 use std::io::Write;
 use std::mem;
@@ -9,7 +10,7 @@ use winapi;
 use consts::{self, KeyPress};
 use ::error;
 use ::Result;
-use super::RawReader;
+use super::{RawReader, Term};
 
 pub type Mode = winapi::DWORD;
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
@@ -232,6 +233,12 @@ pub struct Console {
 }
 
 impl Console {
+    pub fn create_reader(&self) -> Result<ConsoleRawReader> {
+        ConsoleRawReader::new()
+    }
+}
+
+impl Term for Console {
     pub fn new() -> Console {
         use std::ptr;
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
@@ -264,10 +271,6 @@ impl Console {
     /// or assume 24 if it fails.
     pub fn get_rows(&self) -> usize {
         get_rows(self.stdout_handle)
-    }
-
-    pub fn create_reader(&self) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::new()
     }
 
     pub fn sigwinch(&self) -> bool {

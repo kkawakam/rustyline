@@ -12,9 +12,8 @@ use nix::sys::termios;
 use consts::{self, KeyPress};
 use ::Result;
 use ::error;
-use super::{RawReader, Term};
+use super::{RawMode, RawReader, Term};
 
-pub type Mode = termios::Termios;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 
@@ -29,20 +28,6 @@ const TIOCGWINSZ: libc::c_ulong = 0x5413;
 
 #[cfg(all(target_os = "linux", target_env = "musl"))]
 const TIOCGWINSZ: libc::c_int = 0x5413;
-
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-fn get_columns() -> usize {
-    let (cols, _) = get_win_size();
-    cols
-}
-
-/// Try to get the number of rows in the current terminal,
-/// or assume 24 if it fails.
-fn get_rows() -> usize {
-    let (_, rows) = get_win_size();
-    rows
-}
 
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
@@ -73,7 +58,7 @@ fn is_unsupported_term() -> bool {
         Ok(term) => {
             for iter in &UNSUPPORTED_TERM {
                 if (*iter).eq_ignore_ascii_case(&term) {
-                    return true
+                    return true;
                 }
             }
             false
@@ -88,40 +73,14 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
-/// Enable RAW mode for the terminal.
-pub fn enable_raw_mode() -> Result<Mode> {
-    use nix::errno::Errno::ENOTTY;
-    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /* OPOST, */ VMIN, VTIME};
-    if !is_a_tty(STDIN_FILENO) {
-        try!(Err(nix::Error::from_errno(ENOTTY)));
+pub type Mode = termios::Termios;
+
+impl RawMode for Mode {
+    /// Disable RAW mode for the terminal.
+    fn disable_raw_mode(&self) -> Result<()> {
+        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, self));
+        Ok(())
     }
-    let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
-    let mut raw = original_mode;
-    // disable BREAK interrupt, CR to NL conversion on input,
-    // input parity check, strip high bit (bit 8), output flow control
-    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    // we don't want raw output, it turns newlines into straight linefeeds
-    // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-    // disable echoing, canonical mode, extended input processing and signals
-    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 1; // One character-at-a-time input
-    raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
-    Ok(original_mode)
-}
-
-/// Disable RAW mode for the terminal.
-pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &original_mode));
-    Ok(())
-}
-
-fn clear_screen(w: &mut Write) -> Result<()> {
-    try!(w.write_all(b"\x1b[H\x1b[2J"));
-    try!(w.flush());
-    Ok(())
 }
 
 // Rust std::io::Stdin is buffered with no way to know if bytes are available.
@@ -284,6 +243,7 @@ pub struct PosixTerminal {
 
 impl Term for PosixTerminal {
     type Reader = PosixRawReader;
+    type Mode = Mode;
 
     fn new() -> PosixTerminal {
         let term = PosixTerminal {
@@ -310,14 +270,41 @@ impl Term for PosixTerminal {
 
     // Interactive loop:
 
-    /// Get the number of columns in the current terminal.
+    /// Try to get the number of columns in the current terminal,
+    /// or assume 80 if it fails.
     fn get_columns(&self) -> usize {
-        get_columns()
+        let (cols, _) = get_win_size();
+        cols
     }
 
-    /// Get the number of rows in the current terminal.
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
-        get_rows()
+        let (_, rows) = get_win_size();
+        rows
+    }
+
+    fn enable_raw_mode(&self) -> Result<Mode> {
+        use nix::errno::Errno::ENOTTY;
+        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
+                                IXON, /* OPOST, */ VMIN, VTIME};
+        if !self.stdin_isatty {
+            try!(Err(nix::Error::from_errno(ENOTTY)));
+        }
+        let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
+        let mut raw = original_mode;
+        // disable BREAK interrupt, CR to NL conversion on input,
+        // input parity check, strip high bit (bit 8), output flow control
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        // we don't want raw output, it turns newlines into straight linefeeds
+        // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        // disable echoing, canonical mode, extended input processing and signals
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_cc[VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[VTIME] = 0; // with blocking read
+        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
+        Ok(original_mode)
     }
 
     /// Create a RAW reader
@@ -332,7 +319,9 @@ impl Term for PosixTerminal {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
-        clear_screen(w)
+        try!(w.write_all(b"\x1b[H\x1b[2J"));
+        try!(w.flush());
+        Ok(())
     }
 }
 

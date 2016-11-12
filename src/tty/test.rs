@@ -10,15 +10,14 @@ use winapi;
 use consts::KeyPress;
 use ::error::ReadlineError;
 use ::Result;
-use super::{RawReader, Term};
+use super::{RawMode, RawReader, Term};
 
 pub type Mode = ();
 
-pub fn enable_raw_mode() -> Result<Mode> {
-    Ok(())
-}
-pub fn disable_raw_mode(_: Mode) -> Result<()> {
-    Ok(())
+impl RawMode for Mode {
+    fn disable_raw_mode(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
@@ -91,6 +90,7 @@ impl DummyTerminal {
 
 impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
+    type Mode = Mode;
 
     fn new() -> DummyTerminal {
         DummyTerminal { keys: Vec::new() }
@@ -123,6 +123,10 @@ impl Term for DummyTerminal {
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
         false
+    }
+
+    fn enable_raw_mode(&self) -> Result<Mode> {
+        Ok(())
     }
 
     /// Create a RAW reader

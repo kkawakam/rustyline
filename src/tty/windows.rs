@@ -10,9 +10,8 @@ use winapi;
 use consts::{self, KeyPress};
 use ::error;
 use ::Result;
-use super::{RawReader, Term};
+use super::{RawMode, RawReader, Term};
 
-pub type Mode = winapi::DWORD;
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
 const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
 
@@ -40,16 +39,6 @@ macro_rules! check {
     };
 }
 
-fn get_columns(handle: winapi::HANDLE) -> usize {
-    let (cols, _) = get_win_size(handle);
-    cols
-}
-
-fn get_rows(handle: winapi::HANDLE) -> usize {
-    let (_, rows) = get_win_size(handle);
-    rows
-}
-
 fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
@@ -58,60 +47,26 @@ fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
     }
 }
 
-fn get_console_mode(handle: winapi::HANDLE) -> Result<Mode> {
+fn get_console_mode(handle: winapi::HANDLE) -> Result<winapi::DWORD> {
     let mut original_mode = 0;
     check!(kernel32::GetConsoleMode(handle, &mut original_mode));
     Ok(original_mode)
 }
 
-/// Return whether or not STDIN, STDOUT or STDERR is a TTY
-fn is_a_tty(fd: winapi::DWORD) -> bool {
-    let handle = get_std_handle(fd);
-    match handle {
-        Ok(handle) => {
-            // If this function doesn't fail then fd is a TTY
-            get_console_mode(handle).is_ok()
-        }
-        Err(_) => false,
+pub type Mode = ConsoleMode;
+
+#[derive(Clone,Copy,Debug)]
+pub struct ConsoleMode {
+    original_mode: winapi::DWORD,
+    stdin_handle: winapi::HANDLE,
+}
+
+impl RawMode for Mode {
+    /// Disable RAW mode for the terminal.
+    fn disable_raw_mode(&self) -> Result<()> {
+        check!(kernel32::SetConsoleMode(self.stdin_handle, self.original_mode));
+        Ok(())
     }
-}
-
-/// Enable raw mode for the TERM
-pub fn enable_raw_mode() -> Result<Mode> {
-    let handle = try!(get_std_handle(STDIN_FILENO));
-    let original_mode = try!(get_console_mode(handle));
-    // Disable these modes
-    let raw = original_mode &
-              !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
-                winapi::wincon::ENABLE_PROCESSED_INPUT);
-    // Enable these modes
-    let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
-    let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
-    let raw = raw | winapi::wincon::ENABLE_QUICK_EDIT_MODE;
-    let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
-    check!(kernel32::SetConsoleMode(handle, raw));
-    Ok(original_mode)
-}
-
-/// Disable Raw mode for the term
-pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    let handle = try!(get_std_handle(STDIN_FILENO));
-    check!(kernel32::SetConsoleMode(handle, original_mode));
-    Ok(())
-}
-
-/// Clear the screen. Used to handle ctrl+l
-fn clear_screen(info: winapi::CONSOLE_SCREEN_BUFFER_INFO, handle: winapi::HANDLE) -> Result<()> {
-    let coord = winapi::COORD { X: 0, Y: 0 };
-    check!(kernel32::SetConsoleCursorPosition(handle, coord));
-    let mut _count = 0;
-    let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
-    check!(kernel32::FillConsoleOutputCharacterA(handle,
-                                                 ' ' as winapi::CHAR,
-                                                 n,
-                                                 coord,
-                                                 &mut _count));
-    Ok(())
 }
 
 /// Console input reader
@@ -229,6 +184,7 @@ pub type Terminal = Console;
 #[derive(Clone,Debug)]
 pub struct Console {
     stdin_isatty: bool,
+    stdin_handle: winapi::HANDLE,
     stdout_handle: winapi::HANDLE,
 }
 
@@ -260,12 +216,23 @@ impl Console {
 
 impl Term for Console {
     type Reader = ConsoleRawReader;
+    type Mode = Mode;
 
     fn new() -> Console {
         use std::ptr;
+        let stdin_handle = get_std_handle(STDIN_FILENO);
+        let stdin_isatty = match stdin_handle {
+            Ok(handle) => {
+                // If this function doesn't fail then fd is a TTY
+                get_console_mode(handle).is_ok()
+            }
+            Err(_) => false,
+        };
+
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
         Console {
-            stdin_isatty: is_a_tty(STDIN_FILENO),
+            stdin_isatty: stdin_isatty,
+            stdin_handle: stdin_handle.unwrap_or(ptr::null_mut()),
             stdout_handle: stdout_handle,
         }
     }
@@ -286,14 +253,40 @@ impl Term for Console {
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn get_columns(&self) -> usize {
-        get_columns(self.stdout_handle)
+        let (cols, _) = get_win_size(self.stdout_handle);
+        cols
     }
 
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
-        get_rows(self.stdout_handle)
+        let (_, rows) = get_win_size(self.stdout_handle);
+        rows
     }
+
+    /// Enable RAW mode for the terminal.
+    fn enable_raw_mode(&self) -> Result<Mode> {
+        if !self.stdin_isatty {
+            try!(Err(io::Error::new(io::ErrorKind::Other,
+                                    "no stdio handle available for this process")));
+        }
+        let original_mode = try!(get_console_mode(self.stdin_handle));
+        // Disable these modes
+        let raw = original_mode &
+                  !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
+                    winapi::wincon::ENABLE_PROCESSED_INPUT);
+        // Enable these modes
+        let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
+        let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
+        let raw = raw | winapi::wincon::ENABLE_QUICK_EDIT_MODE;
+        let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
+        check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
+        Ok(Mode {
+            original_mode: original_mode,
+            stdin_handle: self.stdin_handle,
+        })
+    }
+
 
     fn create_reader(&self) -> Result<ConsoleRawReader> {
         ConsoleRawReader::new()
@@ -303,8 +296,18 @@ impl Term for Console {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }
 
+    /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
         let info = try!(self.get_console_screen_buffer_info());
-        clear_screen(info, self.stdout_handle)
+        let coord = winapi::COORD { X: 0, Y: 0 };
+        check!(kernel32::SetConsoleCursorPosition(self.stdout_handle, coord));
+        let mut _count = 0;
+        let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
+        check!(kernel32::FillConsoleOutputCharacterA(self.stdout_handle,
+                                                     ' ' as winapi::CHAR,
+                                                     n,
+                                                     coord,
+                                                     &mut _count));
+        Ok(())
     }
 }

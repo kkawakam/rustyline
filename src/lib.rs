@@ -46,7 +46,7 @@ use std::path::Path;
 use std::result;
 #[cfg(unix)]
 use nix::sys::signal;
-use tty::{RawReader, Terminal, Term};
+use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
@@ -931,9 +931,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
-                try!(tty::disable_raw_mode(original_mode));
+                try!(original_mode.disable_raw_mode());
                 try!(signal::raise(signal::SIGSTOP));
-                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
+                try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -1024,14 +1024,14 @@ struct Guard(tty::Mode);
 impl Drop for Guard {
     fn drop(&mut self) {
         let Guard(mode) = *self;
-        tty::disable_raw_mode(mode);
+        mode.disable_raw_mode();
     }
 }
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw<C: Completer>(prompt: &str, editor: &mut Editor<C>) -> Result<String> {
-    let original_mode = try!(tty::enable_raw_mode());
+    let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, editor, original_mode);
     drop(guard); // try!(disable_raw_mode(original_mode));

@@ -3,6 +3,11 @@ use std::io::Write;
 use ::Result;
 use consts::KeyPress;
 
+pub trait RawMode: Copy + Sized {
+    /// Disable RAW mode for the terminal.
+    fn disable_raw_mode(&self) -> Result<()>;
+}
+
 pub trait RawReader: Sized {
     /// Blocking read of key pressed.
     fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress>;
@@ -14,6 +19,7 @@ pub trait RawReader: Sized {
 /// Terminal contract
 pub trait Term: Clone {
     type Reader: RawReader;
+    type Mode;
 
     fn new() -> Self;
     /// Check if current terminal can provide a rich line-editing user interface.
@@ -26,6 +32,8 @@ pub trait Term: Clone {
     fn get_rows(&self) -> usize;
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
+    /// Enable RAW mode for the terminal.
+    fn enable_raw_mode(&self) -> Result<Self::Mode>;
     /// Create a RAW reader
     fn create_reader(&self) -> Result<Self::Reader>;
     /// Clear the screen. Used to handle ctrl+l

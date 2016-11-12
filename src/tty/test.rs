@@ -140,3 +140,8 @@ impl Term for DummyTerminal {
         Ok(())
     }
 }
+
+#[cfg(unix)]
+pub fn suspend() -> Result<()> {
+    Ok(())
+}

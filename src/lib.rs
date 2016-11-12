@@ -43,8 +43,6 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
-#[cfg(unix)]
-use nix::sys::signal;
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
@@ -937,7 +935,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
                 try!(original_mode.disable_raw_mode());
-                try!(signal::raise(signal::SIGSTOP));
+                try!(tty::suspend());
                 try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }

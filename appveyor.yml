@@ -1,5 +1,5 @@
 environment:
-  TARGET: nightly-x86_64-pc-windows-msvc
+  TARGET: nightly-msvc
 install:
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
   - rustup-init.exe -y --default-host %TARGET%

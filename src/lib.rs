@@ -46,7 +46,7 @@ use std::path::Path;
 use std::result;
 #[cfg(unix)]
 use nix::sys::signal;
-use tty::{RawReader, Terminal};
+use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
@@ -314,7 +314,7 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    if let Some(_) = s.line.yank(text) {
+    if s.line.yank(text).is_some() {
         s.refresh_line()
     } else {
         Ok(())
@@ -553,7 +553,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 s.snapshot();
             }
 
-            key = try!(rdr.next_key(false));
+            key = try!(rdr.next_key(config.keyseq_timeout()));
             match key {
                 KeyPress::Tab => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -592,7 +592,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             }
         }
         // we can't complete any further, wait for second tab
-        let mut key = try!(rdr.next_key(false));
+        let mut key = try!(rdr.next_key(config.keyseq_timeout()));
         // if any character other than tab, pass it to the main loop
         if key != KeyPress::Tab {
             return Ok(Some(key));
@@ -610,7 +610,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
                   key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
                   key != KeyPress::Backspace {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             show_completions = match key {
                 KeyPress::Char('y') |
@@ -619,7 +619,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             };
         }
         if show_completions {
-            page_completions(rdr, s, &candidates)
+            page_completions(rdr, s, config, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -631,6 +631,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
 
 fn page_completions<R: RawReader>(rdr: &mut R,
                                   s: &mut State,
+                                  config: &Config,
                                   candidates: &[String])
                                   -> Result<Option<KeyPress>> {
     use std::cmp;
@@ -657,7 +658,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                   key != KeyPress::Char('Q') &&
                   key != KeyPress::Char(' ') &&
                   key != KeyPress::Backspace && key != KeyPress::Enter {
-                key = try!(rdr.next_key(true));
+                key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             match key {
                 KeyPress::Char('y') |
@@ -698,7 +699,8 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 /// Incremental search
 fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                                             s: &mut State,
-                                            history: &History)
+                                            history: &History,
+                                            config: &Config)
                                             -> Result<Option<KeyPress>> {
     if history.is_empty() {
         return Ok(None);
@@ -721,7 +723,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        key = try!(rdr.next_key(true));
+        key = try!(rdr.next_key(config.keyseq_timeout()));
         if let KeyPress::Char(c) = key {
             search_buf.push(c);
         } else {
@@ -794,7 +796,7 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut rdr = try!(s.term.create_reader());
 
     loop {
-        let rk = rdr.next_key(true);
+        let rk = rdr.next_key(editor.config.keyseq_timeout());
         if rk.is_err() && s.term.sigwinch() {
             s.update_columns();
             try!(s.refresh_line());
@@ -822,7 +824,8 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
         } else if key == KeyPress::Ctrl('R') {
             // Search history backward
-            let next = try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
+            let next =
+                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history, &editor.config));
             if next.is_some() {
                 key = next.unwrap();
             } else {
@@ -931,9 +934,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             #[cfg(unix)]
             KeyPress::Ctrl('Z') => {
-                try!(tty::disable_raw_mode(original_mode));
+                try!(original_mode.disable_raw_mode());
                 try!(signal::raise(signal::SIGSTOP));
-                try!(tty::enable_raw_mode()); // TODO original_mode may have changed
+                try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
@@ -1024,14 +1027,14 @@ struct Guard(tty::Mode);
 impl Drop for Guard {
     fn drop(&mut self) {
         let Guard(mode) = *self;
-        tty::disable_raw_mode(mode);
+        mode.disable_raw_mode();
     }
 }
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
 fn readline_raw<C: Completer>(prompt: &str, editor: &mut Editor<C>) -> Result<String> {
-    let original_mode = try!(tty::enable_raw_mode());
+    let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, editor, original_mode);
     drop(guard); // try!(disable_raw_mode(original_mode));
@@ -1127,7 +1130,10 @@ impl<C: Completer> Editor<C> {
     /// }
     /// ```
     pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<C> {
-        Iter { editor: self,  prompt: prompt }
+        Iter {
+            editor: self,
+            prompt: prompt,
+        }
     }
 }
 
@@ -1140,7 +1146,9 @@ impl<C: Completer> fmt::Debug for Editor<C> {
     }
 }
 
-pub struct Iter<'a, C: Completer> where C: 'a {
+pub struct Iter<'a, C: Completer>
+    where C: 'a
+{
     editor: &'a mut Editor<C>,
     prompt: &'a str,
 }
@@ -1154,26 +1162,24 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
             Ok(l) => {
                 self.editor.add_history_entry(l.as_ref()); // TODO Validate
                 Some(Ok(l))
-            },
+            }
             Err(error::ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
     }
 }
 
-#[cfg(all(unix,test))]
+#[cfg(test)]
 mod test {
     use std::io::Write;
-    use std::slice::Iter;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
     use config::Config;
     use consts::KeyPress;
-    use error::ReadlineError;
     use {Position, State};
-    use super::Result;
-    use tty::{RawReader, Terminal};
+    use super::{Editor, Result};
+    use tty::{Terminal, Term};
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1193,6 +1199,13 @@ mod test {
             snapshot: LineBuffer::with_capacity(100),
             term: term,
         }
+    }
+
+    fn init_editor(keys: &[KeyPress]) -> Editor<()> {
+        let config = Config::default();
+        let mut editor = Editor::<()>::new(config);
+        editor.term.keys.extend(keys.iter().cloned());
+        editor
     }
 
     #[test]
@@ -1240,18 +1253,6 @@ mod test {
         }
     }
 
-    impl<'a> RawReader for Iter<'a, KeyPress> {
-        fn next_key(&mut self, _: bool) -> Result<KeyPress> {
-            match self.next() {
-                Some(key) => Ok(*key),
-                None => Err(ReadlineError::Eof),
-            }
-        }
-        fn next_char(&mut self) -> Result<char> {
-            unimplemented!();
-        }
-    }
-
     #[test]
     fn complete_line() {
         let mut out = ::std::io::sink();
@@ -1270,5 +1271,64 @@ mod test {
         let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
+    }
+
+    fn assert_line(keys: &[KeyPress], expected_line: &str) {
+        let mut editor = init_editor(keys);
+        let actual_line = editor.readline(&">>").unwrap();
+        assert_eq!(expected_line, actual_line);
+    }
+
+    #[test]
+    fn delete_key() {
+        assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
+                    "a");
+        assert_line(&[KeyPress::Char('a'), KeyPress::Left, KeyPress::Delete, KeyPress::Enter],
+                    "");
+    }
+
+    #[test]
+    fn down_key() {
+        assert_line(&[KeyPress::Down, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn end_key() {
+        assert_line(&[KeyPress::End, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn home_key() {
+        assert_line(&[KeyPress::Home, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn left_key() {
+        assert_line(&[KeyPress::Left, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn meta_backspace_key() {
+        assert_line(&[KeyPress::Meta('\x08'), KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn page_down_key() {
+        assert_line(&[KeyPress::PageDown, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn page_up_key() {
+        assert_line(&[KeyPress::PageUp, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn right_key() {
+        assert_line(&[KeyPress::Right, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn up_key() {
+        assert_line(&[KeyPress::Up, KeyPress::Enter], "");
     }
 }

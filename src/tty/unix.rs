@@ -1,9 +1,11 @@
+//! Unix specific definitions
 use std;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::sync;
 use std::sync::atomic;
 use libc;
 use nix;
+use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
 
@@ -11,9 +13,8 @@ use char_iter;
 use consts::{self, KeyPress};
 use ::Result;
 use ::error;
-use super::RawReader;
+use super::{RawMode, RawReader, Term};
 
-pub type Mode = termios::Termios;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 
@@ -28,20 +29,6 @@ const TIOCGWINSZ: libc::c_ulong = 0x5413;
 
 #[cfg(all(target_os = "linux", target_env = "musl"))]
 const TIOCGWINSZ: libc::c_int = 0x5413;
-
-/// Try to get the number of columns in the current terminal,
-/// or assume 80 if it fails.
-fn get_columns() -> usize {
-    let (cols, _) = get_win_size();
-    cols
-}
-
-/// Try to get the number of rows in the current terminal,
-/// or assume 24 if it fails.
-fn get_rows() -> usize {
-    let (_, rows) = get_win_size();
-    rows
-}
 
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
@@ -72,7 +59,7 @@ fn is_unsupported_term() -> bool {
         Ok(term) => {
             for iter in &UNSUPPORTED_TERM {
                 if (*iter).eq_ignore_ascii_case(&term) {
-                    return true
+                    return true;
                 }
             }
             false
@@ -87,49 +74,43 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
-/// Enable RAW mode for the terminal.
-pub fn enable_raw_mode() -> Result<Mode> {
-    use nix::errno::Errno::ENOTTY;
-    use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                            /* OPOST, */ VMIN, VTIME};
-    if !is_a_tty(STDIN_FILENO) {
-        try!(Err(nix::Error::from_errno(ENOTTY)));
+pub type Mode = termios::Termios;
+
+impl RawMode for Mode {
+    /// Disable RAW mode for the terminal.
+    fn disable_raw_mode(&self) -> Result<()> {
+        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, self));
+        Ok(())
     }
-    let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
-    let mut raw = original_mode;
-    // disable BREAK interrupt, CR to NL conversion on input,
-    // input parity check, strip high bit (bit 8), output flow control
-    raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    // we don't want raw output, it turns newlines into straight linefeeds
-    // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-    raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
-    // disable echoing, canonical mode, extended input processing and signals
-    raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 1; // One character-at-a-time input
-    raw.c_cc[VTIME] = 0; // with blocking read
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &raw));
-    Ok(original_mode)
 }
 
-/// Disable RAW mode for the terminal.
-pub fn disable_raw_mode(original_mode: Mode) -> Result<()> {
-    try!(termios::tcsetattr(STDIN_FILENO, termios::TCSAFLUSH, &original_mode));
-    Ok(())
-}
+// Rust std::io::Stdin is buffered with no way to know if bytes are available.
+// So we use low-level stuff instead...
+struct StdinRaw {}
 
-fn clear_screen(w: &mut Write) -> Result<()> {
-    try!(w.write_all(b"\x1b[H\x1b[2J"));
-    try!(w.flush());
-    Ok(())
+impl Read for StdinRaw {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let res = unsafe {
+            libc::read(STDIN_FILENO,
+                       buf.as_mut_ptr() as *mut libc::c_void,
+                       buf.len() as libc::size_t)
+        };
+        if res == -1 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(res as usize)
+        }
+    }
 }
 
 /// Console input reader
-pub struct PosixRawReader<R> {
-    chars: char_iter::Chars<R>,
+pub struct PosixRawReader {
+    chars: char_iter::Chars<StdinRaw>,
 }
 
-impl<R: Read> PosixRawReader<R> {
-    pub fn new(stdin: R) -> Result<PosixRawReader<R>> {
+impl PosixRawReader {
+    pub fn new() -> Result<PosixRawReader> {
+        let stdin = StdinRaw {};
         Ok(PosixRawReader { chars: char_iter::chars(stdin) })
     }
 
@@ -205,16 +186,25 @@ impl<R: Read> PosixRawReader<R> {
     }
 }
 
-impl<R: Read> RawReader for PosixRawReader<R> {
-    // As there is no read timeout to properly handle single ESC key,
-    // we make possible to deactivate escape sequence processing.
-    fn next_key(&mut self, esc_seq: bool) -> Result<KeyPress> {
+impl RawReader for PosixRawReader {
+    fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if esc_seq && key == KeyPress::Esc {
-            // escape sequence
-            key = try!(self.escape_sequence());
+        if key == KeyPress::Esc {
+            let mut fds =
+                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+            match poll::poll(&mut fds, timeout_ms) {
+                Ok(n) if n == 0 => {
+                    // single escape
+                }
+                Ok(_) => {
+                    // escape sequence
+                    key = try!(self.escape_sequence())
+                }
+                // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            }
         }
         Ok(key)
     }
@@ -234,26 +224,29 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
         let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlag::empty(),
+                                              signal::SaFlags::empty(),
                                               signal::SigSet::empty());
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
 
-extern "C" fn sigwinch_handler(_: signal::SigNum) {
+extern "C" fn sigwinch_handler(_: libc::c_int) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
 }
 
 pub type Terminal = PosixTerminal;
 
-#[derive(Clone, Debug)]
+#[derive(Clone,Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
 }
 
-impl PosixTerminal {
-    pub fn new() -> PosixTerminal {
+impl Term for PosixTerminal {
+    type Reader = PosixRawReader;
+    type Mode = Mode;
+
+    fn new() -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
@@ -267,40 +260,69 @@ impl PosixTerminal {
     // Init checks:
 
     /// Check if current terminal can provide a rich line-editing user interface.
-    pub fn is_unsupported(&self) -> bool {
+    fn is_unsupported(&self) -> bool {
         self.unsupported
     }
 
     /// check if stdin is connected to a terminal.
-    pub fn is_stdin_tty(&self) -> bool {
+    fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
     }
 
     // Interactive loop:
 
-    /// Get the number of columns in the current terminal.
-    pub fn get_columns(&self) -> usize {
-        get_columns()
+    /// Try to get the number of columns in the current terminal,
+    /// or assume 80 if it fails.
+    fn get_columns(&self) -> usize {
+        let (cols, _) = get_win_size();
+        cols
     }
 
-    /// Get the number of rows in the current terminal.
-    pub fn get_rows(&self) -> usize {
-        get_rows()
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
+    fn get_rows(&self) -> usize {
+        let (_, rows) = get_win_size();
+        rows
+    }
+
+    fn enable_raw_mode(&self) -> Result<Mode> {
+        use nix::errno::Errno::ENOTTY;
+        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
+                                IXON, /* OPOST, */ VMIN, VTIME};
+        if !self.stdin_isatty {
+            try!(Err(nix::Error::from_errno(ENOTTY)));
+        }
+        let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
+        let mut raw = original_mode;
+        // disable BREAK interrupt, CR to NL conversion on input,
+        // input parity check, strip high bit (bit 8), output flow control
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        // we don't want raw output, it turns newlines into straight linefeeds
+        // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        // disable echoing, canonical mode, extended input processing and signals
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_cc[VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[VTIME] = 0; // with blocking read
+        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
+        Ok(original_mode)
     }
 
     /// Create a RAW reader
-    pub fn create_reader(&self) -> Result<PosixRawReader<std::io::Stdin>> {
-        PosixRawReader::new(std::io::stdin())
+    fn create_reader(&self) -> Result<PosixRawReader> {
+        PosixRawReader::new()
     }
 
     /// Check if a SIGWINCH signal has been received
-    pub fn sigwinch(&self) -> bool {
+    fn sigwinch(&self) -> bool {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }
 
     /// Clear the screen. Used to handle ctrl+l
-    pub fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
-        clear_screen(w)
+    fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
+        try!(w.write_all(b"\x1b[H\x1b[2J"));
+        try!(w.flush());
+        Ok(())
     }
 }
 

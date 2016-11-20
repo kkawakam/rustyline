@@ -13,4 +13,4 @@ after_success: |
   bash deploy-docs.sh
 env:
   global:
-    secure: CEgJhYJN0LBGdrhBfeFywxPLKJLnjgAhu2H1A7Gl8r7PGhSlvMjLs1CgLluD83pUxrtxAxLxT/I3bJeUhPI5fbxwxfXO7V48yYqivAx11f0FCnvkBFRcxFCysZLazgEFpttDaxwySC69CL+uwoP93F4lO/YKulyUqiEbDdJsZdM=
+    secure: "XxaPXHiVplTwMaAytYC0VQR/nNnm7SJVzXiUuaVEjssHip0Uje/4f3vGqtJjnD70FfxwNWQKiSYOcbYjWPlsJeANRt4ZoCsRt5eLGUZ+wH79n1fOkp5EIpFT/isjCB51A4n8PRUvuWfQ2OtNNeGLL6akMxt19sHdXoiQkLOe338="

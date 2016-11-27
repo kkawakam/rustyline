@@ -30,18 +30,18 @@ fn main() {
             Ok(line) => {
                 rl.add_history_entry(line.as_ref());
                 println!("Line: {}", line);
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                break
-            },
+                break;
+            }
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }

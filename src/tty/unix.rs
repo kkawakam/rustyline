@@ -90,15 +90,20 @@ struct StdinRaw {}
 
 impl Read for StdinRaw {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let res = unsafe {
-            libc::read(STDIN_FILENO,
-                       buf.as_mut_ptr() as *mut libc::c_void,
-                       buf.len() as libc::size_t)
-        };
-        if res == -1 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(res as usize)
+        loop {
+            let res = unsafe {
+                libc::read(STDIN_FILENO,
+                           buf.as_mut_ptr() as *mut libc::c_void,
+                           buf.len() as libc::size_t)
+            };
+            if res == -1 {
+                let error = io::Error::last_os_error();
+                if error.kind() != io::ErrorKind::Interrupted {
+                    return Err(error);
+                }
+            } else {
+                return Ok(res as usize);
+            }
         }
     }
 }

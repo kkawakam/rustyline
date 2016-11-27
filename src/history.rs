@@ -209,13 +209,13 @@ fn umask() -> u16 {
     0
 }
 #[cfg(unix)]
-fn umask() -> u16 {
+fn umask() -> libc::mode_t {
     unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
 }
 #[cfg(windows)]
 fn restore_umask(_: u16) {}
 #[cfg(unix)]
-fn restore_umask(old_umask: u16) {
+fn restore_umask(old_umask: libc::mode_t) {
     unsafe {
         libc::umask(old_umask);
     }

@@ -6,6 +6,10 @@ use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
+#[cfg(unix)]
+use libc;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 
 use super::Result;
 use config::{Config, HistoryDuplicates};
@@ -103,11 +107,19 @@ impl History {
         if self.is_empty() {
             return Ok(());
         }
-        // TODO umask
-        let file = try!(File::create(path));
+        let old_umask = if cfg!(unix) {
+            unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
+        } else {
+            0
+        };
+        let f = File::create(path);
         if cfg!(unix) {
-            use libc;
-            use std::os::unix::io::AsRawFd;
+            unsafe {
+                libc::umask(old_umask);
+            }
+        }
+        let file = try!(f);
+        if cfg!(unix) {
             unsafe {
                 libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
             }

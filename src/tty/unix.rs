@@ -129,9 +129,9 @@ impl PosixRawReader {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     match seq2 {
-                        // '1' => Ok(KeyPress::Home),
+                        '1' => Ok(KeyPress::Home), // xterm
                         '3' => Ok(KeyPress::Delete),
-                        // '4' => Ok(KeyPress::End),
+                        '4' => Ok(KeyPress::End), // xterm
                         '5' => Ok(KeyPress::PageUp),
                         '6' => Ok(KeyPress::PageDown),
                         '7' => Ok(KeyPress::Home),

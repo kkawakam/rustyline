@@ -6,10 +6,7 @@ use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
-#[cfg(unix)]
 use libc;
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 
 use super::Result;
 use config::{Config, HistoryDuplicates};
@@ -123,6 +120,7 @@ impl History {
         }
         let file = try!(f);
         if cfg!(unix) {
+            use std::os::unix::io::AsRawFd;
             unsafe {
                 libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
             }

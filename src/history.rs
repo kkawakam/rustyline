@@ -101,7 +101,15 @@ impl History {
         if self.is_empty() {
             return Ok(());
         }
+        // TODO umask
         let file = try!(File::create(path));
+        if cfg!(unix) {
+            use libc;
+            use std::os::unix::io::AsRawFd;
+            unsafe {
+                libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
+            }
+        }
         let mut wtr = BufWriter::new(file);
         for entry in &self.entries {
             try!(wtr.write_all(&entry.as_bytes()));

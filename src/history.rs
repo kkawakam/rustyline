@@ -29,7 +29,10 @@ pub struct History {
 }
 
 impl History {
-    pub fn new(config: Config) -> History {
+    pub fn new() -> History {
+        Self::with_config(Config::default())
+    }
+    pub fn with_config(config: Config) -> History {
         History {
             entries: VecDeque::new(),
             max_len: config.max_history_size(),
@@ -228,7 +231,7 @@ mod tests {
     use super::{Direction, History};
 
     fn init() -> History {
-        let mut history = History::new(Config::default());
+        let mut history = History::new();
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
@@ -237,9 +240,7 @@ mod tests {
 
     #[test]
     fn new() {
-        let config = Config::default();
-        let history = History::new(config);
-        assert_eq!(config.max_history_size(), history.max_len);
+        let history = History::new();
         assert_eq!(0, history.entries.len());
     }
 
@@ -248,7 +249,8 @@ mod tests {
         let config = Config::builder()
             .history_ignore_space(true)
             .build();
-        let mut history = History::new(config);
+        let mut history = History::with_config(config);
+        assert_eq!(config.max_history_size(), history.max_len);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));

@@ -6,6 +6,7 @@ use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
+#[cfg(unix)]
 use libc;
 
 use super::Result;
@@ -107,24 +108,11 @@ impl History {
         if self.is_empty() {
             return Ok(());
         }
-        let old_umask = if cfg!(unix) {
-            unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
-        } else {
-            0
-        };
+        let old_umask = umask();
         let f = File::create(path);
-        if cfg!(unix) {
-            unsafe {
-                libc::umask(old_umask);
-            }
-        }
+        restore_umask(old_umask);
         let file = try!(f);
-        if cfg!(unix) {
-            use std::os::unix::io::AsRawFd;
-            unsafe {
-                libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
-            }
-        }
+        fix_perm(&file);
         let mut wtr = BufWriter::new(file);
         for entry in &self.entries {
             try!(wtr.write_all(&entry.as_bytes()));
@@ -218,6 +206,33 @@ impl<'a> Iterator for Iter<'a> {
 impl<'a> DoubleEndedIterator for Iter<'a> {
     fn next_back(&mut self) -> Option<&'a String> {
         self.0.next_back()
+    }
+}
+
+#[cfg(windows)]
+fn umask() -> u16 {
+    0
+}
+#[cfg(unix)]
+fn umask() -> u16 {
+    unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
+}
+#[cfg(windows)]
+fn restore_umask(_: u16) {}
+#[cfg(unix)]
+fn restore_umask(old_umask: u16) {
+    unsafe {
+        libc::umask(old_umask);
+    }
+}
+
+#[cfg(windows)]
+fn fix_perm(file: &File) {}
+#[cfg(unix)]
+fn fix_perm(file: &File) {
+    use std::os::unix::io::AsRawFd;
+    unsafe {
+        libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
     }
 }
 

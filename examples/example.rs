@@ -19,7 +19,7 @@ fn main() {
         .completion_type(CompletionType::List)
         .build();
     let c = FilenameCompleter::new();
-    let mut rl = Editor::new(config);
+    let mut rl = Editor::with_config(config);
     rl.set_completer(Some(c));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");

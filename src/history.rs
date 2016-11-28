@@ -222,7 +222,7 @@ fn restore_umask(old_umask: libc::mode_t) {
 }
 
 #[cfg(windows)]
-fn fix_perm(file: &File) {}
+fn fix_perm(_: &File) {}
 #[cfg(unix)]
 fn fix_perm(file: &File) {
     use std::os::unix::io::AsRawFd;

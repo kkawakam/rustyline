@@ -20,30 +20,12 @@ const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-const TIOCGWINSZ: libc::c_ulong = 0x40087468;
-
-#[cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "android"))]
-const TIOCGWINSZ: libc::c_ulong = 0x5413;
-
-#[cfg(all(target_os = "linux", target_env = "musl"))]
-const TIOCGWINSZ: libc::c_int = 0x5413;
-
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
-    use libc::c_ushort;
 
     unsafe {
-        #[repr(C)]
-        struct winsize {
-            ws_row: c_ushort,
-            ws_col: c_ushort,
-            ws_xpixel: c_ushort,
-            ws_ypixel: c_ushort,
-        }
-
-        let mut size: winsize = zeroed();
-        match libc::ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size) {
+        let mut size: libc::winsize = zeroed();
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ, &mut size) {
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }

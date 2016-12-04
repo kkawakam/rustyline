@@ -116,10 +116,11 @@ Meta-U       | Upper-case the next word
 Meta-Y       | See Ctrl-Y
 Meta-BackSpace | Kill from the start of the current word, or, if between words, to the start of the previous word
 
+[Readline Emacs Editing Mode Cheat Sheet](http://www.catonmat.net/download/readline-emacs-editing-mode-cheat-sheet.pdf)
+
 ## ToDo
 
  - Undos
- - Read input with timeout to properly handle single ESC key
  - expose an API callable from C
 
 ## Wine

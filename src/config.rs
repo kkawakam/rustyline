@@ -3,8 +3,7 @@ use std::default::Default;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
-    /// When listing completion alternatives, only display
-    /// one screen of possibilities at a time.
+    /// Maximum number of entries in History.
     max_history_size: usize,
     history_duplicates: HistoryDuplicates,
     history_ignore_space: bool,
@@ -21,7 +20,7 @@ impl Config {
         Builder::new()
     }
 
-    /// Tell the maximum length for the history.
+    /// Tell the maximum length (i.e. number of entries) for the history.
     pub fn max_history_size(&self) -> usize {
         self.max_history_size
     }

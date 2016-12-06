@@ -90,15 +90,20 @@ struct StdinRaw {}
 
 impl Read for StdinRaw {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let res = unsafe {
-            libc::read(STDIN_FILENO,
-                       buf.as_mut_ptr() as *mut libc::c_void,
-                       buf.len() as libc::size_t)
-        };
-        if res == -1 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(res as usize)
+        loop {
+            let res = unsafe {
+                libc::read(STDIN_FILENO,
+                           buf.as_mut_ptr() as *mut libc::c_void,
+                           buf.len() as libc::size_t)
+            };
+            if res == -1 {
+                let error = io::Error::last_os_error();
+                if error.kind() != io::ErrorKind::Interrupted {
+                    return Err(error);
+                }
+            } else {
+                return Ok(res as usize);
+            }
         }
     }
 }
@@ -125,9 +130,9 @@ impl PosixRawReader {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     match seq2 {
-                        // '1' => Ok(KeyPress::Home),
+                        '1' => Ok(KeyPress::Home), // xterm
                         '3' => Ok(KeyPress::Delete),
-                        // '4' => Ok(KeyPress::End),
+                        '4' => Ok(KeyPress::End), // xterm
                         '5' => Ok(KeyPress::PageUp),
                         '6' => Ok(KeyPress::PageDown),
                         '7' => Ok(KeyPress::Home),
@@ -324,6 +329,14 @@ impl Term for PosixTerminal {
         try!(w.flush());
         Ok(())
     }
+}
+
+#[cfg(unix)]
+pub fn suspend() -> Result<()> {
+    // For macos:
+    try!(signal::kill(nix::unistd::getppid(), signal::SIGTSTP));
+    try!(signal::kill(nix::unistd::getpid(), signal::SIGTSTP));
+    Ok(())
 }
 
 #[cfg(all(unix,test))]

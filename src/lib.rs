@@ -7,8 +7,7 @@
 //! Usage
 //!
 //! ```
-//! let config = rustyline::Config::default();
-//! let mut rl = rustyline::Editor::<()>::new(config);
+//! let mut rl = rustyline::Editor::<()>::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -1059,11 +1058,15 @@ pub struct Editor<C: Completer> {
 }
 
 impl<C: Completer> Editor<C> {
-    pub fn new(config: Config) -> Editor<C> {
+    pub fn new() -> Editor<C> {
+        Self::with_config(Config::default())
+    }
+
+    pub fn with_config(config: Config) -> Editor<C> {
         let term = Terminal::new();
         Editor {
             term: term,
-            history: History::new(config),
+            history: History::with_config(config),
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
@@ -1113,8 +1116,7 @@ impl<C: Completer> Editor<C> {
     }
 
     /// ```
-    /// let config = rustyline::Config::default();
-    /// let mut rl = rustyline::Editor::<()>::new(config);
+    /// let mut rl = rustyline::Editor::<()>::new();
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -1200,8 +1202,7 @@ mod test {
     }
 
     fn init_editor(keys: &[KeyPress]) -> Editor<()> {
-        let config = Config::default();
-        let mut editor = Editor::<()>::new(config);
+        let mut editor = Editor::<()>::new();
         editor.term.keys.extend(keys.iter().cloned());
         editor
     }
@@ -1211,7 +1212,7 @@ mod test {
         let mut out = ::std::io::sink();
         let line = "current edited line";
         let mut s = init_state(&mut out, line, 6, 80);
-        let mut history = History::new(Config::default());
+        let mut history = History::new();
         history.add("line0");
         history.add("line1");
         s.history_index = history.len();

@@ -183,6 +183,11 @@ impl LineBuffer {
         }
     }
 
+    /// Replace a single character under the cursor (Vi mode)
+    pub fn replace_char(&mut self, ch: char) -> Option<bool> {
+        if self.delete() { self.insert(ch) } else { None }
+    }
+
     /// Delete the character at the right of the cursor without altering the cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
     pub fn delete(&mut self) -> bool {
@@ -204,6 +209,12 @@ impl LineBuffer {
         } else {
             false
         }
+    }
+
+    /// Kill all characters on the current line.
+    pub fn kill_whole_line(&mut self) -> Option<String> {
+        self.move_home();
+        self.kill_line()
     }
 
     /// Kill the text from point to the end of the line.

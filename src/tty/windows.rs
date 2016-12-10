@@ -151,6 +151,10 @@ impl RawReader for ConsoleRawReader {
                 let c = try!(orc.unwrap());
                 if meta {
                     match c {
+                        '-' => return Ok(KeyPress::Meta('-')),
+                        '0'...'9' => return Ok(KeyPress::Meta(c)),
+                        '<' => Ok(KeyPress::Meta('<')),
+                        '>' => Ok(KeyPress::Meta('>')),
                         'b' | 'B' => return Ok(KeyPress::Meta('B')),
                         'c' | 'C' => return Ok(KeyPress::Meta('C')),
                         'd' | 'D' => return Ok(KeyPress::Meta('D')),

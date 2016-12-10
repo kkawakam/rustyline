@@ -13,6 +13,7 @@ pub struct Config {
     completion_prompt_limit: usize,
     /// Duration (milliseconds) Rustyline will wait for a character when reading an ambiguous key sequence.
     keyseq_timeout: i32,
+    edit_mode: EditMode,
 }
 
 impl Config {
@@ -48,6 +49,10 @@ impl Config {
     pub fn keyseq_timeout(&self) -> i32 {
         self.keyseq_timeout
     }
+
+    pub fn edit_mode(&self) -> EditMode {
+        self.edit_mode
+    }
 }
 
 impl Default for Config {
@@ -59,6 +64,7 @@ impl Default for Config {
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
             keyseq_timeout: 500,
+            edit_mode: EditMode::Emacs,
         }
     }
 }
@@ -77,6 +83,12 @@ pub enum CompletionType {
     /// When more than one match, list all matches
     /// (like in Bash/Readline).
     List,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditMode {
+    Emacs,
+    Vi,
 }
 
 #[derive(Debug)]
@@ -127,6 +139,11 @@ impl Builder {
     /// Set `keyseq_timeout` in milliseconds.
     pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
         self.p.keyseq_timeout = keyseq_timeout_ms;
+        self
+    }
+
+    pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
+        self.p.edit_mode = edit_mode;
         self
     }
 

@@ -152,6 +152,8 @@ impl PosixRawReader {
             // TODO ESC-R (r): Undo all changes made to this line.
             match seq1 {
                 '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
+                '-' => return Ok(KeyPress::Meta('-')),
+                '0'...'9' => return Ok(KeyPress::Meta(seq1)),
                 '<' => Ok(KeyPress::Meta('<')),
                 '>' => Ok(KeyPress::Meta('>')),
                 'b' | 'B' => Ok(KeyPress::Meta('B')),

@@ -30,6 +30,7 @@ pub mod completion;
 mod consts;
 pub mod error;
 pub mod history;
+mod keymap;
 mod kill_ring;
 pub mod line_buffer;
 #[cfg(unix)]
@@ -51,7 +52,7 @@ use consts::KeyPress;
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::{Mode, KillRing};
-pub use config::{CompletionType, Config, HistoryDuplicates};
+pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;

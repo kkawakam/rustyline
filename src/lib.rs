@@ -667,22 +667,22 @@ fn page_completions<R: RawReader>(rdr: &mut R,
     for row in 0..num_rows {
         if row == pause_row {
             try!(write_and_flush(s.out, b"\n--More--"));
-            let mut key = KeyPress::Null;
-            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
-                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
-                  key != KeyPress::Char('q') &&
-                  key != KeyPress::Char('Q') &&
-                  key != KeyPress::Char(' ') &&
-                  key != KeyPress::Backspace && key != KeyPress::Enter {
-                key = try!(rdr.next_key(config.keyseq_timeout()));
+            let mut cmd = Cmd::Noop;
+            while cmd != Cmd::SelfInsert('y') && cmd != Cmd::SelfInsert('Y') &&
+                  cmd != Cmd::SelfInsert('n') && cmd != Cmd::SelfInsert('N') &&
+                  cmd != Cmd::SelfInsert('q') &&
+                  cmd != Cmd::SelfInsert('Q') &&
+                  cmd != Cmd::SelfInsert(' ') &&
+                  cmd != Cmd::BackwardDeleteChar && cmd != Cmd::AcceptLine {
+                cmd = try!(s.next_cmd(rdr, config));
             }
-            match key {
-                KeyPress::Char('y') |
-                KeyPress::Char('Y') |
-                KeyPress::Char(' ') => {
+            match cmd {
+                Cmd::SelfInsert('y') |
+                Cmd::SelfInsert('Y') |
+                Cmd::SelfInsert(' ') => {
                     pause_row += s.term.get_rows() - 1;
                 }
-                KeyPress::Enter => {
+                Cmd::AcceptLine => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -859,6 +859,12 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Delete (forward) one character at point.
                 try!(edit_delete(&mut s))
             }
+            Cmd::Replace(c) => {
+                editor.kill_ring.reset();
+                try!(edit_delete(&mut s));
+                try!(edit_insert(&mut s, c));
+                try!(edit_move_left(&mut s))
+            }
             Cmd::EndOfFile => {
                 editor.kill_ring.reset();
                 if !s.edit_state.is_emacs_mode() || s.line.is_empty() {
@@ -884,6 +890,12 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::KillLine => {
                 // Kill the text from point to the end of the line.
+                if let Some(text) = try!(edit_kill_line(&mut s)) {
+                    editor.kill_ring.kill(&text, Mode::Append)
+                }
+            }
+            Cmd::KillWholeLine => {
+                try!(edit_move_home(&mut s));
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
@@ -1204,7 +1216,7 @@ mod test {
             snapshot: LineBuffer::with_capacity(100),
             term: term,
             byte_buffer: [0; 4],
-            edit_state : EditState::new(&config),
+            edit_state: EditState::new(&config),
         }
     }
 

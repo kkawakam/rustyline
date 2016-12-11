@@ -27,7 +27,7 @@ pub enum Cmd {
     ForwardWord(Word), // Command For Moving
     Interrupt,
     KillLine, // Command For Killing
-    KillWholeLine, // Command For Killing (TODO Delete current line)
+    KillWholeLine, // Command For Killing
     KillWord(Word), // Command For Killing
     NextHistory, // Command For History
     Noop,
@@ -313,7 +313,7 @@ impl EditState {
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode: Vi enter command mode (use alternative key bindings).
                 self.insert = false;
-                Cmd::Noop
+                Cmd::BackwardChar
             }
             KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,

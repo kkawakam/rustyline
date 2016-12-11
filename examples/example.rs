@@ -2,7 +2,7 @@ extern crate rustyline;
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::{Config, CompletionType, Editor};
+use rustyline::{Config, CompletionType, Editor, EditMode};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -17,6 +17,7 @@ fn main() {
     let config = Config::builder()
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
+        .edit_mode(EditMode::Emacs)
         .build();
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);

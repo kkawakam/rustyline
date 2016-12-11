@@ -4,7 +4,7 @@ use super::KeyPress;
 use super::RawReader;
 use super::Result;
 
-//#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     Abort, // Miscellaneous Command
     AcceptLine, // Command For History
@@ -25,16 +25,18 @@ pub enum Cmd {
     ForwardChar, // Command For Moving
     ForwardSearchHistory, // Command For History
     ForwardWord(Word), // Command For Moving
+    Interrupt,
     KillLine, // Command For Killing
     KillWholeLine, // Command For Killing (TODO Delete current line)
     KillWord(Word), // Command For Killing
     NextHistory, // Command For History
-    Noop, // TODO
+    Noop,
     PreviousHistory, // Command For History
     QuotedInsert, // Command For Text
-    Replace, // TODO DeleteChar + SelfInsert
+    Replace(char), // TODO DeleteChar + SelfInsert
     ReverseSearchHistory, // Command For History
-    SelfInsert, // Command For Text
+    SelfInsert(char), // Command For Text
+    Suspend,
     TransposeChars, // Command For Text
     TransposeWords, // Command For Text
     Unknown,
@@ -48,6 +50,7 @@ pub enum Cmd {
     YankPop, // Command For Killing
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Word {
     // non-blanks characters
     BigWord,
@@ -57,6 +60,7 @@ pub enum Word {
     ViWord,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum CharSearch {
     Forward(char),
     // until
@@ -81,10 +85,11 @@ impl EditState {
         }
     }
 
-    pub fn next_cmd<R: RawReader>(&mut self,
-                                  rdr: &mut R,
-                                  config: &Config)
-                                  -> Result<(KeyPress, Cmd)> {
+    pub fn is_emacs_mode(&self) -> bool {
+        self.mode == EditMode::Emacs
+    }
+
+    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         match self.mode {
             EditMode::Emacs => self.emacs(rdr, config),
             EditMode::Vi if self.insert => self.vi_insert(rdr, config),
@@ -92,17 +97,18 @@ impl EditState {
         }
     }
 
-    fn emacs<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<(KeyPress, Cmd)> {
+    fn emacs<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         let key = try!(rdr.next_key(config.keyseq_timeout()));
         let cmd = match key {
-            KeyPress::Char(_) => Cmd::SelfInsert,
+            KeyPress::Char(c) => Cmd::SelfInsert(c),
             KeyPress::Esc => Cmd::Abort, // TODO Validate
             KeyPress::Ctrl('A') => Cmd::BeginningOfLine,
             KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Ctrl('B') => Cmd::BackwardChar,
             KeyPress::Left => Cmd::BackwardChar,
-            // KeyPress::Ctrl('D') if s.line.is_empty() => Cmd::EndOfFile,
-            KeyPress::Ctrl('D') => Cmd::DeleteChar,
+            KeyPress::Ctrl('C') => Cmd::Interrupt,
+            KeyPress::Ctrl('D') => Cmd::EndOfFile,
+            // KeyPress::Ctrl('D') => Cmd::DeleteChar,
             KeyPress::Delete => Cmd::DeleteChar,
             KeyPress::Ctrl('E') => Cmd::EndOfLine,
             KeyPress::End => Cmd::EndOfLine,
@@ -128,6 +134,7 @@ impl EditState {
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
             KeyPress::Ctrl('Y') => Cmd::Yank,
+            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Meta('\x08') => Cmd::BackwardKillWord(Word::Word),
             KeyPress::Meta('\x7f') => Cmd::BackwardKillWord(Word::Word),
             // KeyPress::Meta('-') => { // digit-argument
@@ -144,15 +151,13 @@ impl EditState {
             KeyPress::Meta('T') => Cmd::TransposeWords,
             KeyPress::Meta('U') => Cmd::UpcaseWord,
             KeyPress::Meta('Y') => Cmd::YankPop,
+            KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         };
-        Ok((key, cmd))
+        Ok(cmd)
     }
 
-    fn vi_command<R: RawReader>(&mut self,
-                                rdr: &mut R,
-                                config: &Config)
-                                -> Result<(KeyPress, Cmd)> {
+    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         let key = try!(rdr.next_key(config.keyseq_timeout()));
         let cmd = match key {
             KeyPress::Char('$') => Cmd::EndOfLine,
@@ -211,7 +216,7 @@ impl EditState {
                 // vi-replace-char: Vi replace character under the cursor with the next character typed.
                 let ch = try!(rdr.next_key(config.keyseq_timeout()));
                 match ch {
-                    KeyPress::Char(_) => return Ok((ch, Cmd::Replace)),
+                    KeyPress::Char(c) => Cmd::Replace(c),
                     KeyPress::Esc => Cmd::Noop,
                     _ => Cmd::Unknown,
                 }
@@ -238,6 +243,7 @@ impl EditState {
             KeyPress::Ctrl('H') => Cmd::BackwardChar,
             KeyPress::Backspace => Cmd::BackwardChar, // TODO Validate
             KeyPress::Left => Cmd::BackwardChar,
+            KeyPress::Ctrl('C') => Cmd::Interrupt,
             KeyPress::Ctrl('D') => Cmd::EndOfFile,
             KeyPress::Delete => Cmd::DeleteChar,
             KeyPress::Ctrl('G') => Cmd::Abort,
@@ -257,25 +263,34 @@ impl EditState {
             KeyPress::Up => Cmd::PreviousHistory,
             KeyPress::Ctrl('K') => Cmd::KillLine,
             KeyPress::Ctrl('Q') => Cmd::QuotedInsert, // most terminals override Ctrl+Q to resume execution
-            KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
-            KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory,
+            KeyPress::Ctrl('R') => {
+                self.insert = true; // TODO Validate
+                Cmd::ReverseSearchHistory
+            }
+            KeyPress::Ctrl('S') => {
+                self.insert = true; // TODO Validate
+                Cmd::ForwardSearchHistory
+            }
             KeyPress::Ctrl('T') => Cmd::TransposeChars,
             KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
             KeyPress::Ctrl('Y') => Cmd::Yank,
+            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Esc => Cmd::Noop,
+            KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         };
-        Ok((key, cmd))
+        Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<(KeyPress, Cmd)> {
+    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         let key = try!(rdr.next_key(config.keyseq_timeout()));
         let cmd = match key {
-            KeyPress::Char(_) => Cmd::SelfInsert,
+            KeyPress::Char(c) => Cmd::SelfInsert(c),
             KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Left => Cmd::BackwardChar,
+            KeyPress::Ctrl('C') => Cmd::Interrupt,
             KeyPress::Ctrl('D') => Cmd::EndOfFile, // vi-eof-maybe
             KeyPress::Delete => Cmd::DeleteChar,
             KeyPress::End => Cmd::EndOfLine,
@@ -294,14 +309,16 @@ impl EditState {
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
             KeyPress::Ctrl('Y') => Cmd::Yank,
+            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode: Vi enter command mode (use alternative key bindings).
                 self.insert = false;
                 Cmd::Noop
             }
+            KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         };
-        Ok((key, cmd))
+        Ok(cmd)
     }
 
     fn vi_delete_motion<R: RawReader>(&mut self,
@@ -310,12 +327,14 @@ impl EditState {
                                       key: KeyPress)
                                       -> Result<Cmd> {
         let mvt = try!(rdr.next_key(config.keyseq_timeout()));
+        if mvt == key {
+            return Ok(Cmd::KillWholeLine);
+        }
         Ok(match mvt {
             KeyPress::Char('$') => Cmd::KillLine, // vi-change-to-eol: Vi change to end of line.
             KeyPress::Char('0') => Cmd::UnixLikeDiscard, // vi-kill-line-prev: Vi cut from beginning of line to cursor.
             KeyPress::Char('b') => Cmd::BackwardKillWord(Word::ViWord),
             KeyPress::Char('B') => Cmd::BackwardKillWord(Word::BigWord),
-            x if x == key => Cmd::KillWholeLine,
             KeyPress::Char('e') => Cmd::KillWord(Word::ViWord),
             KeyPress::Char('E') => Cmd::KillWord(Word::BigWord),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {

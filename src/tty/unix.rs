@@ -111,66 +111,66 @@ impl PosixRawReader {
                 // Extended escape, read additional byte.
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
-                    match seq2 {
-                        '1' => Ok(KeyPress::Home), // xterm
-                        '3' => Ok(KeyPress::Delete),
-                        '4' => Ok(KeyPress::End), // xterm
-                        '5' => Ok(KeyPress::PageUp),
-                        '6' => Ok(KeyPress::PageDown),
-                        '7' => Ok(KeyPress::Home),
-                        '8' => Ok(KeyPress::End),
-                        _ => Ok(KeyPress::UnknownEscSeq),
-                    }
+                    Ok(match seq2 {
+                        '1' => KeyPress::Home, // xterm
+                        '3' => KeyPress::Delete,
+                        '4' => KeyPress::End, // xterm
+                        '5' => KeyPress::PageUp,
+                        '6' => KeyPress::PageDown,
+                        '7' => KeyPress::Home,
+                        '8' => KeyPress::End,
+                        _ => KeyPress::UnknownEscSeq,
+                    })
                 } else {
                     Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
-                match seq2 {
-                    'A' => Ok(KeyPress::Up), // ANSI
-                    'B' => Ok(KeyPress::Down),
-                    'C' => Ok(KeyPress::Right),
-                    'D' => Ok(KeyPress::Left),
-                    'F' => Ok(KeyPress::End),
-                    'H' => Ok(KeyPress::Home),
-                    _ => Ok(KeyPress::UnknownEscSeq),
-                }
+                Ok(match seq2 {
+                    'A' => KeyPress::Up, // ANSI
+                    'B' => KeyPress::Down,
+                    'C' => KeyPress::Right,
+                    'D' => KeyPress::Left,
+                    'F' => KeyPress::End,
+                    'H' => KeyPress::Home,
+                    _ => KeyPress::UnknownEscSeq,
+                })
             }
         } else if seq1 == 'O' {
             // ESC O sequences.
             let seq2 = try!(self.next_char());
-            match seq2 {
-                'A' => Ok(KeyPress::Up),
-                'B' => Ok(KeyPress::Down),
-                'C' => Ok(KeyPress::Right),
-                'D' => Ok(KeyPress::Left),
-                'F' => Ok(KeyPress::End),
-                'H' => Ok(KeyPress::Home),
-                _ => Ok(KeyPress::UnknownEscSeq),
-            }
+            Ok(match seq2 {
+                'A' => KeyPress::Up,
+                'B' => KeyPress::Down,
+                'C' => KeyPress::Right,
+                'D' => KeyPress::Left,
+                'F' => KeyPress::End,
+                'H' => KeyPress::Home,
+                _ => KeyPress::UnknownEscSeq,
+            })
         } else {
             // TODO ESC-N (n): search history forward not interactively
             // TODO ESC-P (p): search history backward not interactively
             // TODO ESC-R (r): Undo all changes made to this line.
-            match seq1 {
-                '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
-                '-' => return Ok(KeyPress::Meta('-')),
-                '0'...'9' => return Ok(KeyPress::Meta(seq1)),
-                '<' => Ok(KeyPress::Meta('<')),
-                '>' => Ok(KeyPress::Meta('>')),
-                'b' | 'B' => Ok(KeyPress::Meta('B')),
-                'c' | 'C' => Ok(KeyPress::Meta('C')),
-                'd' | 'D' => Ok(KeyPress::Meta('D')),
-                'f' | 'F' => Ok(KeyPress::Meta('F')),
-                'l' | 'L' => Ok(KeyPress::Meta('L')),
-                't' | 'T' => Ok(KeyPress::Meta('T')),
-                'u' | 'U' => Ok(KeyPress::Meta('U')),
-                'y' | 'Y' => Ok(KeyPress::Meta('Y')),
-                '\x7f' => Ok(KeyPress::Meta('\x7f')), // Delete
+            Ok(match seq1 {
+                '\x08' => KeyPress::Meta('\x08'), // Backspace
+                '-' => KeyPress::Meta('-'),
+                '0'...'9' => KeyPress::Meta(seq1),
+                '<' => KeyPress::Meta('<'),
+                '>' => KeyPress::Meta('>'),
+                'b' | 'B' => KeyPress::Meta('B'),
+                'c' | 'C' => KeyPress::Meta('C'),
+                'd' | 'D' => KeyPress::Meta('D'),
+                'f' | 'F' => KeyPress::Meta('F'),
+                'l' | 'L' => KeyPress::Meta('L'),
+                't' | 'T' => KeyPress::Meta('T'),
+                'u' | 'U' => KeyPress::Meta('U'),
+                'y' | 'Y' => KeyPress::Meta('Y'),
+                '\x7f' => KeyPress::Meta('\x7f'), // Delete
                 _ => {
                     // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
-                    Ok(KeyPress::UnknownEscSeq)
+                    KeyPress::UnknownEscSeq
                 }
-            }
+            })
         }
     }
 }

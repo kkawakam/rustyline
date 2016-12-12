@@ -148,21 +148,21 @@ impl RawReader for ConsoleRawReader {
                 }
                 let c = try!(orc.unwrap());
                 if meta {
-                    match c {
-                        '-' => return Ok(KeyPress::Meta('-')),
-                        '0'...'9' => return Ok(KeyPress::Meta(c)),
-                        '<' => Ok(KeyPress::Meta('<')),
-                        '>' => Ok(KeyPress::Meta('>')),
-                        'b' | 'B' => return Ok(KeyPress::Meta('B')),
-                        'c' | 'C' => return Ok(KeyPress::Meta('C')),
-                        'd' | 'D' => return Ok(KeyPress::Meta('D')),
-                        'f' | 'F' => return Ok(KeyPress::Meta('F')),
-                        'l' | 'L' => return Ok(KeyPress::Meta('L')),
-                        't' | 'T' => return Ok(KeyPress::Meta('T')),
-                        'u' | 'U' => return Ok(KeyPress::Meta('U')),
-                        'y' | 'Y' => return Ok(KeyPress::Meta('Y')),
-                        _ => return Ok(KeyPress::UnknownEscSeq),
-                    }
+                    return Ok(match c {
+                        '-' => KeyPress::Meta('-'),
+                        '0'...'9' => KeyPress::Meta(c),
+                        '<' => KeyPress::Meta('<'),
+                        '>' => KeyPress::Meta('>'),
+                        'b' | 'B' => KeyPress::Meta('B'),
+                        'c' | 'C' => KeyPress::Meta('C'),
+                        'd' | 'D' => KeyPress::Meta('D'),
+                        'f' | 'F' => KeyPress::Meta('F'),
+                        'l' | 'L' => KeyPress::Meta('L'),
+                        't' | 'T' => KeyPress::Meta('T'),
+                        'u' | 'U' => KeyPress::Meta('U'),
+                        'y' | 'Y' => KeyPress::Meta('Y'),
+                        _ => KeyPress::UnknownEscSeq,
+                    });
                 } else {
                     return Ok(consts::char_to_key_press(c));
                 }

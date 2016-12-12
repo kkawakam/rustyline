@@ -1,7 +1,7 @@
-use super::Config;
-use super::EditMode;
-use super::KeyPress;
-use super::RawReader;
+use config::Config;
+use config::EditMode;
+use consts::KeyPress;
+use tty::RawReader;
 use super::Result;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +41,7 @@ pub enum Cmd {
     TransposeWords, // Command For Text
     Unknown,
     UnixLikeDiscard, // Command For Killing
-    // UnixWordRubout, // = KillWord(Word::BigWord) Command For Killing
+    // UnixWordRubout, // = BackwardKillWord(Word::BigWord) Command For Killing
     UpcaseWord, // Command For Text
     ViCharSearch(CharSearch), // TODO
     ViEndWord(Word), // TODO
@@ -50,7 +50,7 @@ pub enum Cmd {
     YankPop, // Command For Killing
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Word {
     // non-blanks characters
     BigWord,
@@ -132,7 +132,7 @@ impl EditState {
             KeyPress::Ctrl('T') => Cmd::TransposeChars,
             KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
-            KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
+            KeyPress::Ctrl('W') => Cmd::BackwardKillWord(Word::BigWord),
             KeyPress::Ctrl('Y') => Cmd::Yank,
             KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Meta('\x08') => Cmd::BackwardKillWord(Word::Word),

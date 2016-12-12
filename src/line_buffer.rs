@@ -1,5 +1,6 @@
 //! Line buffer with current cursor position
 use std::ops::Deref;
+use keymap::Word;
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -261,18 +262,17 @@ impl LineBuffer {
         true
     }
 
-    fn prev_word_pos<F>(&self, pos: usize, test: F) -> Option<usize>
-        where F: Fn(char) -> bool
-    {
+    fn prev_word_pos(&self, pos: usize, word_def: Word) -> Option<usize> {
         if pos == 0 {
             return None;
         }
+        let test = is_break_char(word_def);
         let mut pos = pos;
         // eat any spaces on the left
         pos -= self.buf[..pos]
             .chars()
             .rev()
-            .take_while(|ch| test(*ch))
+            .take_while(|ch| test(ch))
             .map(char::len_utf8)
             .sum();
         if pos > 0 {
@@ -280,7 +280,7 @@ impl LineBuffer {
             pos -= self.buf[..pos]
                 .chars()
                 .rev()
-                .take_while(|ch| !test(*ch))
+                .take_while(|ch| !test(ch))
                 .map(char::len_utf8)
                 .sum();
         }
@@ -288,8 +288,8 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the beginning of previous word.
-    pub fn move_to_prev_word(&mut self) -> bool {
-        if let Some(pos) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
+    pub fn move_to_prev_word(&mut self, word_def: Word) -> bool {
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
             self.pos = pos;
             true
         } else {
@@ -299,10 +299,8 @@ impl LineBuffer {
 
     /// Delete the previous word, maintaining the cursor at the start of the
     /// current word.
-    pub fn delete_prev_word<F>(&mut self, test: F) -> Option<String>
-        where F: Fn(char) -> bool
-    {
-        if let Some(pos) = self.prev_word_pos(self.pos, test) {
+    pub fn delete_prev_word(&mut self, word_def: Word) -> Option<String> {
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
             Some(word)
@@ -312,13 +310,14 @@ impl LineBuffer {
     }
 
     /// Returns the position (start, end) of the next word.
-    pub fn next_word_pos(&self, pos: usize) -> Option<(usize, usize)> {
+    pub fn next_word_pos(&self, pos: usize, word_def: Word) -> Option<(usize, usize)> {
         if pos < self.buf.len() {
+            let test = is_break_char(word_def);
             let mut pos = pos;
             // eat any spaces
             pos += self.buf[pos..]
                 .chars()
-                .take_while(|ch| !ch.is_alphanumeric())
+                .take_while(test)
                 .map(char::len_utf8)
                 .sum();
             let start = pos;
@@ -326,7 +325,7 @@ impl LineBuffer {
                 // eat any non-spaces
                 pos += self.buf[pos..]
                     .chars()
-                    .take_while(|ch| ch.is_alphanumeric())
+                    .take_while(|ch| !test(ch))
                     .map(char::len_utf8)
                     .sum();
             }
@@ -337,8 +336,8 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the end of next word.
-    pub fn move_to_next_word(&mut self) -> bool {
-        if let Some((_, end)) = self.next_word_pos(self.pos) {
+    pub fn move_to_next_word(&mut self, word_def: Word) -> bool {
+        if let Some((_, end)) = self.next_word_pos(self.pos, word_def) {
             self.pos = end;
             true
         } else {
@@ -346,9 +345,12 @@ impl LineBuffer {
         }
     }
 
+    // TODO move_to_end_of_word (Vi mode)
+    // TODO move_to (Vi mode: f|F|t|T)
+
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-    pub fn delete_word(&mut self) -> Option<String> {
-        if let Some((_, end)) = self.next_word_pos(self.pos) {
+    pub fn delete_word(&mut self, word_def: Word) -> Option<String> {
+        if let Some((_, end)) = self.next_word_pos(self.pos, word_def) {
             let word = self.buf.drain(self.pos..end).collect();
             Some(word)
         } else {
@@ -358,7 +360,7 @@ impl LineBuffer {
 
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some((start, end)) = self.next_word_pos(self.pos) {
+        if let Some((start, end)) = self.next_word_pos(self.pos, Word::Word) {
             if start == end {
                 return false;
             }
@@ -388,16 +390,17 @@ impl LineBuffer {
         // prevword___oneword__
         // ^          ^       ^
         // prev_start start   self.pos/end
-        if let Some(start) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
-            if let Some(prev_start) = self.prev_word_pos(start, |ch| !ch.is_alphanumeric()) {
-                let (_, prev_end) = self.next_word_pos(prev_start).unwrap();
+        let word_def = Word::Word;
+        if let Some(start) = self.prev_word_pos(self.pos, word_def) {
+            if let Some(prev_start) = self.prev_word_pos(start, word_def) {
+                let (_, prev_end) = self.next_word_pos(prev_start, word_def).unwrap();
                 if prev_end >= start {
                     return false;
                 }
-                let (_, mut end) = self.next_word_pos(start).unwrap();
+                let (_, mut end) = self.next_word_pos(start, word_def).unwrap();
                 if end < self.pos {
                     if self.pos < self.buf.len() {
-                        let (s, _) = self.next_word_pos(self.pos).unwrap();
+                        let (s, _) = self.next_word_pos(self.pos, word_def).unwrap();
                         end = s;
                     } else {
                         end = self.pos;
@@ -467,9 +470,27 @@ fn insert_str(buf: &mut String, idx: usize, s: &str) {
     }
 }
 
+fn is_break_char(word_def: Word) -> fn(&char) -> bool {
+    match word_def {
+        Word::Word => is_not_alphanumeric,
+        Word::ViWord => is_not_alphanumeric_and_underscore,
+        Word::BigWord => is_whitespace,
+    }
+}
+
+fn is_not_alphanumeric(ch: &char) -> bool {
+    !ch.is_alphanumeric()
+}
+fn is_not_alphanumeric_and_underscore(ch: &char) -> bool {
+    !ch.is_alphanumeric() && *ch != '_'
+}
+fn is_whitespace(ch: &char) -> bool {
+    ch.is_whitespace()
+}
+
 #[cfg(test)]
 mod test {
-    use super::{LineBuffer, MAX_LINE, WordAction};
+    use super::{LineBuffer, MAX_LINE, Word, WordAction};
 
     #[test]
     fn insert() {
@@ -570,7 +591,7 @@ mod test {
     #[test]
     fn move_to_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let ok = s.move_to_prev_word();
+        let ok = s.move_to_prev_word(Word::Word);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
@@ -579,7 +600,7 @@ mod test {
     #[test]
     fn delete_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let text = s.delete_prev_word(char::is_whitespace);
+        let text = s.delete_prev_word(Word::BigWord);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
@@ -588,7 +609,7 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word();
+        let ok = s.move_to_next_word(Word::Word);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -597,7 +618,7 @@ mod test {
     #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word();
+        let text = s.delete_word(Word::Word);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);

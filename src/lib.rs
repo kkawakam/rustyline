@@ -46,7 +46,6 @@ use std::result;
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
-use consts::KeyPress;
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use keymap::{CharSearch, Cmd, EditState, Word};
@@ -427,8 +426,8 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     }
 }
 
-fn edit_move_to_prev_word(s: &mut State) -> Result<()> {
-    if s.line.move_to_prev_word() {
+fn edit_move_to_prev_word(s: &mut State, word_def: Word) -> Result<()> {
+    if s.line.move_to_prev_word(word_def) {
         s.refresh_line()
     } else {
         Ok(())
@@ -437,10 +436,8 @@ fn edit_move_to_prev_word(s: &mut State) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
-    where F: Fn(char) -> bool
-{
-    if let Some(text) = s.line.delete_prev_word(test) {
+fn edit_delete_prev_word(s: &mut State, word_def: Word) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_prev_word(word_def) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -448,8 +445,8 @@ fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
     }
 }
 
-fn edit_move_to_next_word(s: &mut State) -> Result<()> {
-    if s.line.move_to_next_word() {
+fn edit_move_to_next_word(s: &mut State, word_def: Word) -> Result<()> {
+    if s.line.move_to_next_word(word_def) {
         s.refresh_line()
     } else {
         Ok(())
@@ -457,8 +454,8 @@ fn edit_move_to_next_word(s: &mut State) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_word() {
+fn edit_delete_word(s: &mut State, word_def: Word) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_word(word_def) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -933,12 +930,6 @@ fn readline_edit<C: Completer>(prompt: &str,
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c)) // FIXME
             }
-            Cmd::KillWord(Word::BigWord) => {
-                // Kill the word behind point, using white space as a word boundary
-                if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
-                    editor.kill_ring.kill(&text, Mode::Prepend)
-                }
-            }
             Cmd::Yank => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.yank() {
@@ -952,11 +943,9 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_move_end(&mut s));
                 break;
             }
-            Cmd::BackwardKillWord(Word::Word) => {
+            Cmd::BackwardKillWord(word_def) => {
                 // kill one word backward
-                // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
-                if let Some(text) = try!(edit_delete_prev_word(&mut s,
-                                                               |ch| !ch.is_alphanumeric())) {
+                if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
@@ -970,26 +959,26 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_history(&mut s, &editor.history, false))
             }
-            Cmd::BackwardWord(Word::Word) => {
+            Cmd::BackwardWord(word_def) => {
                 // move backwards one word
                 editor.kill_ring.reset();
-                try!(edit_move_to_prev_word(&mut s))
+                try!(edit_move_to_prev_word(&mut s, word_def))
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            Cmd::KillWord(Word::Word) => {
+            Cmd::KillWord(word_def) => {
                 // kill one word forward
-                if let Some(text) = try!(edit_delete_word(&mut s)) {
+                if let Some(text) = try!(edit_delete_word(&mut s, word_def)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::ForwardWord(Word::Word) => {
+            Cmd::ForwardWord(word_def) => {
                 // move forwards one word
                 editor.kill_ring.reset();
-                try!(edit_move_to_next_word(&mut s))
+                try!(edit_move_to_next_word(&mut s, word_def))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point

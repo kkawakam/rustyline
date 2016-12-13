@@ -547,7 +547,6 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 // Restore current edited line
                 s.snapshot();
                 try!(s.refresh_line());
-                s.snapshot();
             }
 
             key = try!(rdr.next_key(config.keyseq_timeout()));
@@ -558,12 +557,10 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                         try!(beep());
                     }
                 }
-                KeyPress::Esc => {
+                KeyPress::Esc if i < candidates.len() => {
                     // Re-show original buffer
                     s.snapshot();
-                    if i < candidates.len() {
-                        try!(s.refresh_line());
-                    }
+                    try!(s.refresh_line());
                     return Ok(None);
                 }
                 _ => {

@@ -93,7 +93,6 @@ impl RawReader for ConsoleRawReader {
 
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
-        let mut esc_seen = false;
         loop {
             // TODO GetNumberOfConsoleInputEvents
             check!(kernel32::ReadConsoleInputW(self.handle,
@@ -121,7 +120,7 @@ impl RawReader for ConsoleRawReader {
                       (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
             // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) ==
             // (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);
-            let meta = alt || esc_seen;
+            let meta = alt;
 
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
@@ -139,8 +138,7 @@ impl RawReader for ConsoleRawReader {
                     _ => continue,
                 };
             } else if utf16 == 27 {
-                esc_seen = true;
-                continue;
+                return Ok(KeyPress::Esc);
             } else {
                 // TODO How to support surrogate pair ?
                 self.buf = Some(utf16);

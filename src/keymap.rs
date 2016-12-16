@@ -103,38 +103,17 @@ impl EditState {
             KeyPress::Char(c) => Cmd::SelfInsert(c),
             KeyPress::Esc => Cmd::Abort, // TODO Validate
             KeyPress::Ctrl('A') => Cmd::BeginningOfLine,
-            KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Ctrl('B') => Cmd::BackwardChar,
-            KeyPress::Left => Cmd::BackwardChar,
-            KeyPress::Ctrl('C') => Cmd::Interrupt,
-            KeyPress::Ctrl('D') => Cmd::EndOfFile,
-            // KeyPress::Ctrl('D') => Cmd::DeleteChar,
-            KeyPress::Delete => Cmd::DeleteChar,
             KeyPress::Ctrl('E') => Cmd::EndOfLine,
-            KeyPress::End => Cmd::EndOfLine,
             KeyPress::Ctrl('F') => Cmd::ForwardChar,
-            KeyPress::Right => Cmd::ForwardChar,
             KeyPress::Ctrl('G') => Cmd::Abort,
             KeyPress::Ctrl('H') => Cmd::BackwardDeleteChar,
             KeyPress::Backspace => Cmd::BackwardDeleteChar,
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Ctrl('J') => Cmd::AcceptLine,
-            KeyPress::Enter => Cmd::AcceptLine,
             KeyPress::Ctrl('K') => Cmd::KillLine,
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
-            KeyPress::Down => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
-            KeyPress::Up => Cmd::PreviousHistory,
-            KeyPress::Ctrl('Q') => Cmd::QuotedInsert, // most terminals override Ctrl+Q to resume execution
-            KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
-            KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
-            KeyPress::Ctrl('T') => Cmd::TransposeChars,
-            KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
-            KeyPress::Ctrl('V') => Cmd::QuotedInsert,
-            KeyPress::Ctrl('W') => Cmd::BackwardKillWord(Word::BigWord),
-            KeyPress::Ctrl('Y') => Cmd::Yank,
-            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Meta('\x08') => Cmd::BackwardKillWord(Word::Word),
             KeyPress::Meta('\x7f') => Cmd::BackwardKillWord(Word::Word),
             // KeyPress::Meta('-') => { // digit-argument
@@ -151,8 +130,7 @@ impl EditState {
             KeyPress::Meta('T') => Cmd::TransposeWords,
             KeyPress::Meta('U') => Cmd::UpcaseWord,
             KeyPress::Meta('Y') => Cmd::YankPop,
-            KeyPress::UnknownEscSeq => Cmd::Noop,
-            _ => Cmd::Unknown,
+            _ => self.common(key),
         };
         Ok(cmd)
     }
@@ -164,7 +142,6 @@ impl EditState {
             KeyPress::End => Cmd::EndOfLine,
             // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing bracket
             KeyPress::Char('0') => Cmd::BeginningOfLine, // vi-zero: Vi move to the beginning of line.
-            KeyPress::Home => Cmd::BeginningOfLine,
             // KeyPress::Char('1'...'9') => Cmd::???, // vi-arg-digit
             KeyPress::Char('^') => Cmd::BeginningOfLine, // vi-first-print TODO Move to the first non-blank character of line.
             KeyPress::Char('a') => {
@@ -242,27 +219,17 @@ impl EditState {
             KeyPress::Char('h') => Cmd::BackwardChar,
             KeyPress::Ctrl('H') => Cmd::BackwardChar,
             KeyPress::Backspace => Cmd::BackwardChar, // TODO Validate
-            KeyPress::Left => Cmd::BackwardChar,
-            KeyPress::Ctrl('C') => Cmd::Interrupt,
-            KeyPress::Ctrl('D') => Cmd::EndOfFile,
-            KeyPress::Delete => Cmd::DeleteChar,
             KeyPress::Ctrl('G') => Cmd::Abort,
             KeyPress::Char('l') => Cmd::ForwardChar,
             KeyPress::Char(' ') => Cmd::ForwardChar,
-            KeyPress::Right => Cmd::ForwardChar,
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
-            KeyPress::Ctrl('J') => Cmd::AcceptLine,
-            KeyPress::Enter => Cmd::AcceptLine,
             KeyPress::Char('+') => Cmd::NextHistory,
             KeyPress::Char('j') => Cmd::NextHistory,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
-            KeyPress::Down => Cmd::NextHistory,
             KeyPress::Char('-') => Cmd::PreviousHistory,
             KeyPress::Char('k') => Cmd::PreviousHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
-            KeyPress::Up => Cmd::PreviousHistory,
             KeyPress::Ctrl('K') => Cmd::KillLine,
-            KeyPress::Ctrl('Q') => Cmd::QuotedInsert, // most terminals override Ctrl+Q to resume execution
             KeyPress::Ctrl('R') => {
                 self.insert = true; // TODO Validate
                 Cmd::ReverseSearchHistory
@@ -271,15 +238,8 @@ impl EditState {
                 self.insert = true; // TODO Validate
                 Cmd::ForwardSearchHistory
             }
-            KeyPress::Ctrl('T') => Cmd::TransposeChars,
-            KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
-            KeyPress::Ctrl('V') => Cmd::QuotedInsert,
-            KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
-            KeyPress::Ctrl('Y') => Cmd::Yank,
-            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Esc => Cmd::Noop,
-            KeyPress::UnknownEscSeq => Cmd::Noop,
-            _ => Cmd::Unknown,
+            _ => self.common(key),
         };
         Ok(cmd)
     }
@@ -288,35 +248,15 @@ impl EditState {
         let key = try!(rdr.next_key(config.keyseq_timeout()));
         let cmd = match key {
             KeyPress::Char(c) => Cmd::SelfInsert(c),
-            KeyPress::Home => Cmd::BeginningOfLine,
-            KeyPress::Left => Cmd::BackwardChar,
-            KeyPress::Ctrl('C') => Cmd::Interrupt,
-            KeyPress::Ctrl('D') => Cmd::EndOfFile, // vi-eof-maybe
-            KeyPress::Delete => Cmd::DeleteChar,
-            KeyPress::End => Cmd::EndOfLine,
-            KeyPress::Right => Cmd::ForwardChar,
             KeyPress::Ctrl('H') => Cmd::BackwardDeleteChar,
             KeyPress::Backspace => Cmd::BackwardDeleteChar,
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Ctrl('J') => Cmd::AcceptLine,
-            KeyPress::Enter => Cmd::AcceptLine,
-            KeyPress::Down => Cmd::NextHistory,
-            KeyPress::Up => Cmd::PreviousHistory,
-            KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
-            KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory,
-            KeyPress::Ctrl('T') => Cmd::TransposeChars,
-            KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
-            KeyPress::Ctrl('V') => Cmd::QuotedInsert,
-            KeyPress::Ctrl('W') => Cmd::KillWord(Word::BigWord),
-            KeyPress::Ctrl('Y') => Cmd::Yank,
-            KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode: Vi enter command mode (use alternative key bindings).
                 self.insert = false;
                 Cmd::BackwardChar
             }
-            KeyPress::UnknownEscSeq => Cmd::Noop,
-            _ => Cmd::Unknown,
+            _ => self.common(key),
         };
         Ok(cmd)
     }
@@ -373,5 +313,32 @@ impl EditState {
             }
             _ => None,
         })
+    }
+
+    fn common(&mut self, key: KeyPress) -> Cmd {
+        match key {
+            KeyPress::Home => Cmd::BeginningOfLine,
+            KeyPress::Left => Cmd::BackwardChar,
+            KeyPress::Ctrl('C') => Cmd::Interrupt,
+            KeyPress::Ctrl('D') => Cmd::EndOfFile,
+            KeyPress::Delete => Cmd::DeleteChar,
+            KeyPress::End => Cmd::EndOfLine,
+            KeyPress::Right => Cmd::ForwardChar,
+            KeyPress::Ctrl('J') => Cmd::AcceptLine,
+            KeyPress::Enter => Cmd::AcceptLine,
+            KeyPress::Down => Cmd::NextHistory,
+            KeyPress::Up => Cmd::PreviousHistory,
+            KeyPress::Ctrl('Q') => Cmd::QuotedInsert, // most terminals override Ctrl+Q to resume execution
+            KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
+            KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            KeyPress::Ctrl('T') => Cmd::TransposeChars,
+            KeyPress::Ctrl('U') => Cmd::UnixLikeDiscard,
+            KeyPress::Ctrl('V') => Cmd::QuotedInsert,
+            KeyPress::Ctrl('W') => Cmd::BackwardKillWord(Word::BigWord),
+            KeyPress::Ctrl('Y') => Cmd::Yank,
+            KeyPress::Ctrl('Z') => Cmd::Suspend,
+            KeyPress::UnknownEscSeq => Cmd::Noop,
+            _ => Cmd::Unknown,
+        }
     }
 }

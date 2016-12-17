@@ -48,7 +48,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{CharSearch, Cmd, EditState, Word};
+use keymap::{At, Cmd, EditState, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
@@ -445,8 +445,8 @@ fn edit_delete_prev_word(s: &mut State, word_def: Word) -> Result<Option<String>
     }
 }
 
-fn edit_move_to_next_word(s: &mut State, word_def: Word) -> Result<()> {
-    if s.line.move_to_next_word(word_def) {
+fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word) -> Result<()> {
+    if s.line.move_to_next_word(at, word_def) {
         s.refresh_line()
     } else {
         Ok(())
@@ -454,8 +454,8 @@ fn edit_move_to_next_word(s: &mut State, word_def: Word) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State, word_def: Word) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_word(word_def) {
+fn edit_delete_word(s: &mut State, at: At, word_def: Word) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_word(at, word_def) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -969,16 +969,16 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            Cmd::KillWord(_, word_def) => {
+            Cmd::KillWord(_, at, word_def) => {
                 // kill one word forward
-                if let Some(text) = try!(edit_delete_word(&mut s, word_def)) {
+                if let Some(text) = try!(edit_delete_word(&mut s, at, word_def)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::ForwardWord(_, word_def) => {
+            Cmd::ForwardWord(_, at, word_def) => {
                 // move forwards one word
                 editor.kill_ring.reset();
-                try!(edit_move_to_next_word(&mut s, word_def))
+                try!(edit_move_to_next_word(&mut s, at, word_def))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point

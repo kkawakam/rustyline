@@ -1,6 +1,6 @@
 //! Line buffer with current cursor position
 use std::ops::Deref;
-use keymap::Word;
+use keymap::{At, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -262,6 +262,7 @@ impl LineBuffer {
         true
     }
 
+    /// Go left until start of word
     fn prev_word_pos(&self, pos: usize, word_def: Word) -> Option<usize> {
         if pos == 0 {
             return None;
@@ -309,8 +310,46 @@ impl LineBuffer {
         }
     }
 
+    fn next_pos(&self, pos: usize, at: At, word_def: Word) -> Option<usize> {
+        match at {
+            At::End => {
+                match self.next_word_pos(pos, word_def) {
+                    Some((_, end)) => Some(end),
+                    _ => None,
+                }
+            }
+            At::Start => self.next_start_of_word_pos(pos, word_def),
+        }
+    }
+
+    /// Go right until start of word
+    fn next_start_of_word_pos(&self, pos: usize, word_def: Word) -> Option<usize> {
+        if pos < self.buf.len() {
+            let test = is_break_char(word_def);
+            let mut pos = pos;
+            // eat any non-spaces
+            pos += self.buf[pos..]
+                .chars()
+                .take_while(|ch| !test(ch))
+                .map(char::len_utf8)
+                .sum();
+            if pos < self.buf.len() {
+                // eat any spaces
+                pos += self.buf[pos..]
+                    .chars()
+                    .take_while(test)
+                    .map(char::len_utf8)
+                    .sum();
+            }
+            Some(pos)
+        } else {
+            None
+        }
+    }
+
+    /// Go right until end of word
     /// Returns the position (start, end) of the next word.
-    pub fn next_word_pos(&self, pos: usize, word_def: Word) -> Option<(usize, usize)> {
+    fn next_word_pos(&self, pos: usize, word_def: Word) -> Option<(usize, usize)> {
         if pos < self.buf.len() {
             let test = is_break_char(word_def);
             let mut pos = pos;
@@ -336,22 +375,21 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the end of next word.
-    pub fn move_to_next_word(&mut self, word_def: Word) -> bool {
-        if let Some((_, end)) = self.next_word_pos(self.pos, word_def) {
-            self.pos = end;
+    pub fn move_to_next_word(&mut self, at: At, word_def: Word) -> bool {
+        if let Some(pos) = self.next_pos(self.pos, at, word_def) {
+            self.pos = pos;
             true
         } else {
             false
         }
     }
 
-    // TODO move_to_end_of_word (Vi mode)
     // TODO move_to (Vi mode: f|F|t|T)
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-    pub fn delete_word(&mut self, word_def: Word) -> Option<String> {
-        if let Some((_, end)) = self.next_word_pos(self.pos, word_def) {
-            let word = self.buf.drain(self.pos..end).collect();
+    pub fn delete_word(&mut self, at: At, word_def: Word) -> Option<String> {
+        if let Some(pos) = self.next_pos(self.pos, at, word_def) {
+            let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
         } else {
             None
@@ -490,7 +528,7 @@ fn is_whitespace(ch: &char) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{LineBuffer, MAX_LINE, Word, WordAction};
+    use super::{LineBuffer, MAX_LINE, At, Word, WordAction};
 
     #[test]
     fn insert() {
@@ -609,19 +647,37 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word(Word::Word);
+        let ok = s.move_to_next_word(At::End, Word::Word);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
     }
 
     #[test]
+    fn move_to_start_of_word() {
+        let mut s = LineBuffer::init("a ß  c", 2);
+        let ok = s.move_to_next_word(At::Start, Word::Word);
+        assert_eq!("a ß  c", s.buf);
+        assert_eq!(6, s.pos);
+        assert_eq!(true, ok);
+    }
+
+    #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word(Word::Word);
+        let text = s.delete_word(At::End, Word::Word);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
+    }
+
+    #[test]
+    fn delete_til_start_of_word() {
+        let mut s = LineBuffer::init("a ß  c", 2);
+        let text = s.delete_word(At::Start, Word::Word);
+        assert_eq!("a c", s.buf);
+        assert_eq!(2, s.pos);
+        assert_eq!(Some("ß  ".to_string()), text);
     }
 
     #[test]

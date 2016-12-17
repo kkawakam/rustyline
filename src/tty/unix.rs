@@ -111,13 +111,11 @@ impl PosixRawReader {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     Ok(match seq2 {
-                        '1' => KeyPress::Home, // xterm
+                        '1' | '7' => KeyPress::Home, // '1': xterm
                         '3' => KeyPress::Delete,
-                        '4' => KeyPress::End, // xterm
+                        '4' | '8' => KeyPress::End, // '4': xterm
                         '5' => KeyPress::PageUp,
                         '6' => KeyPress::PageDown,
-                        '7' => KeyPress::Home,
-                        '8' => KeyPress::End,
                         _ => KeyPress::UnknownEscSeq,
                     })
                 } else {

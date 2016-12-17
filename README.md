@@ -134,6 +134,15 @@ $ wineconsole --backend=curses target/x86_64-pc-windows-gnu/debug/examples/examp
 ...
 ```
 
+## Terminal checks
+
+```sh
+$ # current settings of all terminal attributes:
+$ stty -a
+$ # key bindings:
+$ bind -p
+```
+
 ## Similar projects
 
  - [copperline](https://github.com/srijs/rust-copperline) (Rust)

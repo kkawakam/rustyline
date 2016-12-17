@@ -398,7 +398,7 @@ impl LineBuffer {
 
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some((start, end)) = self.next_word_pos(self.pos, Word::Word) {
+        if let Some((start, end)) = self.next_word_pos(self.pos, Word::Emacs) {
             if start == end {
                 return false;
             }
@@ -428,7 +428,7 @@ impl LineBuffer {
         // prevword___oneword__
         // ^          ^       ^
         // prev_start start   self.pos/end
-        let word_def = Word::Word;
+        let word_def = Word::Emacs;
         if let Some(start) = self.prev_word_pos(self.pos, word_def) {
             if let Some(prev_start) = self.prev_word_pos(start, word_def) {
                 let (_, prev_end) = self.next_word_pos(prev_start, word_def).unwrap();
@@ -510,9 +510,9 @@ fn insert_str(buf: &mut String, idx: usize, s: &str) {
 
 fn is_break_char(word_def: Word) -> fn(&char) -> bool {
     match word_def {
-        Word::Word => is_not_alphanumeric,
-        Word::ViWord => is_not_alphanumeric_and_underscore,
-        Word::BigWord => is_whitespace,
+        Word::Emacs => is_not_alphanumeric,
+        Word::Vi => is_not_alphanumeric_and_underscore,
+        Word::Big => is_whitespace,
     }
 }
 
@@ -630,7 +630,7 @@ mod test {
     #[test]
     fn move_to_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let ok = s.move_to_prev_word(Word::Word);
+        let ok = s.move_to_prev_word(Word::Emacs);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
@@ -639,7 +639,7 @@ mod test {
     #[test]
     fn delete_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let text = s.delete_prev_word(Word::BigWord);
+        let text = s.delete_prev_word(Word::Big);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
@@ -648,7 +648,7 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word(At::End, Word::Word);
+        let ok = s.move_to_next_word(At::End, Word::Emacs);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -657,7 +657,7 @@ mod test {
     #[test]
     fn move_to_start_of_word() {
         let mut s = LineBuffer::init("a ß  c", 2);
-        let ok = s.move_to_next_word(At::Start, Word::Word);
+        let ok = s.move_to_next_word(At::Start, Word::Emacs);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(6, s.pos);
         assert_eq!(true, ok);
@@ -666,7 +666,7 @@ mod test {
     #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word(At::End, Word::Word);
+        let text = s.delete_word(At::End, Word::Emacs);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
@@ -675,7 +675,7 @@ mod test {
     #[test]
     fn delete_til_start_of_word() {
         let mut s = LineBuffer::init("a ß  c", 2);
-        let text = s.delete_word(At::Start, Word::Word);
+        let text = s.delete_word(At::Start, Word::Emacs);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);

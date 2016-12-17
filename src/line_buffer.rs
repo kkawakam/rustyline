@@ -528,7 +528,8 @@ fn is_whitespace(ch: &char) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{LineBuffer, MAX_LINE, At, Word, WordAction};
+    use keymap::{At, Word};
+    use super::{LineBuffer, MAX_LINE, WordAction};
 
     #[test]
     fn insert() {

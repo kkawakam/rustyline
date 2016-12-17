@@ -7,47 +7,46 @@ use super::Result;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     Abort, // Miscellaneous Command
-    AcceptLine, // Command For History
-    BackwardChar(i32), // Command For Moving
-    BackwardDeleteChar(i32), // Command For Text
-    BackwardKillWord(i32, Word), // Command For Killing
-    BackwardWord(i32, Word), // Command For Moving
-    BeginningOfHistory, // Command For History
-    BeginningOfLine, // Command For Moving
-    CapitalizeWord, // Command For Text
-    ClearScreen, // Command For Moving
-    Complete, // Command For Completion
-    DeleteChar(i32), // Command For Text
-    DowncaseWord, // Command For Text
-    EndOfFile, // Command For Text
-    EndOfHistory, // Command For History
-    EndOfLine, // Command For Moving
-    ForwardChar(i32), // Command For Moving
-    ForwardSearchHistory, // Command For History
-    ForwardWord(i32, Word), // Command For Moving
+    AcceptLine,
+    BackwardChar(i32),
+    BackwardDeleteChar(i32),
+    BackwardKillWord(i32, Word), // Backward until start of word
+    BackwardWord(i32, Word), // Backward until start of word
+    BeginningOfHistory,
+    BeginningOfLine,
+    CapitalizeWord,
+    ClearScreen,
+    Complete,
+    DeleteChar(i32),
+    DowncaseWord,
+    EndOfFile,
+    EndOfHistory,
+    EndOfLine,
+    ForwardChar(i32),
+    ForwardSearchHistory,
+    ForwardWord(i32, At, Word), // Forward until start/end of word
     Interrupt,
-    KillLine, // Command For Killing
-    KillWholeLine, // Command For Killing
-    KillWord(i32, Word), // Command For Killing
-    NextHistory, // Command For History
+    KillLine,
+    KillWholeLine,
+    KillWord(i32, At, Word), // Forward until start/end of word
+    NextHistory,
     Noop,
-    PreviousHistory, // Command For History
-    QuotedInsert, // Command For Text
+    PreviousHistory,
+    QuotedInsert,
     Replace(i32, char), // TODO DeleteChar + SelfInsert
-    ReverseSearchHistory, // Command For History
-    SelfInsert(char), // Command For Text
+    ReverseSearchHistory,
+    SelfInsert(char),
     Suspend,
-    TransposeChars, // Command For Text
-    TransposeWords, // Command For Text
+    TransposeChars,
+    TransposeWords,
     Unknown,
-    UnixLikeDiscard, // Command For Killing
-    // UnixWordRubout, // = BackwardKillWord(Word::BigWord) Command For Killing
-    UpcaseWord, // Command For Text
+    UnixLikeDiscard,
+    // UnixWordRubout, // = BackwardKillWord(Word::BigWord)
+    UpcaseWord,
     ViCharSearch(CharSearch), // TODO
-    ViEndWord(i32, Word), // TODO
     ViKillTo(i32, CharSearch), // TODO
-    Yank(i32), // Command For Killing
-    YankPop, // Command For Killing
+    Yank(i32),
+    YankPop,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -58,6 +57,12 @@ pub enum Word {
     Word,
     // alphanumeric (and '_') characters
     ViWord,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum At {
+    Start,
+    End,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,7 +112,7 @@ impl EditState {
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i32;
-            } 
+            }
             '-' => {
                 self.num_args = -1;
             }
@@ -155,8 +160,8 @@ impl EditState {
             KeyPress::Meta('>') => Cmd::EndOfHistory,
             KeyPress::Meta('B') => Cmd::BackwardWord(self.num_args(), Word::Word),
             KeyPress::Meta('C') => Cmd::CapitalizeWord,
-            KeyPress::Meta('D') => Cmd::KillWord(self.num_args(), Word::Word),
-            KeyPress::Meta('F') => Cmd::ForwardWord(self.num_args(), Word::Word),
+            KeyPress::Meta('D') => Cmd::KillWord(self.num_args(), At::End, Word::Word),
+            KeyPress::Meta('F') => Cmd::ForwardWord(self.num_args(), At::End, Word::Word),
             KeyPress::Meta('L') => Cmd::DowncaseWord,
             KeyPress::Meta('T') => Cmd::TransposeWords,
             KeyPress::Meta('U') => Cmd::UpcaseWord,
@@ -216,8 +221,8 @@ impl EditState {
             }
             KeyPress::Char('d') => try!(self.vi_delete_motion(rdr, config, key)),
             KeyPress::Char('D') => Cmd::KillLine,
-            KeyPress::Char('e') => Cmd::ViEndWord(self.num_args(), Word::ViWord),
-            KeyPress::Char('E') => Cmd::ViEndWord(self.num_args(), Word::BigWord),
+            KeyPress::Char('e') => Cmd::ForwardWord(self.num_args(), At::End, Word::ViWord),
+            KeyPress::Char('E') => Cmd::ForwardWord(self.num_args(), At::End, Word::BigWord),
             KeyPress::Char('i') => {
                 // vi-insertion-mode
                 self.insert = true;
@@ -260,8 +265,8 @@ impl EditState {
                 Cmd::KillWholeLine
             }
             // KeyPress::Char('U') => Cmd::???, // revert-line
-            KeyPress::Char('w') => Cmd::ForwardWord(self.num_args(), Word::ViWord), // vi-next-word FIXME
-            KeyPress::Char('W') => Cmd::ForwardWord(self.num_args(), Word::BigWord), // vi-next-word FIXME
+            KeyPress::Char('w') => Cmd::ForwardWord(self.num_args(), At::Start, Word::ViWord), // vi-next-word
+            KeyPress::Char('W') => Cmd::ForwardWord(self.num_args(), At::Start, Word::BigWord), // vi-next-word
             KeyPress::Char('x') => Cmd::DeleteChar(self.num_args()), // vi-delete: TODO move backward if eol
             KeyPress::Char('X') => Cmd::BackwardDeleteChar(self.num_args()), // vi-rubout
             // KeyPress::Char('y') => Cmd::???, // vi-yank-to
@@ -329,8 +334,8 @@ impl EditState {
             KeyPress::Char('0') => Cmd::UnixLikeDiscard, // vi-kill-line-prev: Vi cut from beginning of line to cursor.
             KeyPress::Char('b') => Cmd::BackwardKillWord(self.num_args(), Word::ViWord),
             KeyPress::Char('B') => Cmd::BackwardKillWord(self.num_args(), Word::BigWord),
-            KeyPress::Char('e') => Cmd::KillWord(self.num_args(), Word::ViWord),
-            KeyPress::Char('E') => Cmd::KillWord(self.num_args(), Word::BigWord),
+            KeyPress::Char('e') => Cmd::KillWord(self.num_args(), At::End, Word::ViWord),
+            KeyPress::Char('E') => Cmd::KillWord(self.num_args(), At::End, Word::BigWord),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
@@ -343,8 +348,8 @@ impl EditState {
             KeyPress::Backspace => Cmd::BackwardDeleteChar(self.num_args()),
             KeyPress::Char('l') => Cmd::DeleteChar(self.num_args()),
             KeyPress::Char(' ') => Cmd::DeleteChar(self.num_args()),
-            KeyPress::Char('w') => Cmd::KillWord(self.num_args(), Word::ViWord), // FIXME
-            KeyPress::Char('W') => Cmd::KillWord(self.num_args(), Word::BigWord), // FIXME
+            KeyPress::Char('w') => Cmd::KillWord(self.num_args(), At::Start, Word::ViWord),
+            KeyPress::Char('W') => Cmd::KillWord(self.num_args(), At::Start, Word::BigWord),
             _ => Cmd::Unknown,
         })
     }

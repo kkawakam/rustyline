@@ -43,8 +43,8 @@ pub enum Cmd {
     UnixLikeDiscard,
     // UnixWordRubout, // = BackwardKillWord(Word::Big)
     UpcaseWord,
-    ViCharSearch(CharSearch), // TODO
-    ViKillTo(i32, CharSearch), // TODO
+    ViCharSearch(i32, CharSearch),
+    ViDeleteTo(i32, CharSearch),
     Yank(i32),
     YankPop,
 }
@@ -218,7 +218,8 @@ impl EditState {
                 Cmd::KillLine
             }
             KeyPress::Char('d') => try!(self.vi_delete_motion(rdr, config, key)),
-            KeyPress::Char('D') | KeyPress::Ctrl('K') => Cmd::KillLine,
+            KeyPress::Char('D') |
+            KeyPress::Ctrl('K') => Cmd::KillLine,
             KeyPress::Char('e') => Cmd::ForwardWord(self.num_args(), At::End, Word::Vi),
             KeyPress::Char('E') => Cmd::ForwardWord(self.num_args(), At::End, Word::Big),
             KeyPress::Char('i') => {
@@ -235,7 +236,7 @@ impl EditState {
                 // vi-char-search
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
-                    Some(cs) => Cmd::ViCharSearch(cs),
+                    Some(cs) => Cmd::ViCharSearch(self.num_args(), cs),
                     None => Cmd::Unknown,
                 }
             }
@@ -336,7 +337,7 @@ impl EditState {
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
-                    Some(cs) => Cmd::ViKillTo(self.num_args(), cs),
+                    Some(cs) => Cmd::ViDeleteTo(self.num_args(), cs),
                     None => Cmd::Unknown,
                 }
             }

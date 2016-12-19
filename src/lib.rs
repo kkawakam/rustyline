@@ -50,7 +50,7 @@ use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{At, Cmd, EditState, Word};
+use keymap::{At, CharSearch, Cmd, EditState, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
@@ -451,9 +451,26 @@ fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word) -> Result<()> {
     }
 }
 
+fn edit_move_to(s: &mut State, cs: CharSearch) -> Result<()> {
+    if s.line.move_to(cs) {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
 fn edit_delete_word(s: &mut State, at: At, word_def: Word) -> Result<Option<String>> {
     if let Some(text) = s.line.delete_word(at, word_def) {
+        try!(s.refresh_line());
+        Ok(Some(text))
+    } else {
+        Ok(None)
+    }
+}
+
+fn edit_delete_to(s: &mut State, cs: CharSearch) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_to(cs) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -997,6 +1014,15 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // yank-pop
                 if let Some((yank_size, text)) = editor.kill_ring.yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
+                }
+            }
+            Cmd::ViCharSearch(_, cs) => {
+                editor.kill_ring.reset();
+                try!(edit_move_to(&mut s, cs))
+            }
+            Cmd::ViDeleteTo(_, cs) => {
+                if let Some(text) = try!(edit_delete_to(&mut s, cs)) {
+                    editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
             Cmd::Interrupt => {

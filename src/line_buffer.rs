@@ -1,6 +1,6 @@
 //! Line buffer with current cursor position
 use std::ops::Deref;
-use keymap::{At, Word};
+use keymap::{At, CharSearch, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -384,13 +384,82 @@ impl LineBuffer {
         }
     }
 
-    // TODO move_to (Vi mode: f|F|t|T)
+    fn search_char_pos(&mut self, cs: &CharSearch) -> Option<usize> {
+        let mut shift = 0;
+        let search_result = match *cs {
+            CharSearch::Backward(c) |
+            CharSearch::BackwardAfter(c) => {
+                self.buf[..self.pos].rfind(c)
+                // if let Some(pc) = self.char_before_cursor() {
+                // self.buf[..self.pos - pc.len_utf8()].rfind(c)
+                // } else {
+                // None
+                // }
+            }
+            CharSearch::Forward(c) |
+            CharSearch::ForwardBefore(c) => {
+                if let Some(cc) = self.char_at_cursor() {
+                    shift = self.pos + cc.len_utf8();
+                    if shift < self.buf.len() {
+                        self.buf[shift..].find(c)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        };
+        if let Some(pos) = search_result {
+            Some(match *cs {
+                CharSearch::Backward(_) => pos,
+                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                CharSearch::Forward(_) => shift + pos,
+                CharSearch::ForwardBefore(_) => {
+                    shift + pos - self.buf[..shift + pos].chars().next_back().unwrap().len_utf8()
+                }
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn move_to(&mut self, cs: CharSearch) -> bool {
+        if let Some(pos) = self.search_char_pos(&cs) {
+            self.pos = pos;
+            true
+        } else {
+            false
+        }
+    }
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
     pub fn delete_word(&mut self, at: At, word_def: Word) -> Option<String> {
         if let Some(pos) = self.next_pos(self.pos, at, word_def) {
             let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
+        } else {
+            None
+        }
+    }
+
+    pub fn delete_to(&mut self, cs: CharSearch) -> Option<String> {
+        let search_result = match cs {
+            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c)),
+            _ => self.search_char_pos(&cs),
+        };
+        if let Some(pos) = search_result {
+            let chunk = match cs {
+                CharSearch::Backward(_) |
+                CharSearch::BackwardAfter(_) => {
+                    let end = self.pos;
+                    self.pos = pos;
+                    self.buf.drain(pos..end).collect()
+                }
+                CharSearch::ForwardBefore(_) => self.buf.drain(self.pos..pos).collect(),
+                CharSearch::Forward(c) => self.buf.drain(self.pos..pos + c.len_utf8()).collect(),
+            };
+            Some(chunk)
         } else {
             None
         }

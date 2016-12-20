@@ -45,7 +45,7 @@ pub enum Cmd {
     UpcaseWord,
     ViCharSearch(i32, CharSearch),
     ViDeleteTo(i32, CharSearch),
-    Yank(i32),
+    Yank(i32, Anchor),
     YankPop,
 }
 
@@ -63,6 +63,12 @@ pub enum Word {
 pub enum At {
     Start,
     End,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Anchor {
+    After,
+    Before,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,8 +247,8 @@ impl EditState {
                 }
             }
             // TODO KeyPress::Char('G') => Cmd::???, Move to the history line n
-            KeyPress::Char('p') => Cmd::Yank(self.num_args()), // vi-put FIXME cursor at end
-            KeyPress::Char('P') => Cmd::Yank(self.num_args()), // vi-put TODO Insert the yanked text before the cursor.
+            KeyPress::Char('p') => Cmd::Yank(self.num_args(), Anchor::After), // vi-put
+            KeyPress::Char('P') => Cmd::Yank(self.num_args(), Anchor::Before), // vi-put
             KeyPress::Char('r') => {
                 // vi-replace-char: Vi replace character under the cursor with the next character typed.
                 let ch = try!(rdr.next_key(config.keyseq_timeout()));
@@ -392,7 +398,7 @@ impl EditState {
             KeyPress::Ctrl('Q') | // most terminals override Ctrl+Q to resume execution
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => Cmd::BackwardKillWord(self.num_args(), Word::Big),
-            KeyPress::Ctrl('Y') => Cmd::Yank(self.num_args()),
+            KeyPress::Ctrl('Y') => Cmd::Yank(self.num_args(), Anchor::Before),
             KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,

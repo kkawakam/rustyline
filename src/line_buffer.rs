@@ -1,6 +1,6 @@
 //! Line buffer with current cursor position
 use std::ops::Deref;
-use keymap::{At, CharSearch, Word};
+use keymap::{Anchor, At, CharSearch, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -126,10 +126,13 @@ impl LineBuffer {
     /// Yank/paste `text` at current position.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn yank(&mut self, text: &str) -> Option<bool> {
+    pub fn yank(&mut self, text: &str, anchor: Anchor) -> Option<bool> {
         let shift = text.len();
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
+        }
+        if let Anchor::After = anchor {
+            self.move_right();
         }
         let pos = self.pos;
         let push = self.insert_str(pos, text);
@@ -141,7 +144,7 @@ impl LineBuffer {
     pub fn yank_pop(&mut self, yank_size: usize, text: &str) -> Option<bool> {
         self.buf.drain((self.pos - yank_size)..self.pos);
         self.pos -= yank_size;
-        self.yank(text)
+        self.yank(text, Anchor::Before)
     }
 
     /// Move cursor on the left.

@@ -48,7 +48,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{At, CharSearch, Cmd, EditState, Word};
+use keymap::{Anchor, At, CharSearch, Cmd, EditState, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
@@ -328,8 +328,8 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
 }
 
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    if s.line.yank(text).is_some() {
+fn edit_yank(s: &mut State, text: &str, anchor: Anchor) -> Result<()> {
+    if s.line.yank(text, anchor).is_some() {
         s.refresh_line()
     } else {
         Ok(())
@@ -339,7 +339,7 @@ fn edit_yank(s: &mut State, text: &str) -> Result<()> {
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.line.yank_pop(yank_size, text);
-    edit_yank(s, text)
+    edit_yank(s, text, Anchor::Before)
 }
 
 /// Move cursor on the left.
@@ -947,10 +947,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c)) // FIXME
             }
-            Cmd::Yank(_) => {
+            Cmd::Yank(_, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.yank() {
-                    try!(edit_yank(&mut s, text))
+                    try!(edit_yank(&mut s, text, anchor))
                 }
             }
             // TODO CTRL-_ // undo

@@ -1,6 +1,5 @@
 //! Windows specific definitions
-use std::io;
-use std::io::Write;
+use std::io::{self, Stdout, Write};
 use std::mem;
 use std::sync::atomic;
 
@@ -220,6 +219,7 @@ impl Console {
 
 impl Term for Console {
     type Reader = ConsoleRawReader;
+    type Writer = Stdout;
     type Mode = Mode;
 
     fn new() -> Console {
@@ -294,6 +294,10 @@ impl Term for Console {
 
     fn create_reader(&self) -> Result<ConsoleRawReader> {
         ConsoleRawReader::new()
+    }
+
+    fn create_writer(&self) -> Stdout {
+        io::stdout()
     }
 
     fn sigwinch(&self) -> bool {

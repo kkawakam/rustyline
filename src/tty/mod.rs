@@ -19,6 +19,7 @@ pub trait RawReader: Sized {
 /// Terminal contract
 pub trait Term: Clone {
     type Reader: RawReader;
+    type Writer: Write;
     type Mode;
 
     fn new() -> Self;
@@ -36,6 +37,8 @@ pub trait Term: Clone {
     fn enable_raw_mode(&self) -> Result<Self::Mode>;
     /// Create a RAW reader
     fn create_reader(&self) -> Result<Self::Reader>;
+    /// Create a writer
+    fn create_writer(&self) -> Self::Writer;
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, w: &mut Write) -> Result<()>;
 }

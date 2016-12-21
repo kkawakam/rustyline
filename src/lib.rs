@@ -813,7 +813,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                                -> Result<String> {
     let completer = editor.completer.as_ref().map(|c| c as &Completer);
 
-    let mut stdout = io::stdout();
+    let mut stdout = editor.term.create_writer();
 
     editor.kill_ring.reset();
     let mut s = State::new(&mut stdout,

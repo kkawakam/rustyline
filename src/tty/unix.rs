@@ -1,6 +1,6 @@
 //! Unix specific definitions
 use std;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Stdout, Write};
 use std::sync;
 use std::sync::atomic;
 use libc;
@@ -231,6 +231,7 @@ pub struct PosixTerminal {
 
 impl Term for PosixTerminal {
     type Reader = PosixRawReader;
+    type Writer = Stdout;
     type Mode = Mode;
 
     fn new() -> PosixTerminal {
@@ -298,6 +299,10 @@ impl Term for PosixTerminal {
     /// Create a RAW reader
     fn create_reader(&self) -> Result<PosixRawReader> {
         PosixRawReader::new()
+    }
+
+    fn create_writer(&self) -> Stdout {
+        io::stdout()
     }
 
     /// Check if a SIGWINCH signal has been received

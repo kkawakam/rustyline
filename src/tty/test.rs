@@ -1,5 +1,5 @@
 //! Tests specific definitions
-use std::io::Write;
+use std::io::{self, Sink, Write};
 use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -90,6 +90,7 @@ impl DummyTerminal {
 
 impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
+    type Writer = Sink;
     type Mode = Mode;
 
     fn new() -> DummyTerminal {
@@ -134,6 +135,9 @@ impl Term for DummyTerminal {
         Ok(self.keys.clone().into_iter())
     }
 
+    fn create_writer(&self) -> Sink {
+        io::sink()
+    }
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, _: &mut Write) -> Result<()> {

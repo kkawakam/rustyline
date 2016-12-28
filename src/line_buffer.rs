@@ -547,7 +547,7 @@ impl LineBuffer {
             self.buf.push_str(s);
             true
         } else {
-            insert_str(&mut self.buf, idx, s);
+            self.buf.insert_str(idx, s);
             false
         }
     }
@@ -558,25 +558,6 @@ impl Deref for LineBuffer {
 
     fn deref(&self) -> &str {
         self.as_str()
-    }
-}
-
-fn insert_str(buf: &mut String, idx: usize, s: &str) {
-    use std::ptr;
-
-    let len = buf.len();
-    assert!(idx <= len);
-    assert!(buf.is_char_boundary(idx));
-    let amt = s.len();
-    buf.reserve(amt);
-
-    unsafe {
-        let v = buf.as_mut_vec();
-        ptr::copy(v.as_ptr().offset(idx as isize),
-                  v.as_mut_ptr().offset((idx + amt) as isize),
-                  len - idx);
-        ptr::copy_nonoverlapping(s.as_ptr(), v.as_mut_ptr().offset(idx as isize), amt);
-        v.set_len(len + amt);
     }
 }
 

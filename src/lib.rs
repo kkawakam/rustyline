@@ -15,6 +15,7 @@
 //! }
 //! ```
 #![feature(io)]
+#![feature(insert_str)]
 #![allow(unknown_lints)]
 
 extern crate libc;

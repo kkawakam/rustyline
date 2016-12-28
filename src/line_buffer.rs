@@ -126,13 +126,13 @@ impl LineBuffer {
     /// Yank/paste `text` at current position.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn yank(&mut self, text: &str, anchor: Anchor) -> Option<bool> {
+    pub fn yank(&mut self, text: &str, anchor: Anchor, count: u16) -> Option<bool> {
         let shift = text.len();
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
         }
         if let Anchor::After = anchor {
-            self.move_right();
+            self.move_right(1);
         }
         let pos = self.pos;
         let push = self.insert_str(pos, text);
@@ -144,27 +144,35 @@ impl LineBuffer {
     pub fn yank_pop(&mut self, yank_size: usize, text: &str) -> Option<bool> {
         self.buf.drain((self.pos - yank_size)..self.pos);
         self.pos -= yank_size;
-        self.yank(text, Anchor::Before)
+        self.yank(text, Anchor::Before, 1)
     }
 
     /// Move cursor on the left.
-    pub fn move_left(&mut self) -> bool {
-        if let Some(ch) = self.char_before_cursor() {
-            self.pos -= ch.len_utf8();
-            true
-        } else {
-            false
+    pub fn move_left(&mut self, count: u16) -> bool {
+        let mut moved = false;
+        for _ in 0..count {
+            if let Some(ch) = self.char_before_cursor() {
+                self.pos -= ch.len_utf8();
+                moved = true
+            } else {
+                break;
+            }
         }
+        moved
     }
 
     /// Move cursor on the right.
-    pub fn move_right(&mut self) -> bool {
-        if let Some(ch) = self.char_at_cursor() {
-            self.pos += ch.len_utf8();
-            true
-        } else {
-            false
+    pub fn move_right(&mut self, count: u16) -> bool {
+        let mut moved = false;
+        for _ in 0..count {
+            if let Some(ch) = self.char_at_cursor() {
+                self.pos += ch.len_utf8();
+                moved = true
+            } else {
+                break;
+            }
         }
+        moved
     }
 
     /// Move cursor to the start of the line.
@@ -189,30 +197,42 @@ impl LineBuffer {
 
     /// Replace a single character under the cursor (Vi mode)
     pub fn replace_char(&mut self, ch: char) -> Option<bool> {
-        if self.delete() { self.insert(ch) } else { None }
+        if self.delete(1) {
+            self.insert(ch)
+        } else {
+            None
+        }
     }
 
     /// Delete the character at the right of the cursor without altering the cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
-    pub fn delete(&mut self) -> bool {
-        if !self.buf.is_empty() && self.pos < self.buf.len() {
-            self.buf.remove(self.pos);
-            true
-        } else {
-            false
+    pub fn delete(&mut self, count: u16) -> bool {
+        let mut deleted = false;
+        for _ in 0..count {
+            if !self.buf.is_empty() && self.pos < self.buf.len() {
+                self.buf.remove(self.pos);
+                deleted = true
+            } else {
+                break;
+            }
         }
+        deleted
     }
 
     /// Delete the character at the left of the cursor.
     /// Basically that is what happens with the "Backspace" keyboard key.
-    pub fn backspace(&mut self) -> bool {
-        if let Some(ch) = self.char_before_cursor() {
-            self.pos -= ch.len_utf8();
-            self.buf.remove(self.pos);
-            true
-        } else {
-            false
+    pub fn backspace(&mut self, count: u16) -> bool {
+        let mut deleted = false;
+        for _ in 0..count {
+            if let Some(ch) = self.char_before_cursor() {
+                self.pos -= ch.len_utf8();
+                self.buf.remove(self.pos);
+                deleted = true
+            } else {
+                break;
+            }
         }
+        deleted
     }
 
     /// Kill all characters on the current line.
@@ -248,7 +268,7 @@ impl LineBuffer {
             return false;
         }
         if self.pos == self.buf.len() {
-            self.move_left();
+            self.move_left(1);
         }
         let ch = self.buf.remove(self.pos);
         let size = ch.len_utf8();
@@ -292,18 +312,22 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the beginning of previous word.
-    pub fn move_to_prev_word(&mut self, word_def: Word) -> bool {
-        if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
-            self.pos = pos;
-            true
-        } else {
-            false
+    pub fn move_to_prev_word(&mut self, word_def: Word, count: u16) -> bool {
+        let mut moved = false;
+        for _ in 0..count {
+            if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
+                self.pos = pos;
+                moved = true
+            } else {
+                break;
+            }
         }
+        moved
     }
 
     /// Delete the previous word, maintaining the cursor at the start of the
     /// current word.
-    pub fn delete_prev_word(&mut self, word_def: Word) -> Option<String> {
+    pub fn delete_prev_word(&mut self, word_def: Word, count: u16) -> Option<String> {
         if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
@@ -378,13 +402,17 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the end of next word.
-    pub fn move_to_next_word(&mut self, at: At, word_def: Word) -> bool {
-        if let Some(pos) = self.next_pos(self.pos, at, word_def) {
-            self.pos = pos;
-            true
-        } else {
-            false
+    pub fn move_to_next_word(&mut self, at: At, word_def: Word, count: u16) -> bool {
+        let mut moved = false;
+        for _ in 0..count {
+            if let Some(pos) = self.next_pos(self.pos, at, word_def) {
+                self.pos = pos;
+                moved = true
+            } else {
+                break;
+            }
         }
+        moved
     }
 
     fn search_char_pos(&mut self, cs: &CharSearch) -> Option<usize> {
@@ -427,17 +455,21 @@ impl LineBuffer {
         }
     }
 
-    pub fn move_to(&mut self, cs: CharSearch) -> bool {
-        if let Some(pos) = self.search_char_pos(&cs) {
-            self.pos = pos;
-            true
-        } else {
-            false
+    pub fn move_to(&mut self, cs: CharSearch, count: u16) -> bool {
+        let mut moved = false;
+        for _ in 0..count {
+            if let Some(pos) = self.search_char_pos(&cs) {
+                self.pos = pos;
+                moved = true
+            } else {
+                break;
+            }
         }
+        moved
     }
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-    pub fn delete_word(&mut self, at: At, word_def: Word) -> Option<String> {
+    pub fn delete_word(&mut self, at: At, word_def: Word, count: u16) -> Option<String> {
         if let Some(pos) = self.next_pos(self.pos, at, word_def) {
             let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
@@ -446,7 +478,7 @@ impl LineBuffer {
         }
     }
 
-    pub fn delete_to(&mut self, cs: CharSearch) -> Option<String> {
+    pub fn delete_to(&mut self, cs: CharSearch, count: u16) -> Option<String> {
         let search_result = match cs {
             CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c)),
             _ => self.search_char_pos(&cs),
@@ -607,12 +639,12 @@ mod test {
     #[test]
     fn moves() {
         let mut s = LineBuffer::init("αß", 4);
-        let ok = s.move_left();
+        let ok = s.move_left(1);
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
 
-        let ok = s.move_right();
+        let ok = s.move_right(1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -631,12 +663,12 @@ mod test {
     #[test]
     fn delete() {
         let mut s = LineBuffer::init("αß", 2);
-        let ok = s.delete();
+        let ok = s.delete(1);
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
 
-        let ok = s.backspace();
+        let ok = s.backspace(1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
@@ -683,7 +715,7 @@ mod test {
     #[test]
     fn move_to_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let ok = s.move_to_prev_word(Word::Emacs);
+        let ok = s.move_to_prev_word(Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
@@ -692,7 +724,7 @@ mod test {
     #[test]
     fn delete_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let text = s.delete_prev_word(Word::Big);
+        let text = s.delete_prev_word(Word::Big, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
@@ -701,7 +733,7 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word(At::End, Word::Emacs);
+        let ok = s.move_to_next_word(At::End, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -710,7 +742,7 @@ mod test {
     #[test]
     fn move_to_start_of_word() {
         let mut s = LineBuffer::init("a ß  c", 2);
-        let ok = s.move_to_next_word(At::Start, Word::Emacs);
+        let ok = s.move_to_next_word(At::Start, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(6, s.pos);
         assert_eq!(true, ok);
@@ -719,7 +751,7 @@ mod test {
     #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word(At::End, Word::Emacs);
+        let text = s.delete_word(At::End, Word::Emacs, 1);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
@@ -728,7 +760,7 @@ mod test {
     #[test]
     fn delete_til_start_of_word() {
         let mut s = LineBuffer::init("a ß  c", 2);
-        let text = s.delete_word(At::Start, Word::Emacs);
+        let text = s.delete_word(At::Start, Word::Emacs, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);

@@ -12,6 +12,7 @@ license = "MIT"
 [dependencies]
 libc = "0.2"
 unicode-width = "0.1"
+unicode-segmentation = "1.0"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.7"

@@ -110,11 +110,12 @@ impl EditState {
         }
     }
 
-    fn digit_argument<R: RawReader>(&mut self,
-                                    rdr: &mut R,
-                                    config: &Config,
-                                    digit: char)
-                                    -> Result<KeyPress> {
+    // TODO dynamic prompt (arg: ?)
+    fn emacs_digit_argument<R: RawReader>(&mut self,
+                                          rdr: &mut R,
+                                          config: &Config,
+                                          digit: char)
+                                          -> Result<KeyPress> {
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -139,9 +140,9 @@ impl EditState {
     fn emacs<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         let mut key = try!(rdr.next_key(config.keyseq_timeout()));
         if let KeyPress::Meta(digit @ '-') = key {
-            key = try!(self.digit_argument(rdr, config, digit));
+            key = try!(self.emacs_digit_argument(rdr, config, digit));
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
-            key = try!(self.digit_argument(rdr, config, digit));
+            key = try!(self.emacs_digit_argument(rdr, config, digit));
         }
         let cmd = match key {
             KeyPress::Char(c) => Cmd::SelfInsert(c),

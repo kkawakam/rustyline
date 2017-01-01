@@ -3,11 +3,13 @@ use std::io::Write;
 use ::Result;
 use consts::KeyPress;
 
+/// Terminal state
 pub trait RawMode: Copy + Sized {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()>;
 }
 
+/// Translate bytes read from stdin to keys.
 pub trait RawReader: Sized {
     /// Blocking read of key pressed.
     fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress>;
@@ -20,7 +22,7 @@ pub trait RawReader: Sized {
 pub trait Term: Clone {
     type Reader: RawReader;
     type Writer: Write;
-    type Mode;
+    type Mode: RawMode;
 
     fn new() -> Self;
     /// Check if current terminal can provide a rich line-editing user interface.

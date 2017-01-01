@@ -17,10 +17,10 @@
 #![allow(unknown_lints)]
 
 extern crate libc;
+extern crate encode_unicode;
+extern crate unicode_width;
 #[cfg(unix)]
 extern crate nix;
-extern crate unicode_width;
-extern crate encode_unicode;
 #[cfg(windows)]
 extern crate winapi;
 #[cfg(windows)]
@@ -44,6 +44,8 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
@@ -288,7 +290,7 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
             pos.row += 1;
             None
         } else {
-            unicode_width::UnicodeWidthChar::width(c)
+            c.width()
         };
         if let Some(cw) = cw {
             pos.col += cw;
@@ -309,7 +311,7 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
 fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
     if let Some(push) = s.line.insert(ch) {
         if push {
-            if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
+            if s.cursor.col + ch.width().unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
                 s.cursor = cursor;
@@ -663,12 +665,11 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                                   candidates: &[String])
                                   -> Result<Option<Cmd>> {
     use std::cmp;
-    use unicode_width::UnicodeWidthStr;
 
     let min_col_pad = 2;
     let max_width = cmp::min(s.cols,
                              candidates.into_iter()
-                                 .map(|s| UnicodeWidthStr::width(s.as_str()))
+                                 .map(|s| s.as_str().width())
                                  .max()
                                  .unwrap() + min_col_pad);
     let num_cols = s.cols / max_width;
@@ -709,7 +710,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
             if i < candidates.len() {
                 let candidate = &candidates[i];
                 ab.push_str(candidate);
-                let width = UnicodeWidthStr::width(candidate.as_str());
+                let width = candidate.as_str().width();
                 if ((col + 1) * num_rows) + row < candidates.len() {
                     for _ in width..max_width {
                         ab.push(' ');

@@ -1,5 +1,5 @@
 //! Line buffer with current cursor position
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use keymap::{Anchor, At, CharSearch, Word};
 
 /// Maximum buffer size for the line read
@@ -568,8 +568,9 @@ impl LineBuffer {
     }
 
     /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
-    pub fn replace(&mut self, start: usize, end: usize, text: &str) {
-        self.buf.drain(start..end);
+    pub fn replace(&mut self, range: Range<usize>, text: &str) {
+        let start = range.start;
+        self.buf.drain(range);
         self.insert_str(start, text);
         self.pos = start + text.len();
     }

@@ -1,4 +1,5 @@
 //! Line buffer with current cursor position
+use std::iter;
 use std::ops::{Deref, Range};
 use keymap::{Anchor, At, CharSearch, Word};
 
@@ -108,16 +109,25 @@ impl LineBuffer {
     /// and advance cursor position accordingly.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn insert(&mut self, ch: char) -> Option<bool> {
-        let shift = ch.len_utf8();
+    pub fn insert(&mut self, ch: char, count: u16) -> Option<bool> {
+        let shift = ch.len_utf8() * count as usize;
         if self.buf.len() + shift > self.buf.capacity() {
             return None;
         }
         let push = self.pos == self.buf.len();
         if push {
-            self.buf.push(ch);
+            self.buf.reserve(shift);
+            for _ in 0..count {
+                self.buf.push(ch);
+            }
         } else {
-            self.buf.insert(self.pos, ch);
+            if count == 1 {
+                self.buf.insert(self.pos, ch);
+            } else {
+                let text = iter::repeat(ch).take(count as usize).collect::<String>();
+                let pos = self.pos;
+                self.insert_str(pos, &text);
+            }
         }
         self.pos += shift;
         Some(push)
@@ -192,15 +202,6 @@ impl LineBuffer {
         } else {
             self.pos = self.buf.len();
             true
-        }
-    }
-
-    /// Replace a single character under the cursor (Vi mode)
-    pub fn replace_char(&mut self, ch: char) -> Option<bool> {
-        if self.delete(1) {
-            self.insert(ch)
-        } else {
-            None
         }
     }
 
@@ -639,18 +640,18 @@ mod test {
     #[test]
     fn insert() {
         let mut s = LineBuffer::with_capacity(MAX_LINE);
-        let push = s.insert('α').unwrap();
+        let push = s.insert('α', 1).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, push);
 
-        let push = s.insert('ß').unwrap();
+        let push = s.insert('ß', 1).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, push);
 
         s.pos = 0;
-        let push = s.insert('γ').unwrap();
+        let push = s.insert('γ', 1).unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(false, push);

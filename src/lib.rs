@@ -309,9 +309,9 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
 
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
-    if let Some(push) = s.line.insert(ch) {
+    if let Some(push) = s.line.insert(ch, count) {
         if push {
-            if s.cursor.col + ch.width().unwrap_or(0) < s.cols {
+            if count == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
                 s.cursor = cursor;
@@ -322,6 +322,17 @@ fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
         } else {
             s.refresh_line()
         }
+    } else {
+        Ok(())
+    }
+}
+
+/// Replace a single (or count) character(s) under the cursor (Vi mode)
+fn edit_replace_char(s: &mut State, ch: char, count: u16) -> Result<()> {
+    if s.line.delete(count) {
+        s.line.insert(ch, count);
+        s.line.move_left(1);
+        s.refresh_line()
     } else {
         Ok(())
     }
@@ -874,9 +885,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Replace(count, c) => {
                 editor.kill_ring.reset();
-                try!(edit_delete(&mut s, count));
-                try!(edit_insert(&mut s, c, count));
-                try!(edit_move_left(&mut s, 1))
+                try!(edit_replace_char(&mut s, c, count));
             }
             Cmd::EndOfFile => {
                 editor.kill_ring.reset();

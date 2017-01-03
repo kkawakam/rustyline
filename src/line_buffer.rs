@@ -207,17 +207,18 @@ impl LineBuffer {
 
     /// Delete the character at the right of the cursor without altering the cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
-    pub fn delete(&mut self, count: u16) -> bool {
-        let mut deleted = false;
+    /// Return the number of characters deleted.
+    pub fn delete(&mut self, count: u16) -> u16 {
+        let mut n = 0;
         for _ in 0..count {
             if !self.buf.is_empty() && self.pos < self.buf.len() {
                 self.buf.remove(self.pos);
-                deleted = true
+                n += 1
             } else {
                 break;
             }
         }
-        deleted
+        n
     }
 
     /// Delete the character at the left of the cursor.
@@ -665,10 +666,10 @@ mod test {
     #[test]
     fn delete() {
         let mut s = LineBuffer::init("αß", 2);
-        let ok = s.delete(1);
+        let n = s.delete(1);
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert_eq!(1, n);
 
         let ok = s.backspace(1);
         assert_eq!("", s.buf);

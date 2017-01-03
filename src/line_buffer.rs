@@ -137,15 +137,24 @@ impl LineBuffer {
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
     pub fn yank(&mut self, text: &str, anchor: Anchor, count: u16) -> Option<bool> {
-        let shift = text.len();
+        let shift = text.len() * count as usize;
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
         }
         if let Anchor::After = anchor {
             self.move_right(1);
         }
-        let pos = self.pos;
-        let push = self.insert_str(pos, text);
+        let push = self.pos == self.buf.len();
+        if push {
+            self.buf.reserve(shift);
+            for _ in 0..count {
+                self.buf.push_str(text);
+            }
+        } else {
+            let text = iter::repeat(text).take(count as usize).collect::<String>();
+            let pos = self.pos;
+            self.insert_str(pos, &text);
+        }
         self.pos += shift;
         Some(push)
     }

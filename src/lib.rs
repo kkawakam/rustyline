@@ -308,10 +308,10 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
 }
 
 /// Insert the character `ch` at cursor current position.
-fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
-    if let Some(push) = s.line.insert(ch, count) {
+fn edit_insert(s: &mut State, ch: char, n: u16) -> Result<()> {
+    if let Some(push) = s.line.insert(ch, n) {
         if push {
-            if count == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
                 s.cursor = cursor;
@@ -327,11 +327,11 @@ fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
     }
 }
 
-/// Replace a single (or count) character(s) under the cursor (Vi mode)
-fn edit_replace_char(s: &mut State, ch: char, count: u16) -> Result<()> {
-    let n = s.line.delete(count);
-    if n > 0 {
-        s.line.insert(ch, n);
+/// Replace a single (or n) character(s) under the cursor (Vi mode)
+fn edit_replace_char(s: &mut State, ch: char, n: u16) -> Result<()> {
+    let count = s.line.delete(n);
+    if count > 0 {
+        s.line.insert(ch, count);
         s.line.move_left(1);
         s.refresh_line()
     } else {
@@ -340,8 +340,8 @@ fn edit_replace_char(s: &mut State, ch: char, count: u16) -> Result<()> {
 }
 
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, text: &str, anchor: Anchor, count: u16) -> Result<()> {
-    if s.line.yank(text, anchor, count).is_some() {
+fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: u16) -> Result<()> {
+    if s.line.yank(text, anchor, n).is_some() {
         s.refresh_line()
     } else {
         Ok(())
@@ -355,8 +355,8 @@ fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
 }
 
 /// Move cursor on the left.
-fn edit_move_left(s: &mut State, count: u16) -> Result<()> {
-    if s.line.move_left(count) {
+fn edit_move_left(s: &mut State, n: u16) -> Result<()> {
+    if s.line.move_left(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -364,8 +364,8 @@ fn edit_move_left(s: &mut State, count: u16) -> Result<()> {
 }
 
 /// Move cursor on the right.
-fn edit_move_right(s: &mut State, count: u16) -> Result<()> {
-    if s.line.move_right(count) {
+fn edit_move_right(s: &mut State, n: u16) -> Result<()> {
+    if s.line.move_right(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -392,8 +392,8 @@ fn edit_move_end(s: &mut State) -> Result<()> {
 
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
-fn edit_delete(s: &mut State, count: u16) -> Result<()> {
-    if s.line.delete(count) > 0 {
+fn edit_delete(s: &mut State, n: u16) -> Result<()> {
+    if s.line.delete(n) > 0 {
         s.refresh_line()
     } else {
         Ok(())
@@ -401,8 +401,8 @@ fn edit_delete(s: &mut State, count: u16) -> Result<()> {
 }
 
 /// Backspace implementation.
-fn edit_backspace(s: &mut State, count: u16) -> Result<()> {
-    if s.line.backspace(count) {
+fn edit_backspace(s: &mut State, n: u16) -> Result<()> {
+    if s.line.backspace(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -438,8 +438,8 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     }
 }
 
-fn edit_move_to_prev_word(s: &mut State, word_def: Word, count: u16) -> Result<()> {
-    if s.line.move_to_prev_word(word_def, count) {
+fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: u16) -> Result<()> {
+    if s.line.move_to_prev_word(word_def, n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -448,8 +448,8 @@ fn edit_move_to_prev_word(s: &mut State, word_def: Word, count: u16) -> Result<(
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State, word_def: Word, count: u16) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_prev_word(word_def, count) {
+fn edit_delete_prev_word(s: &mut State, word_def: Word, n: u16) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_prev_word(word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -457,16 +457,16 @@ fn edit_delete_prev_word(s: &mut State, word_def: Word, count: u16) -> Result<Op
     }
 }
 
-fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, count: u16) -> Result<()> {
-    if s.line.move_to_next_word(at, word_def, count) {
+fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: u16) -> Result<()> {
+    if s.line.move_to_next_word(at, word_def, n) {
         s.refresh_line()
     } else {
         Ok(())
     }
 }
 
-fn edit_move_to(s: &mut State, cs: CharSearch, count: u16) -> Result<()> {
-    if s.line.move_to(cs, count) {
+fn edit_move_to(s: &mut State, cs: CharSearch, n: u16) -> Result<()> {
+    if s.line.move_to(cs, n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -474,8 +474,8 @@ fn edit_move_to(s: &mut State, cs: CharSearch, count: u16) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State, at: At, word_def: Word, count: u16) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_word(at, word_def, count) {
+fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: u16) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_word(at, word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -483,8 +483,8 @@ fn edit_delete_word(s: &mut State, at: At, word_def: Word, count: u16) -> Result
     }
 }
 
-fn edit_delete_to(s: &mut State, cs: CharSearch, count: u16) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_to(cs, count) {
+fn edit_delete_to(s: &mut State, cs: CharSearch, n: u16) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_to(cs, n) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -649,14 +649,15 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(write_and_flush(s.out, msg.as_bytes()));
             s.old_rows += 1;
-            while cmd != Cmd::SelfInsert('y') && cmd != Cmd::SelfInsert('Y') &&
-                  cmd != Cmd::SelfInsert('n') && cmd != Cmd::SelfInsert('N') &&
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
+                  cmd != Cmd::SelfInsert(1, 'n') &&
+                  cmd != Cmd::SelfInsert(1, 'N') &&
                   cmd != Cmd::BackwardDeleteChar(1) {
                 cmd = try!(s.next_cmd(rdr, config));
             }
             show_completions = match cmd {
-                Cmd::SelfInsert('y') |
-                Cmd::SelfInsert('Y') => true,
+                Cmd::SelfInsert(1, 'y') |
+                Cmd::SelfInsert(1, 'Y') => true,
                 _ => false,
             };
         }
@@ -693,18 +694,19 @@ fn page_completions<R: RawReader>(rdr: &mut R,
         if row == pause_row {
             try!(write_and_flush(s.out, b"\n--More--"));
             let mut cmd = Cmd::Noop;
-            while cmd != Cmd::SelfInsert('y') && cmd != Cmd::SelfInsert('Y') &&
-                  cmd != Cmd::SelfInsert('n') && cmd != Cmd::SelfInsert('N') &&
-                  cmd != Cmd::SelfInsert('q') &&
-                  cmd != Cmd::SelfInsert('Q') &&
-                  cmd != Cmd::SelfInsert(' ') &&
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1_, 'Y') &&
+                  cmd != Cmd::SelfInsert(1, 'n') &&
+                  cmd != Cmd::SelfInsert(1_, 'N') &&
+                  cmd != Cmd::SelfInsert(1, 'q') &&
+                  cmd != Cmd::SelfInsert(1, 'Q') &&
+                  cmd != Cmd::SelfInsert(1, ' ') &&
                   cmd != Cmd::BackwardDeleteChar(1) && cmd != Cmd::AcceptLine {
                 cmd = try!(s.next_cmd(rdr, config));
             }
             match cmd {
-                Cmd::SelfInsert('y') |
-                Cmd::SelfInsert('Y') |
-                Cmd::SelfInsert(' ') => {
+                Cmd::SelfInsert(1, 'y') |
+                Cmd::SelfInsert(1, 'Y') |
+                Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.term.get_rows() - 1;
                 }
                 Cmd::AcceptLine => {
@@ -765,7 +767,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         try!(s.refresh_prompt_and_line(&prompt));
 
         cmd = try!(s.next_cmd(rdr, config));
-        if let Cmd::SelfInsert(c) = cmd {
+        if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
             match cmd {
@@ -851,9 +853,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
         }
 
-        if let Cmd::SelfInsert(c) = cmd {
+        if let Cmd::SelfInsert(n, c) = cmd {
             editor.kill_ring.reset();
-            try!(edit_insert(&mut s, c, 1));
+            try!(edit_insert(&mut s, c, n));
             continue;
         }
 
@@ -874,19 +876,19 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
-            Cmd::BackwardChar(count) => {
+            Cmd::BackwardChar(n) => {
                 editor.kill_ring.reset();
                 // Move back a character.
-                try!(edit_move_left(&mut s, count))
+                try!(edit_move_left(&mut s, n))
             }
-            Cmd::DeleteChar(count) => {
+            Cmd::DeleteChar(n) => {
                 editor.kill_ring.reset();
                 // Delete (forward) one character at point.
-                try!(edit_delete(&mut s, count))
+                try!(edit_delete(&mut s, n))
             }
-            Cmd::Replace(count, c) => {
+            Cmd::Replace(n, c) => {
                 editor.kill_ring.reset();
-                try!(edit_replace_char(&mut s, c, count));
+                try!(edit_replace_char(&mut s, c, n));
             }
             Cmd::EndOfFile => {
                 editor.kill_ring.reset();
@@ -901,15 +903,15 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
-            Cmd::ForwardChar(count) => {
+            Cmd::ForwardChar(n) => {
                 editor.kill_ring.reset();
                 // Move forward a character.
-                try!(edit_move_right(&mut s, count))
+                try!(edit_move_right(&mut s, n))
             }
-            Cmd::BackwardDeleteChar(count) => {
+            Cmd::BackwardDeleteChar(n) => {
                 editor.kill_ring.reset();
                 // Delete one character backward.
-                try!(edit_backspace(&mut s, count))
+                try!(edit_backspace(&mut s, n))
             }
             Cmd::KillLine => {
                 // Kill the text from point to the end of the line.
@@ -956,10 +958,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c, 1)) // FIXME
             }
-            Cmd::Yank(count, anchor) => {
+            Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.yank() {
-                    try!(edit_yank(&mut s, text, anchor, count))
+                    try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
             // TODO CTRL-_ // undo
@@ -969,9 +971,9 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_move_end(&mut s));
                 break;
             }
-            Cmd::BackwardKillWord(count, word_def) => {
+            Cmd::BackwardKillWord(n, word_def) => {
                 // kill one word backward
-                if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def, count)) {
+                if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def, n)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
@@ -985,26 +987,26 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_history(&mut s, &editor.history, false))
             }
-            Cmd::BackwardWord(count, word_def) => {
+            Cmd::BackwardWord(n, word_def) => {
                 // move backwards one word
                 editor.kill_ring.reset();
-                try!(edit_move_to_prev_word(&mut s, word_def, count))
+                try!(edit_move_to_prev_word(&mut s, word_def, n))
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            Cmd::KillWord(count, at, word_def) => {
+            Cmd::KillWord(n, at, word_def) => {
                 // kill one word forward
-                if let Some(text) = try!(edit_delete_word(&mut s, at, word_def, count)) {
+                if let Some(text) = try!(edit_delete_word(&mut s, at, word_def, n)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::ForwardWord(count, at, word_def) => {
+            Cmd::ForwardWord(n, at, word_def) => {
                 // move forwards one word
                 editor.kill_ring.reset();
-                try!(edit_move_to_next_word(&mut s, at, word_def, count))
+                try!(edit_move_to_next_word(&mut s, at, word_def, n))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
@@ -1027,12 +1029,12 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            Cmd::ViCharSearch(count, cs) => {
+            Cmd::ViCharSearch(n, cs) => {
                 editor.kill_ring.reset();
-                try!(edit_move_to(&mut s, cs, count))
+                try!(edit_move_to(&mut s, cs, n))
             }
-            Cmd::ViDeleteTo(count, cs) => {
-                if let Some(text) = try!(edit_delete_to(&mut s, cs, count)) {
+            Cmd::ViDeleteTo(n, cs) => {
+                if let Some(text) = try!(edit_delete_to(&mut s, cs, n)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }

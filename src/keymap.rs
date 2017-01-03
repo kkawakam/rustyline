@@ -35,7 +35,7 @@ pub enum Cmd {
     QuotedInsert,
     Replace(u16, char), // TODO DeleteChar + SelfInsert
     ReverseSearchHistory,
-    SelfInsert(char),
+    SelfInsert(u16, char),
     Suspend,
     TransposeChars,
     TransposeWords,
@@ -144,35 +144,39 @@ impl EditState {
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
             key = try!(self.emacs_digit_argument(rdr, config, digit));
         }
+        let (n, positive) = self.emacs_num_args(); // consume them in all cases
         let cmd = match key {
-            KeyPress::Char(c) => Cmd::SelfInsert(c),
+            KeyPress::Char(c) => {
+                if positive {
+                    Cmd::SelfInsert(n, c)
+                } else {
+                    Cmd::Unknown // TODO ???
+                }
+            }
             KeyPress::Ctrl('A') => Cmd::BeginningOfLine,
             KeyPress::Ctrl('B') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardChar(count)
+                    Cmd::BackwardChar(n)
                 } else {
-                    Cmd::ForwardChar(count)
+                    Cmd::ForwardChar(n)
                 }
             }
             KeyPress::Ctrl('E') => Cmd::EndOfLine,
             KeyPress::Ctrl('F') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::ForwardChar(count)
+                    Cmd::ForwardChar(n)
                 } else {
-                    Cmd::BackwardChar(count)
+                    Cmd::BackwardChar(n)
                 }
             }
             KeyPress::Ctrl('G') |
             KeyPress::Esc => Cmd::Abort,
             KeyPress::Ctrl('H') |
             KeyPress::Backspace => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardDeleteChar(count)
+                    Cmd::BackwardDeleteChar(n)
                 } else {
-                    Cmd::DeleteChar(count)
+                    Cmd::DeleteChar(n)
                 }
             }
             KeyPress::Tab => Cmd::Complete,
@@ -182,45 +186,41 @@ impl EditState {
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Meta('\x08') |
             KeyPress::Meta('\x7f') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardKillWord(count, Word::Emacs)
+                    Cmd::BackwardKillWord(n, Word::Emacs)
                 } else {
-                    Cmd::KillWord(count, At::End, Word::Emacs)
+                    Cmd::KillWord(n, At::End, Word::Emacs)
                 }
             }
             KeyPress::Meta('<') => Cmd::BeginningOfHistory,
             KeyPress::Meta('>') => Cmd::EndOfHistory,
             KeyPress::Meta('B') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardWord(count, Word::Emacs)
+                    Cmd::BackwardWord(n, Word::Emacs)
                 } else {
-                    Cmd::ForwardWord(count, At::End, Word::Emacs)
+                    Cmd::ForwardWord(n, At::End, Word::Emacs)
                 }
             }
             KeyPress::Meta('C') => Cmd::CapitalizeWord,
             KeyPress::Meta('D') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::KillWord(count, At::End, Word::Emacs)
+                    Cmd::KillWord(n, At::End, Word::Emacs)
                 } else {
-                    Cmd::BackwardKillWord(count, Word::Emacs)
+                    Cmd::BackwardKillWord(n, Word::Emacs)
                 }
             }
             KeyPress::Meta('F') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::ForwardWord(count, At::End, Word::Emacs)
+                    Cmd::ForwardWord(n, At::End, Word::Emacs)
                 } else {
-                    Cmd::BackwardWord(count, Word::Emacs)
+                    Cmd::BackwardWord(n, Word::Emacs)
                 }
             }
             KeyPress::Meta('L') => Cmd::DowncaseWord,
             KeyPress::Meta('T') => Cmd::TransposeWords,
             KeyPress::Meta('U') => Cmd::UpcaseWord,
             KeyPress::Meta('Y') => Cmd::YankPop,
-            _ => self.common(key),
+            _ => self.common(key, n, positive),
         };
         Ok(cmd)
     }
@@ -247,6 +247,7 @@ impl EditState {
         if let KeyPress::Char(digit @ '1'...'9') = key {
             key = try!(self.vi_arg_digit(rdr, config, digit));
         }
+        let n = self.vi_num_args(); // consume them in all cases
         let cmd = match key {
             KeyPress::Char('$') |
             KeyPress::End => Cmd::EndOfLine,
@@ -256,28 +257,28 @@ impl EditState {
             KeyPress::Char('a') => {
                 // vi-append-mode: Vi enter insert mode after the cursor.
                 self.insert = true;
-                Cmd::ForwardChar(self.vi_num_args())
+                Cmd::ForwardChar(n)
             }
             KeyPress::Char('A') => {
                 // vi-append-eol: Vi enter insert mode at end of line.
                 self.insert = true;
                 Cmd::EndOfLine
             }
-            KeyPress::Char('b') => Cmd::BackwardWord(self.vi_num_args(), Word::Vi), // vi-prev-word
-            KeyPress::Char('B') => Cmd::BackwardWord(self.vi_num_args(), Word::Big),
+            KeyPress::Char('b') => Cmd::BackwardWord(n, Word::Vi), // vi-prev-word
+            KeyPress::Char('B') => Cmd::BackwardWord(n, Word::Big),
             KeyPress::Char('c') => {
                 self.insert = true;
-                try!(self.vi_delete_motion(rdr, config, key))
+                try!(self.vi_delete_motion(rdr, config, key, n))
             }
             KeyPress::Char('C') => {
                 self.insert = true;
                 Cmd::KillLine
             }
-            KeyPress::Char('d') => try!(self.vi_delete_motion(rdr, config, key)),
+            KeyPress::Char('d') => try!(self.vi_delete_motion(rdr, config, key, n)),
             KeyPress::Char('D') |
             KeyPress::Ctrl('K') => Cmd::KillLine,
-            KeyPress::Char('e') => Cmd::ForwardWord(self.vi_num_args(), At::End, Word::Vi),
-            KeyPress::Char('E') => Cmd::ForwardWord(self.vi_num_args(), At::End, Word::Big),
+            KeyPress::Char('e') => Cmd::ForwardWord(n, At::End, Word::Vi),
+            KeyPress::Char('E') => Cmd::ForwardWord(n, At::End, Word::Big),
             KeyPress::Char('i') => {
                 // vi-insertion-mode
                 self.insert = true;
@@ -292,18 +293,18 @@ impl EditState {
                 // vi-char-search
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
-                    Some(cs) => Cmd::ViCharSearch(self.vi_num_args(), cs),
+                    Some(cs) => Cmd::ViCharSearch(n, cs),
                     None => Cmd::Unknown,
                 }
             }
             // TODO KeyPress::Char('G') => Cmd::???, Move to the history line n
-            KeyPress::Char('p') => Cmd::Yank(self.vi_num_args(), Anchor::After), // vi-put, FIXME cursor position
-            KeyPress::Char('P') => Cmd::Yank(self.vi_num_args(), Anchor::Before), // vi-put, FIXME cursor position
+            KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put, FIXME cursor position
+            KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put, FIXME cursor position
             KeyPress::Char('r') => {
                 // vi-replace-char: Vi replace character under the cursor with the next character typed.
                 let ch = try!(rdr.next_key(config.keyseq_timeout()));
                 match ch {
-                    KeyPress::Char(c) => Cmd::Replace(self.vi_num_args(), c),
+                    KeyPress::Char(c) => Cmd::Replace(n, c),
                     KeyPress::Esc => Cmd::Noop,
                     _ => Cmd::Unknown,
                 }
@@ -312,7 +313,7 @@ impl EditState {
             KeyPress::Char('s') => {
                 // vi-substitute-char: Vi replace character under the cursor and enter insert mode.
                 self.insert = true;
-                Cmd::DeleteChar(self.vi_num_args())
+                Cmd::DeleteChar(n)
             }
             KeyPress::Char('S') => {
                 // vi-substitute-line: Vi substitute entire line.
@@ -320,18 +321,18 @@ impl EditState {
                 Cmd::KillWholeLine
             }
             // KeyPress::Char('U') => Cmd::???, // revert-line
-            KeyPress::Char('w') => Cmd::ForwardWord(self.vi_num_args(), At::Start, Word::Vi), // vi-next-word
-            KeyPress::Char('W') => Cmd::ForwardWord(self.vi_num_args(), At::Start, Word::Big), // vi-next-word
-            KeyPress::Char('x') => Cmd::DeleteChar(self.vi_num_args()), // vi-delete: TODO move backward if eol
-            KeyPress::Char('X') => Cmd::BackwardDeleteChar(self.vi_num_args()), // vi-rubout
+            KeyPress::Char('w') => Cmd::ForwardWord(n, At::Start, Word::Vi), // vi-next-word
+            KeyPress::Char('W') => Cmd::ForwardWord(n, At::Start, Word::Big), // vi-next-word
+            KeyPress::Char('x') => Cmd::DeleteChar(n), // vi-delete: TODO move backward if eol
+            KeyPress::Char('X') => Cmd::BackwardDeleteChar(n), // vi-rubout
             // KeyPress::Char('y') => Cmd::???, // vi-yank-to
             // KeyPress::Char('Y') => Cmd::???, // vi-yank-to
             KeyPress::Char('h') |
             KeyPress::Ctrl('H') |
-            KeyPress::Backspace => Cmd::BackwardChar(self.vi_num_args()), // TODO Validate
+            KeyPress::Backspace => Cmd::BackwardChar(n), // TODO Validate
             KeyPress::Ctrl('G') => Cmd::Abort,
             KeyPress::Char('l') |
-            KeyPress::Char(' ') => Cmd::ForwardChar(self.vi_num_args()),
+            KeyPress::Char(' ') => Cmd::ForwardChar(n),
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Char('+') |
             KeyPress::Char('j') |
@@ -348,7 +349,7 @@ impl EditState {
                 Cmd::ForwardSearchHistory
             }
             KeyPress::Esc => Cmd::Noop,
-            _ => self.common(key),
+            _ => self.common(key, n, true),
         };
         Ok(cmd)
     }
@@ -356,7 +357,7 @@ impl EditState {
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
         let key = try!(rdr.next_key(config.keyseq_timeout()));
         let cmd = match key {
-            KeyPress::Char(c) => Cmd::SelfInsert(c),
+            KeyPress::Char(c) => Cmd::SelfInsert(1, c),
             KeyPress::Ctrl('H') |
             KeyPress::Backspace => Cmd::BackwardDeleteChar(1),
             KeyPress::Tab => Cmd::Complete,
@@ -365,7 +366,7 @@ impl EditState {
                 self.insert = false;
                 Cmd::BackwardChar(1)
             }
-            _ => self.common(key),
+            _ => self.common(key, 1, true),
         };
         Ok(cmd)
     }
@@ -373,37 +374,40 @@ impl EditState {
     fn vi_delete_motion<R: RawReader>(&mut self,
                                       rdr: &mut R,
                                       config: &Config,
-                                      key: KeyPress)
+                                      key: KeyPress,
+                                      n: u16)
                                       -> Result<Cmd> {
         let mut mvt = try!(rdr.next_key(config.keyseq_timeout()));
         if mvt == key {
             return Ok(Cmd::KillWholeLine);
         }
+        let mut n = n;
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
             mvt = try!(self.vi_arg_digit(rdr, config, digit));
+            n = self.vi_num_args();
         }
         Ok(match mvt {
             KeyPress::Char('$') => Cmd::KillLine, // vi-change-to-eol: Vi change to end of line.
             KeyPress::Char('0') => Cmd::UnixLikeDiscard, // vi-kill-line-prev: Vi cut from beginning of line to cursor.
-            KeyPress::Char('b') => Cmd::BackwardKillWord(self.vi_num_args(), Word::Vi),
-            KeyPress::Char('B') => Cmd::BackwardKillWord(self.vi_num_args(), Word::Big),
-            KeyPress::Char('e') => Cmd::KillWord(self.vi_num_args(), At::End, Word::Vi),
-            KeyPress::Char('E') => Cmd::KillWord(self.vi_num_args(), At::End, Word::Big),
+            KeyPress::Char('b') => Cmd::BackwardKillWord(n, Word::Vi),
+            KeyPress::Char('B') => Cmd::BackwardKillWord(n, Word::Big),
+            KeyPress::Char('e') => Cmd::KillWord(n, At::End, Word::Vi),
+            KeyPress::Char('E') => Cmd::KillWord(n, At::End, Word::Big),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
-                    Some(cs) => Cmd::ViDeleteTo(self.vi_num_args(), cs),
+                    Some(cs) => Cmd::ViDeleteTo(n, cs),
                     None => Cmd::Unknown,
                 }
             }
             KeyPress::Char('h') |
             KeyPress::Ctrl('H') |
-            KeyPress::Backspace => Cmd::BackwardDeleteChar(self.vi_num_args()), // vi-delete-prev-char: Vi move to previous character (backspace).
+            KeyPress::Backspace => Cmd::BackwardDeleteChar(n), // vi-delete-prev-char: Vi move to previous character (backspace).
             KeyPress::Char('l') |
-            KeyPress::Char(' ') => Cmd::DeleteChar(self.vi_num_args()),
-            KeyPress::Char('w') => Cmd::KillWord(self.vi_num_args(), At::Start, Word::Vi),
-            KeyPress::Char('W') => Cmd::KillWord(self.vi_num_args(), At::Start, Word::Big),
+            KeyPress::Char(' ') => Cmd::DeleteChar(n),
+            KeyPress::Char('w') => Cmd::KillWord(n, At::Start, Word::Vi),
+            KeyPress::Char('W') => Cmd::KillWord(n, At::Start, Word::Big),
             _ => Cmd::Unknown,
         })
     }
@@ -428,34 +432,31 @@ impl EditState {
         })
     }
 
-    fn common(&mut self, key: KeyPress) -> Cmd {
+    fn common(&mut self, key: KeyPress, n: u16, positive: bool) -> Cmd {
         match key {
             KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Left => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardChar(count)
+                    Cmd::BackwardChar(n)
                 } else {
-                    Cmd::ForwardChar(count)
+                    Cmd::ForwardChar(n)
                 }
             }
             KeyPress::Ctrl('C') => Cmd::Interrupt,
             KeyPress::Ctrl('D') => Cmd::EndOfFile,
             KeyPress::Delete => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::DeleteChar(count)
+                    Cmd::DeleteChar(n)
                 } else {
-                    Cmd::BackwardDeleteChar(count)
+                    Cmd::BackwardDeleteChar(n)
                 }
             }
             KeyPress::End => Cmd::EndOfLine,
             KeyPress::Right => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::ForwardChar(count)
+                    Cmd::ForwardChar(n)
                 } else {
-                    Cmd::BackwardChar(count)
+                    Cmd::BackwardChar(n)
                 }
             }
             KeyPress::Ctrl('J') |
@@ -469,17 +470,15 @@ impl EditState {
             KeyPress::Ctrl('Q') | // most terminals override Ctrl+Q to resume execution
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::BackwardKillWord(count, Word::Big)
+                    Cmd::BackwardKillWord(n, Word::Big)
                 } else {
-                    Cmd::KillWord(count, At::End, Word::Big)
+                    Cmd::KillWord(n, At::End, Word::Big)
                 }
             }
             KeyPress::Ctrl('Y') => {
-                let (count, positive) = self.emacs_num_args();
                 if positive {
-                    Cmd::Yank(count, Anchor::Before)
+                    Cmd::Yank(n, Anchor::Before)
                 } else {
                     Cmd::Unknown // TODO Validate
                 }
@@ -489,6 +488,7 @@ impl EditState {
             _ => Cmd::Unknown,
         }
     }
+
     fn num_args(&mut self) -> i16 {
         let num_args = match self.num_args {
             0 => 1,
@@ -501,8 +501,8 @@ impl EditState {
     fn emacs_num_args(&mut self) -> (u16, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
-            if let (count, false) = num_args.overflowing_abs() {
-                (count as u16, false)
+            if let (n, false) = num_args.overflowing_abs() {
+                (n as u16, false)
             } else {
                 (u16::max_value(), false)
             }

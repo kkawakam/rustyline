@@ -329,8 +329,9 @@ fn edit_insert(s: &mut State, ch: char, count: u16) -> Result<()> {
 
 /// Replace a single (or count) character(s) under the cursor (Vi mode)
 fn edit_replace_char(s: &mut State, ch: char, count: u16) -> Result<()> {
-    if s.line.delete(count) {
-        s.line.insert(ch, count);
+    let n = s.line.delete(count);
+    if n > 0 {
+        s.line.insert(ch, n);
         s.line.move_left(1);
         s.refresh_line()
     } else {
@@ -392,7 +393,7 @@ fn edit_move_end(s: &mut State) -> Result<()> {
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
 fn edit_delete(s: &mut State, count: u16) -> Result<()> {
-    if s.line.delete(count) {
+    if s.line.delete(count) > 0 {
         s.refresh_line()
     } else {
         Ok(())

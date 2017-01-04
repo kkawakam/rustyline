@@ -297,49 +297,50 @@ impl LineBuffer {
     }
 
     /// Go left until start of word
-    fn prev_word_pos(&self, pos: usize, word_def: Word) -> Option<usize> {
+    fn prev_word_pos(&self, pos: usize, word_def: Word, n: u16) -> Option<usize> {
         if pos == 0 {
             return None;
         }
         let test = is_break_char(word_def);
         let mut pos = pos;
-        // eat any spaces on the left
-        pos -= self.buf[..pos]
-            .chars()
-            .rev()
-            .take_while(|ch| test(ch))
-            .map(char::len_utf8)
-            .sum();
-        if pos > 0 {
-            // eat any non-spaces on the left
+        for _ in 0..n {
+            // eat any spaces on the left
             pos -= self.buf[..pos]
                 .chars()
                 .rev()
-                .take_while(|ch| !test(ch))
+                .take_while(|ch| test(ch))
                 .map(char::len_utf8)
                 .sum();
+            if pos > 0 {
+                // eat any non-spaces on the left
+                pos -= self.buf[..pos]
+                    .chars()
+                    .rev()
+                    .take_while(|ch| !test(ch))
+                    .map(char::len_utf8)
+                    .sum();
+            }
+            if pos == 0 {
+                break;
+            }
         }
         Some(pos)
     }
 
     /// Moves the cursor to the beginning of previous word.
     pub fn move_to_prev_word(&mut self, word_def: Word, n: u16) -> bool {
-        let mut moved = false;
-        for _ in 0..n {
-            if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
-                self.pos = pos;
-                moved = true
-            } else {
-                break;
-            }
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
+            self.pos = pos;
+            true
+        } else {
+            false
         }
-        moved
     }
 
     /// Delete the previous word, maintaining the cursor at the start of the
     /// current word.
     pub fn delete_prev_word(&mut self, word_def: Word, n: u16) -> Option<String> {
-        if let Some(pos) = self.prev_word_pos(self.pos, word_def) {
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
             Some(word)
@@ -348,23 +349,26 @@ impl LineBuffer {
         }
     }
 
-    fn next_pos(&self, pos: usize, at: At, word_def: Word) -> Option<usize> {
+    fn next_pos(&self, pos: usize, at: At, word_def: Word, n: u16) -> Option<usize> {
         match at {
             At::End => {
-                match self.next_word_pos(pos, word_def) {
+                match self.next_word_pos(pos, word_def, n) {
                     Some((_, end)) => Some(end),
                     _ => None,
                 }
             }
-            At::Start => self.next_start_of_word_pos(pos, word_def),
+            At::Start => self.next_start_of_word_pos(pos, word_def, n),
         }
     }
 
     /// Go right until start of word
-    fn next_start_of_word_pos(&self, pos: usize, word_def: Word) -> Option<usize> {
-        if pos < self.buf.len() {
-            let test = is_break_char(word_def);
-            let mut pos = pos;
+    fn next_start_of_word_pos(&self, pos: usize, word_def: Word, n: u16) -> Option<usize> {
+        if pos == self.buf.len() {
+            return None;
+        }
+        let test = is_break_char(word_def);
+        let mut pos = pos;
+        for _ in 0..n {
             // eat any non-spaces
             pos += self.buf[pos..]
                 .chars()
@@ -379,25 +383,30 @@ impl LineBuffer {
                     .map(char::len_utf8)
                     .sum();
             }
-            Some(pos)
-        } else {
-            None
+            if pos == self.buf.len() {
+                break;
+            }
         }
+        Some(pos)
     }
 
     /// Go right until end of word
     /// Returns the position (start, end) of the next word.
-    fn next_word_pos(&self, pos: usize, word_def: Word) -> Option<(usize, usize)> {
-        if pos < self.buf.len() {
-            let test = is_break_char(word_def);
-            let mut pos = pos;
+    fn next_word_pos(&self, pos: usize, word_def: Word, n: u16) -> Option<(usize, usize)> {
+        if pos == self.buf.len() {
+            return None;
+        }
+        let test = is_break_char(word_def);
+        let mut pos = pos;
+        let mut start = pos;
+        for _ in 0..n {
             // eat any spaces
             pos += self.buf[pos..]
                 .chars()
                 .take_while(test)
                 .map(char::len_utf8)
                 .sum();
-            let start = pos;
+            start = pos;
             if pos < self.buf.len() {
                 // eat any non-spaces
                 pos += self.buf[pos..]
@@ -406,38 +415,28 @@ impl LineBuffer {
                     .map(char::len_utf8)
                     .sum();
             }
-            Some((start, pos))
-        } else {
-            None
+            if pos == self.buf.len() {
+                break;
+            }
         }
+        Some((start, pos))
     }
 
     /// Moves the cursor to the end of next word.
     pub fn move_to_next_word(&mut self, at: At, word_def: Word, n: u16) -> bool {
-        let mut moved = false;
-        for _ in 0..n {
-            if let Some(pos) = self.next_pos(self.pos, at, word_def) {
-                self.pos = pos;
-                moved = true
-            } else {
-                break;
-            }
+        if let Some(pos) = self.next_pos(self.pos, at, word_def, n) {
+            self.pos = pos;
+            true
+        } else {
+            false
         }
-        moved
     }
 
-    fn search_char_pos(&mut self, cs: &CharSearch) -> Option<usize> {
+    fn search_char_pos(&mut self, cs: &CharSearch, n: u16) -> Option<usize> {
         let mut shift = 0;
         let search_result = match *cs {
             CharSearch::Backward(c) |
-            CharSearch::BackwardAfter(c) => {
-                self.buf[..self.pos].rfind(c)
-                // if let Some(pc) = self.char_before_cursor() {
-                // self.buf[..self.pos - pc.len_utf8()].rfind(c)
-                // } else {
-                // None
-                // }
-            }
+            CharSearch::BackwardAfter(c) => self.buf[..self.pos].rfind(c),
             CharSearch::Forward(c) |
             CharSearch::ForwardBefore(c) => {
                 if let Some(cc) = self.char_at_cursor() {
@@ -467,21 +466,17 @@ impl LineBuffer {
     }
 
     pub fn move_to(&mut self, cs: CharSearch, n: u16) -> bool {
-        let mut moved = false;
-        for _ in 0..n {
-            if let Some(pos) = self.search_char_pos(&cs) {
-                self.pos = pos;
-                moved = true
-            } else {
-                break;
-            }
+        if let Some(pos) = self.search_char_pos(&cs, n) {
+            self.pos = pos;
+            true
+        } else {
+            false
         }
-        moved
     }
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
     pub fn delete_word(&mut self, at: At, word_def: Word, n: u16) -> Option<String> {
-        if let Some(pos) = self.next_pos(self.pos, at, word_def) {
+        if let Some(pos) = self.next_pos(self.pos, at, word_def, n) {
             let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
         } else {
@@ -491,8 +486,8 @@ impl LineBuffer {
 
     pub fn delete_to(&mut self, cs: CharSearch, n: u16) -> Option<String> {
         let search_result = match cs {
-            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c)),
-            _ => self.search_char_pos(&cs),
+            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c), n),
+            _ => self.search_char_pos(&cs, n),
         };
         if let Some(pos) = search_result {
             let chunk = match cs {
@@ -513,7 +508,7 @@ impl LineBuffer {
 
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some((start, end)) = self.next_word_pos(self.pos, Word::Emacs) {
+        if let Some((start, end)) = self.next_word_pos(self.pos, Word::Emacs, 1) {
             if start == end {
                 return false;
             }
@@ -544,16 +539,16 @@ impl LineBuffer {
         // ^          ^       ^
         // prev_start start   self.pos/end
         let word_def = Word::Emacs;
-        if let Some(start) = self.prev_word_pos(self.pos, word_def) {
-            if let Some(prev_start) = self.prev_word_pos(start, word_def) {
-                let (_, prev_end) = self.next_word_pos(prev_start, word_def).unwrap();
+        if let Some(start) = self.prev_word_pos(self.pos, word_def, 1) {
+            if let Some(prev_start) = self.prev_word_pos(start, word_def, 1) {
+                let (_, prev_end) = self.next_word_pos(prev_start, word_def, 1).unwrap();
                 if prev_end >= start {
                     return false;
                 }
-                let (_, mut end) = self.next_word_pos(start, word_def).unwrap();
+                let (_, mut end) = self.next_word_pos(start, word_def, 1).unwrap();
                 if end < self.pos {
                     if self.pos < self.buf.len() {
-                        let (s, _) = self.next_word_pos(self.pos, word_def).unwrap();
+                        let (s, _) = self.next_word_pos(self.pos, word_def, 1).unwrap();
                         end = s;
                     } else {
                         end = self.pos;

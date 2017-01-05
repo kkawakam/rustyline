@@ -120,14 +120,12 @@ impl LineBuffer {
             for _ in 0..n {
                 self.buf.push(ch);
             }
+        } else if n == 1 {
+            self.buf.insert(self.pos, ch);
         } else {
-            if n == 1 {
-                self.buf.insert(self.pos, ch);
-            } else {
-                let text = iter::repeat(ch).take(n as usize).collect::<String>();
-                let pos = self.pos;
-                self.insert_str(pos, &text);
-            }
+            let text = iter::repeat(ch).take(n as usize).collect::<String>();
+            let pos = self.pos;
+            self.insert_str(pos, &text);
         }
         self.pos += shift;
         Some(push)

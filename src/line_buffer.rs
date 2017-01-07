@@ -434,13 +434,26 @@ impl LineBuffer {
         let mut shift = 0;
         let search_result = match *cs {
             CharSearch::Backward(c) |
-            CharSearch::BackwardAfter(c) => self.buf[..self.pos].rfind(c),
+            CharSearch::BackwardAfter(c) => {
+                self.buf[..self.pos]
+                    .chars()
+                    .rev()
+                    .enumerate()
+                    .filter(|&(_, ch)| ch == c)
+                    .nth(n as usize - 1)
+                    .map(|(i, _)| self.pos - i)
+            }
             CharSearch::Forward(c) |
             CharSearch::ForwardBefore(c) => {
                 if let Some(cc) = self.char_at_cursor() {
                     shift = self.pos + cc.len_utf8();
                     if shift < self.buf.len() {
-                        self.buf[shift..].find(c)
+                        self.buf[shift..]
+                            .chars()
+                            .enumerate()
+                            .filter(|&(_, ch)| ch == c)
+                            .nth(n as usize - 1)
+                            .map(|(i, _)| i)
                     } else {
                         None
                     }
@@ -451,8 +464,8 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             Some(match *cs {
-                CharSearch::Backward(_) => pos,
-                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                CharSearch::Backward(c) => pos - c.len_utf8(),
+                CharSearch::BackwardAfter(_) => pos,
                 CharSearch::Forward(_) => shift + pos,
                 CharSearch::ForwardBefore(_) => {
                     shift + pos - self.buf[..shift + pos].chars().next_back().unwrap().len_utf8()

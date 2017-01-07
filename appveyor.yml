@@ -1,7 +1,7 @@
 environment:
   matrix:
-  - TARGET: 1.12.0-x86_64-pc-windows-msvc
-  - TARGET: 1.12.0-x86_64-pc-windows-gnu
+  - TARGET: 1.13.0-x86_64-pc-windows-msvc
+  - TARGET: 1.13.0-x86_64-pc-windows-gnu
   - TARGET: beta-x86_64-pc-windows-msvc
   - TARGET: beta-x86_64-pc-windows-gnu
 install:

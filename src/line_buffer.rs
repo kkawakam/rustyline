@@ -29,10 +29,10 @@ impl LineBuffer {
 
     #[cfg(test)]
     pub fn init(line: &str, pos: usize) -> LineBuffer {
-        LineBuffer {
-            buf: String::from(line),
-            pos: pos,
-        }
+        let mut lb = Self::with_capacity(MAX_LINE);
+        assert!(lb.insert_str(0, line));
+        lb.set_pos(pos);
+        lb
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -436,12 +436,11 @@ impl LineBuffer {
             CharSearch::Backward(c) |
             CharSearch::BackwardAfter(c) => {
                 self.buf[..self.pos]
-                    .chars()
+                    .char_indices()
                     .rev()
-                    .enumerate()
                     .filter(|&(_, ch)| ch == c)
                     .nth(n as usize - 1)
-                    .map(|(i, _)| self.pos - i)
+                    .map(|(i, _)| i)
             }
             CharSearch::Forward(c) |
             CharSearch::ForwardBefore(c) => {
@@ -449,8 +448,7 @@ impl LineBuffer {
                     shift = self.pos + cc.len_utf8();
                     if shift < self.buf.len() {
                         self.buf[shift..]
-                            .chars()
-                            .enumerate()
+                            .char_indices()
                             .filter(|&(_, ch)| ch == c)
                             .nth(n as usize - 1)
                             .map(|(i, _)| i)
@@ -464,8 +462,8 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             Some(match *cs {
-                CharSearch::Backward(c) => pos - c.len_utf8(),
-                CharSearch::BackwardAfter(_) => pos,
+                CharSearch::Backward(_) => pos,
+                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
                 CharSearch::ForwardBefore(_) => {
                     shift + pos - self.buf[..shift + pos].chars().next_back().unwrap().len_utf8()
@@ -650,7 +648,7 @@ fn is_whitespace(ch: &char) -> bool {
 
 #[cfg(test)]
 mod test {
-    use keymap::{At, Word};
+    use keymap::{Anchor, At, CharSearch, Word};
     use super::{LineBuffer, MAX_LINE, WordAction};
 
     #[test]
@@ -671,6 +669,24 @@ mod test {
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(false, push);
+    }
+
+    #[test]
+    fn yank_after() {
+        let mut s = LineBuffer::init("αß", 2);
+        let ok = s.yank("γδε", Anchor::After, 1);
+        assert_eq!(Some(true), ok);
+        assert_eq!("αßγδε", s.buf);
+        assert_eq!(10, s.pos);
+    }
+
+    #[test]
+    fn yank_before() {
+        let mut s = LineBuffer::init("αε", 2);
+        let ok = s.yank("ßγδ", Anchor::Before, 1);
+        assert_eq!(Some(false), ok);
+        assert_eq!("αßγδε", s.buf);
+        assert_eq!(8, s.pos);
     }
 
     #[test]
@@ -759,6 +775,32 @@ mod test {
     }
 
     #[test]
+    fn move_to_forward() {
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::ForwardBefore('ε'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(6, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::Forward('ε'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(8, s.pos);
+    }
+
+    #[test]
+    fn move_to_backward() {
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let ok = s.move_to(CharSearch::BackwardAfter('ß'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(4, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let ok = s.move_to(CharSearch::Backward('ß'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
     fn delete_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
         let text = s.delete_prev_word(Word::Big, 1);
@@ -801,6 +843,36 @@ mod test {
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
+    }
+
+    #[test]
+    fn delete_to_forward() {
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let text = s.delete_to(CharSearch::ForwardBefore('ε'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let text = s.delete_to(CharSearch::Forward('ε'), 1);
+        assert_eq!(Some("ßγδε".to_string()), text);
+        assert_eq!("α", s.buf);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
+    fn delete_to_backward() {
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let text = s.delete_to(CharSearch::BackwardAfter('α'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let text = s.delete_to(CharSearch::Backward('ß'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
     }
 
     #[test]

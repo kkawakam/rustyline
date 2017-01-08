@@ -1379,4 +1379,9 @@ mod test {
     fn up_key() {
         assert_line(&[KeyPress::Up, KeyPress::Enter], "");
     }
+
+    #[test]
+    fn unknown_esc_key() {
+        assert_line(&[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
+    }
 }

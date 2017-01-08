@@ -8,34 +8,34 @@ use super::Result;
 pub enum Cmd {
     Abort, // Miscellaneous Command
     AcceptLine,
-    BackwardChar(u16),
-    BackwardDeleteChar(u16),
-    BackwardKillWord(u16, Word), // Backward until start of word
-    BackwardWord(u16, Word), // Backward until start of word
+    BackwardChar(usize),
+    BackwardDeleteChar(usize),
+    BackwardKillWord(usize, Word), // Backward until start of word
+    BackwardWord(usize, Word), // Backward until start of word
     BeginningOfHistory,
     BeginningOfLine,
     CapitalizeWord,
     ClearScreen,
     Complete,
-    DeleteChar(u16),
+    DeleteChar(usize),
     DowncaseWord,
     EndOfFile,
     EndOfHistory,
     EndOfLine,
-    ForwardChar(u16),
+    ForwardChar(usize),
     ForwardSearchHistory,
-    ForwardWord(u16, At, Word), // Forward until start/end of word
+    ForwardWord(usize, At, Word), // Forward until start/end of word
     Interrupt,
     KillLine,
     KillWholeLine,
-    KillWord(u16, At, Word), // Forward until start/end of word
+    KillWord(usize, At, Word), // Forward until start/end of word
     NextHistory,
     Noop,
     PreviousHistory,
     QuotedInsert,
-    Replace(u16, char), // TODO DeleteChar + SelfInsert
+    Replace(usize, char), // TODO DeleteChar + SelfInsert
     ReverseSearchHistory,
-    SelfInsert(u16, char),
+    SelfInsert(usize, char),
     Suspend,
     TransposeChars,
     TransposeWords,
@@ -43,9 +43,9 @@ pub enum Cmd {
     UnixLikeDiscard,
     // UnixWordRubout, // = BackwardKillWord(Word::Big)
     UpcaseWord,
-    ViCharSearch(u16, CharSearch),
-    ViDeleteTo(u16, CharSearch),
-    Yank(u16, Anchor),
+    ViCharSearch(usize, CharSearch),
+    ViDeleteTo(usize, CharSearch),
+    Yank(usize, Anchor),
     YankPop,
 }
 
@@ -375,7 +375,7 @@ impl EditState {
                                       rdr: &mut R,
                                       config: &Config,
                                       key: KeyPress,
-                                      n: u16)
+                                      n: usize)
                                       -> Result<Cmd> {
         let mut mvt = try!(rdr.next_key(config.keyseq_timeout()));
         if mvt == key {
@@ -432,7 +432,7 @@ impl EditState {
         })
     }
 
-    fn common(&mut self, key: KeyPress, n: u16, positive: bool) -> Cmd {
+    fn common(&mut self, key: KeyPress, n: usize, positive: bool) -> Cmd {
         match key {
             KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Left => {
@@ -498,25 +498,25 @@ impl EditState {
         num_args
     }
 
-    fn emacs_num_args(&mut self) -> (u16, bool) {
+    fn emacs_num_args(&mut self) -> (usize, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
             if let (n, false) = num_args.overflowing_abs() {
-                (n as u16, false)
+                (n as usize, false)
             } else {
-                (u16::max_value(), false)
+                (usize::max_value(), false)
             }
         } else {
-            (num_args as u16, true)
+            (num_args as usize, true)
         }
     }
 
-    fn vi_num_args(&mut self) -> u16 {
+    fn vi_num_args(&mut self) -> usize {
         let num_args = self.num_args();
         if num_args < 0 {
             unreachable!()
         } else {
-            num_args.abs() as u16
+            num_args.abs() as usize
         }
     }
 }

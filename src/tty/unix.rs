@@ -116,9 +116,13 @@ impl PosixRawReader {
                         '4' | '8' => KeyPress::End, // '4': xterm
                         '5' => KeyPress::PageUp,
                         '6' => KeyPress::PageDown,
-                        _ => KeyPress::UnknownEscSeq,
+                        _ => {
+                            debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}{:?}", seq1, seq2, seq3);
+                            KeyPress::UnknownEscSeq
+                        }
                     })
                 } else {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}{:?}", seq1, seq2, seq3);
                     Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
@@ -129,7 +133,10 @@ impl PosixRawReader {
                     'D' => KeyPress::Left,
                     'F' => KeyPress::End,
                     'H' => KeyPress::Home,
-                    _ => KeyPress::UnknownEscSeq,
+                    _ => {
+                        debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
+                        KeyPress::UnknownEscSeq
+                    }
                 })
             }
         } else if seq1 == 'O' {
@@ -142,7 +149,10 @@ impl PosixRawReader {
                 'D' => KeyPress::Left,
                 'F' => KeyPress::End,
                 'H' => KeyPress::Home,
-                _ => KeyPress::UnknownEscSeq,
+                _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
+                    KeyPress::UnknownEscSeq
+                }
             })
         } else {
             // TODO ESC-N (n): search history forward not interactively
@@ -164,7 +174,7 @@ impl PosixRawReader {
                 'y' | 'Y' => KeyPress::Meta('Y'),
                 '\x7f' => KeyPress::Meta('\x7f'), // Delete
                 _ => {
-                    // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
+                    debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", seq1);
                     KeyPress::UnknownEscSeq
                 }
             })
@@ -192,6 +202,7 @@ impl RawReader for PosixRawReader {
                 Err(e) => return Err(e.into()),
             }
         }
+        debug!(target: "rustyline", "key: {:?}", key);
         Ok(key)
     }
 
@@ -218,6 +229,7 @@ fn install_sigwinch_handler() {
 
 extern "C" fn sigwinch_handler(_: libc::c_int) {
     SIGWINCH.store(true, atomic::Ordering::SeqCst);
+    debug!(target: "rustyline", "SIGWINCH");
 }
 
 pub type Terminal = PosixTerminal;

@@ -222,6 +222,7 @@ impl EditState {
             KeyPress::Meta('Y') => Cmd::YankPop,
             _ => self.common(key, n, positive),
         };
+        debug!(target: "rustyline", "Emacs command: {:?}", cmd);
         Ok(cmd)
     }
 
@@ -351,6 +352,7 @@ impl EditState {
             KeyPress::Esc => Cmd::Noop,
             _ => self.common(key, n, true),
         };
+        debug!(target: "rustyline", "Vi command: {:?}", cmd);
         Ok(cmd)
     }
 
@@ -368,6 +370,7 @@ impl EditState {
             }
             _ => self.common(key, 1, true),
         };
+        debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         Ok(cmd)
     }
 

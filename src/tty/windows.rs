@@ -101,6 +101,7 @@ impl RawReader for ConsoleRawReader {
 
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
+                debug!(target: "rustyline", "SIGWINCH");
                 return Err(error::ReadlineError::WindowResize);
             } else if rec.EventType != winapi::KEY_EVENT {
                 continue;
@@ -160,7 +161,10 @@ impl RawReader for ConsoleRawReader {
                         't' | 'T' => KeyPress::Meta('T'),
                         'u' | 'U' => KeyPress::Meta('U'),
                         'y' | 'Y' => KeyPress::Meta('Y'),
-                        _ => KeyPress::UnknownEscSeq,
+                        _ => {
+                            debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", c);
+                            KeyPress::UnknownEscSeq
+                        }
                     });
                 } else {
                     return Ok(consts::char_to_key_press(c));

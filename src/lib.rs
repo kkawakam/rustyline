@@ -19,6 +19,8 @@
 #![allow(unknown_lints)]
 
 extern crate libc;
+#[macro_use]
+extern crate log;
 extern crate unicode_segmentation;
 extern crate unicode_width;
 #[cfg(unix)]
@@ -1122,12 +1124,14 @@ impl<C: Completer> Editor<C> {
     /// This method will read a line from STDIN and will display a `prompt`
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         if self.term.is_unsupported() {
+            debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
             readline_direct()
         } else if !self.term.is_stdin_tty() {
+            debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {

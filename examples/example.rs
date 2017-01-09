@@ -1,4 +1,8 @@
+extern crate log;
 extern crate rustyline;
+
+use std::io::{self, Write};
+use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
@@ -14,6 +18,7 @@ static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 static PROMPT: &'static str = ">> ";
 
 fn main() {
+    init_logger().is_ok();
     let config = Config::builder()
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
@@ -47,4 +52,25 @@ fn main() {
         }
     }
     rl.save_history("history.txt").unwrap();
+}
+
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, metadata: &LogMetadata) -> bool {
+        metadata.level() <= LogLevel::Debug
+    }
+
+    fn log(&self, record: &LogRecord) {
+        if self.enabled(record.metadata()) {
+            writeln!(io::stderr(), "{} - {}", record.level(), record.args()).unwrap();
+        }
+    }
+}
+
+fn init_logger() -> Result<(), SetLoggerError> {
+    log::set_logger(|max_log_level| {
+        max_log_level.set(LogLevelFilter::Info);
+        Box::new(Logger)
+    })
 }

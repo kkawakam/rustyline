@@ -33,7 +33,7 @@ pub enum Cmd {
     Noop,
     PreviousHistory,
     QuotedInsert,
-    Replace(usize, char), // TODO DeleteChar + SelfInsert
+    Replace(usize, char),
     ReverseSearchHistory,
     SelfInsert(usize, char),
     Suspend,
@@ -150,7 +150,7 @@ impl EditState {
                 if positive {
                     Cmd::SelfInsert(n, c)
                 } else {
-                    Cmd::Unknown // TODO ???
+                    Cmd::Unknown
                 }
             }
             KeyPress::Ctrl('A') => Cmd::BeginningOfLine,

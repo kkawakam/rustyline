@@ -1,6 +1,7 @@
 //! Line buffer with current cursor position
 use std::iter;
 use std::ops::{Deref, Range};
+use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
 use keymap::{Anchor, At, CharSearch, Word};
 
@@ -299,20 +300,22 @@ impl LineBuffer {
         let mut pos = pos;
         for _ in 0..n {
             // eat any spaces on the left
-            pos -= self.buf[..pos]
-                .chars()
+            pos = self.buf[..pos]
+                .grapheme_indices(true)
                 .rev()
-                .take_while(|ch| test(ch))
-                .map(char::len_utf8)
-                .sum();
+                .take_while(|&(_, s)| test(s))
+                .last()
+                .map(|(i, _)| i)
+                .unwrap_or(pos);
             if pos > 0 {
                 // eat any non-spaces on the left
-                pos -= self.buf[..pos]
-                    .chars()
+                pos = self.buf[..pos]
+                    .grapheme_indices(true)
                     .rev()
-                    .take_while(|ch| !test(ch))
-                    .map(char::len_utf8)
-                    .sum();
+                    .take_while(|&(_, s)| !test(s))
+                    .last()
+                    .map(|(i, _)| i)
+                    .unwrap_or(pos);
             }
             if pos == 0 {
                 break;
@@ -365,17 +368,19 @@ impl LineBuffer {
         for _ in 0..n {
             // eat any non-spaces
             pos += self.buf[pos..]
-                .chars()
-                .take_while(|ch| !test(ch))
-                .map(char::len_utf8)
-                .sum();
+                .grapheme_indices(true)
+                .take_while(|&(_, s)| !test(s))
+                .last()
+                .map(|(i, s)| i + s.len())
+                .unwrap_or(0);
             if pos < self.buf.len() {
                 // eat any spaces
                 pos += self.buf[pos..]
-                    .chars()
-                    .take_while(test)
-                    .map(char::len_utf8)
-                    .sum();
+                    .grapheme_indices(true)
+                    .take_while(|&(_, s)| test(s))
+                    .last()
+                    .map(|(i, s)| i + s.len())
+                    .unwrap_or(0);
             }
             if pos == self.buf.len() {
                 break;
@@ -396,18 +401,20 @@ impl LineBuffer {
         for _ in 0..n {
             // eat any spaces
             pos += self.buf[pos..]
-                .chars()
-                .take_while(test)
-                .map(char::len_utf8)
-                .sum();
+                .grapheme_indices(true)
+                .take_while(|&(_, s)| test(s))
+                .last()
+                .map(|(i, s)| i + s.len())
+                .unwrap_or(0);
             start = pos;
             if pos < self.buf.len() {
                 // eat any non-spaces
                 pos += self.buf[pos..]
-                    .chars()
-                    .take_while(|ch| !test(ch))
-                    .map(char::len_utf8)
-                    .sum();
+                    .grapheme_indices(true)
+                    .take_while(|&(_, s)| !test(s))
+                    .last()
+                    .map(|(i, s)| i + s.len())
+                    .unwrap_or(0);
             }
             if pos == self.buf.len() {
                 break;
@@ -605,7 +612,7 @@ impl Deref for LineBuffer {
     }
 }
 
-fn is_break_char(word_def: Word) -> fn(&char) -> bool {
+fn is_break_char(word_def: Word) -> fn(&str) -> bool {
     match word_def {
         Word::Emacs => is_not_alphanumeric,
         Word::Vi => is_not_alphanumeric_and_underscore,
@@ -613,14 +620,14 @@ fn is_break_char(word_def: Word) -> fn(&char) -> bool {
     }
 }
 
-fn is_not_alphanumeric(ch: &char) -> bool {
-    !ch.is_alphanumeric()
+fn is_not_alphanumeric(s: &str) -> bool {
+    !s.is_alphanumeric()
 }
-fn is_not_alphanumeric_and_underscore(ch: &char) -> bool {
-    !ch.is_alphanumeric() && *ch != '_'
+fn is_not_alphanumeric_and_underscore(s: &str) -> bool {
+    !s.is_alphanumeric() && s != "_"
 }
-fn is_whitespace(ch: &char) -> bool {
-    ch.is_whitespace()
+fn is_whitespace(s: &str) -> bool {
+    s.is_whitespace()
 }
 
 #[cfg(test)]

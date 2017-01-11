@@ -16,11 +16,13 @@
 //! ```
 #![feature(io)]
 #![feature(insert_str)]
+#![feature(unicode)]
 #![allow(unknown_lints)]
 
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate std_unicode;
 extern crate unicode_segmentation;
 extern crate unicode_width;
 #[cfg(unix)]

@@ -4,38 +4,40 @@ use consts::KeyPress;
 use tty::RawReader;
 use super::Result;
 
+pub type RepeatCount = usize;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     Abort, // Miscellaneous Command
     AcceptLine,
-    BackwardChar(usize),
-    BackwardDeleteChar(usize),
-    BackwardKillWord(usize, Word), // Backward until start of word
-    BackwardWord(usize, Word), // Backward until start of word
+    BackwardChar(RepeatCount),
+    BackwardDeleteChar(RepeatCount),
+    BackwardKillWord(RepeatCount, Word), // Backward until start of word
+    BackwardWord(RepeatCount, Word), // Backward until start of word
     BeginningOfHistory,
     BeginningOfLine,
     CapitalizeWord,
     ClearScreen,
     Complete,
-    DeleteChar(usize),
+    DeleteChar(RepeatCount),
     DowncaseWord,
     EndOfFile,
     EndOfHistory,
     EndOfLine,
-    ForwardChar(usize),
+    ForwardChar(RepeatCount),
     ForwardSearchHistory,
-    ForwardWord(usize, At, Word), // Forward until start/end of word
+    ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
     Interrupt,
     KillLine,
     KillWholeLine,
-    KillWord(usize, At, Word), // Forward until start/end of word
+    KillWord(RepeatCount, At, Word), // Forward until start/end of word
     NextHistory,
     Noop,
     PreviousHistory,
     QuotedInsert,
-    Replace(usize, char),
+    Replace(RepeatCount, char),
     ReverseSearchHistory,
-    SelfInsert(usize, char),
+    SelfInsert(RepeatCount, char),
     Suspend,
     TransposeChars,
     TransposeWords,
@@ -43,9 +45,9 @@ pub enum Cmd {
     UnixLikeDiscard,
     // UnixWordRubout, // = BackwardKillWord(Word::Big)
     UpcaseWord,
-    ViCharSearch(usize, CharSearch),
-    ViDeleteTo(usize, CharSearch),
-    Yank(usize, Anchor),
+    ViCharSearch(RepeatCount, CharSearch),
+    ViDeleteTo(RepeatCount, CharSearch),
+    Yank(RepeatCount, Anchor),
     YankPop,
 }
 
@@ -378,7 +380,7 @@ impl EditState {
                                       rdr: &mut R,
                                       config: &Config,
                                       key: KeyPress,
-                                      n: usize)
+                                      n: RepeatCount)
                                       -> Result<Cmd> {
         let mut mvt = try!(rdr.next_key(config.keyseq_timeout()));
         if mvt == key {
@@ -435,7 +437,7 @@ impl EditState {
         })
     }
 
-    fn common(&mut self, key: KeyPress, n: usize, positive: bool) -> Cmd {
+    fn common(&mut self, key: KeyPress, n: RepeatCount, positive: bool) -> Cmd {
         match key {
             KeyPress::Home => Cmd::BeginningOfLine,
             KeyPress::Left => {
@@ -501,25 +503,25 @@ impl EditState {
         num_args
     }
 
-    fn emacs_num_args(&mut self) -> (usize, bool) {
+    fn emacs_num_args(&mut self) -> (RepeatCount, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
             if let (n, false) = num_args.overflowing_abs() {
-                (n as usize, false)
+                (n as RepeatCount, false)
             } else {
-                (usize::max_value(), false)
+                (RepeatCount::max_value(), false)
             }
         } else {
-            (num_args as usize, true)
+            (num_args as RepeatCount, true)
         }
     }
 
-    fn vi_num_args(&mut self) -> usize {
+    fn vi_num_args(&mut self) -> RepeatCount {
         let num_args = self.num_args();
         if num_args < 0 {
             unreachable!()
         } else {
-            num_args.abs() as usize
+            num_args.abs() as RepeatCount
         }
     }
 }

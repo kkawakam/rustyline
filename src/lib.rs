@@ -56,7 +56,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{Anchor, At, CharSearch, Cmd, EditState, Word};
+use keymap::{Anchor, At, CharSearch, Cmd, EditState, RepeatCount, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
@@ -314,7 +314,7 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
 }
 
 /// Insert the character `ch` at cursor current position.
-fn edit_insert(s: &mut State, ch: char, n: usize) -> Result<()> {
+fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if let Some(push) = s.line.insert(ch, n) {
         if push {
             if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
@@ -336,7 +336,7 @@ fn edit_insert(s: &mut State, ch: char, n: usize) -> Result<()> {
 }
 
 /// Replace a single (or n) character(s) under the cursor (Vi mode)
-fn edit_replace_char(s: &mut State, ch: char, n: usize) -> Result<()> {
+fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if let Some(chars) = s.line.delete(n) {
         let count = chars.graphemes(true).count();
         s.line.insert(ch, count);
@@ -348,7 +348,7 @@ fn edit_replace_char(s: &mut State, ch: char, n: usize) -> Result<()> {
 }
 
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: usize) -> Result<()> {
+fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
     if s.line.yank(text, anchor, n).is_some() {
         s.refresh_line()
     } else {
@@ -363,7 +363,7 @@ fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
 }
 
 /// Move cursor on the left.
-fn edit_move_left(s: &mut State, n: usize) -> Result<()> {
+fn edit_move_left(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.move_left(n) {
         s.refresh_line()
     } else {
@@ -372,7 +372,7 @@ fn edit_move_left(s: &mut State, n: usize) -> Result<()> {
 }
 
 /// Move cursor on the right.
-fn edit_move_right(s: &mut State, n: usize) -> Result<()> {
+fn edit_move_right(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.move_right(n) {
         s.refresh_line()
     } else {
@@ -400,7 +400,7 @@ fn edit_move_end(s: &mut State) -> Result<()> {
 
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
-fn edit_delete(s: &mut State, n: usize) -> Result<()> {
+fn edit_delete(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.delete(n).is_some() {
         s.refresh_line()
     } else {
@@ -409,7 +409,7 @@ fn edit_delete(s: &mut State, n: usize) -> Result<()> {
 }
 
 /// Backspace implementation.
-fn edit_backspace(s: &mut State, n: usize) -> Result<()> {
+fn edit_backspace(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.backspace(n).is_some() {
         s.refresh_line()
     } else {
@@ -446,7 +446,7 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     }
 }
 
-fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: usize) -> Result<()> {
+fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
     if s.line.move_to_prev_word(word_def, n) {
         s.refresh_line()
     } else {
@@ -456,7 +456,7 @@ fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: usize) -> Result<()>
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State, word_def: Word, n: usize) -> Result<Option<String>> {
+fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<Option<String>> {
     if let Some(text) = s.line.delete_prev_word(word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))
@@ -465,7 +465,7 @@ fn edit_delete_prev_word(s: &mut State, word_def: Word, n: usize) -> Result<Opti
     }
 }
 
-fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: usize) -> Result<()> {
+fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
     if s.line.move_to_next_word(at, word_def, n) {
         s.refresh_line()
     } else {
@@ -473,7 +473,7 @@ fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: usize) -> Re
     }
 }
 
-fn edit_move_to(s: &mut State, cs: CharSearch, n: usize) -> Result<()> {
+fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
     if s.line.move_to(cs, n) {
         s.refresh_line()
     } else {
@@ -482,7 +482,7 @@ fn edit_move_to(s: &mut State, cs: CharSearch, n: usize) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: usize) -> Result<Option<String>> {
+fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<Option<String>> {
     if let Some(text) = s.line.delete_word(at, word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))
@@ -491,7 +491,7 @@ fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: usize) -> Result<O
     }
 }
 
-fn edit_delete_to(s: &mut State, cs: CharSearch, n: usize) -> Result<Option<String>> {
+fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<Option<String>> {
     if let Some(text) = s.line.delete_to(cs, n) {
         try!(s.refresh_line());
         Ok(Some(text))

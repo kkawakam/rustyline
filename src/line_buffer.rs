@@ -3,7 +3,7 @@ use std::iter;
 use std::ops::{Deref, Range};
 use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
-use keymap::{Anchor, At, CharSearch, Word};
+use keymap::{Anchor, At, CharSearch, RepeatCount, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -99,7 +99,7 @@ impl LineBuffer {
         }
     }
 
-    fn next_pos(&self, n: usize) -> Option<usize> {
+    fn next_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == self.buf.len() {
             return None;
         }
@@ -110,7 +110,7 @@ impl LineBuffer {
             .map(|(i, s)| i + self.pos + s.len())
     }
     /// Returns the position of the character just before the current cursor position.
-    fn prev_pos(&self, n: usize) -> Option<usize> {
+    fn prev_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == 0 {
             return None;
         }
@@ -126,7 +126,7 @@ impl LineBuffer {
     /// and advance cursor position accordingly.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn insert(&mut self, ch: char, n: usize) -> Option<bool> {
+    pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
         let shift = ch.len_utf8() * n;
         if self.buf.len() + shift > self.buf.capacity() {
             return None;
@@ -151,7 +151,7 @@ impl LineBuffer {
     /// Yank/paste `text` at current position.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn yank(&mut self, text: &str, anchor: Anchor, n: usize) -> Option<bool> {
+    pub fn yank(&mut self, text: &str, anchor: Anchor, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
@@ -182,7 +182,7 @@ impl LineBuffer {
     }
 
     /// Move cursor on the left.
-    pub fn move_left(&mut self, n: usize) -> bool {
+    pub fn move_left(&mut self, n: RepeatCount) -> bool {
         match self.prev_pos(n) {
             Some(pos) => {
                 self.pos = pos;
@@ -193,7 +193,7 @@ impl LineBuffer {
     }
 
     /// Move cursor on the right.
-    pub fn move_right(&mut self, n: usize) -> bool {
+    pub fn move_right(&mut self, n: RepeatCount) -> bool {
         match self.next_pos(n) {
             Some(pos) => {
                 self.pos = pos;
@@ -226,7 +226,7 @@ impl LineBuffer {
     /// Delete the character at the right of the cursor without altering the cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
     /// Return the number of characters deleted.
-    pub fn delete(&mut self, n: usize) -> Option<String> {
+    pub fn delete(&mut self, n: RepeatCount) -> Option<String> {
         match self.next_pos(n) {
             Some(pos) => {
                 let chars = self.buf.drain(self.pos..pos).collect::<String>();
@@ -238,7 +238,7 @@ impl LineBuffer {
 
     /// Delete the character at the left of the cursor.
     /// Basically that is what happens with the "Backspace" keyboard key.
-    pub fn backspace(&mut self, n: usize) -> Option<String> {
+    pub fn backspace(&mut self, n: RepeatCount) -> Option<String> {
         match self.prev_pos(n) {
             Some(pos) => {
                 let chars = self.buf.drain(pos..self.pos).collect::<String>();
@@ -292,7 +292,7 @@ impl LineBuffer {
     }
 
     /// Go left until start of word
-    fn prev_word_pos(&self, pos: usize, word_def: Word, n: usize) -> Option<usize> {
+    fn prev_word_pos(&self, pos: usize, word_def: Word, n: RepeatCount) -> Option<usize> {
         if pos == 0 {
             return None;
         }
@@ -325,7 +325,7 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the beginning of previous word.
-    pub fn move_to_prev_word(&mut self, word_def: Word, n: usize) -> bool {
+    pub fn move_to_prev_word(&mut self, word_def: Word, n: RepeatCount) -> bool {
         if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             self.pos = pos;
             true
@@ -336,7 +336,7 @@ impl LineBuffer {
 
     /// Delete the previous word, maintaining the cursor at the start of the
     /// current word.
-    pub fn delete_prev_word(&mut self, word_def: Word, n: usize) -> Option<String> {
+    pub fn delete_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Option<String> {
         if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
@@ -346,7 +346,7 @@ impl LineBuffer {
         }
     }
 
-    fn next_word_pos(&self, pos: usize, at: At, word_def: Word, n: usize) -> Option<usize> {
+    fn next_word_pos(&self, pos: usize, at: At, word_def: Word, n: RepeatCount) -> Option<usize> {
         match at {
             At::End => {
                 match self.next_end_of_word_pos(pos, word_def, n) {
@@ -359,7 +359,7 @@ impl LineBuffer {
     }
 
     /// Go right until start of word
-    fn next_start_of_word_pos(&self, pos: usize, word_def: Word, n: usize) -> Option<usize> {
+    fn next_start_of_word_pos(&self, pos: usize, word_def: Word, n: RepeatCount) -> Option<usize> {
         if pos == self.buf.len() {
             return None;
         }
@@ -391,7 +391,7 @@ impl LineBuffer {
 
     /// Go right until end of word
     /// Returns the position (start, end) of the next word.
-    fn next_end_of_word_pos(&self, pos: usize, word_def: Word, n: usize) -> Option<(usize, usize)> {
+    fn next_end_of_word_pos(&self, pos: usize, word_def: Word, n: RepeatCount) -> Option<(usize, usize)> {
         if pos == self.buf.len() {
             return None;
         }
@@ -424,7 +424,7 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the end of next word.
-    pub fn move_to_next_word(&mut self, at: At, word_def: Word, n: usize) -> bool {
+    pub fn move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> bool {
         if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
             self.pos = pos;
             true
@@ -433,7 +433,7 @@ impl LineBuffer {
         }
     }
 
-    fn search_char_pos(&mut self, cs: &CharSearch, n: usize) -> Option<usize> {
+    fn search_char_pos(&mut self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
         let search_result = match *cs {
             CharSearch::Backward(c) |
@@ -477,7 +477,7 @@ impl LineBuffer {
         }
     }
 
-    pub fn move_to(&mut self, cs: CharSearch, n: usize) -> bool {
+    pub fn move_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
         if let Some(pos) = self.search_char_pos(&cs, n) {
             self.pos = pos;
             true
@@ -487,7 +487,7 @@ impl LineBuffer {
     }
 
     /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-    pub fn delete_word(&mut self, at: At, word_def: Word, n: usize) -> Option<String> {
+    pub fn delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Option<String> {
         if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
             let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
@@ -496,7 +496,7 @@ impl LineBuffer {
         }
     }
 
-    pub fn delete_to(&mut self, cs: CharSearch, n: usize) -> Option<String> {
+    pub fn delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> Option<String> {
         let search_result = match cs {
             CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c), n),
             _ => self.search_char_pos(&cs, n),

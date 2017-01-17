@@ -482,7 +482,11 @@ fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<Option<String>> {
+fn edit_delete_word(s: &mut State,
+                    at: At,
+                    word_def: Word,
+                    n: RepeatCount)
+                    -> Result<Option<String>> {
     if let Some(text) = s.line.delete_word(at, word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))

@@ -132,7 +132,13 @@ impl EditState {
             match key {
                 KeyPress::Char(digit @ '0'...'9') |
                 KeyPress::Meta(digit @ '0'...'9') => {
-                    self.num_args = self.num_args * 10 + digit.to_digit(10).unwrap() as i16;
+                    if self.num_args == -1 {
+                        self.num_args = self.num_args * digit.to_digit(10).unwrap() as i16;
+                    } else {
+                        self.num_args = self.num_args
+                            .saturating_mul(10)
+                            .saturating_add(digit.to_digit(10).unwrap() as i16);
+                    }
                 }
                 _ => return Ok(key),
             };
@@ -238,7 +244,9 @@ impl EditState {
             let key = try!(rdr.next_key(config.keyseq_timeout()));
             match key {
                 KeyPress::Char(digit @ '0'...'9') => {
-                    self.num_args = self.num_args * 10 + digit.to_digit(10).unwrap() as i16;
+                    self.num_args = self.num_args
+                        .saturating_mul(10)
+                        .saturating_add(digit.to_digit(10).unwrap() as i16);
                 }
                 _ => return Ok(key),
             };

@@ -386,7 +386,11 @@ impl LineBuffer {
 
     /// Go right until end of word
     /// Returns the position (start, end) of the next word.
-    fn next_end_of_word_pos(&self, pos: usize, word_def: Word, n: RepeatCount) -> Option<(usize, usize)> {
+    fn next_end_of_word_pos(&self,
+                            pos: usize,
+                            word_def: Word,
+                            n: RepeatCount)
+                            -> Option<(usize, usize)> {
         if pos == self.buf.len() {
             return None;
         }

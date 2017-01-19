@@ -104,7 +104,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             prompt_size: prompt_size,
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
-            old_rows: prompt_size.row,
+            old_rows: 0,
             history_index: history_index,
             saved_line_for_history: LineBuffer::with_capacity(capacity),
             byte_buffer: [0; 4],

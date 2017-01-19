@@ -361,7 +361,9 @@ impl Renderer for PosixRenderer {
         // calculate the desired position of the cursor
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
-        let cursor_row_movement = old_rows - current_row;
+        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if this is the
+        // default State.
+        let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
         // move the cursor down as required
         if cursor_row_movement > 0 {
             write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();

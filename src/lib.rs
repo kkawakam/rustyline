@@ -56,7 +56,7 @@ use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{Anchor, At, CharSearch, Cmd, EditState, RepeatCount, Word};
+use keymap::{Anchor, At, CharSearch, Cmd, EditState, Movement, RepeatCount, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 
@@ -660,7 +660,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
                   cmd != Cmd::SelfInsert(1, 'n') &&
                   cmd != Cmd::SelfInsert(1, 'N') &&
-                  cmd != Cmd::BackwardDeleteChar(1) {
+                  cmd != Cmd::Kill(Movement::BackwardChar(1)) {
                 cmd = try!(s.next_cmd(rdr, config));
             }
             show_completions = match cmd {
@@ -708,7 +708,8 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                   cmd != Cmd::SelfInsert(1, 'q') &&
                   cmd != Cmd::SelfInsert(1, 'Q') &&
                   cmd != Cmd::SelfInsert(1, ' ') &&
-                  cmd != Cmd::BackwardDeleteChar(1) && cmd != Cmd::AcceptLine {
+                  cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
+                  cmd != Cmd::AcceptLine {
                 cmd = try!(s.next_cmd(rdr, config));
             }
             match cmd {
@@ -779,7 +780,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
             search_buf.push(c);
         } else {
             match cmd {
-                Cmd::BackwardDeleteChar(_) => {
+                Cmd::Kill(Movement::BackwardChar(_)) => {
                     search_buf.pop();
                     continue;
                 }
@@ -889,7 +890,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Move back a character.
                 try!(edit_move_left(&mut s, n))
             }
-            Cmd::DeleteChar(n) => {
+            Cmd::Kill(Movement::ForwardChar(n)) => {
                 editor.kill_ring.reset();
                 // Delete (forward) one character at point.
                 try!(edit_delete(&mut s, n))
@@ -916,18 +917,18 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Move forward a character.
                 try!(edit_move_right(&mut s, n))
             }
-            Cmd::BackwardDeleteChar(n) => {
+            Cmd::Kill(Movement::BackwardChar(n)) => {
                 editor.kill_ring.reset();
                 // Delete one character backward.
                 try!(edit_backspace(&mut s, n))
             }
-            Cmd::KillLine => {
+            Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::KillWholeLine => {
+            Cmd::Kill(Movement::WholeLine) => {
                 try!(edit_move_home(&mut s));
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
@@ -953,7 +954,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
-            Cmd::UnixLikeDiscard => {
+            Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
                 if let Some(text) = try!(edit_discard_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
@@ -972,6 +973,9 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
+            Cmd::ViYankTo(mvt) => {
+                // TODO Copy
+            }
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.
@@ -979,8 +983,8 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_move_end(&mut s));
                 break;
             }
-            Cmd::BackwardKillWord(n, word_def) => {
-                // kill one word backward
+            Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
+                // kill one word backward (until start of word)
                 if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def, n)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
@@ -1005,8 +1009,8 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            Cmd::KillWord(n, at, word_def) => {
-                // kill one word forward
+            Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
+                // kill one word forward (until start/end of word)
                 if let Some(text) = try!(edit_delete_word(&mut s, at, word_def, n)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
@@ -1041,7 +1045,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_move_to(&mut s, cs, n))
             }
-            Cmd::ViDeleteTo(n, cs) => {
+            Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
                 if let Some(text) = try!(edit_delete_to(&mut s, cs, n)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }

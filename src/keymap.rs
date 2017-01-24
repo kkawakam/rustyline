@@ -284,6 +284,7 @@ impl EditState {
             KeyPress::Char('B') => Cmd::BackwardWord(n, Word::Big),
             KeyPress::Char('c') => {
                 self.insert = true;
+                // FIXME: 'cw' is 'ce' (and 'cW' is 'cE')
                 match try!(self.vi_cmd_motion(rdr, config, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,

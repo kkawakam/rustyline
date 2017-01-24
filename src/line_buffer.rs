@@ -424,6 +424,9 @@ impl LineBuffer {
     pub fn move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> bool {
         if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
             self.pos = pos;
+            if at == At::End && word_def != Word::Emacs {
+                self.move_left(1);
+            }
             true
         } else {
             false
@@ -918,6 +921,15 @@ mod test {
         let ok = s.move_to_next_word(At::End, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
+        assert_eq!(true, ok);
+    }
+
+    #[test]
+    fn move_to_end_of_word() {
+        let mut s = LineBuffer::init("a ßeta  c", 1);
+        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        assert_eq!("a ßeta  c", s.buf);
+        assert_eq!(6, s.pos);
         assert_eq!(true, ok);
     }
 

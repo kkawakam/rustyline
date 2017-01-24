@@ -284,7 +284,6 @@ impl EditState {
             KeyPress::Char('B') => Cmd::BackwardWord(n, Word::Big),
             KeyPress::Char('c') => {
                 self.insert = true;
-                // FIXME: 'cw' is 'ce' (and 'cW' is 'cE')
                 match try!(self.vi_cmd_motion(rdr, config, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
@@ -438,8 +437,22 @@ impl EditState {
             KeyPress::Backspace => Some(Movement::BackwardChar(n)), // vi-delete-prev-char: Vi move to previous character (backspace).
             KeyPress::Char('l') |
             KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
-            KeyPress::Char('w') => Some(Movement::ForwardWord(n, At::Start, Word::Vi)),
-            KeyPress::Char('W') => Some(Movement::ForwardWord(n, At::Start, Word::Big)),
+            KeyPress::Char('w') => {
+                // 'cw' is 'ce'
+                if key == KeyPress::Char('c') {
+                    Some(Movement::ForwardWord(n, At::End, Word::Vi))
+                } else {
+                    Some(Movement::ForwardWord(n, At::Start, Word::Vi))
+                }
+            }
+            KeyPress::Char('W') => {
+                // 'cW' is 'cE'
+                if key == KeyPress::Char('c') {
+                    Some(Movement::ForwardWord(n, At::End, Word::Big))
+                } else {
+                    Some(Movement::ForwardWord(n, At::Start, Word::Big))
+                }
+            }
             _ => None,
         })
     }

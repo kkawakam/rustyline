@@ -978,7 +978,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                 }
             }
             Cmd::ViYankTo(mvt) => {
-                // TODO Copy
+                editor.kill_ring.reset();
+                if let Some(text) = s.line.copy(mvt) {
+                    editor.kill_ring.kill(&text, Mode::Append)
+                }
             }
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {

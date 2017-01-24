@@ -3,7 +3,7 @@ use std::iter;
 use std::ops::{Deref, Range};
 use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
-use keymap::{Anchor, At, CharSearch, RepeatCount, Word};
+use keymap::{Anchor, At, CharSearch, Movement, RepeatCount, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -437,7 +437,7 @@ impl LineBuffer {
         }
     }
 
-    fn search_char_pos(&mut self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
+    fn search_char_pos(&self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
         let search_result = match *cs {
             CharSearch::Backward(c) |
@@ -604,6 +604,72 @@ impl LineBuffer {
         } else {
             self.buf.insert_str(idx, s);
             false
+        }
+    }
+
+    pub fn copy(&self, mvt: Movement) -> Option<String> {
+        if self.is_empty() {
+            return None;
+        }
+        match mvt {
+            Movement::WholeLine => Some(self.buf.clone()),
+            Movement::BeginningOfLine => {
+                if self.pos == 0 {
+                    None
+                } else {
+                    Some(self.buf[..self.pos].to_string())
+                }
+            }
+            Movement::EndOfLine => {
+                if self.pos == self.buf.len() {
+                    None
+                } else {
+                    Some(self.buf[self.pos..].to_string())
+                }
+            }
+            Movement::BackwardWord(n, word_def) => {
+                if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
+                    Some(self.buf[pos..self.pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ForwardWord(n, at, word_def) => {
+                if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
+                    Some(self.buf[self.pos..pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ViCharSearch(n, cs) => {
+                let search_result = self.search_char_pos(&cs, n);
+                if let Some(pos) = search_result {
+                    Some(match cs {
+                        CharSearch::Backward(_) |
+                        CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_string(),
+                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_string(),
+                        CharSearch::Forward(c) => {
+                            self.buf[self.pos..pos + c.len_utf8()].to_string()
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            Movement::BackwardChar(n) => {
+                if let Some(pos) = self.prev_pos(n) {
+                    Some(self.buf[pos..self.pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ForwardChar(n) => {
+                if let Some(pos) = self.next_pos(n) {
+                    Some(self.buf[self.pos..pos].to_string())
+                } else {
+                    None
+                }
+            }
         }
     }
 }

@@ -328,8 +328,8 @@ impl EditState {
                 }
             }
             // TODO KeyPress::Char('G') => Cmd::???, Move to the history line n
-            KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put, FIXME cursor position
-            KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put, FIXME cursor position
+            KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put
+            KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
             KeyPress::Char('r') => {
                 // vi-replace-char: Vi replace character under the cursor with the next character typed.
                 let ch = try!(rdr.next_key(config.keyseq_timeout()));

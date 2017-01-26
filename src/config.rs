@@ -92,7 +92,7 @@ pub enum EditMode {
     Vi,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Builder {
     p: Config,
 }

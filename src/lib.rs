@@ -512,8 +512,8 @@ fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
     }
 }
 
-fn edit_transpose_words(s: &mut State) -> Result<()> {
-    if s.line.transpose_words() {
+fn edit_transpose_words(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.transpose_words(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -1032,10 +1032,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
-            Cmd::TransposeWords => {
+            Cmd::TransposeWords(n) => {
                 // transpose words
                 editor.kill_ring.reset();
-                try!(edit_transpose_words(&mut s))
+                try!(edit_transpose_words(&mut s, n))
             }
             Cmd::UpcaseWord => {
                 // uppercase word after point

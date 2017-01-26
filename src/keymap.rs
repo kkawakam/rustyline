@@ -193,7 +193,13 @@ impl EditState {
                 }
             }
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Ctrl('K') => Cmd::Kill(Movement::EndOfLine),
+            KeyPress::Ctrl('K') => {
+                if positive {
+                    Cmd::Kill(Movement::EndOfLine)
+                } else {
+                    Cmd::Kill(Movement::BeginningOfLine)
+                }
+            }
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
@@ -511,7 +517,13 @@ impl EditState {
             KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
             KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
             KeyPress::Ctrl('T') => Cmd::TransposeChars,
-            KeyPress::Ctrl('U') => Cmd::Kill(Movement::BeginningOfLine),
+            KeyPress::Ctrl('U') => {
+                if positive {
+                Cmd::Kill(Movement::BeginningOfLine)
+                } else {
+                Cmd::Kill(Movement::EndOfLine)
+                }
+            },
             KeyPress::Ctrl('Q') | // most terminals override Ctrl+Q to resume execution
             KeyPress::Ctrl('V') => Cmd::QuotedInsert,
             KeyPress::Ctrl('W') => {

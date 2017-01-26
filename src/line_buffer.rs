@@ -157,7 +157,7 @@ impl LineBuffer {
             return None;
         }
         if let Anchor::After = anchor {
-            self.move_right(1);
+            self.move_forward(1);
         }
         let push = self.pos == self.buf.len();
         if push {
@@ -182,7 +182,7 @@ impl LineBuffer {
     }
 
     /// Move cursor on the left.
-    pub fn move_left(&mut self, n: RepeatCount) -> bool {
+    pub fn move_backward(&mut self, n: RepeatCount) -> bool {
         match self.prev_pos(n) {
             Some(pos) => {
                 self.pos = pos;
@@ -193,7 +193,7 @@ impl LineBuffer {
     }
 
     /// Move cursor on the right.
-    pub fn move_right(&mut self, n: RepeatCount) -> bool {
+    pub fn move_forward(&mut self, n: RepeatCount) -> bool {
         match self.next_pos(n) {
             Some(pos) => {
                 self.pos = pos;
@@ -282,12 +282,12 @@ impl LineBuffer {
             return false;
         }
         if self.pos == self.buf.len() {
-            self.move_left(1);
+            self.move_backward(1);
         }
         let chars = self.delete(1).unwrap();
-        self.move_left(1);
+        self.move_backward(1);
         self.yank(&chars, Anchor::Before, 1);
-        self.move_right(1);
+        self.move_forward(1);
         true
     }
 
@@ -432,7 +432,7 @@ impl LineBuffer {
         if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
             self.pos = pos;
             if at == At::End && word_def != Word::Emacs {
-                self.move_left(1);
+                self.move_backward(1);
             }
             true
         } else {
@@ -762,12 +762,12 @@ mod test {
     #[test]
     fn moves() {
         let mut s = LineBuffer::init("αß", 4);
-        let ok = s.move_left(1);
+        let ok = s.move_backward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
 
-        let ok = s.move_right(1);
+        let ok = s.move_forward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -787,11 +787,11 @@ mod test {
     fn move_grapheme() {
         let mut s = LineBuffer::init("ag̈", 4);
         assert_eq!(4, s.len());
-        let ok = s.move_left(1);
+        let ok = s.move_backward(1);
         assert_eq!(true, ok);
         assert_eq!(1, s.pos);
 
-        let ok = s.move_right(1);
+        let ok = s.move_forward(1);
         assert_eq!(true, ok);
         assert_eq!(4, s.pos);
     }

@@ -340,7 +340,7 @@ fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if let Some(chars) = s.line.delete(n) {
         let count = chars.graphemes(true).count();
         s.line.insert(ch, count);
-        s.line.move_left(1);
+        s.line.move_backward(1);
         s.refresh_line()
     } else {
         Ok(())
@@ -351,7 +351,7 @@ fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
 fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
     if s.line.yank(text, anchor, n).is_some() {
         if !s.edit_state.is_emacs_mode() {
-            s.line.move_left(1);
+            s.line.move_backward(1);
         }
         s.refresh_line()
     } else {
@@ -366,8 +366,8 @@ fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
 }
 
 /// Move cursor on the left.
-fn edit_move_left(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.move_left(n) {
+fn edit_move_backward(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.move_backward(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -375,8 +375,8 @@ fn edit_move_left(s: &mut State, n: RepeatCount) -> Result<()> {
 }
 
 /// Move cursor on the right.
-fn edit_move_right(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.move_right(n) {
+fn edit_move_forward(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.move_forward(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -895,7 +895,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             Cmd::BackwardChar(n) => {
                 editor.kill_ring.reset();
                 // Move back a character.
-                try!(edit_move_left(&mut s, n))
+                try!(edit_move_backward(&mut s, n))
             }
             Cmd::Kill(Movement::ForwardChar(n)) => {
                 editor.kill_ring.reset();
@@ -922,7 +922,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             Cmd::ForwardChar(n) => {
                 editor.kill_ring.reset();
                 // Move forward a character.
-                try!(edit_move_right(&mut s, n))
+                try!(edit_move_forward(&mut s, n))
             }
             Cmd::Kill(Movement::BackwardChar(n)) => {
                 editor.kill_ring.reset();

@@ -35,7 +35,7 @@ pub enum Cmd {
     SelfInsert(RepeatCount, char),
     Suspend,
     TransposeChars,
-    TransposeWords,
+    TransposeWords(RepeatCount),
     Unknown,
     UpcaseWord,
     ViCharSearch(RepeatCount, CharSearch),
@@ -230,7 +230,7 @@ impl EditState {
                 }
             }
             KeyPress::Meta('L') => Cmd::DowncaseWord,
-            KeyPress::Meta('T') => Cmd::TransposeWords,
+            KeyPress::Meta('T') => Cmd::TransposeWords(n),
             KeyPress::Meta('U') => Cmd::UpcaseWord,
             KeyPress::Meta('Y') => Cmd::YankPop,
             _ => self.common(key, n, positive),

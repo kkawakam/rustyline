@@ -546,43 +546,30 @@ impl LineBuffer {
     }
 
     /// Transpose two words
-    pub fn transpose_words(&mut self) -> bool {
-        // prevword___oneword__
-        // ^          ^       ^
-        // prev_start start   self.pos/end
+    pub fn transpose_words(&mut self, n: RepeatCount) -> bool {
         let word_def = Word::Emacs;
-        if let Some(start) = self.prev_word_pos(self.pos, word_def, 1) {
-            if let Some(prev_start) = self.prev_word_pos(start, word_def, 1) {
-                let (_, prev_end) = self.next_end_of_word_pos(prev_start, word_def, 1).unwrap();
-                if prev_end >= start {
-                    return false;
-                }
-                let (_, mut end) = self.next_end_of_word_pos(start, word_def, 1).unwrap();
-                if end < self.pos {
-                    if self.pos < self.buf.len() {
-                        let (s, _) = self.next_end_of_word_pos(self.pos, word_def, 1).unwrap();
-                        end = s;
-                    } else {
-                        end = self.pos;
-                    }
-                }
-
-                let oneword = self.buf.drain(start..end).collect::<String>();
-                let sep = self.buf.drain(prev_end..start).collect::<String>();
-                let prevword = self.buf.drain(prev_start..prev_end).collect::<String>();
-
-                let mut idx = prev_start;
-                self.insert_str(idx, &oneword);
-                idx += oneword.len();
-                self.insert_str(idx, &sep);
-                idx += sep.len();
-                self.insert_str(idx, &prevword);
-
-                self.pos = idx + prevword.len();
-                return true;
-            }
+        self.move_to_next_word(At::End, word_def, n);
+        let w2_end = self.pos;
+        self.move_to_prev_word(word_def, 1);
+        let w2_beg = self.pos;
+        self.move_to_prev_word(word_def, n);
+        let w1_beg = self.pos;
+        self.move_to_next_word(At::End, word_def, 1);
+        let w1_end = self.pos;
+        if w1_beg == w2_beg || w2_beg < w1_end {
+            return false;
         }
-        false
+
+        let w1 = self.buf[w1_beg..w1_end].to_string();
+
+        let w2 = self.buf.drain(w2_beg..w2_end).collect::<String>();
+        self.insert_str(w2_beg, &w1);
+
+        self.buf.drain(w1_beg..w1_end);
+        self.insert_str(w1_beg, &w2);
+
+        self.pos = w2_end;
+        true
     }
 
     /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
@@ -1011,19 +998,19 @@ mod test {
     #[test]
     fn transpose_words() {
         let mut s = LineBuffer::init("ßeta / δelta__", 15);
-        assert!(s.transpose_words());
+        assert!(s.transpose_words(1));
         assert_eq!("δelta__ / ßeta", s.buf);
         assert_eq!(16, s.pos);
 
         let mut s = LineBuffer::init("ßeta / δelta", 14);
-        assert!(s.transpose_words());
+        assert!(s.transpose_words(1));
         assert_eq!("δelta / ßeta", s.buf);
         assert_eq!(14, s.pos);
 
         let mut s = LineBuffer::init(" / δelta", 8);
-        assert!(!s.transpose_words());
+        assert!(!s.transpose_words(1));
 
         let mut s = LineBuffer::init("ßeta / __", 9);
-        assert!(!s.transpose_words());
+        assert!(!s.transpose_words(1));
     }
 }

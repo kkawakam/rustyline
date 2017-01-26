@@ -278,7 +278,7 @@ impl LineBuffer {
 
     /// Exchange the char before cursor with the character at cursor.
     pub fn transpose_chars(&mut self) -> bool {
-        if self.pos == 0 || self.buf.chars().count() < 2 {
+        if self.pos == 0 || self.buf.graphemes(true).count() < 2 {
             return false;
         }
         if self.pos == self.buf.len() {
@@ -534,12 +534,9 @@ impl LineBuffer {
             let word = self.buf.drain(start..end).collect::<String>();
             let result = match a {
                 WordAction::CAPITALIZE => {
-                    if let Some(ch) = word.chars().next() {
-                        let cap = ch.to_uppercase().collect::<String>();
-                        cap + &word[ch.len_utf8()..].to_lowercase()
-                    } else {
-                        word
-                    }
+                    let ch = (&word).graphemes(true).next().unwrap();
+                    let cap = ch.to_uppercase();
+                    cap + &word[ch.len()..].to_lowercase()
                 }
                 WordAction::LOWERCASE => word.to_lowercase(),
                 WordAction::UPPERCASE => word.to_uppercase(),

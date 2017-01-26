@@ -622,7 +622,12 @@ impl LineBuffer {
                 }
             }
             Movement::ViCharSearch(n, cs) => {
-                let search_result = self.search_char_pos(&cs, n);
+                let search_result = match cs {
+                    CharSearch::ForwardBefore(c) => {
+                        self.search_char_pos(&CharSearch::Forward(c), n)
+                    }
+                    _ => self.search_char_pos(&cs, n),
+                };
                 if let Some(pos) = search_result {
                     Some(match cs {
                         CharSearch::Backward(_) |

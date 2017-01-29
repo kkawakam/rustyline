@@ -353,14 +353,15 @@ impl LineBuffer {
         if pos == self.buf.len() {
             return None;
         }
-        let mut wp = self.buf.len() - pos;
+        let mut wp = 0;
         let mut gis = self.buf[pos..].grapheme_indices(true);
+        let mut gi = None;
         if at == At::End {
             // TODO Validate
-            gis.next();
+            gi = gis.next();
         }
         'outer: for _ in 0..n {
-            let mut gi = gis.next();
+            gi = gis.next();
             'inner: loop {
                 match gi {
                     Some((i, x)) => {
@@ -391,7 +392,18 @@ impl LineBuffer {
                 }
             }
         }
-        Some(wp + pos)
+        if wp == 0 {
+            if word_def == Word::Emacs {
+                Some(self.buf.len())
+            } else {
+                match gi {
+                    Some((i, _)) if i != 0 => Some(i + pos),
+                    _ => None,
+                }
+            }
+        } else {
+            Some(wp + pos)
+        }
     }
 
     /// Moves the cursor to the end of next word.
@@ -968,7 +980,7 @@ mod test {
         assert_eq!(15, s.pos);
         let ok = s.move_to_next_word(At::End, Word::Vi, 1);
         assert!(ok);
-        assert_eq!(19, s.pos);
+        assert_eq!(18, s.pos);
         let ok = s.move_to_next_word(At::End, Word::Vi, 1);
         assert!(!ok);
     }
@@ -984,7 +996,7 @@ mod test {
         assert_eq!(15, s.pos);
         let ok = s.move_to_next_word(At::End, Word::Big, 1);
         assert!(ok);
-        assert_eq!(19, s.pos);
+        assert_eq!(18, s.pos);
         let ok = s.move_to_next_word(At::End, Word::Big, 1);
         assert!(!ok);
     }
@@ -1021,7 +1033,7 @@ mod test {
         assert_eq!(17, s.pos);
         let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
         assert!(ok);
-        assert_eq!(19, s.pos);
+        assert_eq!(18, s.pos);
         let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
         assert!(!ok);
     }
@@ -1037,7 +1049,7 @@ mod test {
         assert_eq!(17, s.pos);
         let ok = s.move_to_next_word(At::Start, Word::Big, 1);
         assert!(ok);
-        assert_eq!(19, s.pos);
+        assert_eq!(18, s.pos);
         let ok = s.move_to_next_word(At::Start, Word::Big, 1);
         assert!(!ok);
     }

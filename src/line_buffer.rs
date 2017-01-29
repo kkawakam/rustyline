@@ -90,11 +90,11 @@ impl LineBuffer {
     }
 
     /// Returns the character at current cursor position.
-    fn char_at_cursor(&self) -> Option<char> {
+    fn grapheme_at_cursor(&self) -> Option<&str> {
         if self.pos == self.buf.len() {
             None
         } else {
-            self.buf[self.pos..].chars().next()
+            self.buf[self.pos..].graphemes(true).next()
         }
     }
 
@@ -430,8 +430,8 @@ impl LineBuffer {
             }
             CharSearch::Forward(c) |
             CharSearch::ForwardBefore(c) => {
-                if let Some(cc) = self.char_at_cursor() {
-                    shift = self.pos + cc.len_utf8();
+                if let Some(cc) = self.grapheme_at_cursor() {
+                    shift = self.pos + cc.len();
                     if shift < self.buf.len() {
                         self.buf[shift..]
                             .char_indices()

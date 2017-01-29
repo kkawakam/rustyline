@@ -86,7 +86,7 @@ pub struct EditState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Movement {
-    WholeLine,
+    WholeLine, // not really a movement
     BeginningOfLine,
     EndOfLine,
     BackwardWord(RepeatCount, Word),

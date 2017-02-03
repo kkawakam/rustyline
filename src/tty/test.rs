@@ -8,8 +8,8 @@ use std::vec::IntoIter;
 use winapi;
 
 use consts::KeyPress;
-use ::error::ReadlineError;
-use ::Result;
+use error::ReadlineError;
+use Result;
 use super::{RawMode, RawReader, Term};
 
 pub type Mode = ();

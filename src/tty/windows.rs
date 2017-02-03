@@ -7,8 +7,8 @@ use kernel32;
 use winapi;
 
 use consts::{self, KeyPress};
-use ::error;
-use ::Result;
+use error;
+use Result;
 use super::{RawMode, RawReader, Term};
 
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;

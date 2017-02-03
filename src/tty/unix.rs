@@ -10,8 +10,8 @@ use nix::sys::signal;
 use nix::sys::termios;
 
 use consts::{self, KeyPress};
-use ::Result;
-use ::error;
+use Result;
+use error;
 use super::{RawMode, RawReader, Term};
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
@@ -286,8 +286,8 @@ impl Term for PosixTerminal {
 
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
-                                IXON, /* OPOST, */ VMIN, VTIME};
+        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
+                                /* OPOST, */ VMIN, VTIME};
         if !self.stdin_isatty {
             try!(Err(nix::Error::from_errno(ENOTTY)));
         }

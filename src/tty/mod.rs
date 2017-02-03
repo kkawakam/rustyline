@@ -1,6 +1,6 @@
 //! This module implements and describes common TTY methods & traits
 use std::io::Write;
-use ::Result;
+use Result;
 use consts::KeyPress;
 
 /// Terminal state

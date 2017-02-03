@@ -15,7 +15,6 @@
 //! }
 //! ```
 #![feature(io)]
-#![feature(insert_str)]
 #![feature(unicode)]
 #![allow(unknown_lints)]
 

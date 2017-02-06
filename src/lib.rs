@@ -39,6 +39,7 @@ mod keymap;
 mod kill_ring;
 pub mod line_buffer;
 pub mod config;
+mod undo;
 
 mod tty;
 

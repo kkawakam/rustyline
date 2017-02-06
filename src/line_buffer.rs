@@ -571,7 +571,7 @@ impl LineBuffer {
         self.pos = start + text.len();
     }
 
-    fn insert_str(&mut self, idx: usize, s: &str) -> bool {
+    pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
         if idx == self.buf.len() {
             self.buf.push_str(s);
             true
@@ -579,6 +579,10 @@ impl LineBuffer {
             insert_str(&mut self.buf, idx, s);
             false
         }
+    }
+
+    pub fn delete_range(&mut self, range: Range<usize>) {
+        self.buf.drain(range);
     }
 
     pub fn copy(&self, mvt: Movement) -> Option<String> {

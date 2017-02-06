@@ -39,6 +39,7 @@ pub mod line_buffer;
 #[cfg(unix)]
 mod char_iter;
 pub mod config;
+mod undo;
 
 mod tty;
 

@@ -1,4 +1,6 @@
 use line_buffer::LineBuffer;
+use std_unicode::str::UnicodeStr;
+use unicode_segmentation::UnicodeSegmentation;
 
 enum Action {
     Insert(String), // QuotedInsert, SelfInsert, Yank
@@ -40,9 +42,18 @@ impl Change {
         }
     }
 
-    fn seq(&self, idx: usize) -> bool {
+    fn insert_seq(&self, idx: usize) -> bool {
         if let Action::Insert(ref text) = self.action {
             self.idx + text.len() == idx
+        } else {
+            false
+        }
+    }
+
+    fn delete_seq(&self, idx: usize, len: usize) -> bool {
+        if let Action::Delete(_) = self.action {
+            // delete or backspace
+            self.idx == idx || self.idx == idx + len
         } else {
             false
         }
@@ -73,11 +84,15 @@ impl Changeset {
 
     pub fn insert(&mut self, idx: usize, c: char) {
         self.redos.clear();
+        if !c.is_alphanumeric() {
+            self.undos.push(Self::insert_char(idx, c));
+            return;
+        }
         let last_change = self.undos.pop();
         match last_change {
             Some(last_change) => {
                 // merge consecutive char insertions when char is alphanumeric
-                if c.is_alphanumeric() && last_change.seq(idx) {
+                if last_change.insert_seq(idx) {
                     let mut last_change = last_change;
                     if let Action::Insert(ref mut text) = last_change.action {
                         text.push(c);
@@ -106,11 +121,52 @@ impl Changeset {
 
     pub fn delete(&mut self, idx: usize, string: String) {
         self.redos.clear();
-        // TODO merge consecutive deletions
-        self.undos.push(Change {
-            idx: idx,
-            action: Action::Delete(string),
-        });
+
+        if !Self::single_char(&string) {
+            self.undos.push(Change {
+                idx: idx,
+                action: Action::Delete(string),
+            });
+            return;
+        }
+        let last_change = self.undos.pop();
+        match last_change {
+            Some(last_change) => {
+                // merge consecutive char deletions when char is alphanumeric
+                if last_change.delete_seq(idx, string.len()) {
+                    let mut last_change = last_change;
+                    if let Action::Delete(ref mut text) = last_change.action {
+                        if last_change.idx == idx {
+                            text.push_str(&string);
+                        } else {
+                            text.insert_str(0, &string);
+                            last_change.idx = idx;
+                        }
+                    } else {
+                        unreachable!();
+                    }
+                    self.undos.push(last_change);
+                } else {
+                    self.undos.push(last_change);
+                    self.undos.push(Change {
+                        idx: idx,
+                        action: Action::Delete(string),
+                    });
+                }
+            }
+            None => {
+                self.undos.push(Change {
+                    idx: idx,
+                    action: Action::Delete(string),
+                });
+            }
+        };
+    }
+
+    fn single_char(s: &str) -> bool {
+        let mut graphemes = s.graphemes(true);
+        graphemes.next().map_or(false, |grapheme| grapheme.is_alphanumeric()) &&
+        graphemes.next().is_none()
     }
 
     pub fn replace(&mut self, idx: usize, old: String, new: &str) {
@@ -207,6 +263,34 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_chars() {
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hlo");
+
+        let mut cs = Changeset::new();
+        cs.delete(1, "e".to_string());
+        cs.delete(1, "l".to_string());
+        assert_eq!(1, cs.undos.len());
+
+        cs.undo(&mut buf);
+        assert_eq!(buf.as_str(), "Hello");
+    }
+
+    #[test]
+    fn test_backspace_chars() {
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hlo");
+
+        let mut cs = Changeset::new();
+        cs.delete(2, "l".to_string());
+        cs.delete(1, "e".to_string());
+        assert_eq!(1, cs.undos.len());
+
+        cs.undo(&mut buf);
+        assert_eq!(buf.as_str(), "Hello");
+    }
+
+    #[test]
     fn test_undo_replace() {
         let mut buf = LineBuffer::init("", 0);
         buf.insert_str(0, "Hello, world!");
@@ -214,7 +298,7 @@ mod tests {
         assert_eq!(buf.as_str(), "Hello, world!");
 
         buf.replace(1..5, "i");
-        assert_eq!(buf.as_str(), "Hi, world!");        
+        assert_eq!(buf.as_str(), "Hi, world!");
         cs.replace(1, "ello".to_string(), "i");
 
         cs.undo(&mut buf);

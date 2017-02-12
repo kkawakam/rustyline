@@ -1064,7 +1064,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 return Err(error::ReadlineError::Interrupted);
             }
-          #[cfg(unix)]
+            #[cfg(unix)]
             Cmd::Suspend => {
                 try!(original_mode.disable_raw_mode());
                 try!(tty::suspend());

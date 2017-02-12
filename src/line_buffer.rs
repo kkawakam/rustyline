@@ -249,12 +249,6 @@ impl LineBuffer {
         }
     }
 
-    /// Kill all characters on the current line.
-    pub fn kill_whole_line(&mut self) -> Option<String> {
-        self.move_home();
-        self.kill_line()
-    }
-
     /// Kill the text from point to the end of the line.
     pub fn kill_line(&mut self) -> Option<String> {
         if !self.buf.is_empty() && self.pos < self.buf.len() {

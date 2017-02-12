@@ -58,7 +58,7 @@ pub enum Word {
 pub enum At {
     Start,
     BeforeEnd,
-    AfterEnd
+    AfterEnd,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]

@@ -57,7 +57,8 @@ pub enum Word {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum At {
     Start,
-    End,
+    BeforeEnd,
+    AfterEnd
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -208,7 +209,7 @@ impl EditState {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 } else {
-                    Cmd::Kill(Movement::ForwardWord(n, At::End, Word::Emacs))
+                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
             KeyPress::Meta('<') => Cmd::BeginningOfHistory,
@@ -217,20 +218,20 @@ impl EditState {
                 if positive {
                     Cmd::BackwardWord(n, Word::Emacs)
                 } else {
-                    Cmd::ForwardWord(n, At::End, Word::Emacs)
+                    Cmd::ForwardWord(n, At::AfterEnd, Word::Emacs)
                 }
             }
             KeyPress::Meta('C') => Cmd::CapitalizeWord,
             KeyPress::Meta('D') => {
                 if positive {
-                    Cmd::Kill(Movement::ForwardWord(n, At::End, Word::Emacs))
+                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
             KeyPress::Meta('F') => {
                 if positive {
-                    Cmd::ForwardWord(n, At::End, Word::Emacs)
+                    Cmd::ForwardWord(n, At::AfterEnd, Word::Emacs)
                 } else {
                     Cmd::BackwardWord(n, Word::Emacs)
                 }
@@ -307,8 +308,8 @@ impl EditState {
             }
             KeyPress::Char('D') |
             KeyPress::Ctrl('K') => Cmd::Kill(Movement::EndOfLine),
-            KeyPress::Char('e') => Cmd::ForwardWord(n, At::End, Word::Vi),
-            KeyPress::Char('E') => Cmd::ForwardWord(n, At::End, Word::Big),
+            KeyPress::Char('e') => Cmd::ForwardWord(n, At::BeforeEnd, Word::Vi),
+            KeyPress::Char('E') => Cmd::ForwardWord(n, At::BeforeEnd, Word::Big),
             KeyPress::Char('i') => {
                 // vi-insertion-mode
                 self.insert = true;
@@ -429,8 +430,8 @@ impl EditState {
             KeyPress::Char('0') => Some(Movement::BeginningOfLine), // vi-kill-line-prev: Vi cut from beginning of line to cursor.
             KeyPress::Char('b') => Some(Movement::BackwardWord(n, Word::Vi)),
             KeyPress::Char('B') => Some(Movement::BackwardWord(n, Word::Big)),
-            KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::End, Word::Vi)),
-            KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::End, Word::Big)),
+            KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
+            KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = try!(self.vi_char_search(rdr, config, c));
                 match cs {
@@ -446,7 +447,7 @@ impl EditState {
             KeyPress::Char('w') => {
                 // 'cw' is 'ce'
                 if key == KeyPress::Char('c') {
-                    Some(Movement::ForwardWord(n, At::End, Word::Vi))
+                    Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Vi))
                 }
@@ -454,7 +455,7 @@ impl EditState {
             KeyPress::Char('W') => {
                 // 'cW' is 'cE'
                 if key == KeyPress::Char('c') {
-                    Some(Movement::ForwardWord(n, At::End, Word::Big))
+                    Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Big))
                 }
@@ -530,7 +531,7 @@ impl EditState {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
                 } else {
-                    Cmd::Kill(Movement::ForwardWord(n, At::End, Word::Big))
+                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 }
             }
             KeyPress::Ctrl('Y') => {

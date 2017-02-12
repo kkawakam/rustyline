@@ -21,6 +21,7 @@ impl Change {
             }
             Action::Delete(ref text) => {
                 line.insert_str(self.idx, text);
+                line.set_pos(self.idx + text.len());
             }
             Action::Replace(ref old, ref new) => {
                 line.replace(self.idx..self.idx + new.len(), old);
@@ -28,6 +29,7 @@ impl Change {
         }
     }
 
+    #[cfg(test)]
     fn redo(&self, line: &mut LineBuffer) {
         match self.action {
             Action::Insert(ref text) => {
@@ -111,21 +113,21 @@ impl Changeset {
         };
     }
 
-    pub fn insert_str(&mut self, idx: usize, string: &str) {
+    pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
         self.undos.push(Change {
             idx: idx,
-            action: Action::Insert(string.to_string()),
+            action: Action::Insert(string.into()),
         });
     }
 
-    pub fn delete(&mut self, idx: usize, string: String) {
+    pub fn delete<S: AsRef<str> + Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
 
-        if !Self::single_char(&string) {
+        if !Self::single_char(string.as_ref()) {
             self.undos.push(Change {
                 idx: idx,
-                action: Action::Delete(string),
+                action: Action::Delete(string.into()),
             });
             return;
         }
@@ -133,13 +135,13 @@ impl Changeset {
         match last_change {
             Some(last_change) => {
                 // merge consecutive char deletions when char is alphanumeric
-                if last_change.delete_seq(idx, string.len()) {
+                if last_change.delete_seq(idx, string.as_ref().len()) {
                     let mut last_change = last_change;
                     if let Action::Delete(ref mut text) = last_change.action {
                         if last_change.idx == idx {
-                            text.push_str(&string);
+                            text.push_str(string.as_ref());
                         } else {
-                            text.insert_str(0, &string);
+                            text.insert_str(0, string.as_ref());
                             last_change.idx = idx;
                         }
                     } else {
@@ -150,14 +152,14 @@ impl Changeset {
                     self.undos.push(last_change);
                     self.undos.push(Change {
                         idx: idx,
-                        action: Action::Delete(string),
+                        action: Action::Delete(string.into()),
                     });
                 }
             }
             None => {
                 self.undos.push(Change {
                     idx: idx,
-                    action: Action::Delete(string),
+                    action: Action::Delete(string.into()),
                 });
             }
         };
@@ -169,11 +171,11 @@ impl Changeset {
         graphemes.next().is_none()
     }
 
-    pub fn replace(&mut self, idx: usize, old: String, new: &str) {
+    pub fn replace<S: Into<String>>(&mut self, idx: usize, old: String, new: S) {
         self.redos.clear();
         self.undos.push(Change {
             idx: idx,
-            action: Action::Replace(old, new.to_string()),
+            action: Action::Replace(old.into(), new.into()),
         });
     }
 
@@ -188,6 +190,7 @@ impl Changeset {
         }
     }
 
+    #[cfg(test)]
     pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
         match self.redos.pop() {
             Some(change) => {

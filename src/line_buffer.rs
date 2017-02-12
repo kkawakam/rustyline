@@ -356,7 +356,7 @@ impl LineBuffer {
         let mut wp = 0;
         let mut gis = self.buf[pos..].grapheme_indices(true);
         let mut gi = None;
-        if at == At::End {
+        if at != At::Start {
             // TODO Validate
             gi = gis.next();
         }
@@ -371,8 +371,8 @@ impl LineBuffer {
                                 if at == At::Start && is_start_of_word(word_def, x, y) {
                                     wp = j;
                                     break 'inner;
-                                } else if at == At::End && is_end_of_word(word_def, x, y) {
-                                    if word_def == Word::Emacs {
+                                } else if at != At::Start && is_end_of_word(word_def, x, y) {
+                                    if word_def == Word::Emacs || at == At::AfterEnd {
                                         wp = j;
                                     } else {
                                         wp = i;
@@ -505,7 +505,7 @@ impl LineBuffer {
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
         if let Some(start) = self.next_word_pos(self.pos, At::Start, Word::Emacs, 1) {
-            if let Some(end) = self.next_word_pos(self.pos, At::End, Word::Emacs, 1) {
+            if let Some(end) = self.next_word_pos(self.pos, At::AfterEnd, Word::Emacs, 1) {
                 if start == end {
                     return false;
                 }
@@ -530,13 +530,13 @@ impl LineBuffer {
     /// Transpose two words
     pub fn transpose_words(&mut self, n: RepeatCount) -> bool {
         let word_def = Word::Emacs;
-        self.move_to_next_word(At::End, word_def, n);
+        self.move_to_next_word(At::AfterEnd, word_def, n);
         let w2_end = self.pos;
         self.move_to_prev_word(word_def, 1);
         let w2_beg = self.pos;
         self.move_to_prev_word(word_def, n);
         let w1_beg = self.pos;
-        self.move_to_next_word(At::End, word_def, 1);
+        self.move_to_next_word(At::AfterEnd, word_def, 1);
         let w1_end = self.pos;
         if w1_beg == w2_beg || w2_beg < w1_end {
             return false;
@@ -942,7 +942,7 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word(At::End, Word::Emacs, 1);
+        let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -951,7 +951,7 @@ mod test {
     #[test]
     fn move_to_end_of_word() {
         let mut s = LineBuffer::init("a ßeta  c", 1);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(6, s.pos);
         assert_eq!(true, ok);
@@ -960,44 +960,44 @@ mod test {
     #[test]
     fn move_to_end_of_vi_word() {
         let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(4, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(6, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(10, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(11, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(14, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(15, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(ok);
         assert_eq!(18, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Vi, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert!(!ok);
     }
 
     #[test]
     fn move_to_end_of_big_word() {
         let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
-        let ok = s.move_to_next_word(At::End, Word::Big, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
         assert!(ok);
         assert_eq!(4, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Big, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
         assert!(ok);
         assert_eq!(15, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Big, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
         assert!(ok);
         assert_eq!(18, s.pos);
-        let ok = s.move_to_next_word(At::End, Word::Big, 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
         assert!(!ok);
     }
 
@@ -1057,7 +1057,7 @@ mod test {
     #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word(At::End, Word::Emacs, 1);
+        let text = s.delete_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);

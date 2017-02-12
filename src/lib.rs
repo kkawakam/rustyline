@@ -43,6 +43,8 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+use std::thread;
+use std::time;
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
@@ -303,9 +305,32 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
             }
         } else {
             s.refresh_line()
-        }
+        }.and_then(|_| edit_blink_matching_delimeter(s, ch))
     } else {
         Ok(())
+    }
+}
+
+const MATCHING_DELIMITER_BLINK_DELAY: u64 = 500;
+
+// Briefly move the cursor to the delimiter that matches `ch` if one exists.
+fn edit_blink_matching_delimeter(s: &mut State, ch: char) -> Result<()> {
+    match ch {
+        ')' | ']' | '}' => {
+            let original_pos = s.line.pos();
+            if s.line.move_to_matching_delimiter(ch) {
+                s.refresh_line().and_then(|_| {
+                    // TODO use async io to either wait, or let user proceed
+                    let delay = time::Duration::from_millis(MATCHING_DELIMITER_BLINK_DELAY);
+                    thread::sleep(delay);
+                    s.line.set_pos(original_pos);
+                    s.refresh_line()
+                })
+            } else {
+                Ok(())
+            }
+        }
+        _ => Ok(())
     }
 }
 

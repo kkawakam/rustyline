@@ -276,6 +276,21 @@ impl LineBuffer {
         Some(pos)
     }
 
+    /// Moves the cursor to the matching delimiter.
+    pub fn move_to_matching_delimiter(&mut self, delimiter: char) -> bool {
+        matching_delimiter_for(delimiter).and_then(|matching_delimiter| {
+            // TODO need to handle nesting, right now just scans backwards to first closer
+            match self.prev_word_pos(self.pos, |ch| ch == matching_delimiter) {
+                Some(pos) if pos == 0 => false,
+                Some(pos) => {
+                    self.pos = pos - 1;
+                    true
+                }
+                None => false
+            }.into()
+        }).unwrap_or(false)
+    }
+
     /// Moves the cursor to the beginning of previous word.
     pub fn move_to_prev_word(&mut self) -> bool {
         if let Some(pos) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
@@ -453,6 +468,15 @@ fn insert_str(buf: &mut String, idx: usize, s: &str) {
                   len - idx);
         ptr::copy_nonoverlapping(s.as_ptr(), v.as_mut_ptr().offset(idx as isize), amt);
         v.set_len(len + amt);
+    }
+}
+
+fn matching_delimiter_for(ch: char) -> Option<char> {
+    match ch {
+        ')' => Some('('),
+        ']' => Some('['),
+        '}' => Some('{'),
+        _ => None
     }
 }
 

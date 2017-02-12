@@ -276,14 +276,35 @@ impl LineBuffer {
         Some(pos)
     }
 
+    // Returns the position in the current line for the matching `closer` character to the given `opener` character.
+    // Scans the current buffer in reverse, tracking nesting to find the correct matching delimiter.
+    fn prev_matching_delimiter(&self, pos: usize, opener: char, closer: char) -> Option<usize> {
+        if pos == 0 {
+            return None;
+        }
+
+        let mut pos = pos;
+        let mut nesting = 0;
+        for ch in self.buf[..pos].chars().rev() {
+            pos -= 1;
+            if ch == closer {
+                nesting -= 1;
+                if nesting == 0 {
+                    return Some(pos)
+                }
+            } else if ch == opener {
+                nesting += 1
+            }
+        }
+        None
+    }
+
     /// Moves the cursor to the matching delimiter.
     pub fn move_to_matching_delimiter(&mut self, delimiter: char) -> bool {
         matching_delimiter_for(delimiter).and_then(|matching_delimiter| {
-            // TODO need to handle nesting, right now just scans backwards to first closer
-            match self.prev_word_pos(self.pos, |ch| ch == matching_delimiter) {
-                Some(pos) if pos == 0 => false,
+            match self.prev_matching_delimiter(self.pos, delimiter, matching_delimiter) {
                 Some(pos) => {
-                    self.pos = pos - 1;
+                    self.pos = pos;
                     true
                 }
                 None => false

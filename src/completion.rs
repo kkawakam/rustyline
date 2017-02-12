@@ -1,4 +1,5 @@
 //! Completion API
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{self, Path};
@@ -63,12 +64,7 @@ pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
 }
 
-#[cfg(unix)]
-static DEFAULT_BREAK_CHARS: [char; 18] = [' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>',
-                                          '<', '=', ';', '|', '&', '{', '(', '\0'];
-// Remove \ to make file completion works on windows
-#[cfg(windows)]
-static DEFAULT_BREAK_CHARS: [char; 17] = [' ', '\t', '\n', '"', '\'', '`', '@', '$', '>',
+static DEFAULT_BREAK_CHARS: [char; 15] = [' ', '\t', '\n', '`', '@', '$', '>',
                                           '<', '=', ';', '|', '&', '{', '(', '\0'];
 
 impl FilenameCompleter {
@@ -85,10 +81,21 @@ impl Default for FilenameCompleter {
 
 impl Completer for FilenameCompleter {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
-        let (start, path) = extract_word(line, pos, &self.break_chars);
-        let matches = try!(filename_complete(path));
-        Ok((start, matches))
+        let mut args = ::cmdline_parser::Parser::new(line);
+        args.set_separators(self.break_chars.iter().cloned());
+
+        let (start, path) = args.find(|&(ref range, _)| {
+            range.start < pos && pos <= range.end
+        }).map(|(range, _)| {
+            (range.start, ::cmdline_parser::parse_single(&line[range.start..pos]))
+        }).unwrap_or((pos, "".into()));
+
+        Ok((start, filename_complete(&path)?))
     }
+}
+
+fn escape(input: &str) -> Cow<str> {
+    ::shell_escape::escape(input.into())
 }
 
 fn filename_complete(path: &str) -> Result<Vec<String>> {
@@ -128,10 +135,10 @@ fn filename_complete(path: &str) -> Result<Vec<String>> {
         if let Some(s) = entry.file_name().to_str() {
             if s.starts_with(file_name) {
                 let mut path = String::from(dir_name) + s;
-                if try!(fs::metadata(entry.path())).is_dir() {
+                if cfg!(unix) && try!(fs::metadata(entry.path())).is_dir() {
                     path.push(sep);
                 }
-                entries.push(path);
+                entries.push(escape(&path).into_owned());
             }
         }
     }
@@ -193,8 +200,8 @@ mod tests {
     #[test]
     pub fn extract_word() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
-        let line = "ls '/usr/local/b";
-        assert_eq!((4, "/usr/local/b"),
+        let line = "ls /usr/local/b";
+        assert_eq!((3, "/usr/local/b"),
                    super::extract_word(line, line.len(), &break_chars));
     }
 

@@ -25,6 +25,8 @@ extern crate encode_unicode;
 extern crate winapi;
 #[cfg(windows)]
 extern crate kernel32;
+extern crate shell_escape;
+extern crate cmdline_parser;
 
 pub mod completion;
 mod consts;

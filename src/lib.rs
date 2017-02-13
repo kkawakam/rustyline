@@ -65,6 +65,7 @@ use keymap::EditState;
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 pub use consts::KeyPress;
+use undo::Changeset;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -82,6 +83,7 @@ struct State<'out, 'prompt> {
     snapshot: LineBuffer, // Current edited line before history browsing/completion
     term: Terminal, // terminal
     edit_state: EditState,
+    changes: Changeset,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -112,7 +114,13 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
+<<<<<<< HEAD
             edit_state: EditState::new(config, custom_bindings),
+=======
+            byte_buffer: [0; 4],
+            edit_state: EditState::new(config),
+            changes: Changeset::new(),
+>>>>>>> bd0d304... Bind keys to Undo cmd (#60)
         }
     }
 
@@ -1087,6 +1095,11 @@ fn readline_edit<C: Completer>(prompt: &str,
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
+            Cmd::Undo => {
+                if s.changes.undo(&mut s.line) {
+                    try!(s.refresh_line());
+                }
+            }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);
             }
@@ -1285,6 +1298,7 @@ mod test {
     use keymap::{Cmd, EditState};
     use super::{Editor, Position, Result, State};
     use tty::{Terminal, Term};
+    use undo::Changeset;
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1304,7 +1318,13 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
+<<<<<<< HEAD
             edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
+=======
+            byte_buffer: [0; 4],
+            edit_state: EditState::new(&config),
+            changes: Changeset::new(),
+>>>>>>> bd0d304... Bind keys to Undo cmd (#60)
         }
     }
 

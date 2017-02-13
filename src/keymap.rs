@@ -39,6 +39,7 @@ pub enum Cmd {
     Suspend,
     TransposeChars,
     TransposeWords(RepeatCount),
+    Undo,
     Unknown,
     UpcaseWord,
     ViYankTo(Movement),
@@ -307,6 +308,14 @@ impl EditState {
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
+            KeyPress::Ctrl('X') => {
+                let snd_key = try!(rdr.next_key(config.keyseq_timeout()));
+                match snd_key {
+                    KeyPress::Ctrl('U') => Cmd::Undo,
+                    _ => Cmd::Unknown,
+                }
+            }
+            KeyPress::Ctrl('_') => Cmd::Undo,
             KeyPress::Meta('\x08') |
             KeyPress::Meta('\x7f') => {
                 if positive {
@@ -482,6 +491,7 @@ impl EditState {
                 self.insert = true;
                 Cmd::Kill(Movement::WholeLine)
             }
+            KeyPress::Char('u') => Cmd::Undo,
             // KeyPress::Char('U') => Cmd::???, // revert-line
             KeyPress::Char('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), // vi-next-word
             KeyPress::Char('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), // vi-next-word

@@ -90,7 +90,7 @@ impl Completer for FilenameCompleter {
             (range.start, ::cmdline_parser::parse_single(&line[range.start..pos]))
         }).unwrap_or((pos, "".into()));
 
-        Ok((start, filename_complete(&path)?))
+        Ok((start, try!(filename_complete(&path))))
     }
 }
 

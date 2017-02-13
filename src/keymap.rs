@@ -311,6 +311,7 @@ impl EditState {
             KeyPress::Ctrl('X') => {
                 let snd_key = try!(rdr.next_key(config.keyseq_timeout()));
                 match snd_key {
+                    KeyPress::Ctrl('G') => Cmd::Abort,
                     KeyPress::Ctrl('U') => Cmd::Undo,
                     _ => Cmd::Unknown,
                 }

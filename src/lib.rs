@@ -59,6 +59,7 @@ use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use keymap::{Anchor, At, CharSearch, Cmd, EditState, Movement, RepeatCount, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
+use undo::Changeset;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -77,6 +78,7 @@ struct State<'out, 'prompt> {
     term: Terminal, // terminal
     byte_buffer: [u8; 4],
     edit_state: EditState,
+    changes: Changeset,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -108,6 +110,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(config),
+            changes: Changeset::new(),
         }
     }
 
@@ -1060,6 +1063,11 @@ fn readline_edit<C: Completer>(prompt: &str,
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
+            Cmd::Undo => {
+                if s.changes.undo(&mut s.line) {
+                    try!(s.refresh_line());
+                }
+            }
             Cmd::Interrupt => {
                 editor.kill_ring.reset();
                 return Err(error::ReadlineError::Interrupted);
@@ -1246,6 +1254,7 @@ mod test {
     use keymap::{Cmd, EditState};
     use super::{Editor, Position, Result, State};
     use tty::{Terminal, Term};
+    use undo::Changeset;
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1267,6 +1276,7 @@ mod test {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(&config),
+            changes: Changeset::new(),
         }
     }
 

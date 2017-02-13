@@ -49,9 +49,11 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x15' => KeyPress::Ctrl('U'),
         '\x16' => KeyPress::Ctrl('V'),
         '\x17' => KeyPress::Ctrl('W'),
+        '\x18' => KeyPress::Ctrl('X'),
         '\x19' => KeyPress::Ctrl('Y'),
         '\x1a' => KeyPress::Ctrl('Z'),
         '\x1b' => KeyPress::Esc,
+        '\x1f' => KeyPress::Ctrl('_'),
         '\x7f' => KeyPress::Backspace, // TODO Validate
         _ => KeyPress::Null,
     }

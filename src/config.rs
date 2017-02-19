@@ -13,6 +13,8 @@ pub struct Config {
     completion_prompt_limit: usize,
     /// Duration (milliseconds) Rustyline will wait for a character when reading an ambiguous key sequence.
     keyseq_timeout: i32,
+    /// Maximum duration (milliseconds) Rustyline will use for animating the blink on a matching delimiter.
+    matching_delimiter_timeout: i32,
 }
 
 impl Config {
@@ -48,6 +50,10 @@ impl Config {
     pub fn keyseq_timeout(&self) -> i32 {
         self.keyseq_timeout
     }
+
+    pub fn matching_delimiter_timeout(&self) -> i32 {
+        self.matching_delimiter_timeout
+    }
 }
 
 impl Default for Config {
@@ -59,6 +65,7 @@ impl Default for Config {
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
             keyseq_timeout: 500,
+            matching_delimiter_timeout: 500,
         }
     }
 }
@@ -127,6 +134,11 @@ impl Builder {
     /// Set `keyseq_timeout` in milliseconds.
     pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
         self.p.keyseq_timeout = keyseq_timeout_ms;
+        self
+    }
+
+    pub fn matching_delimiter_timeout(mut self, matching_delimiter_timeout_ms: i32) -> Builder {
+        self.p.matching_delimiter_timeout = matching_delimiter_timeout_ms;
         self
     }
 

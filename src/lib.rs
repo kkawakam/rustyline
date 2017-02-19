@@ -311,8 +311,6 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     }
 }
 
-const MATCHING_DELIMITER_BLINK_DELAY: u64 = 500;
-
 // Briefly move the cursor to the delimiter that matches `ch` if one exists.
 fn edit_blink_matching_delimeter(s: &mut State, ch: char) -> Result<()> {
     match ch {

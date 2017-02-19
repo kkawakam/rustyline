@@ -816,6 +816,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             try!(rdr.next_char_ready(editor.config.matching_delimiter_timeout()));
             s.snapshot();
             try!(s.refresh_line());
+            s.blinking = false;
         }
 
         let rk = rdr.next_key(editor.config.keyseq_timeout());

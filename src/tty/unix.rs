@@ -201,7 +201,7 @@ impl RawReader for PosixRawReader {
         }
     }
 
-    // Indicates if there
+    // Polls for unread input, up to `timeout_ms`.
     fn next_char_ready(&mut self, timeout_ms: i32) -> Result<usize> {
         let mut fds =
             [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];

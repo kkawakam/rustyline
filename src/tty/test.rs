@@ -31,6 +31,11 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
     fn next_char(&mut self) -> Result<char> {
         unimplemented!();
     }
+
+    #[cfg(unix)]
+    fn next_char_ready(&mut self, _: i32) -> Result<usize> {
+        unimplemented!();
+    }
 }
 
 impl RawReader for IntoIter<KeyPress> {
@@ -42,6 +47,11 @@ impl RawReader for IntoIter<KeyPress> {
     }
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
+        unimplemented!();
+    }
+
+    #[cfg(unix)]
+    fn next_char_ready(&mut self, _: i32) -> Result<usize> {
         unimplemented!();
     }
 }

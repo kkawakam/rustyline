@@ -179,9 +179,7 @@ impl RawReader for PosixRawReader {
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
-            let mut fds =
-                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
-            match poll::poll(&mut fds, timeout_ms) {
+            match self.next_char_ready(timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }
@@ -200,6 +198,16 @@ impl RawReader for PosixRawReader {
         match self.chars.next() {
             Some(c) => Ok(try!(c)),
             None => Err(error::ReadlineError::Eof),
+        }
+    }
+
+    // Indicates if there
+    fn next_char_ready(&mut self, timeout_ms: i32) -> Result<usize> {
+        let mut fds =
+            [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+        match poll::poll(&mut fds, timeout_ms) {
+            Ok(n) => Ok(n as usize),
+            Err(e) => Err(e.into()),
         }
     }
 }

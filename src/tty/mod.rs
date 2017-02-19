@@ -14,6 +14,10 @@ pub trait RawReader: Sized {
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;
+    /// Indicates if there is a character ready to be read.
+    /// Supports escape sequences and delimiter matching.
+    #[cfg(unix)]
+    fn next_char_ready(&mut self, timeout_ms: i32) -> Result<usize>;
 }
 
 /// Terminal contract

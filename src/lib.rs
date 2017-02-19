@@ -43,8 +43,6 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
-use std::thread;
-use std::time;
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
@@ -70,6 +68,7 @@ struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
     term: Terminal, // terminal
+    blinking: bool // Is the terminal currently moving the cursor?
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -98,6 +97,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
+            blinking: false,
         }
     }
 
@@ -305,30 +305,26 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
             }
         } else {
             s.refresh_line()
-        }.and_then(|_| edit_blink_matching_delimeter(s, ch))
+        }
     } else {
         Ok(())
     }
 }
 
 // Briefly move the cursor to the delimiter that matches `ch` if one exists.
-fn edit_blink_matching_delimeter(s: &mut State, ch: char) -> Result<()> {
+// The boolean return value indicates if the cursor has moved as part of a blink operation.
+fn edit_blink_matching_delimiter(s: &mut State, ch: char) -> Result<bool> {
     match ch {
         ')' | ']' | '}' => {
-            let original_pos = s.line.pos();
+            s.backup();
             if s.line.move_to_matching_delimiter(ch) {
-                s.refresh_line().and_then(|_| {
-                    // TODO use async io to either wait, or let user proceed
-                    let delay = time::Duration::from_millis(MATCHING_DELIMITER_BLINK_DELAY);
-                    thread::sleep(delay);
-                    s.line.set_pos(original_pos);
-                    s.refresh_line()
-                })
+                try!(s.refresh_line());
+                Ok(true)
             } else {
-                Ok(())
+                Ok(false)
             }
         }
-        _ => Ok(())
+        _ => Ok(false)
     }
 }
 
@@ -816,6 +812,12 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut rdr = try!(s.term.create_reader());
 
     loop {
+        if s.blinking {
+            try!(rdr.next_char_ready(editor.config.matching_delimiter_timeout()));
+            s.snapshot();
+            try!(s.refresh_line());
+        }
+
         let rk = rdr.next_key(editor.config.keyseq_timeout());
         if rk.is_err() && s.term.sigwinch() {
             s.update_columns();
@@ -826,6 +828,7 @@ fn readline_edit<C: Completer>(prompt: &str,
         if let KeyPress::Char(c) = key {
             editor.kill_ring.reset();
             try!(edit_insert(&mut s, c));
+            s.blinking = try!(edit_blink_matching_delimiter(&mut s, c));
             continue;
         }
 
@@ -1221,6 +1224,7 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
+            blinking: false,
         }
     }
 

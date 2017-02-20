@@ -167,13 +167,11 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn next_char_ready(&mut self, timeout_ms: i32) -> Result<usize> {
-        let t = as_millis(timeout);
-
-        match unsafe { kernel32::WaitForSingleObject(self.handle, timeout_ms) } {
+        match unsafe { kernel32::WaitForSingleObject(self.handle, timeout_ms as u32) } {
             winapi::WAIT_OBJECT_0 => Ok(1),
             winapi::WAIT_TIMEOUT => Ok(0),
             winapi::WAIT_FAILED |
-            _ => Err(io::Error::last_os_error()),
+            _ => try!(Err(io::Error::last_os_error())),
         }
     }
 }

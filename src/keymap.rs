@@ -405,16 +405,16 @@ impl EditState {
             // KeyPress::Char('Y') => Cmd::???, // vi-yank-to
             KeyPress::Char('h') |
             KeyPress::Ctrl('H') |
-            KeyPress::Backspace => Cmd::BackwardChar(n), // TODO Validate
+            KeyPress::Backspace => Cmd::BackwardChar(n),
             KeyPress::Ctrl('G') => Cmd::Abort,
             KeyPress::Char('l') |
             KeyPress::Char(' ') => Cmd::ForwardChar(n),
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Char('+') |
-            KeyPress::Char('j') |
+            KeyPress::Char('j') | // TODO: move to the start of the line.
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Char('-') |
-            KeyPress::Char('k') |
+            KeyPress::Char('k') | // TODO: move to the start of the line.
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('R') => {
                 self.insert = true; // TODO Validate
@@ -467,7 +467,7 @@ impl EditState {
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
             mvt = try!(self.vi_arg_digit(rdr, config, digit));
-            n = self.vi_num_args();
+            n = self.vi_num_args() * n;
         }
         Ok(match mvt {
             KeyPress::Char('$') => Some(Movement::EndOfLine), // vi-change-to-eol: Vi change to end of line.

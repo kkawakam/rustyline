@@ -471,6 +471,18 @@ impl EditState {
                     None => None,
                 }
             }
+            KeyPress::Char(';') => {
+                match self.last_char_search {
+                    Some(ref cs) => Some(Movement::ViCharSearch(n, cs.clone())),
+                    None => None,
+                }
+            }
+            KeyPress::Char(',') => {
+                match self.last_char_search {
+                    Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
+                    None => None,
+                }
+            }
             KeyPress::Char('h') |
             KeyPress::Ctrl('H') |
             KeyPress::Backspace => Some(Movement::BackwardChar(n)), // vi-delete-prev-char: Vi move to previous character (backspace).

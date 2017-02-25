@@ -888,6 +888,11 @@ fn readline_edit<C: Completer>(prompt: &str,
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
+            Cmd::ViFirstPrint => {
+                editor.kill_ring.reset();
+                try!(edit_move_home(&mut s));
+                try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
+            }
             Cmd::BackwardChar(n) => {
                 editor.kill_ring.reset();
                 // Move back a character.

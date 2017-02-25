@@ -39,6 +39,7 @@ pub enum Cmd {
     Unknown,
     UpcaseWord,
     ViCharSearch(RepeatCount, CharSearch),
+    ViFirstPrint,
     ViYankTo(Movement),
     Yank(RepeatCount, Anchor),
     YankPop,
@@ -291,8 +292,8 @@ impl EditState {
             KeyPress::End => Cmd::EndOfLine,
             KeyPress::Char('.') => self.last_cmd.clone(), // vi-redo
             // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing bracket
-            KeyPress::Char('0') => Cmd::BeginningOfLine, // vi-zero: Vi move to the beginning of line.
-            KeyPress::Char('^') => Cmd::BeginningOfLine, // vi-first-print TODO Move to the first non-blank character of line.
+            KeyPress::Char('0') => Cmd::BeginningOfLine,
+            KeyPress::Char('^') => Cmd::ViFirstPrint,
             KeyPress::Char('a') => {
                 // vi-append-mode: Vi enter insert mode after the cursor.
                 self.insert = true;

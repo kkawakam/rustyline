@@ -78,6 +78,17 @@ pub enum CharSearch {
     BackwardAfter(char),
 }
 
+impl CharSearch {
+    fn opposite(&self) -> CharSearch {
+        match *self {
+            CharSearch::Forward(c) => CharSearch::Backward(c),
+            CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
+            CharSearch::Backward(c) => CharSearch::Forward(c),
+            CharSearch::BackwardAfter(c) => CharSearch::ForwardBefore(c),
+        }
+    }
+}
+
 pub struct EditState {
     mode: EditMode,
     // Vi Command/Alternate, Insert/Input mode
@@ -85,6 +96,7 @@ pub struct EditState {
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd, // vi only
+    last_char_search: Option<CharSearch>, // vi only
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,6 +118,7 @@ impl EditState {
             insert: true,
             num_args: 0,
             last_cmd: Cmd::Noop,
+            last_char_search: None,
         }
     }
 
@@ -341,6 +354,18 @@ impl EditState {
                     None => Cmd::Unknown,
                 }
             }
+            KeyPress::Char(';') => {
+                match self.last_char_search {
+                    Some(ref cs) => Cmd::ViCharSearch(n, cs.clone()),
+                    None => Cmd::Noop,
+                }
+            }
+            KeyPress::Char(',') => {
+                match self.last_char_search {
+                    Some(ref cs) => Cmd::ViCharSearch(n, cs.opposite()),
+                    None => Cmd::Noop,
+                }
+            }
             // TODO KeyPress::Char('G') => Cmd::???, Move to the history line n
             KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put
             KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
@@ -490,13 +515,15 @@ impl EditState {
         let ch = try!(rdr.next_key(config.keyseq_timeout()));
         Ok(match ch {
             KeyPress::Char(ch) => {
-                Some(match cmd {
+                let cs = match cmd {
                     'f' => CharSearch::Forward(ch),
                     't' => CharSearch::ForwardBefore(ch),
                     'F' => CharSearch::Backward(ch),
                     'T' => CharSearch::BackwardAfter(ch),
                     _ => unreachable!(),
-                })
+                };
+                self.last_char_search = Some(cs.clone());
+                Some(cs)
             }
             _ => None,
         })

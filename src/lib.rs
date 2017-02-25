@@ -916,7 +916,10 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::EndOfFile => {
                 editor.kill_ring.reset();
-                if !s.edit_state.is_emacs_mode() || s.line.is_empty() {
+                if !s.edit_state.is_emacs_mode() {
+                    try!(edit_move_end(&mut s));
+                    break;
+                } else if s.line.is_empty() {
                     return Err(error::ReadlineError::Eof);
                 } else {
                     try!(edit_delete(&mut s, 1))

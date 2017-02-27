@@ -113,12 +113,9 @@ impl RawReader for ConsoleRawReader {
                 continue;
             }
 
-            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) ==
-            // (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) ==
-                      (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
-            // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) ==
-            // (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);
+            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) != 0;
+            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
+            // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt;
 
             let utf16 = key_event.UnicodeChar;

@@ -504,7 +504,7 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .filter(|&(_, ch)| ch.is_alphanumeric())
+            .filter(|&(_, ch)| ch.chars().all(|c| c.is_alphanumeric()))
             .map(|(i, _)| i)
             .next()
             .map(|i| i + self.pos)

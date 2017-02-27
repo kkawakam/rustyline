@@ -420,7 +420,8 @@ impl LineBuffer {
                     .char_indices()
                     .rev()
                     .filter(|&(_, ch)| ch == c)
-                    .nth(n - 1)
+                    .take(n)
+                    .last()
                     .map(|(i, _)| i)
             }
             CharSearch::Forward(c) |
@@ -431,7 +432,8 @@ impl LineBuffer {
                         self.buf[shift..]
                             .char_indices()
                             .filter(|&(_, ch)| ch == c)
-                            .nth(n - 1)
+                            .take(n)
+                            .last()
                             .map(|(i, _)| i)
                     } else {
                         None
@@ -501,8 +503,12 @@ impl LineBuffer {
         if self.pos == self.buf.len() {
             return None;
         }
-        self.buf[self.pos..].grapheme_indices(true).filter(|&(_, ch)| ch.is_alphanumeric())
-                    .map(|(i, _)| i).next().map(|i| i + self.pos)
+        self.buf[self.pos..]
+            .grapheme_indices(true)
+            .filter(|&(_, ch)| ch.is_alphanumeric())
+            .map(|(i, _)| i)
+            .next()
+            .map(|i| i + self.pos)
     }
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
@@ -900,6 +906,11 @@ mod test {
 
         let mut s = LineBuffer::init("αßγδε", 2);
         let ok = s.move_to(CharSearch::Forward('ε'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(8, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::Forward('ε'), 10);
         assert_eq!(true, ok);
         assert_eq!(8, s.pos);
     }

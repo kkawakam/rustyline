@@ -96,7 +96,6 @@ pub struct EditState {
     insert: bool, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
-    last_cmd: Cmd, // vi only
     last_char_search: Option<CharSearch>, // vi only
 }
 
@@ -118,7 +117,6 @@ impl EditState {
             mode: config.edit_mode(),
             insert: true,
             num_args: 0,
-            last_cmd: Cmd::Noop,
             last_char_search: None,
         }
     }
@@ -300,7 +298,7 @@ impl EditState {
         let cmd = match key {
             KeyPress::Char('$') |
             KeyPress::End => Cmd::EndOfLine,
-            KeyPress::Char('.') => self.last_cmd.clone(), // vi-redo
+            // TODO KeyPress::Char('.') => ..., // vi-redo
             // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing bracket
             KeyPress::Char('0') => Cmd::BeginningOfLine,
             KeyPress::Char('^') => Cmd::ViFirstPrint,
@@ -428,9 +426,6 @@ impl EditState {
             _ => self.common(key, n, true),
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
-        if key != KeyPress::Char('.') {
-            self.last_cmd = cmd.clone();
-        }
         Ok(cmd)
     }
 
@@ -449,7 +444,6 @@ impl EditState {
             _ => self.common(key, 1, true),
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
-        self.last_cmd = cmd.clone();
         Ok(cmd)
     }
 

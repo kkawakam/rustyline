@@ -496,10 +496,17 @@ impl LineBuffer {
         }
     }
 
+    fn skip_whitespace(&self) -> Option<usize> {
+        if self.pos == self.buf.len() {
+            return None;
+        }
+        self.buf[self.pos..].grapheme_indices(true).filter(|&(_, ch)| ch.is_alphanumeric())
+                    .map(|(i, _)| i).next().map(|i| i + self.pos)
+    }
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some(start) = self.next_word_pos(self.pos, At::Start, Word::Emacs, 1) {
-            if let Some(end) = self.next_word_pos(self.pos, At::AfterEnd, Word::Emacs, 1) {
+        if let Some(start) = self.skip_whitespace() {
+            if let Some(end) = self.next_word_pos(start, At::AfterEnd, Word::Emacs, 1) {
                 if start == end {
                     return false;
                 }
@@ -1112,6 +1119,11 @@ mod test {
         assert!(s.edit_word(WordAction::CAPITALIZE));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
+
+        let mut s = LineBuffer::init("test", 1);
+        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert_eq!("tEst", s.buf);
+        assert_eq!(4, s.pos);
     }
 
     #[test]

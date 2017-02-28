@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 #[cfg(windows)]
 use winapi;
 
+use config::Config;
 use consts::KeyPress;
 use ::error::ReadlineError;
 use ::Result;
@@ -21,7 +22,7 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(*key),
             None => Err(ReadlineError::Eof),
@@ -34,7 +35,7 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
 }
 
 impl RawReader for IntoIter<KeyPress> {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(key),
             None => Err(ReadlineError::Eof),
@@ -131,7 +132,7 @@ impl Term for DummyTerminal {
     }
 
     /// Create a RAW reader
-    fn create_reader(&self) -> Result<IntoIter<KeyPress>> {
+    fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyPress>> {
         Ok(self.keys.clone().into_iter())
     }
 

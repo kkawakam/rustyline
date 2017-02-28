@@ -1,6 +1,7 @@
 //! This module implements and describes common TTY methods & traits
 use std::io::Write;
-use ::Result;
+use Result;
+use config::Config;
 use consts::KeyPress;
 
 /// Terminal state
@@ -12,7 +13,7 @@ pub trait RawMode: Copy + Sized {
 /// Translate bytes read from stdin to keys.
 pub trait RawReader: Sized {
     /// Blocking read of key pressed.
-    fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress>;
+    fn next_key(&mut self) -> Result<KeyPress>;
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;
@@ -38,7 +39,7 @@ pub trait Term: Clone {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&self) -> Result<Self::Mode>;
     /// Create a RAW reader
-    fn create_reader(&self) -> Result<Self::Reader>;
+    fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
     /// Clear the screen. Used to handle ctrl+l

@@ -124,18 +124,17 @@ impl EditState {
         self.mode == EditMode::Emacs
     }
 
-    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
+    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         match self.mode {
-            EditMode::Emacs => self.emacs(rdr, config),
-            EditMode::Vi if self.insert => self.vi_insert(rdr, config),
-            EditMode::Vi => self.vi_command(rdr, config),
+            EditMode::Emacs => self.emacs(rdr),
+            EditMode::Vi if self.insert => self.vi_insert(rdr),
+            EditMode::Vi => self.vi_command(rdr),
         }
     }
 
     // TODO dynamic prompt (arg: ?)
     fn emacs_digit_argument<R: RawReader>(&mut self,
                                           rdr: &mut R,
-                                          config: &Config,
                                           digit: char)
                                           -> Result<KeyPress> {
         match digit {
@@ -148,7 +147,7 @@ impl EditState {
             _ => unreachable!(),
         }
         loop {
-            let key = try!(rdr.next_key(config.keyseq_timeout()));
+            let key = try!(rdr.next_key());
             match key {
                 KeyPress::Char(digit @ '0'...'9') |
                 KeyPress::Meta(digit @ '0'...'9') => {
@@ -165,12 +164,12 @@ impl EditState {
         }
     }
 
-    fn emacs<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key(config.keyseq_timeout()));
+    fn emacs<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+        let mut key = try!(rdr.next_key());
         if let KeyPress::Meta(digit @ '-') = key {
-            key = try!(self.emacs_digit_argument(rdr, config, digit));
+            key = try!(self.emacs_digit_argument(rdr, digit));
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
-            key = try!(self.emacs_digit_argument(rdr, config, digit));
+            key = try!(self.emacs_digit_argument(rdr, digit));
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
         let cmd = match key {
@@ -262,12 +261,11 @@ impl EditState {
 
     fn vi_arg_digit<R: RawReader>(&mut self,
                                   rdr: &mut R,
-                                  config: &Config,
                                   digit: char)
                                   -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
-            let key = try!(rdr.next_key(config.keyseq_timeout()));
+            let key = try!(rdr.next_key());
             match key {
                 KeyPress::Char(digit @ '0'...'9') => {
                     self.num_args = self.num_args
@@ -279,10 +277,10 @@ impl EditState {
         }
     }
 
-    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key(config.keyseq_timeout()));
+    fn vi_command<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+        let mut key = try!(rdr.next_key());
         if let KeyPress::Char(digit @ '1'...'9') = key {
-            key = try!(self.vi_arg_digit(rdr, config, digit));
+            key = try!(self.vi_arg_digit(rdr, digit));
         }
         let n = self.vi_num_args(); // consume them in all cases
         let cmd = match key {
@@ -306,7 +304,7 @@ impl EditState {
             KeyPress::Char('B') => Cmd::BackwardWord(n, Word::Big),
             KeyPress::Char('c') => {
                 self.insert = true;
-                match try!(self.vi_cmd_motion(rdr, config, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
@@ -316,7 +314,7 @@ impl EditState {
                 Cmd::Kill(Movement::EndOfLine)
             }
             KeyPress::Char('d') => {
-                match try!(self.vi_cmd_motion(rdr, config, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
@@ -337,7 +335,7 @@ impl EditState {
             }
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 // vi-char-search
-                let cs = try!(self.vi_char_search(rdr, config, c));
+                let cs = try!(self.vi_char_search(rdr, c));
                 match cs {
                     Some(cs) => Cmd::ViCharSearch(n, cs),
                     None => Cmd::Unknown,
@@ -360,7 +358,7 @@ impl EditState {
             KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
             KeyPress::Char('r') => {
                 // vi-replace-char: Vi replace character under the cursor with the next character typed.
-                let ch = try!(rdr.next_key(config.keyseq_timeout()));
+                let ch = try!(rdr.next_key());
                 match ch {
                     KeyPress::Char(c) => Cmd::Replace(n, c),
                     KeyPress::Esc => Cmd::Noop,
@@ -384,7 +382,7 @@ impl EditState {
             KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete: TODO move backward if eol
             KeyPress::Char('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
             KeyPress::Char('y') => {
-                match try!(self.vi_cmd_motion(rdr, config, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, key, n)) {
                     Some(mvt) => Cmd::ViYankTo(mvt),
                     None => Cmd::Unknown,
                 }
@@ -418,8 +416,8 @@ impl EditState {
         Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
-        let key = try!(rdr.next_key(config.keyseq_timeout()));
+    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+        let key = try!(rdr.next_key());
         let cmd = match key {
             KeyPress::Char(c) => Cmd::SelfInsert(1, c),
             KeyPress::Ctrl('H') |
@@ -438,18 +436,17 @@ impl EditState {
 
     fn vi_cmd_motion<R: RawReader>(&mut self,
                                    rdr: &mut R,
-                                   config: &Config,
                                    key: KeyPress,
                                    n: RepeatCount)
                                    -> Result<Option<Movement>> {
-        let mut mvt = try!(rdr.next_key(config.keyseq_timeout()));
+        let mut mvt = try!(rdr.next_key());
         if mvt == key {
             return Ok(Some(Movement::WholeLine));
         }
         let mut n = n;
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
-            mvt = try!(self.vi_arg_digit(rdr, config, digit));
+            mvt = try!(self.vi_arg_digit(rdr, digit));
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
@@ -460,7 +457,7 @@ impl EditState {
             KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
             KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
-                let cs = try!(self.vi_char_search(rdr, config, c));
+                let cs = try!(self.vi_char_search(rdr, c));
                 match cs {
                     Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                     None => None,
@@ -505,10 +502,9 @@ impl EditState {
 
     fn vi_char_search<R: RawReader>(&mut self,
                                     rdr: &mut R,
-                                    config: &Config,
                                     cmd: char)
                                     -> Result<Option<CharSearch>> {
-        let ch = try!(rdr.next_key(config.keyseq_timeout()));
+        let ch = try!(rdr.next_key());
         Ok(match ch {
             KeyPress::Char(ch) => {
                 let cs = match cmd {

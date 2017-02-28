@@ -461,7 +461,7 @@ impl EditState {
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
             mvt = try!(self.vi_arg_digit(rdr, config, digit));
-            n = self.vi_num_args() * n;
+            n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
             KeyPress::Char('$') => Some(Movement::EndOfLine), // vi-change-to-eol: Vi change to end of line.

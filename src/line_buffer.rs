@@ -388,7 +388,7 @@ impl LineBuffer {
             }
         }
         if wp == 0 {
-            if word_def == Word::Emacs {
+            if word_def == Word::Emacs || at == At::AfterEnd {
                 Some(self.buf.len())
             } else {
                 match gi {
@@ -1059,6 +1059,12 @@ mod test {
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
+
+        let mut s = LineBuffer::init("test", 0);
+        let text = s.delete_word(At::AfterEnd, Word::Vi, 1);
+        assert_eq!("", s.buf);
+        assert_eq!(0, s.pos);
+        assert_eq!(Some("test".to_string()), text);
     }
 
     #[test]

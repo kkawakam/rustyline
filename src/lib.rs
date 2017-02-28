@@ -871,8 +871,7 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         if cmd == Cmd::ReverseSearchHistory {
             // Search history backward
-            let next =
-                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
+            let next = try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
             if next.is_some() {
                 cmd = next.unwrap();
             } else {

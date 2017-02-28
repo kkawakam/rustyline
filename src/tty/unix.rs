@@ -9,6 +9,7 @@ use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
 
+use config::Config;
 use consts::{self, KeyPress};
 use Result;
 use error;
@@ -92,12 +93,13 @@ impl Read for StdinRaw {
 /// Console input reader
 pub struct PosixRawReader {
     chars: Chars<StdinRaw>,
+    timeout_ms: i32,
 }
 
 impl PosixRawReader {
-    fn new() -> Result<PosixRawReader> {
+    fn new(config: &Config) -> Result<PosixRawReader> {
         let stdin = StdinRaw {};
-        Ok(PosixRawReader { chars: stdin.chars() })
+        Ok(PosixRawReader { chars: stdin.chars(), timeout_ms: config.keyseq_timeout() })
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
@@ -183,14 +185,14 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
-    fn next_key(&mut self, timeout_ms: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
             let mut fds =
                 [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
-            match poll::poll(&mut fds, timeout_ms) {
+            match poll::poll(&mut fds, self.timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }
@@ -308,8 +310,8 @@ impl Term for PosixTerminal {
     }
 
     /// Create a RAW reader
-    fn create_reader(&self) -> Result<PosixRawReader> {
-        PosixRawReader::new()
+    fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
+        PosixRawReader::new(config)
     }
 
     fn create_writer(&self) -> Stdout {

@@ -114,9 +114,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, config: &Config) -> Result<Cmd> {
+    fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         loop {
-            let rc = self.edit_state.next_cmd(rdr, config);
+            let rc = self.edit_state.next_cmd(rdr);
             if rc.is_err() && self.term.sigwinch() {
                 self.update_columns();
                 try!(self.refresh_line());
@@ -613,7 +613,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 s.snapshot();
             }
 
-            cmd = try!(s.next_cmd(rdr, config));
+            cmd = try!(s.next_cmd(rdr));
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -652,7 +652,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             }
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = try!(s.next_cmd(rdr, config));
+        let mut cmd = try!(s.next_cmd(rdr));
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -671,7 +671,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                   cmd != Cmd::SelfInsert(1, 'n') &&
                   cmd != Cmd::SelfInsert(1, 'N') &&
                   cmd != Cmd::Kill(Movement::BackwardChar(1)) {
-                cmd = try!(s.next_cmd(rdr, config));
+                cmd = try!(s.next_cmd(rdr));
             }
             show_completions = match cmd {
                 Cmd::SelfInsert(1, 'y') |
@@ -680,7 +680,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             };
         }
         if show_completions {
-            page_completions(rdr, s, config, &candidates)
+            page_completions(rdr, s, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -692,7 +692,6 @@ fn complete_line<R: RawReader>(rdr: &mut R,
 
 fn page_completions<R: RawReader>(rdr: &mut R,
                                   s: &mut State,
-                                  config: &Config,
                                   candidates: &[String])
                                   -> Result<Option<Cmd>> {
     use std::cmp;
@@ -720,7 +719,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                   cmd != Cmd::SelfInsert(1, ' ') &&
                   cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
                   cmd != Cmd::AcceptLine {
-                cmd = try!(s.next_cmd(rdr, config));
+                cmd = try!(s.next_cmd(rdr));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') |
@@ -761,8 +760,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 /// Incremental search
 fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                                             s: &mut State,
-                                            history: &History,
-                                            config: &Config)
+                                            history: &History)
                                             -> Result<Option<Cmd>> {
     if history.is_empty() {
         return Ok(None);
@@ -785,7 +783,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        cmd = try!(s.next_cmd(rdr, config));
+        cmd = try!(s.next_cmd(rdr));
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -855,10 +853,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                            editor.history.len());
     try!(s.refresh_line());
 
-    let mut rdr = try!(s.term.create_reader());
+    let mut rdr = try!(s.term.create_reader(&editor.config));
 
     loop {
-        let rc = s.next_cmd(&mut rdr, &editor.config);
+        let rc = s.next_cmd(&mut rdr);
         let mut cmd = try!(rc);
 
         // autocomplete
@@ -881,7 +879,7 @@ fn readline_edit<C: Completer>(prompt: &str,
         if cmd == Cmd::ReverseSearchHistory {
             // Search history backward
             let next =
-                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history, &editor.config));
+                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
             if next.is_some() {
                 cmd = next.unwrap();
             } else {

@@ -6,6 +6,7 @@ use std::sync::atomic;
 use kernel32;
 use winapi;
 
+use config::Config;
 use consts::{self, KeyPress};
 use error;
 use Result;
@@ -85,7 +86,7 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         use std::char::decode_utf16;
         // use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
         use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};
@@ -292,8 +293,7 @@ impl Term for Console {
         })
     }
 
-
-    fn create_reader(&self) -> Result<ConsoleRawReader> {
+    fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
         ConsoleRawReader::new()
     }
 

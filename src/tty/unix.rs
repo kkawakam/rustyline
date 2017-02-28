@@ -99,7 +99,10 @@ pub struct PosixRawReader {
 impl PosixRawReader {
     fn new(config: &Config) -> Result<PosixRawReader> {
         let stdin = StdinRaw {};
-        Ok(PosixRawReader { chars: stdin.chars(), timeout_ms: config.keyseq_timeout() })
+        Ok(PosixRawReader {
+            chars: stdin.chars(),
+            timeout_ms: config.keyseq_timeout(),
+        })
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {

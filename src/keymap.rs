@@ -134,10 +134,7 @@ impl EditState {
     }
 
     // TODO dynamic prompt (arg: ?)
-    fn emacs_digit_argument<R: RawReader>(&mut self,
-                                          rdr: &mut R,
-                                          digit: char)
-                                          -> Result<KeyPress> {
+    fn emacs_digit_argument<R: RawReader>(&mut self, rdr: &mut R, digit: char) -> Result<KeyPress> {
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -269,10 +266,7 @@ impl EditState {
         Ok(cmd)
     }
 
-    fn vi_arg_digit<R: RawReader>(&mut self,
-                                  rdr: &mut R,
-                                  digit: char)
-                                  -> Result<KeyPress> {
+    fn vi_arg_digit<R: RawReader>(&mut self, rdr: &mut R, digit: char) -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
             let key = try!(rdr.next_key());

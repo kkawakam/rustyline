@@ -352,7 +352,10 @@ fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
 
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
-    if s.line.yank(text, anchor, n).is_some() {
+    if let Anchor::After = anchor {
+        s.line.move_forward(1);
+    }
+    if s.line.yank(text, n).is_some() {
         if !s.edit_state.is_emacs_mode() {
             s.line.move_backward(1);
         }

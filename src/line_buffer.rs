@@ -3,7 +3,7 @@ use std::iter;
 use std::ops::{Deref, Range};
 use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
-use keymap::{Anchor, At, CharSearch, Movement, RepeatCount, Word};
+use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -151,13 +151,10 @@ impl LineBuffer {
     /// Yank/paste `text` at current position.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn yank(&mut self, text: &str, anchor: Anchor, n: RepeatCount) -> Option<bool> {
+    pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
-        }
-        if let Anchor::After = anchor {
-            self.move_forward(1);
         }
         let push = self.pos == self.buf.len();
         if push {
@@ -178,7 +175,7 @@ impl LineBuffer {
     pub fn yank_pop(&mut self, yank_size: usize, text: &str) -> Option<bool> {
         self.buf.drain((self.pos - yank_size)..self.pos);
         self.pos -= yank_size;
-        self.yank(text, Anchor::Before, 1)
+        self.yank(text, 1)
     }
 
     /// Move cursor on the left.
@@ -280,7 +277,7 @@ impl LineBuffer {
         }
         let chars = self.delete(1).unwrap();
         self.move_backward(1);
-        self.yank(&chars, Anchor::Before, 1);
+        self.yank(&chars, 1);
         self.move_forward(1);
         true
     }
@@ -690,7 +687,7 @@ fn is_other_char(grapheme: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use keymap::{Anchor, At, CharSearch, Word};
+    use keymap::{At, CharSearch, Word};
     use super::{LineBuffer, MAX_LINE, WordAction};
 
     #[test]
@@ -740,7 +737,8 @@ mod test {
     #[test]
     fn yank_after() {
         let mut s = LineBuffer::init("αß", 2);
-        let ok = s.yank("γδε", Anchor::After, 1);
+        s.move_forward(1);
+        let ok = s.yank("γδε", 1);
         assert_eq!(Some(true), ok);
         assert_eq!("αßγδε", s.buf);
         assert_eq!(10, s.pos);
@@ -749,7 +747,7 @@ mod test {
     #[test]
     fn yank_before() {
         let mut s = LineBuffer::init("αε", 2);
-        let ok = s.yank("ßγδ", Anchor::Before, 1);
+        let ok = s.yank("ßγδ", 1);
         assert_eq!(Some(false), ok);
         assert_eq!("αßγδε", s.buf);
         assert_eq!(8, s.pos);

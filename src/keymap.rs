@@ -223,7 +223,6 @@ impl EditState {
                     _ => Cmd::Unknown,
                 }
             }
-            KeyPress::Ctrl('_') => Cmd::Undo,
             KeyPress::Meta('\x08') |
             KeyPress::Meta('\x7f') => {
                 if positive {
@@ -584,6 +583,7 @@ impl EditState {
                 }
             }
             KeyPress::Ctrl('Z') => Cmd::Suspend,
+            KeyPress::Ctrl('_') => Cmd::Undo,
             KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         }

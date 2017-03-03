@@ -346,11 +346,12 @@ impl LineBuffer {
         }
         let mut wp = 0;
         let mut gis = self.buf[pos..].grapheme_indices(true);
-        let mut gi = None;
-        if at != At::Start {
+        let mut gi = if at != At::Start {
             // TODO Validate
-            gi = gis.next();
-        }
+            gis.next()
+        } else {
+            None
+        };
         'outer: for _ in 0..n {
             gi = gis.next();
             'inner: loop {

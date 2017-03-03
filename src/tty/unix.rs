@@ -301,12 +301,12 @@ impl Term for PosixTerminal {
         let mut raw = original_mode;
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
-        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
         // we don't want raw output, it turns newlines into straight linefeeds
         // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        raw.c_cflag |= CS8; // character-size mark (8 bits)
         // disable echoing, canonical mode, extended input processing and signals
-        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
         raw.c_cc[VMIN] = 1; // One character-at-a-time input
         raw.c_cc[VTIME] = 0; // with blocking read
         try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));

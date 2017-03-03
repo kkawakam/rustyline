@@ -658,8 +658,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
         try!(edit_move_end(s));
         s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
-        let mut show_completions = true;
-        if candidates.len() > config.completion_prompt_limit() {
+        let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(write_and_flush(s.out, msg.as_bytes()));
             s.old_rows += 1;
@@ -669,12 +668,14 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                   cmd != Cmd::Kill(Movement::BackwardChar(1)) {
                 cmd = try!(s.next_cmd(rdr));
             }
-            show_completions = match cmd {
+            match cmd {
                 Cmd::SelfInsert(1, 'y') |
                 Cmd::SelfInsert(1, 'Y') => true,
                 _ => false,
-            };
-        }
+            }
+        } else {
+            true
+        };
         if show_completions {
             page_completions(rdr, s, &candidates)
         } else {

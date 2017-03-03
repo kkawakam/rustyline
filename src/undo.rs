@@ -1,5 +1,5 @@
+//! Undo API
 use line_buffer::LineBuffer;
-use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
 
 enum Action {
@@ -167,7 +167,7 @@ impl Changeset {
 
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
-        graphemes.next().map_or(false, |grapheme| grapheme.is_alphanumeric()) &&
+        graphemes.next().map_or(false, |grapheme| grapheme.chars().all(|c| c.is_alphanumeric())) &&
         graphemes.next().is_none()
     }
 

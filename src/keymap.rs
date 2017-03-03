@@ -309,7 +309,7 @@ impl EditState {
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('X') => {
-                let snd_key = try!(rdr.next_key(config.keyseq_timeout()));
+                let snd_key = try!(rdr.next_key());
                 match snd_key {
                     KeyPress::Ctrl('G') => Cmd::Abort,
                     KeyPress::Ctrl('U') => Cmd::Undo,

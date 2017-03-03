@@ -114,13 +114,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
-<<<<<<< HEAD
             edit_state: EditState::new(config, custom_bindings),
-=======
-            byte_buffer: [0; 4],
-            edit_state: EditState::new(config),
             changes: Changeset::new(),
->>>>>>> bd0d304... Bind keys to Undo cmd (#60)
         }
     }
 
@@ -1318,13 +1313,8 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
-<<<<<<< HEAD
             edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
-=======
-            byte_buffer: [0; 4],
-            edit_state: EditState::new(&config),
             changes: Changeset::new(),
->>>>>>> bd0d304... Bind keys to Undo cmd (#60)
         }
     }
 

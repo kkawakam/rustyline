@@ -1,3 +1,4 @@
+//! Bindings from keys to command for Emacs and Vi modes
 use config::Config;
 use config::EditMode;
 use consts::KeyPress;

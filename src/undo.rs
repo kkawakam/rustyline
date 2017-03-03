@@ -1,3 +1,4 @@
+//! Undo API
 use line_buffer::LineBuffer;
 use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;

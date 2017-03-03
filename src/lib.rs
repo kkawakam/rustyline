@@ -871,6 +871,10 @@ fn readline_edit<C: Completer>(prompt: &str,
             editor.kill_ring.reset();
             try!(edit_insert(&mut s, c, n));
             continue;
+        } else if let Cmd::Insert(n, text) = cmd {
+            editor.kill_ring.reset();
+            try!(edit_yank(&mut s, &text, Anchor::Before, n));
+            continue;
         }
 
         if cmd == Cmd::ReverseSearchHistory {

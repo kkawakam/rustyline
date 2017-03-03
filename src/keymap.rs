@@ -24,6 +24,7 @@ pub enum Cmd {
     ForwardChar(RepeatCount),
     ForwardSearchHistory,
     ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
+    Insert(RepeatCount, String),
     Interrupt,
     Kill(Movement),
     NextHistory,
@@ -44,6 +45,43 @@ pub enum Cmd {
     ViYankTo(Movement),
     Yank(RepeatCount, Anchor),
     YankPop,
+}
+
+impl Cmd {
+    fn is_repeatable_change(&self) -> bool {
+        match *self {
+            Cmd::Insert(_, _) => true,
+            Cmd::Kill(_) => true,
+            Cmd::Replace(_, _) => true,
+            Cmd::SelfInsert(_, _) => true,
+            Cmd::TransposeChars => false, // TODO Validate
+            Cmd::ViYankTo(_) => true,
+            Cmd::Yank(_, _) => true,
+            _ => false,
+        }
+    }
+
+    fn redo(&self, new: Option<RepeatCount>) -> Cmd {
+        match *self {
+            Cmd::Insert(previous, ref text) => {
+                Cmd::Insert(repeat_count(previous, new), text.clone())
+            }
+            Cmd::Kill(ref mvt) => Cmd::Kill(mvt.redo(new)),
+            Cmd::Replace(previous, c) => Cmd::Replace(repeat_count(previous, new), c),
+            Cmd::SelfInsert(previous, c) => Cmd::SelfInsert(repeat_count(previous, new), c),
+            //Cmd::TransposeChars => Cmd::TransposeChars,
+            Cmd::ViYankTo(ref mvt) => Cmd::ViYankTo(mvt.redo(new)),
+            Cmd::Yank(previous, anchor) => Cmd::Yank(repeat_count(previous, new), anchor),
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount {
+    match new {
+        Some(n) => n,
+        None => previous,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -90,14 +128,6 @@ impl CharSearch {
     }
 }
 
-pub struct EditState {
-    mode: EditMode,
-    // Vi Command/Alternate, Insert/Input mode
-    insert: bool, // vi only ?
-    // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
-    num_args: i16,
-    last_char_search: Option<CharSearch>, // vi only
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Movement {
@@ -111,12 +141,44 @@ pub enum Movement {
     ForwardChar(RepeatCount),
 }
 
+impl Movement {
+    fn redo(&self, new: Option<RepeatCount>) -> Movement {
+        match *self {
+            Movement::WholeLine => Movement::WholeLine,
+            Movement::BeginningOfLine => Movement::BeginningOfLine,
+            Movement::EndOfLine => Movement::EndOfLine,
+            Movement::BackwardWord(previous, word) => {
+                Movement::BackwardWord(repeat_count(previous, new), word)
+            }
+            Movement::ForwardWord(previous, at, word) => {
+                Movement::ForwardWord(repeat_count(previous, new), at, word)
+            }
+            Movement::ViCharSearch(previous, ref char_search) => {
+                Movement::ViCharSearch(repeat_count(previous, new), char_search.clone())
+            }
+            Movement::BackwardChar(previous) => Movement::BackwardChar(repeat_count(previous, new)),
+            Movement::ForwardChar(previous) => Movement::ForwardChar(repeat_count(previous, new)),
+        }
+    }
+}
+
+pub struct EditState {
+    mode: EditMode,
+    // Vi Command/Alternate, Insert/Input mode
+    insert: bool, // vi only ?
+    // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
+    num_args: i16,
+    last_cmd: Cmd, // vi only
+    last_char_search: Option<CharSearch>, // vi only
+}
+
 impl EditState {
     pub fn new(config: &Config) -> EditState {
         EditState {
             mode: config.edit_mode(),
             insert: true,
             num_args: 0,
+            last_cmd: Cmd::Noop,
             last_char_search: None,
         }
     }
@@ -285,11 +347,18 @@ impl EditState {
         if let KeyPress::Char(digit @ '1'...'9') = key {
             key = try!(self.vi_arg_digit(rdr, digit));
         }
+        let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
         let cmd = match key {
             KeyPress::Char('$') |
             KeyPress::End => Cmd::EndOfLine,
-            // TODO KeyPress::Char('.') => ..., // vi-redo
+            KeyPress::Char('.') => { // vi-redo
+                if no_num_args {
+                    self.last_cmd.redo(None)
+                } else {
+                    self.last_cmd.redo(Some(n))
+                }
+            },
             // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing bracket
             KeyPress::Char('0') => Cmd::BeginningOfLine,
             KeyPress::Char('^') => Cmd::ViFirstPrint,
@@ -417,6 +486,9 @@ impl EditState {
             _ => self.common(key, n, true),
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
+        if cmd.is_repeatable_change() {
+            self.update_last_cmd(cmd.clone());
+        }
         Ok(cmd)
     }
 
@@ -435,6 +507,9 @@ impl EditState {
             _ => self.common(key, 1, true),
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
+        if cmd.is_repeatable_change() {
+            self.update_last_cmd(cmd.clone());
+        }
         Ok(cmd)
     }
 
@@ -617,6 +692,26 @@ impl EditState {
             unreachable!()
         } else {
             num_args.abs() as RepeatCount
+        }
+    }
+
+    fn update_last_cmd(&mut self, new: Cmd) {
+        // consecutive char inserts are repeatable not only the last one...
+        if let Cmd::SelfInsert(_, c) = new {
+            match self.last_cmd {
+                Cmd::SelfInsert(_, pc) => {
+                    let mut text = String::new();
+                    text.push(pc);
+                    text.push(c);
+                    self.last_cmd = Cmd::Insert(1, text);
+                }
+                Cmd::Insert(_, ref mut text) => {
+                    text.push(c);
+                }
+                _ => self.last_cmd = new,
+            }
+        } else {
+            self.last_cmd = new;
         }
     }
 }

@@ -170,6 +170,7 @@ pub struct EditState {
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd, // vi only
+    consecutive_insert: bool,
     last_char_search: Option<CharSearch>, // vi only
 }
 
@@ -180,6 +181,7 @@ impl EditState {
             insert: true,
             num_args: 0,
             last_cmd: Cmd::Noop,
+            consecutive_insert: false,
             last_char_search: None,
         }
     }
@@ -511,6 +513,10 @@ impl EditState {
         if cmd.is_repeatable_change() {
             self.update_last_cmd(cmd.clone());
         }
+        self.consecutive_insert = match cmd {
+            Cmd::SelfInsert(_, _) => true,
+            _ => false,
+        };
         Ok(cmd)
     }
 
@@ -698,7 +704,9 @@ impl EditState {
 
     fn update_last_cmd(&mut self, new: Cmd) {
         // consecutive char inserts are repeatable not only the last one...
-        if let Cmd::SelfInsert(_, c) = new {
+        if !self.consecutive_insert {
+            self.last_cmd = new;
+        } else if let Cmd::SelfInsert(_, c) = new {
             match self.last_cmd {
                 Cmd::SelfInsert(_, pc) => {
                     let mut text = String::new();

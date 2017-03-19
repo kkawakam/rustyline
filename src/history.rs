@@ -289,7 +289,7 @@ mod tests {
         let mut history = init();
         history.set_max_len(1);
         assert_eq!(1, history.entries.len());
-        assert_eq!(Some(&"line3".to_string()), history.last());
+        assert_eq!(Some(&"line3".to_owned()), history.last());
     }
 
     #[test]

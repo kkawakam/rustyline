@@ -187,9 +187,9 @@ mod tests {
         kill_ring.reset();
         kill_ring.kill("word2", Mode::Append);
 
-        assert_eq!(Some(&"word2".to_string()), kill_ring.yank());
+        assert_eq!(Some(&"word2".to_owned()), kill_ring.yank());
         assert_eq!(Action::Yank(5), kill_ring.last_action);
-        assert_eq!(Some(&"word2".to_string()), kill_ring.yank());
+        assert_eq!(Some(&"word2".to_owned()), kill_ring.yank());
         assert_eq!(Action::Yank(5), kill_ring.last_action);
     }
 
@@ -202,8 +202,8 @@ mod tests {
 
         assert_eq!(None, kill_ring.yank_pop());
         kill_ring.yank();
-        assert_eq!(Some((9, &"word1".to_string())), kill_ring.yank_pop());
-        assert_eq!(Some((5, &"longword2".to_string())), kill_ring.yank_pop());
-        assert_eq!(Some((9, &"word1".to_string())), kill_ring.yank_pop());
+        assert_eq!(Some((9, &"word1".to_owned())), kill_ring.yank_pop());
+        assert_eq!(Some((5, &"longword2".to_owned())), kill_ring.yank_pop());
+        assert_eq!(Some((9, &"word1".to_owned())), kill_ring.yank_pop());
     }
 }

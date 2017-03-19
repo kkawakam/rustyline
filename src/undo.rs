@@ -5,7 +5,7 @@ use unicode_segmentation::UnicodeSegmentation;
 enum Action {
     Insert(String), // QuotedInsert, SelfInsert, Yank
     Delete(String), /* BackwardDeleteChar, BackwardKillWord, DeleteChar, KillLine, KillWholeLine, KillWord, UnixLikeDiscard, ViDeleteTo */
-    Replace(String, String), /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
+                    //Replace(String, String), /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
 }
 
 struct Change {
@@ -23,9 +23,9 @@ impl Change {
                 line.insert_str(self.idx, text);
                 line.set_pos(self.idx + text.len());
             }
-            Action::Replace(ref old, ref new) => {
+            /*Action::Replace(ref old, ref new) => {
                 line.replace(self.idx..self.idx + new.len(), old);
-            }
+            }*/
         }
     }
 
@@ -38,9 +38,9 @@ impl Change {
             Action::Delete(ref text) => {
                 line.delete_range(self.idx..self.idx + text.len());
             }
-            Action::Replace(ref old, ref new) => {
+            /*Action::Replace(ref old, ref new) => {
                 line.replace(self.idx..self.idx + old.len(), new);
-            }
+            }*/
         }
     }
 
@@ -116,9 +116,9 @@ impl Changeset {
     pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
         self.undos.push(Change {
-            idx: idx,
-            action: Action::Insert(string.into()),
-        });
+                            idx: idx,
+                            action: Action::Insert(string.into()),
+                        });
     }
 
     pub fn delete<S: AsRef<str> + Into<String>>(&mut self, idx: usize, string: S) {
@@ -126,9 +126,9 @@ impl Changeset {
 
         if !Self::single_char(string.as_ref()) {
             self.undos.push(Change {
-                idx: idx,
-                action: Action::Delete(string.into()),
-            });
+                                idx: idx,
+                                action: Action::Delete(string.into()),
+                            });
             return;
         }
         let last_change = self.undos.pop();
@@ -151,16 +151,16 @@ impl Changeset {
                 } else {
                     self.undos.push(last_change);
                     self.undos.push(Change {
-                        idx: idx,
-                        action: Action::Delete(string.into()),
-                    });
+                                        idx: idx,
+                                        action: Action::Delete(string.into()),
+                                    });
                 }
             }
             None => {
                 self.undos.push(Change {
-                    idx: idx,
-                    action: Action::Delete(string.into()),
-                });
+                                    idx: idx,
+                                    action: Action::Delete(string.into()),
+                                });
             }
         };
     }
@@ -171,13 +171,13 @@ impl Changeset {
         graphemes.next().is_none()
     }
 
-    pub fn replace<S: Into<String>>(&mut self, idx: usize, old: String, new: S) {
+    /*pub fn replace<S: Into<String>>(&mut self, idx: usize, old: String, new: S) {
         self.redos.clear();
         self.undos.push(Change {
             idx: idx,
             action: Action::Replace(old.into(), new.into()),
         });
-    }
+    }*/
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
         match self.undos.pop() {
@@ -200,6 +200,11 @@ impl Changeset {
             }
             None => false,
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.undos.clear();
+        self.redos.clear();
     }
 }
 
@@ -230,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_undo_insert() {
-        let mut buf = LineBuffer::init("", 0);
+        let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hello");
         buf.insert_str(5, ", world!");
         let mut cs = Changeset::new();
@@ -251,12 +256,12 @@ mod tests {
 
     #[test]
     fn test_undo_delete() {
-        let mut buf = LineBuffer::init("", 0);
+        let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hello");
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello");
 
-        cs.delete(5, ", world!".to_string());
+        cs.delete(5, ", world!".to_owned());
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello, world!");
@@ -267,12 +272,12 @@ mod tests {
 
     #[test]
     fn test_delete_chars() {
-        let mut buf = LineBuffer::init("", 0);
+        let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hlo");
 
         let mut cs = Changeset::new();
-        cs.delete(1, "e".to_string());
-        cs.delete(1, "l".to_string());
+        cs.delete(1, "e".to_owned());
+        cs.delete(1, "l".to_owned());
         assert_eq!(1, cs.undos.len());
 
         cs.undo(&mut buf);
@@ -281,33 +286,33 @@ mod tests {
 
     #[test]
     fn test_backspace_chars() {
-        let mut buf = LineBuffer::init("", 0);
+        let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hlo");
 
         let mut cs = Changeset::new();
-        cs.delete(2, "l".to_string());
-        cs.delete(1, "e".to_string());
+        cs.delete(2, "l".to_owned());
+        cs.delete(1, "e".to_owned());
         assert_eq!(1, cs.undos.len());
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello");
     }
 
-    #[test]
+    /*#[test]
     fn test_undo_replace() {
-        let mut buf = LineBuffer::init("", 0);
+        let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hello, world!");
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello, world!");
 
         buf.replace(1..5, "i");
         assert_eq!(buf.as_str(), "Hi, world!");
-        cs.replace(1, "ello".to_string(), "i");
+        cs.replace(1, "ello".to_owned(), "i");
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello, world!");
 
         cs.redo(&mut buf);
         assert_eq!(buf.as_str(), "Hi, world!");
-    }
+    }*/
 }

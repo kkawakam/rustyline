@@ -43,11 +43,13 @@ mod undo;
 
 mod tty;
 
+use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::result;
+use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -55,7 +57,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
-use line_buffer::{LineBuffer, MAX_LINE, WordAction};
+use line_buffer::{ChangeListener, LineBuffer, MAX_LINE, WordAction};
 use keymap::{Anchor, At, CharSearch, Cmd, EditState, Movement, RepeatCount, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
@@ -78,7 +80,6 @@ struct State<'out, 'prompt> {
     term: Terminal, // terminal
     byte_buffer: [u8; 4],
     edit_state: EditState,
-    changes: Changeset,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -110,7 +111,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(config),
-            changes: Changeset::new(),
         }
     }
 
@@ -128,6 +128,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn snapshot(&mut self) {
         mem::swap(&mut self.line, &mut self.snapshot);
+        // TODO swap ChangeListener ?
     }
 
     fn backup(&mut self) {
@@ -209,9 +210,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         info.dwCursorPosition.Y -= self.cursor.row as i16;
         try!(self.term.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
-        try!(self.term
-            .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as u32,
-                                           info.dwCursorPosition));
+        try!(self.term.fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as
+                                                     u32,
+                                                     info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -419,7 +420,7 @@ fn edit_delete(s: &mut State, n: RepeatCount) -> Result<()> {
 
 /// Backspace implementation.
 fn edit_backspace(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.backspace(n).is_some() {
+    if s.line.backspace(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -427,22 +428,20 @@ fn edit_backspace(s: &mut State, n: RepeatCount) -> Result<()> {
 }
 
 /// Kill the text from point to the end of the line.
-fn edit_kill_line(s: &mut State) -> Result<Option<String>> {
-    if let Some(text) = s.line.kill_line() {
-        try!(s.refresh_line());
-        Ok(Some(text))
+fn edit_kill_line(s: &mut State) -> Result<()> {
+    if s.line.kill_line() {
+        s.refresh_line()
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
 /// Kill backward from point to the beginning of the line.
-fn edit_discard_line(s: &mut State) -> Result<Option<String>> {
-    if let Some(text) = s.line.discard_line() {
-        try!(s.refresh_line());
-        Ok(Some(text))
+fn edit_discard_line(s: &mut State) -> Result<()> {
+    if s.line.discard_line() {
+        s.refresh_line()
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -465,12 +464,11 @@ fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Resu
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_prev_word(word_def, n) {
-        try!(s.refresh_line());
-        Ok(Some(text))
+fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
+    if s.line.delete_prev_word(word_def, n) {
+        s.refresh_line()
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -491,25 +489,19 @@ fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State,
-                    at: At,
-                    word_def: Word,
-                    n: RepeatCount)
-                    -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_word(at, word_def, n) {
-        try!(s.refresh_line());
-        Ok(Some(text))
+fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
+    if s.line.delete_word(at, word_def, n) {
+        s.refresh_line()
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
-fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_to(cs, n) {
-        try!(s.refresh_line());
-        Ok(Some(text))
+fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
+    if s.line.delete_to(cs, n) {
+        s.refresh_line()
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -849,12 +841,14 @@ fn readline_edit<C: Completer>(prompt: &str,
 
     let mut stdout = editor.term.create_writer();
 
-    editor.kill_ring.reset();
+    editor.reset_kill_ring();
+    editor.clear_changes();
     let mut s = State::new(&mut stdout,
                            editor.term.clone(),
                            &editor.config,
                            prompt,
                            editor.history.len());
+    s.line.bind(Some(editor.listener.clone()));
     try!(s.refresh_line());
 
     let mut rdr = try!(s.term.create_reader(&editor.config));
@@ -867,7 +861,7 @@ fn readline_edit<C: Completer>(prompt: &str,
         if cmd == Cmd::Complete && completer.is_some() {
             let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
             if next.is_some() {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 cmd = next.unwrap();
             } else {
                 continue;
@@ -875,11 +869,11 @@ fn readline_edit<C: Completer>(prompt: &str,
         }
 
         if let Cmd::SelfInsert(n, c) = cmd {
-            editor.kill_ring.reset();
+            editor.reset_kill_ring();
             try!(edit_insert(&mut s, c, n));
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            editor.kill_ring.reset();
+            editor.reset_kill_ring();
             try!(edit_yank(&mut s, &text, Anchor::Before, n));
             continue;
         }
@@ -896,31 +890,31 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         match cmd {
             Cmd::BeginningOfLine => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
             Cmd::ViFirstPrint => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_move_home(&mut s));
                 try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
             }
             Cmd::BackwardChar(n) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Move back a character.
                 try!(edit_move_backward(&mut s, n))
             }
             Cmd::Kill(Movement::ForwardChar(n)) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Delete (forward) one character at point.
                 try!(edit_delete(&mut s, n))
             }
             Cmd::Replace(n, c) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_replace_char(&mut s, c, n));
             }
             Cmd::EndOfFile => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
                     try!(edit_move_end(&mut s));
                     break;
@@ -931,31 +925,29 @@ fn readline_edit<C: Completer>(prompt: &str,
                 }
             }
             Cmd::EndOfLine => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
             Cmd::ForwardChar(n) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Move forward a character.
                 try!(edit_move_forward(&mut s, n))
             }
             Cmd::Kill(Movement::BackwardChar(n)) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Delete one character backward.
                 try!(edit_backspace(&mut s, n))
             }
             Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
-                if let Some(text) = try!(edit_kill_line(&mut s)) {
-                    editor.kill_ring.kill(&text, Mode::Append)
-                }
+                editor.set_kill_ring_mode(Mode::Append);
+                try!(edit_kill_line(&mut s))
             }
             Cmd::Kill(Movement::WholeLine) => {
                 try!(edit_move_home(&mut s));
-                if let Some(text) = try!(edit_kill_line(&mut s)) {
-                    editor.kill_ring.kill(&text, Mode::Append)
-                }
+                editor.set_kill_ring_mode(Mode::Append);
+                try!(edit_kill_line(&mut s))
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
@@ -963,126 +955,126 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(s.refresh_line())
             }
             Cmd::NextHistory => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, false))
             }
             Cmd::PreviousHistory => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
             Cmd::TransposeChars => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
             Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
-                if let Some(text) = try!(edit_discard_line(&mut s)) {
-                    editor.kill_ring.kill(&text, Mode::Prepend)
-                }
+                editor.set_kill_ring_mode(Mode::Prepend);
+                try!(edit_discard_line(&mut s))
             }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c, 1)) // FIXME
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
-                if let Some(text) = editor.kill_ring.yank() {
+                if let Some(text) = editor.listener.borrow_mut().kill_ring.yank() {
                     try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 if let Some(text) = s.line.copy(mvt) {
-                    editor.kill_ring.kill(&text, Mode::Append)
+                    editor.kill(&text, Mode::Append)
                 }
             }
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_move_end(&mut s));
                 break;
             }
             Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
                 // kill one word backward (until start of word)
-                if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def, n)) {
-                    editor.kill_ring.kill(&text, Mode::Prepend)
-                }
+                editor.set_kill_ring_mode(Mode::Prepend);
+                try!(edit_delete_prev_word(&mut s, word_def, n))
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_history(&mut s, &editor.history, true))
             }
             Cmd::EndOfHistory => {
                 // move to last entry in history
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_history(&mut s, &editor.history, false))
             }
             Cmd::BackwardWord(n, word_def) => {
                 // move backwards one word
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_move_to_prev_word(&mut s, word_def, n))
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
             Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
                 // kill one word forward (until start/end of word)
-                if let Some(text) = try!(edit_delete_word(&mut s, at, word_def, n)) {
-                    editor.kill_ring.kill(&text, Mode::Append)
-                }
+                editor.set_kill_ring_mode(Mode::Append);
+                try!(edit_delete_word(&mut s, at, word_def, n))
             }
             Cmd::ForwardWord(n, at, word_def) => {
                 // move forwards one word
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_move_to_next_word(&mut s, at, word_def, n))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
             Cmd::TransposeWords(n) => {
                 // transpose words
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_transpose_words(&mut s, n))
             }
             Cmd::UpcaseWord => {
                 // uppercase word after point
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
             Cmd::YankPop => {
                 // yank-pop
-                if let Some((yank_size, text)) = editor.kill_ring.yank_pop() {
+                if let Some((yank_size, text)) = editor.listener.borrow_mut().kill_ring.yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
             Cmd::ViCharSearch(n, cs) => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 try!(edit_move_to(&mut s, cs, n))
             }
             Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
-                if let Some(text) = try!(edit_delete_to(&mut s, cs, n)) {
-                    editor.kill_ring.kill(&text, Mode::Append)
+                if cs.is_backward() {
+                    editor.set_kill_ring_mode(Mode::Prepend);
+                } else {
+                    editor.set_kill_ring_mode(Mode::Append);
                 }
+                try!(edit_delete_to(&mut s, cs, n))
             }
             Cmd::Undo => {
-                if s.changes.undo(&mut s.line) {
+                if editor.undo(&mut s.line) {
                     try!(s.refresh_line());
                 }
             }
             Cmd::Interrupt => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 return Err(error::ReadlineError::Interrupted);
             }
             #[cfg(unix)]
@@ -1095,7 +1087,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Noop => {}
             _ => {
-                editor.kill_ring.reset();
+                editor.reset_kill_ring();
                 // Ignore the character typed.
             }
         }
@@ -1138,8 +1130,69 @@ pub struct Editor<C: Completer> {
     term: Terminal,
     history: History,
     completer: Option<C>,
-    kill_ring: KillRing,
+    listener: Rc<RefCell<Listener>>,
     config: Config,
+}
+
+struct Listener {
+    kill_ring: KillRing,
+    mode: Option<Mode>,
+    changes: Changeset, // FIXME useful only during one line edition (versus kill_ring)
+    undoing: bool,
+}
+
+impl Listener {
+    fn new() -> Rc<RefCell<Listener>> {
+        let l = Listener {
+            kill_ring: KillRing::new(60),
+            mode: None,
+            changes: Changeset::new(),
+            undoing: false,
+        };
+        Rc::new(RefCell::new(l))
+    }
+
+    fn reset_kill_ring(&mut self) {
+        self.kill_ring.reset();
+        self.mode = None;
+    }
+    fn set_kill_ring_mode(&mut self, mode: Mode) {
+        self.mode = Some(mode);
+    }
+
+    fn undo(&mut self, line: &mut LineBuffer) -> bool {
+        self.undoing = true;
+        let ok = self.changes.undo(line);
+        self.undoing = false;
+        ok
+    }
+    fn clear_changes(&mut self) {
+        self.changes.clear();
+    }
+}
+impl ChangeListener for Listener {
+    fn insert_char(&mut self, idx: usize, c: char) {
+        if self.undoing {
+            return;
+        }
+        self.changes.insert(idx, c);
+    }
+    fn insert_str(&mut self, idx: usize, string: &str) {
+        if self.undoing {
+            return;
+        }
+        self.changes.insert_str(idx, string);
+    }
+    fn delete(&mut self, idx: usize, string: &str) {
+        if self.mode.is_some() {
+            self.kill_ring.kill(string, self.mode.unwrap());
+            self.mode = None;
+        }
+        if self.undoing {
+            return;
+        }
+        self.changes.delete(idx, string);
+    }
 }
 
 impl<C: Completer> Editor<C> {
@@ -1153,7 +1206,7 @@ impl<C: Completer> Editor<C> {
             term: term,
             history: History::with_config(config),
             completer: None,
-            kill_ring: KillRing::new(60),
+            listener: Listener::new(),
             config: config,
         }
     }
@@ -1222,6 +1275,23 @@ impl<C: Completer> Editor<C> {
             prompt: prompt,
         }
     }
+
+    fn reset_kill_ring(&self) {
+        self.listener.borrow_mut().reset_kill_ring();
+    }
+    fn set_kill_ring_mode(&self, mode: Mode) {
+        self.listener.borrow_mut().set_kill_ring_mode(mode);
+    }
+    fn kill(&self, text: &str, dir: Mode) {
+        self.listener.borrow_mut().kill_ring.kill(text, dir)
+    }
+
+    fn undo(&self, line: &mut LineBuffer) -> bool {
+        self.listener.borrow_mut().undo(line)
+    }
+    fn clear_changes(&self) {
+        self.listener.borrow_mut().clear_changes()
+    }
 }
 
 impl<C: Completer> fmt::Debug for Editor<C> {
@@ -1267,7 +1337,6 @@ mod test {
     use keymap::{Cmd, EditState};
     use super::{Editor, Position, Result, State};
     use tty::{Terminal, Term};
-    use undo::Changeset;
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1280,7 +1349,7 @@ mod test {
             out: out,
             prompt: "",
             prompt_size: Position::default(),
-            line: LineBuffer::init(line, pos),
+            line: LineBuffer::init(line, pos, None),
             cursor: Position::default(),
             cols: cols,
             old_rows: 0,
@@ -1289,7 +1358,6 @@ mod test {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(&config),
-            changes: Changeset::new(),
         }
     }
 
@@ -1340,7 +1408,7 @@ mod test {
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
         fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
-            Ok((0, vec![line.to_string() + "t"]))
+            Ok((0, vec![line.to_owned() + "t"]))
         }
     }
 

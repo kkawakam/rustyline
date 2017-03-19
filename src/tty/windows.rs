@@ -79,9 +79,9 @@ impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
-            handle: handle,
-            buf: None,
-        })
+               handle: handle,
+               buf: None,
+           })
     }
 }
 
@@ -288,9 +288,9 @@ impl Term for Console {
         let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
         check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
-            original_mode: original_mode,
-            stdin_handle: self.stdin_handle,
-        })
+               original_mode: original_mode,
+               stdin_handle: self.stdin_handle,
+           })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {

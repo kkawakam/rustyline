@@ -56,7 +56,11 @@ impl History {
             return false;
         }
         if line.as_ref().is_empty() ||
-           (self.ignore_space && line.as_ref().chars().next().map_or(true, |c| c.is_whitespace())) {
+           (self.ignore_space &&
+            line.as_ref()
+                .chars()
+                .next()
+                .map_or(true, |c| c.is_whitespace())) {
             return false;
         }
         if self.ignore_dups {
@@ -160,7 +164,10 @@ impl History {
                 index.and_then(|index| Some(start - index))
             }
             Direction::Forward => {
-                let index = self.entries.iter().skip(start).position(|entry| entry.contains(term));
+                let index = self.entries
+                    .iter()
+                    .skip(start)
+                    .position(|entry| entry.contains(term));
                 index.and_then(|index| Some(index + start))
             }
         }
@@ -260,9 +267,7 @@ mod tests {
 
     #[test]
     fn add() {
-        let config = Config::builder()
-            .history_ignore_space(true)
-            .build();
+        let config = Config::builder().history_ignore_space(true).build();
         let mut history = History::with_config(config);
         assert_eq!(config.max_history_size(), history.max_len);
         assert!(history.add("line1"));
@@ -277,7 +282,7 @@ mod tests {
         let mut history = init();
         history.set_max_len(1);
         assert_eq!(1, history.entries.len());
-        assert_eq!(Some(&"line3".to_string()), history.last());
+        assert_eq!(Some(&"line3".to_owned()), history.last());
     }
 
     #[test]

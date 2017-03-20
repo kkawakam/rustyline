@@ -57,7 +57,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
-use line_buffer::{ChangeListener, LineBuffer, MAX_LINE, WordAction};
+use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use keymap::{Anchor, At, CharSearch, Cmd, EditState, Movement, RepeatCount, Word};
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
@@ -80,6 +80,7 @@ struct State<'out, 'prompt> {
     term: Terminal, // terminal
     byte_buffer: [u8; 4],
     edit_state: EditState,
+    changes: Rc<RefCell<Changeset>>,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -111,6 +112,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(config),
+            changes: Rc::new(RefCell::new(Changeset::new())),
         }
     }
 
@@ -829,6 +831,9 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
     Ok(Some(cmd))
 }
 
+static KILL_RING_NAME: &'static str = "kill_ring";
+static UNDOS_NAME: &'static str = "undos";
+
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -842,13 +847,12 @@ fn readline_edit<C: Completer>(prompt: &str,
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring();
-    editor.clear_changes();
     let mut s = State::new(&mut stdout,
                            editor.term.clone(),
                            &editor.config,
                            prompt,
                            editor.history.len());
-    s.line.bind(Some(editor.listener.clone()));
+    s.line.bind(UNDOS_NAME, s.changes.clone());
     try!(s.refresh_line());
 
     let mut rdr = try!(s.term.create_reader(&editor.config));
@@ -941,13 +945,15 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
-                editor.set_kill_ring_mode(Mode::Append);
-                try!(edit_kill_line(&mut s))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_kill_line(&mut s));
+                s.line.unbind(KILL_RING_NAME);
             }
             Cmd::Kill(Movement::WholeLine) => {
                 try!(edit_move_home(&mut s));
-                editor.set_kill_ring_mode(Mode::Append);
-                try!(edit_kill_line(&mut s))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_kill_line(&mut s));
+                s.line.unbind(KILL_RING_NAME);
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
@@ -971,8 +977,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
-                editor.set_kill_ring_mode(Mode::Prepend);
-                try!(edit_discard_line(&mut s))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_discard_line(&mut s));
+                s.line.unbind(KILL_RING_NAME);
             }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
@@ -983,14 +990,14 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
-                if let Some(text) = editor.listener.borrow_mut().kill_ring.yank() {
+                if let Some(text) = editor.kill_ring.borrow_mut().yank() {
                     try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => {
                 editor.reset_kill_ring();
                 if let Some(text) = s.line.copy(mvt) {
-                    editor.kill(&text, Mode::Append)
+                    editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
                 }
             }
             // TODO CTRL-_ // undo
@@ -1002,8 +1009,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
                 // kill one word backward (until start of word)
-                editor.set_kill_ring_mode(Mode::Prepend);
-                try!(edit_delete_prev_word(&mut s, word_def, n))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_delete_prev_word(&mut s, word_def, n));
+                s.line.unbind(KILL_RING_NAME);
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -1027,8 +1035,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
                 // kill one word forward (until start/end of word)
-                editor.set_kill_ring_mode(Mode::Append);
-                try!(edit_delete_word(&mut s, at, word_def, n))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_delete_word(&mut s, at, word_def, n));
+                s.line.unbind(KILL_RING_NAME);
             }
             Cmd::ForwardWord(n, at, word_def) => {
                 // move forwards one word
@@ -1052,7 +1061,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::YankPop => {
                 // yank-pop
-                if let Some((yank_size, text)) = editor.listener.borrow_mut().kill_ring.yank_pop() {
+                if let Some((yank_size, text)) = editor.kill_ring.borrow_mut().yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
@@ -1061,17 +1070,16 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_move_to(&mut s, cs, n))
             }
             Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
-                if cs.is_backward() {
-                    editor.set_kill_ring_mode(Mode::Prepend);
-                } else {
-                    editor.set_kill_ring_mode(Mode::Append);
-                }
-                try!(edit_delete_to(&mut s, cs, n))
+                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                try!(edit_delete_to(&mut s, cs, n));
+                s.line.unbind(KILL_RING_NAME);
             }
             Cmd::Undo => {
-                if editor.undo(&mut s.line) {
+                s.line.unbind(UNDOS_NAME);
+                if s.changes.borrow_mut().undo(&mut s.line) {
                     try!(s.refresh_line());
                 }
+                s.line.bind(UNDOS_NAME, s.changes.clone());
             }
             Cmd::Interrupt => {
                 editor.reset_kill_ring();
@@ -1130,69 +1138,8 @@ pub struct Editor<C: Completer> {
     term: Terminal,
     history: History,
     completer: Option<C>,
-    listener: Rc<RefCell<Listener>>,
+    kill_ring: Rc<RefCell<KillRing>>,
     config: Config,
-}
-
-struct Listener {
-    kill_ring: KillRing,
-    mode: Option<Mode>,
-    changes: Changeset, // FIXME useful only during one line edition (versus kill_ring)
-    undoing: bool,
-}
-
-impl Listener {
-    fn new() -> Rc<RefCell<Listener>> {
-        let l = Listener {
-            kill_ring: KillRing::new(60),
-            mode: None,
-            changes: Changeset::new(),
-            undoing: false,
-        };
-        Rc::new(RefCell::new(l))
-    }
-
-    fn reset_kill_ring(&mut self) {
-        self.kill_ring.reset();
-        self.mode = None;
-    }
-    fn set_kill_ring_mode(&mut self, mode: Mode) {
-        self.mode = Some(mode);
-    }
-
-    fn undo(&mut self, line: &mut LineBuffer) -> bool {
-        self.undoing = true;
-        let ok = self.changes.undo(line);
-        self.undoing = false;
-        ok
-    }
-    fn clear_changes(&mut self) {
-        self.changes.clear();
-    }
-}
-impl ChangeListener for Listener {
-    fn insert_char(&mut self, idx: usize, c: char) {
-        if self.undoing {
-            return;
-        }
-        self.changes.insert(idx, c);
-    }
-    fn insert_str(&mut self, idx: usize, string: &str) {
-        if self.undoing {
-            return;
-        }
-        self.changes.insert_str(idx, string);
-    }
-    fn delete(&mut self, idx: usize, string: &str) {
-        if self.mode.is_some() {
-            self.kill_ring.kill(string, self.mode.unwrap());
-            self.mode = None;
-        }
-        if self.undoing {
-            return;
-        }
-        self.changes.delete(idx, string);
-    }
 }
 
 impl<C: Completer> Editor<C> {
@@ -1206,7 +1153,7 @@ impl<C: Completer> Editor<C> {
             term: term,
             history: History::with_config(config),
             completer: None,
-            listener: Listener::new(),
+            kill_ring: Rc::new(RefCell::new(KillRing::new(60))),
             config: config,
         }
     }
@@ -1277,20 +1224,7 @@ impl<C: Completer> Editor<C> {
     }
 
     fn reset_kill_ring(&self) {
-        self.listener.borrow_mut().reset_kill_ring();
-    }
-    fn set_kill_ring_mode(&self, mode: Mode) {
-        self.listener.borrow_mut().set_kill_ring_mode(mode);
-    }
-    fn kill(&self, text: &str, dir: Mode) {
-        self.listener.borrow_mut().kill_ring.kill(text, dir)
-    }
-
-    fn undo(&self, line: &mut LineBuffer) -> bool {
-        self.listener.borrow_mut().undo(line)
-    }
-    fn clear_changes(&self) {
-        self.listener.borrow_mut().clear_changes()
+        self.kill_ring.borrow_mut().reset();
     }
 }
 
@@ -1328,7 +1262,9 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
     use std::io::Write;
+    use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
@@ -1337,6 +1273,7 @@ mod test {
     use keymap::{Cmd, EditState};
     use super::{Editor, Position, Result, State};
     use tty::{Terminal, Term};
+    use undo::Changeset;
 
     fn init_state<'out>(out: &'out mut Write,
                         line: &str,
@@ -1358,6 +1295,7 @@ mod test {
             term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(&config),
+            changes: Rc::new(RefCell::new(Changeset::new())),
         }
     }
 

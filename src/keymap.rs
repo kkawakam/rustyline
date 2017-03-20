@@ -119,15 +119,6 @@ pub enum CharSearch {
 }
 
 impl CharSearch {
-    pub fn is_backward(&self) -> bool {
-        match *self {
-            CharSearch::Forward(_) => false,
-            CharSearch::ForwardBefore(_) => false,
-            CharSearch::Backward(_) => true,
-            CharSearch::BackwardAfter(_) => true,
-        }
-    }
-
     fn opposite(&self) -> CharSearch {
         match *self {
             CharSearch::Forward(c) => CharSearch::Backward(c),

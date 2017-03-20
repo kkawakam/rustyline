@@ -1,5 +1,5 @@
 //! Undo API
-use line_buffer::LineBuffer;
+use line_buffer::{ChangeListener, Direction, LineBuffer};
 use unicode_segmentation::UnicodeSegmentation;
 
 enum Action {
@@ -201,10 +201,17 @@ impl Changeset {
             None => false,
         }
     }
+}
 
-    pub fn clear(&mut self) {
-        self.undos.clear();
-        self.redos.clear();
+impl ChangeListener for Changeset {
+    fn insert_char(&mut self, idx: usize, c: char) {
+        self.insert(idx, c);
+    }
+    fn insert_str(&mut self, idx: usize, string: &str) {
+        self.insert_str(idx, string);
+    }
+    fn delete(&mut self, idx: usize, string: &str, _: Direction) {
+        self.delete(idx, string);
     }
 }
 

@@ -1,4 +1,5 @@
 //! Kill Ring
+use line_buffer::{ChangeListener, Direction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -99,6 +100,18 @@ impl KillRing {
             }
             _ => None,
         }
+    }
+}
+
+impl ChangeListener for KillRing {
+    fn insert_char(&mut self, _: usize, _: char) {}
+    fn insert_str(&mut self, _: usize, _: &str) {}
+    fn delete(&mut self, _: usize, string: &str, dir: Direction) {
+        let mode = match dir {
+            Direction::Forward => Mode::Append,
+            Direction::Backward => Mode::Prepend,
+        };
+        self.kill(string, mode);
     }
 }
 

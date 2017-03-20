@@ -1,5 +1,6 @@
 //! Line buffer with current cursor position
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::iter;
 use std::ops::{Deref, Range};
@@ -17,16 +18,28 @@ pub enum WordAction {
     UPPERCASE,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Forward,
+    Backward
+}
+
+impl Default for Direction {
+    fn default() -> Direction {
+        Direction::Forward
+    }
+}
+
 pub trait ChangeListener {
     fn insert_char(&mut self, idx: usize, c: char);
     fn insert_str(&mut self, idx: usize, string: &str);
-    fn delete(&mut self, idx: usize, string: &str);
+    fn delete(&mut self, idx: usize, string: &str, dir: Direction);
 }
 
 pub struct LineBuffer {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
-    cl: Option<Rc<RefCell<ChangeListener>>>,
+    cl: HashMap<&'static str, Rc<RefCell<ChangeListener>>>,
 }
 
 impl fmt::Debug for LineBuffer {
@@ -44,7 +57,7 @@ impl LineBuffer {
         LineBuffer {
             buf: String::with_capacity(capacity),
             pos: 0,
-            cl: None,
+            cl: HashMap::new(),
         }
     }
 
@@ -53,12 +66,17 @@ impl LineBuffer {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
-        lb.cl = cl;
+        if cl.is_some() {
+            lb.bind("test", cl.unwrap());
+        }
         lb
     }
 
-    pub fn bind(&mut self, cl: Option<Rc<RefCell<ChangeListener>>>) {
-        self.cl = cl;
+    pub fn bind(&mut self, key: &'static str, cl: Rc<RefCell<ChangeListener>>) {
+        self.cl.insert(key, cl);
+    }
+    pub fn unbind(&mut self, key: &'static str) {
+        self.cl.remove(key);
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -93,7 +111,7 @@ impl LineBuffer {
     pub fn update(&mut self, buf: &str, pos: usize) {
         assert!(pos <= buf.len());
         let end = self.len();
-        self.drain(0..end);
+        self.drain(0..end, Direction::default());
         let max = self.buf.capacity();
         if buf.len() > max {
             self.insert_str(0, &buf[..max]);
@@ -111,7 +129,7 @@ impl LineBuffer {
     /// Backup `src`
     pub fn backup(&mut self, src: &LineBuffer) {
         let end = self.len();
-        self.drain(0..end);
+        self.drain(0..end, Direction::default());
         self.insert_str(0, &src.buf);
         self.pos = src.pos;
     }
@@ -160,7 +178,7 @@ impl LineBuffer {
         let push = self.pos == self.buf.len();
         if n == 1 {
             self.buf.insert(self.pos, ch);
-            for cl in &self.cl {
+            for (_, cl) in &self.cl {
                 cl.borrow_mut().insert_char(self.pos, ch);
             }
         } else {
@@ -196,7 +214,7 @@ impl LineBuffer {
     pub fn yank_pop(&mut self, yank_size: usize, text: &str) -> Option<bool> {
         let end = self.pos;
         let start = end - yank_size;
-        self.drain(start..end);
+        self.drain(start..end, Direction::default());
         self.pos -= yank_size;
         self.yank(text, 1)
     }
@@ -250,7 +268,7 @@ impl LineBuffer {
         match self.next_pos(n) {
             Some(pos) => {
                 let start = self.pos;
-                let chars = self.drain(start..pos).collect::<String>();
+                let chars = self.drain(start..pos, Direction::Forward).collect::<String>();
                 Some(chars)
             }
             None => None,
@@ -263,7 +281,7 @@ impl LineBuffer {
         match self.prev_pos(n) {
             Some(pos) => {
                 let end = self.pos;
-                self.drain(pos..end);
+                self.drain(pos..end, Direction::Backward);
                 self.pos = pos;
                 true
             }
@@ -276,7 +294,7 @@ impl LineBuffer {
         if !self.buf.is_empty() && self.pos < self.buf.len() {
             let start = self.pos;
             let end = self.buf.len();
-            self.drain(start..end);
+            self.drain(start..end, Direction::Forward);
             true
         } else {
             false
@@ -287,7 +305,7 @@ impl LineBuffer {
     pub fn discard_line(&mut self) -> bool {
         if self.pos > 0 && !self.buf.is_empty() {
             let end = self.pos;
-            self.drain(0..end);
+            self.drain(0..end, Direction::Backward);
             self.pos = 0;
             true
         } else {
@@ -360,7 +378,7 @@ impl LineBuffer {
     pub fn delete_prev_word(&mut self, word_def: Word, n: RepeatCount) -> bool {
         if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             let end = self.pos;
-            self.drain(pos..end);
+            self.drain(pos..end, Direction::Backward);
             self.pos = pos;
             true
         } else {
@@ -501,7 +519,7 @@ impl LineBuffer {
     pub fn delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> bool {
         if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
             let start = self.pos;
-            self.drain(start..pos);
+            self.drain(start..pos, Direction::Forward);
             true
         } else {
             false
@@ -519,15 +537,15 @@ impl LineBuffer {
                 CharSearch::BackwardAfter(_) => {
                     let end = self.pos;
                     self.pos = pos;
-                    self.drain(pos..end);
+                    self.drain(pos..end, Direction::Backward);
                 }
                 CharSearch::ForwardBefore(_) => {
                     let start = self.pos;
-                    self.drain(start..pos);
+                    self.drain(start..pos, Direction::Forward);
                 }
                 CharSearch::Forward(c) => {
                     let start = self.pos;
-                    self.drain(start..pos + c.len_utf8());
+                    self.drain(start..pos + c.len_utf8(), Direction::Forward);
                 }
             };
             true
@@ -554,7 +572,7 @@ impl LineBuffer {
                 if start == end {
                     return false;
                 }
-                let word = self.drain(start..end).collect::<String>();
+                let word = self.drain(start..end, Direction::default()).collect::<String>();
                 let result = match a {
                     WordAction::CAPITALIZE => {
                         let ch = (&word).graphemes(true).next().unwrap();
@@ -589,10 +607,10 @@ impl LineBuffer {
 
         let w1 = self.buf[w1_beg..w1_end].to_owned();
 
-        let w2 = self.drain(w2_beg..w2_end).collect::<String>();
+        let w2 = self.drain(w2_beg..w2_end, Direction::default()).collect::<String>();
         self.insert_str(w2_beg, &w1);
 
-        self.drain(w1_beg..w1_end);
+        self.drain(w1_beg..w1_end, Direction::default());
         self.insert_str(w1_beg, &w2);
 
         self.pos = w2_end;
@@ -603,13 +621,13 @@ impl LineBuffer {
     /// and positions the cursor to the end of text.
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
-        self.drain(range);
+        self.drain(range, Direction::default());
         self.insert_str(start, text);
         self.pos = start + text.len();
     }
 
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
-        for cl in &self.cl {
+        for (_, cl) in &self.cl {
             cl.borrow_mut().insert_str(idx, s);
         }
         if idx == self.buf.len() {
@@ -622,12 +640,13 @@ impl LineBuffer {
     }
 
     pub fn delete_range(&mut self, range: Range<usize>) {
-        self.drain(range);
+        self.set_pos(range.start);
+        self.drain(range, Direction::default());
     }
 
-    fn drain(&mut self, range: Range<usize>) -> Drain {
-        for cl in &self.cl {
-            cl.borrow_mut().delete(range.start, &self.buf[range.start..range.end]);
+    fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
+        for (_, cl) in &self.cl {
+            cl.borrow_mut().delete(range.start, &self.buf[range.start..range.end], dir);
         }
         self.buf.drain(range)
     }
@@ -768,7 +787,7 @@ mod test {
     use std::cell::RefCell;
     use std::rc::Rc;
     use keymap::{At, CharSearch, Word};
-    use super::{ChangeListener, LineBuffer, MAX_LINE, WordAction};
+    use super::{ChangeListener, Direction, LineBuffer, MAX_LINE, WordAction};
 
     struct Listener {
         deleted_str: Option<String>,
@@ -789,7 +808,7 @@ mod test {
     impl ChangeListener for Listener {
         fn insert_char(&mut self, _: usize, _: char) {}
         fn insert_str(&mut self, _: usize, _: &str) {}
-        fn delete(&mut self, _: usize, string: &str) {
+        fn delete(&mut self, _: usize, string: &str, _: Direction) {
             self.deleted_str = Some(string.to_owned());
         }
     }

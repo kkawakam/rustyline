@@ -48,13 +48,13 @@ pub enum Cmd {
 impl Cmd {
     fn is_repeatable_change(&self) -> bool {
         match *self {
-            Cmd::Insert(_, _) => true,
-            Cmd::Kill(_) => true,
-            Cmd::Replace(_, _) => true,
-            Cmd::SelfInsert(_, _) => true,
-            Cmd::TransposeChars => false, // TODO Validate
-            Cmd::ViYankTo(_) => true,
+            Cmd::Insert(_, _) |
+            Cmd::Kill(_) |
+            Cmd::Replace(_, _) |
+            Cmd::SelfInsert(_, _) |
+            Cmd::ViYankTo(_) |
             Cmd::Yank(_, _) => true,
+            Cmd::TransposeChars => false, // TODO Validate
             _ => false,
         }
     }

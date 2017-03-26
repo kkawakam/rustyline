@@ -216,9 +216,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         info.dwCursorPosition.Y -= self.cursor.row as i16;
         try!(self.term.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
-        try!(self.term.fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as
-                                                     u32,
-                                                     info.dwCursorPosition));
+        try!(self.term
+            .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as u32,
+                                           info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)

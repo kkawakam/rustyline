@@ -117,9 +117,9 @@ impl Changeset {
     pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
         self.undos.push(Change {
-                            idx: idx,
-                            action: Action::Insert(string.into()),
-                        });
+            idx: idx,
+            action: Action::Insert(string.into()),
+        });
     }
 
     pub fn delete<S: AsRef<str> + Into<String>>(&mut self, idx: usize, string: S) {
@@ -127,9 +127,9 @@ impl Changeset {
 
         if !Self::single_char(string.as_ref()) {
             self.undos.push(Change {
-                                idx: idx,
-                                action: Action::Delete(string.into()),
-                            });
+                idx: idx,
+                action: Action::Delete(string.into()),
+            });
             return;
         }
         let last_change = self.undos.pop();
@@ -152,16 +152,16 @@ impl Changeset {
                 } else {
                     self.undos.push(last_change);
                     self.undos.push(Change {
-                                        idx: idx,
-                                        action: Action::Delete(string.into()),
-                                    });
+                        idx: idx,
+                        action: Action::Delete(string.into()),
+                    });
                 }
             }
             None => {
                 self.undos.push(Change {
-                                    idx: idx,
-                                    action: Action::Delete(string.into()),
-                                });
+                    idx: idx,
+                    action: Action::Delete(string.into()),
+                });
             }
         };
     }

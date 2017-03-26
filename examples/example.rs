@@ -70,7 +70,7 @@ impl log::Log for Logger {
 
 fn init_logger() -> Result<(), SetLoggerError> {
     log::set_logger(|max_log_level| {
-                        max_log_level.set(LogLevelFilter::Info);
-                        Box::new(Logger)
-                    })
+        max_log_level.set(LogLevelFilter::Info);
+        Box::new(Logger)
+    })
 }

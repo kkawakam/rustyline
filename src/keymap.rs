@@ -1,4 +1,8 @@
 //! Bindings from keys to command for Emacs and Vi modes
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use config::Config;
 use config::EditMode;
 use consts::KeyPress;
@@ -54,6 +58,12 @@ impl Cmd {
             _ => false,
         }
     }
+    fn is_repeatable(&self) -> bool {
+        match *self {
+            Cmd::Move(_) => true,
+            _ => self.is_repeatable_change(),
+        }
+    }
 
     fn redo(&self, new: Option<RepeatCount>) -> Cmd {
         match *self {
@@ -61,6 +71,7 @@ impl Cmd {
                 Cmd::Insert(repeat_count(previous, new), text.clone())
             }
             Cmd::Kill(ref mvt) => Cmd::Kill(mvt.redo(new)),
+            Cmd::Move(ref mvt) => Cmd::Move(mvt.redo(new)),
             Cmd::Replace(previous, c) => Cmd::Replace(repeat_count(previous, new), c),
             Cmd::SelfInsert(previous, c) => Cmd::SelfInsert(repeat_count(previous, new), c),
             //Cmd::TransposeChars => Cmd::TransposeChars,
@@ -160,6 +171,7 @@ impl Movement {
 
 pub struct EditState {
     mode: EditMode,
+    custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
     // Vi Command/Alternate, Insert/Input mode
     insert: bool, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
@@ -170,9 +182,10 @@ pub struct EditState {
 }
 
 impl EditState {
-    pub fn new(config: &Config) -> EditState {
+    pub fn new(config: &Config, custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>) -> EditState {
         EditState {
             mode: config.edit_mode(),
+            custom_bindings: custom_bindings,
             insert: true,
             num_args: 0,
             last_cmd: Cmd::Noop,
@@ -230,6 +243,13 @@ impl EditState {
             key = try!(self.emacs_digit_argument(rdr, digit));
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
+        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(Some(n))
+            } else {
+                cmd.clone()
+            });
+        }
         let cmd = match key {
             KeyPress::Char(c) => {
                 if positive {
@@ -347,6 +367,17 @@ impl EditState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
+        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            return Ok(if cmd.is_repeatable() {
+                if no_num_args {
+                    cmd.redo(None)
+                } else {
+                    cmd.redo(Some(n))
+                }
+            } else {
+                cmd.clone()
+            });
+        }
         let cmd = match key {
             KeyPress::Char('$') |
             KeyPress::End => Cmd::Move(Movement::EndOfLine),
@@ -492,6 +523,13 @@ impl EditState {
 
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         let key = try!(rdr.next_key());
+        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(None)
+            } else {
+                cmd.clone()
+            });
+        }
         let cmd = match key {
             KeyPress::Char(c) => Cmd::SelfInsert(1, c),
             KeyPress::Ctrl('H') |

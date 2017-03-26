@@ -1,5 +1,6 @@
+//! Key constants
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyPress {
     UnknownEscSeq,
     Backspace,

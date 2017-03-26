@@ -42,10 +42,13 @@ pub mod config;
 
 mod tty;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
+use std::rc::Rc;
 use std::result;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -56,9 +59,11 @@ use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
-use keymap::{Anchor, At, CharSearch, Cmd, EditState, Movement, RepeatCount, Word};
+pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+use keymap::EditState;
 use kill_ring::{Mode, KillRing};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
+pub use consts::KeyPress;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -89,7 +94,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
            term: Terminal,
            config: &Config,
            prompt: &'prompt str,
-           history_index: usize)
+           history_index: usize,
+           custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let cols = term.get_columns();
@@ -105,7 +111,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
-            edit_state: EditState::new(config),
+            edit_state: EditState::new(config, custom_bindings),
         }
     }
 
@@ -847,7 +853,8 @@ fn readline_edit<C: Completer>(prompt: &str,
                            editor.term.clone(),
                            &editor.config,
                            prompt,
-                           editor.history.len());
+                           editor.history.len(),
+                           editor.custom_bindings.clone());
     try!(s.refresh_line());
 
     let mut rdr = try!(s.term.create_reader(&editor.config));
@@ -1128,6 +1135,7 @@ pub struct Editor<C: Completer> {
     completer: Option<C>,
     kill_ring: KillRing,
     config: Config,
+    custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
 }
 
 impl<C: Completer> Editor<C> {
@@ -1143,6 +1151,7 @@ impl<C: Completer> Editor<C> {
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
+            custom_bindings: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -1188,6 +1197,15 @@ impl<C: Completer> Editor<C> {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<C>) {
         self.completer = completer;
+    }
+
+    /// Bind a sequence to a command.
+    pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
+        self.custom_bindings.borrow_mut().insert(key_seq, cmd)
+    }
+    /// Remove a binding for the given sequence.
+    pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
+        self.custom_bindings.borrow_mut().remove(&key_seq)
     }
 
     /// ```
@@ -1246,7 +1264,10 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::io::Write;
+    use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
@@ -1274,7 +1295,7 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
-            edit_state: EditState::new(&config),
+            edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
         }
     }
 

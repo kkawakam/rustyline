@@ -21,7 +21,7 @@ pub enum WordAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Forward,
-    Backward
+    Backward,
 }
 
 impl Default for Direction {
@@ -178,7 +178,7 @@ impl LineBuffer {
         let push = self.pos == self.buf.len();
         if n == 1 {
             self.buf.insert(self.pos, ch);
-            for (_, cl) in &self.cl {
+            for cl in self.cl.values() {
                 cl.borrow_mut().insert_char(self.pos, ch);
             }
         } else {
@@ -488,18 +488,18 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             Some(match *cs {
-                     CharSearch::Backward(_) => pos,
-                     CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
-                     CharSearch::Forward(_) => shift + pos,
-                     CharSearch::ForwardBefore(_) => {
-                         shift + pos -
-                         self.buf[..shift + pos]
-                             .chars()
-                             .next_back()
-                             .unwrap()
-                             .len_utf8()
-                     }
-                 })
+                CharSearch::Backward(_) => pos,
+                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                CharSearch::Forward(_) => shift + pos,
+                CharSearch::ForwardBefore(_) => {
+                    shift + pos -
+                    self.buf[..shift + pos]
+                        .chars()
+                        .next_back()
+                        .unwrap()
+                        .len_utf8()
+                }
+            })
         } else {
             None
         }
@@ -627,7 +627,7 @@ impl LineBuffer {
     }
 
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
-        for (_, cl) in &self.cl {
+        for cl in self.cl.values() {
             cl.borrow_mut().insert_str(idx, s);
         }
         if idx == self.buf.len() {
@@ -645,7 +645,7 @@ impl LineBuffer {
     }
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
-        for (_, cl) in &self.cl {
+        for cl in self.cl.values() {
             cl.borrow_mut().delete(range.start, &self.buf[range.start..range.end], dir);
         }
         self.buf.drain(range)
@@ -703,13 +703,11 @@ impl LineBuffer {
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {
-                             CharSearch::Backward(_) |
-                             CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_owned(),
-                             CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
-                             CharSearch::Forward(c) => {
-                                 self.buf[self.pos..pos + c.len_utf8()].to_owned()
-                             }
-                         })
+                        CharSearch::Backward(_) |
+                        CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_owned(),
+                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
+                        CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
+                    })
                 } else {
                     None
                 }

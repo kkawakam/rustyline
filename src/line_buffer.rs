@@ -591,6 +591,15 @@ impl LineBuffer {
                     Some(self.buf[..self.pos].to_string())
                 }
             }
+            Movement::ViFirstPrint => {
+                if self.pos == 0 {
+                    None
+                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
+                    Some(self.buf[pos..self.pos].to_owned())
+                } else {
+                    None
+                }
+            }
             Movement::EndOfLine => {
                 if self.pos == self.buf.len() {
                     None

@@ -866,11 +866,14 @@ fn readline_edit<C: Completer>(prompt: &str,
         let rc = s.next_cmd(&mut rdr);
         let mut cmd = try!(rc);
 
+        if cmd.should_reset_kill_ring() {
+            editor.reset_kill_ring();
+        }
+
         // autocomplete
         if cmd == Cmd::Complete && completer.is_some() {
             let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
             if next.is_some() {
-                editor.reset_kill_ring();
                 cmd = next.unwrap();
             } else {
                 continue;
@@ -878,11 +881,9 @@ fn readline_edit<C: Completer>(prompt: &str,
         }
 
         if let Cmd::SelfInsert(n, c) = cmd {
-            editor.reset_kill_ring();
             try!(edit_insert(&mut s, c, n));
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            editor.reset_kill_ring();
             try!(edit_yank(&mut s, &text, Anchor::Before, n));
             continue;
         }
@@ -899,31 +900,25 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         match cmd {
             Cmd::Move(Movement::BeginningOfLine) => {
-                editor.reset_kill_ring();
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
             Cmd::Move(Movement::ViFirstPrint) => {
-                editor.reset_kill_ring();
                 try!(edit_move_home(&mut s));
                 try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
             }
             Cmd::Move(Movement::BackwardChar(n)) => {
-                editor.reset_kill_ring();
                 // Move back a character.
                 try!(edit_move_backward(&mut s, n))
             }
             Cmd::Kill(Movement::ForwardChar(n)) => {
-                editor.reset_kill_ring();
                 // Delete (forward) one character at point.
                 try!(edit_delete(&mut s, n))
             }
             Cmd::Replace(n, c) => {
-                editor.reset_kill_ring();
                 try!(edit_replace_char(&mut s, c, n));
             }
             Cmd::EndOfFile => {
-                editor.reset_kill_ring();
                 if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
                     try!(edit_move_end(&mut s));
                     break;
@@ -934,17 +929,14 @@ fn readline_edit<C: Completer>(prompt: &str,
                 }
             }
             Cmd::Move(Movement::EndOfLine) => {
-                editor.reset_kill_ring();
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
             Cmd::Move(Movement::ForwardChar(n)) => {
-                editor.reset_kill_ring();
                 // Move forward a character.
                 try!(edit_move_forward(&mut s, n))
             }
             Cmd::Kill(Movement::BackwardChar(n)) => {
-                editor.reset_kill_ring();
                 // Delete one character backward.
                 try!(edit_backspace(&mut s, n))
             }
@@ -966,17 +958,14 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(s.refresh_line())
             }
             Cmd::NextHistory => {
-                editor.reset_kill_ring();
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, false))
             }
             Cmd::PreviousHistory => {
-                editor.reset_kill_ring();
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
             Cmd::TransposeChars => {
-                editor.reset_kill_ring();
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
@@ -989,7 +978,6 @@ fn readline_edit<C: Completer>(prompt: &str,
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
-                editor.reset_kill_ring();
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c, 1)) // FIXME
             }
@@ -1000,7 +988,6 @@ fn readline_edit<C: Completer>(prompt: &str,
                 }
             }
             Cmd::ViYankTo(mvt) => {
-                editor.reset_kill_ring();
                 if let Some(text) = s.line.copy(mvt) {
                     editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
                 }
@@ -1008,7 +995,6 @@ fn readline_edit<C: Completer>(prompt: &str,
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.
-                editor.reset_kill_ring();
                 try!(edit_move_end(&mut s));
                 break;
             }
@@ -1020,22 +1006,18 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
-                editor.reset_kill_ring();
                 try!(edit_history(&mut s, &editor.history, true))
             }
             Cmd::EndOfHistory => {
                 // move to last entry in history
-                editor.reset_kill_ring();
                 try!(edit_history(&mut s, &editor.history, false))
             }
             Cmd::Move(Movement::BackwardWord(n, word_def)) => {
                 // move backwards one word
-                editor.reset_kill_ring();
                 try!(edit_move_to_prev_word(&mut s, word_def, n))
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
-                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
             Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
@@ -1046,22 +1028,18 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
-                editor.reset_kill_ring();
                 try!(edit_move_to_next_word(&mut s, at, word_def, n))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
-                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
             Cmd::TransposeWords(n) => {
                 // transpose words
-                editor.reset_kill_ring();
                 try!(edit_transpose_words(&mut s, n))
             }
             Cmd::UpcaseWord => {
                 // uppercase word after point
-                editor.reset_kill_ring();
                 try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
             Cmd::YankPop => {
@@ -1070,10 +1048,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            Cmd::Move(Movement::ViCharSearch(n, cs)) => {
-                editor.reset_kill_ring();
-                try!(edit_move_to(&mut s, cs, n))
-            }
+            Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(edit_move_to(&mut s, cs, n)),
             Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
                 s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
                 try!(edit_delete_to(&mut s, cs, n));
@@ -1087,7 +1062,6 @@ fn readline_edit<C: Completer>(prompt: &str,
                 s.line.bind(UNDOS_NAME, s.changes.clone());
             }
             Cmd::Interrupt => {
-                editor.reset_kill_ring();
                 return Err(error::ReadlineError::Interrupted);
             }
             #[cfg(unix)]
@@ -1100,7 +1074,6 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Noop => {}
             _ => {
-                editor.reset_kill_ring();
                 // Ignore the character typed.
             }
         }

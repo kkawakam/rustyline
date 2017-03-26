@@ -893,17 +893,17 @@ fn readline_edit<C: Completer>(prompt: &str,
         }
 
         match cmd {
-            Cmd::BeginningOfLine => {
+            Cmd::Move(Movement::BeginningOfLine) => {
                 editor.reset_kill_ring();
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
-            Cmd::ViFirstPrint => {
+            Cmd::Move(Movement::ViFirstPrint) => {
                 editor.reset_kill_ring();
                 try!(edit_move_home(&mut s));
                 try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
             }
-            Cmd::BackwardChar(n) => {
+            Cmd::Move(Movement::BackwardChar(n)) => {
                 editor.reset_kill_ring();
                 // Move back a character.
                 try!(edit_move_backward(&mut s, n))
@@ -928,12 +928,12 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_delete(&mut s, 1))
                 }
             }
-            Cmd::EndOfLine => {
+            Cmd::Move(Movement::EndOfLine) => {
                 editor.reset_kill_ring();
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
-            Cmd::ForwardChar(n) => {
+            Cmd::Move(Movement::ForwardChar(n)) => {
                 editor.reset_kill_ring();
                 // Move forward a character.
                 try!(edit_move_forward(&mut s, n))
@@ -1023,7 +1023,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.reset_kill_ring();
                 try!(edit_history(&mut s, &editor.history, false))
             }
-            Cmd::BackwardWord(n, word_def) => {
+            Cmd::Move(Movement::BackwardWord(n, word_def)) => {
                 // move backwards one word
                 editor.reset_kill_ring();
                 try!(edit_move_to_prev_word(&mut s, word_def, n))
@@ -1039,7 +1039,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_delete_word(&mut s, at, word_def, n));
                 s.line.unbind(KILL_RING_NAME);
             }
-            Cmd::ForwardWord(n, at, word_def) => {
+            Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
                 editor.reset_kill_ring();
                 try!(edit_move_to_next_word(&mut s, at, word_def, n))
@@ -1065,7 +1065,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            Cmd::ViCharSearch(n, cs) => {
+            Cmd::Move(Movement::ViCharSearch(n, cs)) => {
                 editor.reset_kill_ring();
                 try!(edit_move_to(&mut s, cs, n))
             }

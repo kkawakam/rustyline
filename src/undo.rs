@@ -3,60 +3,63 @@ use line_buffer::{ChangeListener, Direction, LineBuffer};
 use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
 
-enum Action {
-    Insert(String), // QuotedInsert, SelfInsert, Yank
-    Delete(String), /* BackwardDeleteChar, BackwardKillWord, DeleteChar, KillLine, KillWholeLine, KillWord, UnixLikeDiscard, ViDeleteTo */
-                    //Replace(String, String), /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
-}
-
-struct Change {
-    idx: usize, // where the change happens
-    action: Action,
+enum Change {
+    Begin,
+    End,
+    Insert { idx: usize, text: String }, // QuotedInsert, SelfInsert, Yank
+    Delete { idx: usize, text: String }, /* BackwardDeleteChar, BackwardKillWord, DeleteChar, KillLine, KillWholeLine, KillWord, UnixLikeDiscard, ViDeleteTo */
+                                         //  Replace {idx: usize, old: String, new: String}, /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
 }
 
 impl Change {
     fn undo(&self, line: &mut LineBuffer) {
-        match self.action {
-            Action::Insert(ref text) => {
-                line.delete_range(self.idx..self.idx + text.len());
+        match *self {
+            Change::Begin | Change::End => {
+                unreachable!();
             }
-            Action::Delete(ref text) => {
-                line.insert_str(self.idx, text);
-                line.set_pos(self.idx + text.len());
+            Change::Insert { idx, ref text } => {
+                line.delete_range(idx..idx + text.len());
             }
-            /*Action::Replace(ref old, ref new) => {
-                line.replace(self.idx..self.idx + new.len(), old);
+            Change::Delete { idx, ref text } => {
+                line.insert_str(idx, text);
+                line.set_pos(idx + text.len());
+            }
+            /*Change::Replace{idx, ref old, ref new} => {
+                line.replace(idx..idx + new.len(), old);
             }*/
         }
     }
 
     #[cfg(test)]
     fn redo(&self, line: &mut LineBuffer) {
-        match self.action {
-            Action::Insert(ref text) => {
-                line.insert_str(self.idx, text);
+        match *self {
+            Change::Begin | Change::End => {
+                unreachable!();
             }
-            Action::Delete(ref text) => {
-                line.delete_range(self.idx..self.idx + text.len());
+            Change::Insert { idx, ref text } => {
+                line.insert_str(idx, text);
             }
-            /*Action::Replace(ref old, ref new) => {
-                line.replace(self.idx..self.idx + old.len(), new);
+            Change::Delete { idx, ref text } => {
+                line.delete_range(idx..idx + text.len());
+            }
+            /*Change::Replace{idx, ref old, ref new} => {
+                line.replace(idx..idx + old.len(), new);
             }*/
         }
     }
 
-    fn insert_seq(&self, idx: usize) -> bool {
-        if let Action::Insert(ref text) = self.action {
-            self.idx + text.len() == idx
+    fn insert_seq(&self, indx: usize) -> bool {
+        if let Change::Insert { idx, ref text } = *self {
+            idx + text.len() == indx
         } else {
             false
         }
     }
 
-    fn delete_seq(&self, idx: usize, len: usize) -> bool {
-        if let Action::Delete(_) = self.action {
+    fn delete_seq(&self, indx: usize, len: usize) -> bool {
+        if let Change::Delete { idx, .. } = *self {
             // delete or backspace
-            self.idx == idx || self.idx == idx + len
+            idx == indx || idx == indx + len
         } else {
             false
         }
@@ -76,12 +79,22 @@ impl Changeset {
         }
     }
 
+    pub fn begin(&mut self) {
+        self.redos.clear();
+        self.undos.push(Change::Begin);
+    }
+
+    pub fn end(&mut self) {
+        self.redos.clear();
+        self.undos.push(Change::End);
+    }
+
     fn insert_char(idx: usize, c: char) -> Change {
         let mut text = String::new();
         text.push(c);
-        Change {
+        Change::Insert {
             idx: idx,
-            action: Action::Insert(text),
+            text: text,
         }
     }
 
@@ -97,7 +110,7 @@ impl Changeset {
                 // merge consecutive char insertions when char is alphanumeric
                 if last_change.insert_seq(idx) {
                     let mut last_change = last_change;
-                    if let Action::Insert(ref mut text) = last_change.action {
+                    if let Change::Insert { ref mut text, .. } = last_change {
                         text.push(c);
                     } else {
                         unreachable!();
@@ -116,19 +129,19 @@ impl Changeset {
 
     pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
-        self.undos.push(Change {
+        self.undos.push(Change::Insert {
             idx: idx,
-            action: Action::Insert(string.into()),
+            text: string.into(),
         });
     }
 
-    pub fn delete<S: AsRef<str> + Into<String>>(&mut self, idx: usize, string: S) {
+    pub fn delete<S: AsRef<str> + Into<String>>(&mut self, indx: usize, string: S) {
         self.redos.clear();
 
         if !Self::single_char(string.as_ref()) {
-            self.undos.push(Change {
-                idx: idx,
-                action: Action::Delete(string.into()),
+            self.undos.push(Change::Delete {
+                idx: indx,
+                text: string.into(),
             });
             return;
         }
@@ -136,14 +149,14 @@ impl Changeset {
         match last_change {
             Some(last_change) => {
                 // merge consecutive char deletions when char is alphanumeric
-                if last_change.delete_seq(idx, string.as_ref().len()) {
+                if last_change.delete_seq(indx, string.as_ref().len()) {
                     let mut last_change = last_change;
-                    if let Action::Delete(ref mut text) = last_change.action {
-                        if last_change.idx == idx {
+                    if let Change::Delete { ref mut idx, ref mut text } = last_change {
+                        if *idx == indx {
                             text.push_str(string.as_ref());
                         } else {
                             text.insert_str(0, string.as_ref());
-                            last_change.idx = idx;
+                            *idx = indx;
                         }
                     } else {
                         unreachable!();
@@ -151,16 +164,16 @@ impl Changeset {
                     self.undos.push(last_change);
                 } else {
                     self.undos.push(last_change);
-                    self.undos.push(Change {
-                        idx: idx,
-                        action: Action::Delete(string.into()),
+                    self.undos.push(Change::Delete {
+                        idx: indx,
+                        text: string.into(),
                     });
                 }
             }
             None => {
-                self.undos.push(Change {
-                    idx: idx,
-                    action: Action::Delete(string.into()),
+                self.undos.push(Change::Delete {
+                    idx: indx,
+                    text: string.into(),
                 });
             }
         };
@@ -174,33 +187,64 @@ impl Changeset {
 
     /*pub fn replace<S: Into<String>>(&mut self, idx: usize, old: String, new: S) {
         self.redos.clear();
-        self.undos.push(Change {
+        self.undos.push(Change::Replace {
             idx: idx,
-            action: Action::Replace(old.into(), new.into()),
+            old: old.into(),
+            new: new.into(),
         });
     }*/
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
-        match self.undos.pop() {
-            Some(change) => {
-                change.undo(line);
-                self.redos.push(change);
-                true
+        let mut waiting_for_begin = 0;
+        let mut undone = false;
+        loop {
+            if let Some(change) = self.undos.pop() {
+                match change {
+                    Change::Begin => {
+                        waiting_for_begin -= 1;
+                    }
+                    Change::End => {
+                        waiting_for_begin += 1;
+                    }
+                    _ => {
+                        change.undo(line);
+                        self.redos.push(change);
+                        undone = true;
+                    }
+                };
             }
-            None => false,
+            if waiting_for_begin == 0 {
+                break;
+            }
         }
+        undone
     }
 
     #[cfg(test)]
     pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
-        match self.redos.pop() {
-            Some(change) => {
-                change.redo(line);
-                self.undos.push(change);
-                true
+        let mut waiting_for_end = 0;
+        let mut redone = false;
+        loop {
+            if let Some(change) = self.redos.pop() {
+                match change {
+                    Change::Begin => {
+                        waiting_for_end += 1;
+                    }
+                    Change::End => {
+                        waiting_for_end -= 1;
+                    }
+                    _ => {
+                        change.redo(line);
+                        self.undos.push(change);
+                        redone = true;
+                    }
+                };
             }
-            None => false,
+            if waiting_for_end == 0 {
+                break;
+            }
         }
+        redone
     }
 }
 

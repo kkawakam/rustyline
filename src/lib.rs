@@ -346,14 +346,17 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
 
 /// Replace a single (or n) character(s) under the cursor (Vi mode)
 fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
-    if let Some(chars) = s.line.delete(n) {
+    s.changes.borrow_mut().begin();
+    let succeed = if let Some(chars) = s.line.delete(n) {
         let count = chars.graphemes(true).count();
         s.line.insert(ch, count);
         s.line.move_backward(1);
-        s.refresh_line()
+        true
     } else {
-        Ok(())
-    }
+        false
+    };
+    s.changes.borrow_mut().end();
+    if succeed { s.refresh_line() } else { Ok(()) }
 }
 
 // Yank/paste `text` at current position.
@@ -373,8 +376,11 @@ fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Resul
 
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
+    s.changes.borrow_mut().begin();
     s.line.yank_pop(yank_size, text);
-    edit_yank(s, text, Anchor::Before, 1)
+    let result = edit_yank(s, text, Anchor::Before, 1);
+    s.changes.borrow_mut().end();
+    result
 }
 
 /// Move cursor on the left.
@@ -452,11 +458,10 @@ fn edit_discard_line(s: &mut State) -> Result<()> {
 
 /// Exchange the char before cursor with the character at cursor.
 fn edit_transpose_chars(s: &mut State) -> Result<()> {
-    if s.line.transpose_chars() {
-        s.refresh_line()
-    } else {
-        Ok(())
-    }
+    s.changes.borrow_mut().begin();
+    let succeed = s.line.transpose_chars();
+    s.changes.borrow_mut().end();
+    if succeed { s.refresh_line() } else { Ok(()) }
 }
 
 fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
@@ -511,19 +516,17 @@ fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
 }
 
 fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
-    if s.line.edit_word(a) {
-        s.refresh_line()
-    } else {
-        Ok(())
-    }
+    s.changes.borrow_mut().begin();
+    let succeed = s.line.edit_word(a);
+    s.changes.borrow_mut().end();
+    if succeed { s.refresh_line() } else { Ok(()) }
 }
 
 fn edit_transpose_words(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.transpose_words(n) {
-        s.refresh_line()
-    } else {
-        Ok(())
-    }
+    s.changes.borrow_mut().begin();
+    let succeed = s.line.transpose_words(n);
+    s.changes.borrow_mut().end();
+    if succeed { s.refresh_line() } else { Ok(()) }
 }
 
 /// Substitute the currently edited line with the next or previous history

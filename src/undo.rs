@@ -86,7 +86,12 @@ impl Changeset {
 
     pub fn end(&mut self) {
         self.redos.clear();
-        self.undos.push(Change::End);
+        if let Some(&Change::Begin) = self.undos.last() {
+            // emtpy Begin..End
+            self.undos.pop();
+        } else {
+            self.undos.push(Change::End);
+        }
     }
 
     fn insert_char(idx: usize, c: char) -> Change {
@@ -212,8 +217,10 @@ impl Changeset {
                         undone = true;
                     }
                 };
+            } else {
+                break;
             }
-            if waiting_for_begin == 0 {
+            if waiting_for_begin <= 0 {
                 break;
             }
         }
@@ -239,8 +246,10 @@ impl Changeset {
                         redone = true;
                     }
                 };
+            } else {
+                break;
             }
-            if waiting_for_end == 0 {
+            if waiting_for_end <= 0 {
                 break;
             }
         }

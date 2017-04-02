@@ -863,9 +863,6 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
     Ok(Some(cmd))
 }
 
-static KILL_RING_NAME: &'static str = "kill_ring";
-static UNDOS_NAME: &'static str = "undos";
-
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
@@ -885,7 +882,10 @@ fn readline_edit<C: Completer>(prompt: &str,
                            prompt,
                            editor.history.len(),
                            editor.custom_bindings.clone());
-    s.line.bind(UNDOS_NAME, s.changes.clone());
+
+    s.line.bind(s.changes.clone());
+    s.line.bind(editor.kill_ring.clone());
+
     try!(s.refresh_line());
 
     let mut rdr = try!(s.term.create_reader(&editor.config));
@@ -970,15 +970,15 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_kill_line(&mut s));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Kill(Movement::WholeLine) => {
                 try!(edit_move_home(&mut s));
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_kill_line(&mut s));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
@@ -1005,9 +1005,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_discard_line(&mut s));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
@@ -1034,9 +1034,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
                 // kill one word backward (until start of word)
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_delete_prev_word(&mut s, word_def, n));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -1056,9 +1056,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
                 // kill one word forward (until start/end of word)
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_delete_word(&mut s, at, word_def, n));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
@@ -1084,16 +1084,14 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(edit_move_to(&mut s, cs, n)),
             Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
-                s.line.bind(KILL_RING_NAME, editor.kill_ring.clone());
+                editor.kill_ring.borrow_mut().start_killing();
                 try!(edit_delete_to(&mut s, cs, n));
-                s.line.unbind(KILL_RING_NAME);
+                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Undo => {
-                s.line.unbind(UNDOS_NAME);
                 if s.changes.borrow_mut().undo(&mut s.line) {
                     try!(s.refresh_line());
                 }
-                s.line.bind(UNDOS_NAME, s.changes.clone());
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);

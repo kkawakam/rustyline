@@ -68,6 +68,7 @@ impl Change {
 pub struct Changeset {
     undos: Vec<Change>, // undoable changes
     redos: Vec<Change>, // undone changes, redoable
+    undoing: bool,
 }
 
 impl Changeset {
@@ -75,6 +76,7 @@ impl Changeset {
         Changeset {
             undos: Vec::new(),
             redos: Vec::new(),
+            undoing: false,
         }
     }
 
@@ -133,20 +135,22 @@ impl Changeset {
 
     pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
         self.redos.clear();
-        self.undos.push(Change::Insert {
-            idx: idx,
-            text: string.into(),
-        });
+        self.undos
+            .push(Change::Insert {
+                idx: idx,
+                text: string.into(),
+            });
     }
 
     pub fn delete<S: AsRef<str> + Into<String>>(&mut self, indx: usize, string: S) {
         self.redos.clear();
 
         if !Self::single_char(string.as_ref()) {
-            self.undos.push(Change::Delete {
-                idx: indx,
-                text: string.into(),
-            });
+            self.undos
+                .push(Change::Delete {
+                    idx: indx,
+                    text: string.into(),
+                });
             return;
         }
         let last_change = self.undos.pop();
@@ -168,24 +172,27 @@ impl Changeset {
                     self.undos.push(last_change);
                 } else {
                     self.undos.push(last_change);
-                    self.undos.push(Change::Delete {
-                        idx: indx,
-                        text: string.into(),
-                    });
+                    self.undos
+                        .push(Change::Delete {
+                            idx: indx,
+                            text: string.into(),
+                        });
                 }
             }
             None => {
-                self.undos.push(Change::Delete {
-                    idx: indx,
-                    text: string.into(),
-                });
+                self.undos
+                    .push(Change::Delete {
+                        idx: indx,
+                        text: string.into(),
+                    });
             }
         };
     }
 
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
-        graphemes.next().map_or(false, |grapheme| grapheme.chars().all(|c| c.is_alphanumeric())) &&
+        graphemes.next()
+            .map_or(false, |grapheme| grapheme.chars().all(|c| c.is_alphanumeric())) &&
         graphemes.next().is_none()
     }
 
@@ -199,6 +206,7 @@ impl Changeset {
     }*/
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
+        self.undoing = true;
         let mut waiting_for_begin = 0;
         let mut undone = false;
         loop {
@@ -223,11 +231,13 @@ impl Changeset {
                 break;
             }
         }
+        self.undoing = false;
         undone
     }
 
     #[cfg(test)]
     pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
+        self.undoing = true;
         let mut waiting_for_end = 0;
         let mut redone = false;
         loop {
@@ -252,18 +262,28 @@ impl Changeset {
                 break;
             }
         }
+        self.undoing = false;
         redone
     }
 }
 
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
+        if self.undoing {
+            return;
+        }
         self.insert(idx, c);
     }
     fn insert_str(&mut self, idx: usize, string: &str) {
+        if self.undoing {
+            return;
+        }
         self.insert_str(idx, string);
     }
     fn delete(&mut self, idx: usize, string: &str, _: Direction) {
+        if self.undoing {
+            return;
+        }
         self.delete(idx, string);
     }
 }

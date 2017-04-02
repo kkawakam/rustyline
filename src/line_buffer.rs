@@ -1,6 +1,5 @@
 //! Line buffer with current cursor position
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt;
 use std::iter;
 use std::ops::{Deref, Range};
@@ -40,7 +39,7 @@ pub trait ChangeListener {
 pub struct LineBuffer {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
-    cl: HashMap<&'static str, Rc<RefCell<ChangeListener>>>,
+    cl: Vec<Rc<RefCell<ChangeListener>>>,
 }
 
 impl fmt::Debug for LineBuffer {
@@ -58,7 +57,7 @@ impl LineBuffer {
         LineBuffer {
             buf: String::with_capacity(capacity),
             pos: 0,
-            cl: HashMap::new(),
+            cl: Vec::new(),
         }
     }
 
@@ -68,16 +67,13 @@ impl LineBuffer {
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
         if cl.is_some() {
-            lb.bind("test", cl.unwrap());
+            lb.bind(cl.unwrap());
         }
         lb
     }
 
-    pub fn bind(&mut self, key: &'static str, cl: Rc<RefCell<ChangeListener>>) {
-        self.cl.insert(key, cl);
-    }
-    pub fn unbind(&mut self, key: &'static str) {
-        self.cl.remove(key);
+    pub fn bind(&mut self, cl: Rc<RefCell<ChangeListener>>) {
+        self.cl.push(cl);
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -179,7 +175,7 @@ impl LineBuffer {
         let push = self.pos == self.buf.len();
         if n == 1 {
             self.buf.insert(self.pos, ch);
-            for cl in self.cl.values() {
+            for cl in &self.cl {
                 cl.borrow_mut().insert_char(self.pos, ch);
             }
         } else {
@@ -269,7 +265,8 @@ impl LineBuffer {
         match self.next_pos(n) {
             Some(pos) => {
                 let start = self.pos;
-                let chars = self.drain(start..pos, Direction::Forward).collect::<String>();
+                let chars = self.drain(start..pos, Direction::Forward)
+                    .collect::<String>();
                 Some(chars)
             }
             None => None,
@@ -573,7 +570,8 @@ impl LineBuffer {
                 if start == end {
                     return false;
                 }
-                let word = self.drain(start..end, Direction::default()).collect::<String>();
+                let word = self.drain(start..end, Direction::default())
+                    .collect::<String>();
                 let result = match a {
                     WordAction::CAPITALIZE => {
                         let ch = (&word).graphemes(true).next().unwrap();
@@ -608,7 +606,8 @@ impl LineBuffer {
 
         let w1 = self.buf[w1_beg..w1_end].to_owned();
 
-        let w2 = self.drain(w2_beg..w2_end, Direction::default()).collect::<String>();
+        let w2 = self.drain(w2_beg..w2_end, Direction::default())
+            .collect::<String>();
         self.insert_str(w2_beg, &w1);
 
         self.drain(w1_beg..w1_end, Direction::default());
@@ -628,7 +627,7 @@ impl LineBuffer {
     }
 
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
-        for cl in self.cl.values() {
+        for cl in &self.cl {
             cl.borrow_mut().insert_str(idx, s);
         }
         if idx == self.buf.len() {
@@ -646,8 +645,9 @@ impl LineBuffer {
     }
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
-        for cl in self.cl.values() {
-            cl.borrow_mut().delete(range.start, &self.buf[range.start..range.end], dir);
+        for cl in &self.cl {
+            cl.borrow_mut()
+                .delete(range.start, &self.buf[range.start..range.end], dir);
         }
         self.buf.drain(range)
     }

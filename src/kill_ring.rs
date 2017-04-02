@@ -20,6 +20,7 @@ pub struct KillRing {
     index: usize,
     // whether or not the last command was a kill or a yank
     last_action: Action,
+    killing: bool,
 }
 
 impl KillRing {
@@ -29,7 +30,15 @@ impl KillRing {
             slots: Vec::with_capacity(size),
             index: 0,
             last_action: Action::Other,
+            killing: false,
         }
+    }
+
+    pub fn start_killing(&mut self) {
+        self.killing = true;
+    }
+    pub fn stop_killing(&mut self) {
+        self.killing = false;
     }
 
     /// Reset `last_action` state.
@@ -107,6 +116,9 @@ impl ChangeListener for KillRing {
     fn insert_char(&mut self, _: usize, _: char) {}
     fn insert_str(&mut self, _: usize, _: &str) {}
     fn delete(&mut self, _: usize, string: &str, dir: Direction) {
+        if !self.killing {
+            return;
+        }
         let mode = match dir {
             Direction::Forward => Mode::Append,
             Direction::Backward => Mode::Prepend,

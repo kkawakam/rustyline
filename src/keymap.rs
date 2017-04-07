@@ -255,10 +255,10 @@ impl EditState {
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             return Ok(if cmd.is_repeatable() {
-                cmd.redo(Some(n))
-            } else {
-                cmd.clone()
-            });
+                          cmd.redo(Some(n))
+                      } else {
+                          cmd.clone()
+                      });
         }
         let cmd = match key {
             KeyPress::Char(c) => {
@@ -379,14 +379,14 @@ impl EditState {
         let n = self.vi_num_args(); // consume them in all cases
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             return Ok(if cmd.is_repeatable() {
-                if no_num_args {
-                    cmd.redo(None)
-                } else {
-                    cmd.redo(Some(n))
-                }
-            } else {
-                cmd.clone()
-            });
+                          if no_num_args {
+                              cmd.redo(None)
+                          } else {
+                              cmd.redo(Some(n))
+                          }
+                      } else {
+                          cmd.clone()
+                      });
         }
         let cmd = match key {
             KeyPress::Char('$') |
@@ -535,10 +535,10 @@ impl EditState {
         let key = try!(rdr.next_key());
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             return Ok(if cmd.is_repeatable() {
-                cmd.redo(None)
-            } else {
-                cmd.clone()
-            });
+                          cmd.redo(None)
+                      } else {
+                          cmd.clone()
+                      });
         }
         let cmd = match key {
             KeyPress::Char(c) => Cmd::SelfInsert(1, c),
@@ -579,55 +579,55 @@ impl EditState {
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
-            KeyPress::Char('$') => Some(Movement::EndOfLine), // vi-change-to-eol: Vi change to end of line.
-            KeyPress::Char('0') => Some(Movement::BeginningOfLine), // vi-kill-line-prev: Vi cut from beginning of line to cursor.
-            KeyPress::Char('^') => Some(Movement::ViFirstPrint),
-            KeyPress::Char('b') => Some(Movement::BackwardWord(n, Word::Vi)),
-            KeyPress::Char('B') => Some(Movement::BackwardWord(n, Word::Big)),
-            KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
-            KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
-            KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
-                let cs = try!(self.vi_char_search(rdr, c));
-                match cs {
-                    Some(cs) => Some(Movement::ViCharSearch(n, cs)),
-                    None => None,
-                }
+               KeyPress::Char('$') => Some(Movement::EndOfLine), // vi-change-to-eol: Vi change to end of line.
+               KeyPress::Char('0') => Some(Movement::BeginningOfLine), // vi-kill-line-prev: Vi cut from beginning of line to cursor.
+               KeyPress::Char('^') => Some(Movement::ViFirstPrint),
+               KeyPress::Char('b') => Some(Movement::BackwardWord(n, Word::Vi)),
+               KeyPress::Char('B') => Some(Movement::BackwardWord(n, Word::Big)),
+               KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
+               KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
+               KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
+            let cs = try!(self.vi_char_search(rdr, c));
+            match cs {
+                Some(cs) => Some(Movement::ViCharSearch(n, cs)),
+                None => None,
             }
-            KeyPress::Char(';') => {
-                match self.last_char_search {
-                    Some(ref cs) => Some(Movement::ViCharSearch(n, cs.clone())),
-                    None => None,
-                }
+        }
+               KeyPress::Char(';') => {
+                   match self.last_char_search {
+                       Some(ref cs) => Some(Movement::ViCharSearch(n, cs.clone())),
+                       None => None,
+                   }
+               }
+               KeyPress::Char(',') => {
+                   match self.last_char_search {
+                       Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
+                       None => None,
+                   }
+               }
+               KeyPress::Char('h') |
+               KeyPress::Ctrl('H') |
+               KeyPress::Backspace => Some(Movement::BackwardChar(n)), // vi-delete-prev-char: Vi move to previous character (backspace).
+               KeyPress::Char('l') |
+               KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
+               KeyPress::Char('w') => {
+            // 'cw' is 'ce'
+            if key == KeyPress::Char('c') {
+                Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi))
+            } else {
+                Some(Movement::ForwardWord(n, At::Start, Word::Vi))
             }
-            KeyPress::Char(',') => {
-                match self.last_char_search {
-                    Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
-                    None => None,
-                }
+        }
+               KeyPress::Char('W') => {
+            // 'cW' is 'cE'
+            if key == KeyPress::Char('c') {
+                Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
+            } else {
+                Some(Movement::ForwardWord(n, At::Start, Word::Big))
             }
-            KeyPress::Char('h') |
-            KeyPress::Ctrl('H') |
-            KeyPress::Backspace => Some(Movement::BackwardChar(n)), // vi-delete-prev-char: Vi move to previous character (backspace).
-            KeyPress::Char('l') |
-            KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
-            KeyPress::Char('w') => {
-                // 'cw' is 'ce'
-                if key == KeyPress::Char('c') {
-                    Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi))
-                } else {
-                    Some(Movement::ForwardWord(n, At::Start, Word::Vi))
-                }
-            }
-            KeyPress::Char('W') => {
-                // 'cW' is 'cE'
-                if key == KeyPress::Char('c') {
-                    Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
-                } else {
-                    Some(Movement::ForwardWord(n, At::Start, Word::Big))
-                }
-            }
-            _ => None,
-        })
+        }
+               _ => None,
+           })
     }
 
     fn vi_char_search<R: RawReader>(&mut self,
@@ -636,19 +636,19 @@ impl EditState {
                                     -> Result<Option<CharSearch>> {
         let ch = try!(rdr.next_key());
         Ok(match ch {
-            KeyPress::Char(ch) => {
-                let cs = match cmd {
-                    'f' => CharSearch::Forward(ch),
-                    't' => CharSearch::ForwardBefore(ch),
-                    'F' => CharSearch::Backward(ch),
-                    'T' => CharSearch::BackwardAfter(ch),
-                    _ => unreachable!(),
-                };
-                self.last_char_search = Some(cs.clone());
-                Some(cs)
-            }
-            _ => None,
-        })
+               KeyPress::Char(ch) => {
+            let cs = match cmd {
+                'f' => CharSearch::Forward(ch),
+                't' => CharSearch::ForwardBefore(ch),
+                'F' => CharSearch::Backward(ch),
+                'T' => CharSearch::BackwardAfter(ch),
+                _ => unreachable!(),
+            };
+            self.last_char_search = Some(cs.clone());
+            Some(cs)
+        }
+               _ => None,
+           })
     }
 
     fn common(&mut self, key: KeyPress, n: RepeatCount, positive: bool) -> Cmd {

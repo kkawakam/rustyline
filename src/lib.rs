@@ -215,11 +215,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= self.cursor.row as i16;
         try!(self.term
-            .set_console_cursor_position(info.dwCursorPosition));
+                 .set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
         try!(self.term
-            .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as u32,
-                                           info.dwCursorPosition));
+                 .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as
+                                                u32,
+                                                info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -232,7 +233,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         info.dwCursorPosition.X = cursor.col as i16;
         info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
         try!(self.term
-            .set_console_cursor_position(info.dwCursorPosition));
+                 .set_console_cursor_position(info.dwCursorPosition));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
@@ -705,7 +706,8 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 
     let min_col_pad = 2;
     let max_width = cmp::min(s.cols,
-                             candidates.into_iter()
+                             candidates
+                                 .into_iter()
                                  .map(|s| s.as_str().width())
                                  .max()
                                  .unwrap() + min_col_pad);
@@ -1373,7 +1375,10 @@ mod test {
     fn delete_key() {
         assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
                     "a");
-        assert_line(&[KeyPress::Char('a'), KeyPress::Left, KeyPress::Delete, KeyPress::Enter],
+        assert_line(&[KeyPress::Char('a'),
+                      KeyPress::Left,
+                      KeyPress::Delete,
+                      KeyPress::Enter],
                     "");
     }
 

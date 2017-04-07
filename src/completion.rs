@@ -130,7 +130,8 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input.chars()
+    let n = input
+        .chars()
         .filter(|c| break_chars.contains(c))
         .count();
     if n == 0 {

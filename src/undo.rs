@@ -138,9 +138,9 @@ impl Changeset {
         self.redos.clear();
         self.undos
             .push(Change::Insert {
-                idx: idx,
-                text: string.into(),
-            });
+                      idx: idx,
+                      text: string.into(),
+                  });
     }
 
     pub fn delete<S: AsRef<str> + Into<String>>(&mut self, indx: usize, string: S) {
@@ -149,9 +149,9 @@ impl Changeset {
         if !Self::single_char(string.as_ref()) {
             self.undos
                 .push(Change::Delete {
-                    idx: indx,
-                    text: string.into(),
-                });
+                          idx: indx,
+                          text: string.into(),
+                      });
             return;
         }
         let last_change = self.undos.pop();
@@ -160,7 +160,10 @@ impl Changeset {
                 // merge consecutive char deletions when char is alphanumeric
                 if last_change.delete_seq(indx, string.as_ref().len()) {
                     let mut last_change = last_change;
-                    if let Change::Delete { ref mut idx, ref mut text } = last_change {
+                    if let Change::Delete {
+                               ref mut idx,
+                               ref mut text,
+                           } = last_change {
                         if *idx == indx {
                             text.push_str(string.as_ref());
                         } else {
@@ -175,24 +178,25 @@ impl Changeset {
                     self.undos.push(last_change);
                     self.undos
                         .push(Change::Delete {
-                            idx: indx,
-                            text: string.into(),
-                        });
+                                  idx: indx,
+                                  text: string.into(),
+                              });
                 }
             }
             None => {
                 self.undos
                     .push(Change::Delete {
-                        idx: indx,
-                        text: string.into(),
-                    });
+                              idx: indx,
+                              text: string.into(),
+                          });
             }
         };
     }
 
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
-        graphemes.next()
+        graphemes
+            .next()
             .map_or(false, |grapheme| grapheme.is_alphanumeric()) &&
         graphemes.next().is_none()
     }

@@ -79,9 +79,9 @@ impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
-            handle: handle,
-            buf: None,
-        })
+               handle: handle,
+               buf: None,
+           })
     }
 }
 
@@ -147,23 +147,23 @@ impl RawReader for ConsoleRawReader {
                 let c = try!(orc.unwrap());
                 if meta {
                     return Ok(match c {
-                        '-' => KeyPress::Meta('-'),
-                        '0'...'9' => KeyPress::Meta(c),
-                        '<' => KeyPress::Meta('<'),
-                        '>' => KeyPress::Meta('>'),
-                        'b' | 'B' => KeyPress::Meta('B'),
-                        'c' | 'C' => KeyPress::Meta('C'),
-                        'd' | 'D' => KeyPress::Meta('D'),
-                        'f' | 'F' => KeyPress::Meta('F'),
-                        'l' | 'L' => KeyPress::Meta('L'),
-                        't' | 'T' => KeyPress::Meta('T'),
-                        'u' | 'U' => KeyPress::Meta('U'),
-                        'y' | 'Y' => KeyPress::Meta('Y'),
-                        _ => {
-                            debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", c);
-                            KeyPress::UnknownEscSeq
-                        }
-                    });
+                                  '-' => KeyPress::Meta('-'),
+                                  '0'...'9' => KeyPress::Meta(c),
+                                  '<' => KeyPress::Meta('<'),
+                                  '>' => KeyPress::Meta('>'),
+                                  'b' | 'B' => KeyPress::Meta('B'),
+                                  'c' | 'C' => KeyPress::Meta('C'),
+                                  'd' | 'D' => KeyPress::Meta('D'),
+                                  'f' | 'F' => KeyPress::Meta('F'),
+                                  'l' | 'L' => KeyPress::Meta('L'),
+                                  't' | 'T' => KeyPress::Meta('T'),
+                                  'u' | 'U' => KeyPress::Meta('U'),
+                                  'y' | 'Y' => KeyPress::Meta('Y'),
+                                  _ => {
+                        debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", c);
+                        KeyPress::UnknownEscSeq
+                    }
+                              });
                 } else {
                     return Ok(consts::char_to_key_press(c));
                 }
@@ -288,9 +288,9 @@ impl Term for Console {
         let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
         check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
-            original_mode: original_mode,
-            stdin_handle: self.stdin_handle,
-        })
+               original_mode: original_mode,
+               stdin_handle: self.stdin_handle,
+           })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {

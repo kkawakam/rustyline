@@ -100,9 +100,9 @@ impl PosixRawReader {
     fn new(config: &Config) -> Result<PosixRawReader> {
         let stdin = StdinRaw {};
         Ok(PosixRawReader {
-            chars: stdin.chars(),
-            timeout_ms: config.keyseq_timeout(),
-        })
+               chars: stdin.chars(),
+               timeout_ms: config.keyseq_timeout(),
+           })
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
@@ -116,73 +116,73 @@ impl PosixRawReader {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     Ok(match seq2 {
-                        '1' | '7' => KeyPress::Home, // '1': xterm
-                        '3' => KeyPress::Delete,
-                        '4' | '8' => KeyPress::End, // '4': xterm
-                        '5' => KeyPress::PageUp,
-                        '6' => KeyPress::PageDown,
-                        _ => {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}{:?}", seq1, seq2, seq3);
-                            KeyPress::UnknownEscSeq
-                        }
-                    })
+                           '1' | '7' => KeyPress::Home, // '1': xterm
+                           '3' => KeyPress::Delete,
+                           '4' | '8' => KeyPress::End, // '4': xterm
+                           '5' => KeyPress::PageUp,
+                           '6' => KeyPress::PageDown,
+                           _ => {
+                        debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}{:?}", seq1, seq2, seq3);
+                        KeyPress::UnknownEscSeq
+                    }
+                       })
                 } else {
                     debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}{:?}", seq1, seq2, seq3);
                     Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
                 Ok(match seq2 {
-                    'A' => KeyPress::Up, // ANSI
-                    'B' => KeyPress::Down,
-                    'C' => KeyPress::Right,
-                    'D' => KeyPress::Left,
-                    'F' => KeyPress::End,
-                    'H' => KeyPress::Home,
-                    _ => {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
-                        KeyPress::UnknownEscSeq
-                    }
-                })
+                       'A' => KeyPress::Up, // ANSI
+                       'B' => KeyPress::Down,
+                       'C' => KeyPress::Right,
+                       'D' => KeyPress::Left,
+                       'F' => KeyPress::End,
+                       'H' => KeyPress::Home,
+                       _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
+                    KeyPress::UnknownEscSeq
+                }
+                   })
             }
         } else if seq1 == 'O' {
             // ESC O sequences.
             let seq2 = try!(self.next_char());
             Ok(match seq2 {
-                'A' => KeyPress::Up,
-                'B' => KeyPress::Down,
-                'C' => KeyPress::Right,
-                'D' => KeyPress::Left,
-                'F' => KeyPress::End,
-                'H' => KeyPress::Home,
-                _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
-                    KeyPress::UnknownEscSeq
-                }
-            })
+                   'A' => KeyPress::Up,
+                   'B' => KeyPress::Down,
+                   'C' => KeyPress::Right,
+                   'D' => KeyPress::Left,
+                   'F' => KeyPress::End,
+                   'H' => KeyPress::Home,
+                   _ => {
+                debug!(target: "rustyline", "unsupported esc sequence: ESC{:?}{:?}", seq1, seq2);
+                KeyPress::UnknownEscSeq
+            }
+               })
         } else {
             // TODO ESC-N (n): search history forward not interactively
             // TODO ESC-P (p): search history backward not interactively
             // TODO ESC-R (r): Undo all changes made to this line.
             Ok(match seq1 {
-                '\x08' => KeyPress::Meta('\x08'), // Backspace
-                '-' => KeyPress::Meta('-'),
-                '0'...'9' => KeyPress::Meta(seq1),
-                '<' => KeyPress::Meta('<'),
-                '>' => KeyPress::Meta('>'),
-                'b' | 'B' => KeyPress::Meta('B'),
-                'c' | 'C' => KeyPress::Meta('C'),
-                'd' | 'D' => KeyPress::Meta('D'),
-                'f' | 'F' => KeyPress::Meta('F'),
-                'l' | 'L' => KeyPress::Meta('L'),
-                't' | 'T' => KeyPress::Meta('T'),
-                'u' | 'U' => KeyPress::Meta('U'),
-                'y' | 'Y' => KeyPress::Meta('Y'),
-                '\x7f' => KeyPress::Meta('\x7f'), // Delete
-                _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", seq1);
-                    KeyPress::UnknownEscSeq
-                }
-            })
+                   '\x08' => KeyPress::Meta('\x08'), // Backspace
+                   '-' => KeyPress::Meta('-'),
+                   '0'...'9' => KeyPress::Meta(seq1),
+                   '<' => KeyPress::Meta('<'),
+                   '>' => KeyPress::Meta('>'),
+                   'b' | 'B' => KeyPress::Meta('B'),
+                   'c' | 'C' => KeyPress::Meta('C'),
+                   'd' | 'D' => KeyPress::Meta('D'),
+                   'f' | 'F' => KeyPress::Meta('F'),
+                   'l' | 'L' => KeyPress::Meta('L'),
+                   't' | 'T' => KeyPress::Meta('T'),
+                   'u' | 'U' => KeyPress::Meta('U'),
+                   'y' | 'Y' => KeyPress::Meta('Y'),
+                   '\x7f' => KeyPress::Meta('\x7f'), // Delete
+                   _ => {
+                debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", seq1);
+                KeyPress::UnknownEscSeq
+            }
+               })
         }
     }
 }
@@ -291,8 +291,8 @@ impl Term for PosixTerminal {
 
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP, IXON,
-                                /* OPOST, */ VMIN, VTIME};
+        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
+                                IXON, /* OPOST, */ VMIN, VTIME};
         if !self.stdin_isatty {
             try!(Err(nix::Error::from_errno(ENOTTY)));
         }

@@ -562,6 +562,36 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     s.refresh_line()
 }
 
+fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
+    if history.is_empty() {
+        return Ok(());
+    }
+    if s.history_index == history.len() {
+        if dir == Direction::Reverse {
+            // Save the current edited line before to overwrite it
+            s.snapshot();
+        } else {
+            return Ok(());
+        }
+    } else if s.history_index == 0 && dir == Direction::Reverse {
+        return Ok(());
+    }
+    if dir == Direction::Reverse {
+        s.history_index -= 1;
+    } else {
+        s.history_index += 1;
+    }
+    if let Some(history_index) =
+        history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir) {
+        s.history_index = history_index;
+        let buf = history.get(history_index).unwrap();
+        s.line.update(buf, buf.len());
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 /// Substitute the currently edited line with the first/last history entry.
 fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
     if history.is_empty() {
@@ -965,6 +995,12 @@ fn readline_edit<C: Completer>(prompt: &str,
             Cmd::PreviousHistory => {
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
+            }
+            Cmd::HistorySearchBackward => {
+                try!(edit_history_search(&mut s, &editor.history, Direction::Reverse))
+            }
+            Cmd::HistorySearchForward => {
+                try!(edit_history_search(&mut s, &editor.history, Direction::Forward))
             }
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.

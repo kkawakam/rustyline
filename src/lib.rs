@@ -564,17 +564,12 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 
 fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
     if history.is_empty() {
-        return Ok(());
+        return beep();
     }
-    if s.history_index == history.len() {
-        if dir == Direction::Reverse {
-            // Save the current edited line before to overwrite it
-            s.snapshot();
-        } else {
-            return Ok(());
-        }
+    if s.history_index == history.len() && dir == Direction::Forward {
+        return beep();
     } else if s.history_index == 0 && dir == Direction::Reverse {
-        return Ok(());
+        return beep();
     }
     if dir == Direction::Reverse {
         s.history_index -= 1;
@@ -588,7 +583,7 @@ fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Resu
         s.line.update(buf, buf.len());
         s.refresh_line()
     } else {
-        Ok(())
+        beep()
     }
 }
 

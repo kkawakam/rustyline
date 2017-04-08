@@ -160,8 +160,6 @@ impl PosixRawReader {
             }
                })
         } else {
-            // TODO ESC-N (n): search history forward not interactively
-            // TODO ESC-P (p): search history backward not interactively
             // TODO ESC-R (r): Undo all changes made to this line.
             Ok(match seq1 {
                    '\x08' => KeyPress::Meta('\x08'), // Backspace
@@ -174,6 +172,8 @@ impl PosixRawReader {
                    'd' | 'D' => KeyPress::Meta('D'),
                    'f' | 'F' => KeyPress::Meta('F'),
                    'l' | 'L' => KeyPress::Meta('L'),
+                   'n' | 'N' => KeyPress::Meta('N'),
+                   'p' | 'P' => KeyPress::Meta('P'),
                    't' | 'T' => KeyPress::Meta('T'),
                    'u' | 'U' => KeyPress::Meta('U'),
                    'y' | 'Y' => KeyPress::Meta('Y'),

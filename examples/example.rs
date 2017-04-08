@@ -6,7 +6,7 @@ use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::{Config, CompletionType, Editor, EditMode};
+use rustyline::{Cmd, Config, CompletionType, Editor, EditMode, KeyPress};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -27,6 +27,8 @@ fn main() {
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
     rl.set_completer(Some(c));
+    rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
+    rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }

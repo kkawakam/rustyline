@@ -23,6 +23,8 @@ pub enum Cmd {
     EndOfFile,
     EndOfHistory,
     ForwardSearchHistory,
+    HistorySearchBackward,
+    HistorySearchForward,
     Insert(RepeatCount, String),
     Interrupt,
     Kill(Movement),

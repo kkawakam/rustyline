@@ -120,7 +120,7 @@ impl History {
         fix_perm(&file);
         let mut wtr = BufWriter::new(file);
         for entry in &self.entries {
-            try!(wtr.write_all(&entry.as_bytes()));
+            try!(wtr.write_all(entry.as_bytes()));
             try!(wtr.write_all(b"\n"));
         }
         Ok(())
@@ -151,6 +151,18 @@ impl History {
     /// Return None if no entry contains `term` between [start, len -1] for forward search
     /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
+        let test = |entry: &String| entry.contains(term);
+        self.search_match(term, start, dir, test)
+    }
+
+    pub fn starts_with(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
+        let test = |entry: &String| entry.starts_with(term);
+        self.search_match(term, start, dir, test)
+    }
+
+    fn search_match<F>(&self, term: &str, start: usize, dir: Direction, test: F) -> Option<usize>
+        where F: Fn(&String) -> bool
+    {
         if term.is_empty() || start >= self.len() {
             return None;
         }
@@ -160,14 +172,11 @@ impl History {
                     .iter()
                     .rev()
                     .skip(self.entries.len() - 1 - start)
-                    .position(|entry| entry.contains(term));
+                    .position(test);
                 index.and_then(|index| Some(start - index))
             }
             Direction::Forward => {
-                let index = self.entries
-                    .iter()
-                    .skip(start)
-                    .position(|entry| entry.contains(term));
+                let index = self.entries.iter().skip(start).position(test);
                 index.and_then(|index| Some(index + start))
             }
         }

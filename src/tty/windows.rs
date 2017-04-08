@@ -156,6 +156,8 @@ impl RawReader for ConsoleRawReader {
                                   'd' | 'D' => KeyPress::Meta('D'),
                                   'f' | 'F' => KeyPress::Meta('F'),
                                   'l' | 'L' => KeyPress::Meta('L'),
+                                  'n' | 'N' => KeyPress::Meta('N'),
+                                  'p' | 'P' => KeyPress::Meta('P'),
                                   't' | 'T' => KeyPress::Meta('T'),
                                   'u' | 'U' => KeyPress::Meta('U'),
                                   'y' | 'Y' => KeyPress::Meta('Y'),

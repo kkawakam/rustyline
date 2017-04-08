@@ -256,6 +256,7 @@ impl EditState {
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
                           cmd.redo(Some(n))
                       } else {
@@ -380,6 +381,7 @@ impl EditState {
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
                           if no_num_args {
                               cmd.redo(None)
@@ -536,6 +538,7 @@ impl EditState {
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         let key = try!(rdr.next_key());
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
+            debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
                           cmd.redo(None)
                       } else {

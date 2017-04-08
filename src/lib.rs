@@ -864,7 +864,7 @@ fn readline_edit<C: Completer>(prompt: &str,
         let mut cmd = try!(rc);
 
         if cmd.should_reset_kill_ring() {
-            editor.reset_kill_ring();
+            editor.kill_ring.reset();
         }
 
         // autocomplete

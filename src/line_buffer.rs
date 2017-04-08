@@ -287,9 +287,7 @@ impl LineBuffer {
             return None;
         }
         let mut sow = 0;
-        let mut gis = self.buf[..pos]
-            .grapheme_indices(true)
-            .rev();
+        let mut gis = self.buf[..pos].grapheme_indices(true).rev();
         'outer: for _ in 0..n {
             let mut gj = gis.next();
             'inner: loop {
@@ -442,13 +440,18 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             Some(match *cs {
-                CharSearch::Backward(_) => pos,
-                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
-                CharSearch::Forward(_) => shift + pos,
-                CharSearch::ForwardBefore(_) => {
-                    shift + pos - self.buf[..shift + pos].chars().next_back().unwrap().len_utf8()
-                }
-            })
+                     CharSearch::Backward(_) => pos,
+                     CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                     CharSearch::Forward(_) => shift + pos,
+                     CharSearch::ForwardBefore(_) => {
+                         shift + pos -
+                         self.buf[..shift + pos]
+                             .chars()
+                             .next_back()
+                             .unwrap()
+                             .len_utf8()
+                     }
+                 })
         } else {
             None
         }
@@ -630,13 +633,13 @@ impl LineBuffer {
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {
-                        CharSearch::Backward(_) |
-                        CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_string(),
-                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_string(),
-                        CharSearch::Forward(c) => {
-                            self.buf[self.pos..pos + c.len_utf8()].to_string()
-                        }
-                    })
+                             CharSearch::Backward(_) |
+                             CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_string(),
+                             CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_string(),
+                             CharSearch::Forward(c) => {
+                                 self.buf[self.pos..pos + c.len_utf8()].to_string()
+                             }
+                         })
                 } else {
                     None
                 }

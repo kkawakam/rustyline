@@ -9,8 +9,8 @@ use winapi;
 
 use config::Config;
 use consts::KeyPress;
-use ::error::ReadlineError;
-use ::Result;
+use error::ReadlineError;
+use Result;
 use super::{RawMode, RawReader, Term};
 
 pub type Mode = ();

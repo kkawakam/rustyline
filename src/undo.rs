@@ -1,4 +1,6 @@
 //! Undo API
+use std::fmt::Debug;
+
 use line_buffer::{ChangeListener, Direction, LineBuffer};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -68,7 +70,6 @@ impl Change {
 pub struct Changeset {
     undos: Vec<Change>, // undoable changes
     redos: Vec<Change>, // undone changes, redoable
-    undoing: bool,
 }
 
 impl Changeset {
@@ -76,16 +77,17 @@ impl Changeset {
         Changeset {
             undos: Vec::new(),
             redos: Vec::new(),
-            undoing: false,
         }
     }
 
     pub fn begin(&mut self) {
+        debug!(target: "rustyline", "Changeset::begin");
         self.redos.clear();
         self.undos.push(Change::Begin);
     }
 
     pub fn end(&mut self) {
+        debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();
         if let Some(&Change::Begin) = self.undos.last() {
             // emtpy Begin..End
@@ -105,6 +107,7 @@ impl Changeset {
     }
 
     pub fn insert(&mut self, idx: usize, c: char) {
+        debug!(target: "rustyline", "Changeset::insert({:?}, {:?})", idx, c);
         self.redos.clear();
         if !c.is_alphanumeric() {
             self.undos.push(Self::insert_char(idx, c));
@@ -133,7 +136,8 @@ impl Changeset {
         };
     }
 
-    pub fn insert_str<S: Into<String>>(&mut self, idx: usize, string: S) {
+    pub fn insert_str<S: Into<String> + Debug>(&mut self, idx: usize, string: S) {
+        debug!(target: "rustyline", "Changeset::insert_str({:?}, {:?})", idx, string);
         self.redos.clear();
         self.undos
             .push(Change::Insert {
@@ -142,7 +146,8 @@ impl Changeset {
                   });
     }
 
-    pub fn delete<S: AsRef<str> + Into<String>>(&mut self, indx: usize, string: S) {
+    pub fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
+        debug!(target: "rustyline", "Changeset::delete({:?}, {:?})", indx, string);
         self.redos.clear();
 
         if !Self::single_char(string.as_ref()) {
@@ -210,7 +215,7 @@ impl Changeset {
     }*/
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
-        self.undoing = true;
+        debug!(target: "rustyline", "Changeset::undo");
         let mut waiting_for_begin = 0;
         let mut undone = false;
         loop {
@@ -235,13 +240,34 @@ impl Changeset {
                 break;
             }
         }
-        self.undoing = false;
         undone
+    }
+
+    pub fn cancel(&mut self) {
+        debug!(target: "rustyline", "Changeset::cancel");
+        let mut waiting_for_begin = 1;
+        loop {
+            if let Some(change) = self.undos.pop() {
+                match change {
+                    Change::Begin => {
+                        waiting_for_begin -= 1;
+                    }
+                    Change::End => {
+                        waiting_for_begin += 1;
+                    }
+                    _ => {}
+                };
+            } else {
+                break;
+            }
+            if waiting_for_begin <= 0 {
+                break;
+            }
+        }
     }
 
     #[cfg(test)]
     pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
-        self.undoing = true;
         let mut waiting_for_end = 0;
         let mut redone = false;
         loop {
@@ -266,28 +292,18 @@ impl Changeset {
                 break;
             }
         }
-        self.undoing = false;
         redone
     }
 }
 
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
-        if self.undoing {
-            return;
-        }
         self.insert(idx, c);
     }
     fn insert_str(&mut self, idx: usize, string: &str) {
-        if self.undoing {
-            return;
-        }
         self.insert_str(idx, string);
     }
     fn delete(&mut self, idx: usize, string: &str, _: Direction) {
-        if self.undoing {
-            return;
-        }
         self.delete(idx, string);
     }
 }

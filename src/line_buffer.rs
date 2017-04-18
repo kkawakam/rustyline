@@ -75,6 +75,9 @@ impl LineBuffer {
     pub fn bind(&mut self, cl: Rc<RefCell<ChangeListener>>) {
         self.cl.push(cl);
     }
+    pub fn unbind(&mut self) {
+        self.cl.pop();
+    }
 
     /// Extracts a string slice containing the entire buffer.
     pub fn as_str(&self) -> &str {
@@ -121,14 +124,6 @@ impl LineBuffer {
             self.insert_str(0, buf);
             self.pos = pos;
         }
-    }
-
-    /// Backup `src`
-    pub fn backup(&mut self, src: &LineBuffer) {
-        let end = self.len();
-        self.drain(0..end, Direction::default());
-        self.insert_str(0, &src.buf);
-        self.pos = src.pos;
     }
 
     /// Returns the character at current cursor position.

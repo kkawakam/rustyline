@@ -137,10 +137,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         // TODO swap ChangeListener ?
     }
 
-    fn backup(&mut self) {
-        self.snapshot.backup(&self.line);
-    }
-
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()> {
@@ -629,8 +625,10 @@ fn complete_line<R: RawReader>(rdr: &mut R,
         try!(beep());
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
-        // Save the current edited line before to overwrite it
-        s.backup();
+        s.changes.borrow_mut().begin();
+        // Save the current edited line before overwriting it
+        let backup = s.line.as_str().to_owned();
+        let backup_pos = s.line.pos();
         let mut cmd;
         let mut i = 0;
         loop {
@@ -640,9 +638,8 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 try!(s.refresh_line());
             } else {
                 // Restore current edited line
-                s.snapshot();
+                s.line.update(&backup, backup_pos);
                 try!(s.refresh_line());
-                s.snapshot();
             }
 
             cmd = try!(s.next_cmd(rdr));
@@ -655,16 +652,15 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 }
                 Cmd::Abort => {
                     // Re-show original buffer
-                    s.snapshot();
                     if i < candidates.len() {
+                        s.line.update(&backup, backup_pos);
                         try!(s.refresh_line());
                     }
+                    s.changes.borrow_mut().cancel();
                     return Ok(None);
                 }
                 _ => {
-                    if i == candidates.len() {
-                        s.snapshot();
-                    }
+                    s.changes.borrow_mut().end();
                     break;
                 }
             }
@@ -887,8 +883,9 @@ fn readline_edit<C: Completer>(prompt: &str,
                            editor.history.len(),
                            editor.custom_bindings.clone());
 
-    s.line.bind(s.changes.clone());
     s.line.bind(editor.kill_ring.clone());
+    // must be the last
+    s.line.bind(s.changes.clone());
 
     try!(s.refresh_line());
 
@@ -1093,9 +1090,11 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Undo => {
+                s.line.unbind();
                 if s.changes.borrow_mut().undo(&mut s.line) {
                     try!(s.refresh_line());
                 }
+                s.line.bind(s.changes.clone());
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);

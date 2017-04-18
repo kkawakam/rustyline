@@ -622,7 +622,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
         try!(beep());
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
-        s.changes.borrow_mut().begin();
+        let mark = s.changes.borrow_mut().begin();
         // Save the current edited line before overwriting it
         let backup = s.line.as_str().to_owned();
         let backup_pos = s.line.pos();
@@ -653,7 +653,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                         s.line.update(&backup, backup_pos);
                         try!(s.refresh_line());
                     }
-                    s.changes.borrow_mut().cancel();
+                    s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
                 }
                 _ => {
@@ -792,8 +792,10 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
     if history.is_empty() {
         return Ok(None);
     }
-    // Save the current edited line (and cursor position) before to overwrite it
-    s.snapshot();
+    let mark = s.changes.borrow_mut().begin();
+    // Save the current edited line (and cursor position) before overwriting it
+    let backup = s.line.as_str().to_owned();
+    let backup_pos = s.line.pos();
 
     let mut search_buf = String::new();
     let mut history_idx = history.len() - 1;
@@ -839,8 +841,9 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                 }
                 Cmd::Abort => {
                     // Restore current edited line (before search)
-                    s.snapshot();
+                    s.line.update(&backup, backup_pos);
                     try!(s.refresh_line());
+                    s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
                 }
                 _ => break,
@@ -857,6 +860,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
             _ => false,
         };
     }
+    s.changes.borrow_mut().end();
     Ok(Some(cmd))
 }
 

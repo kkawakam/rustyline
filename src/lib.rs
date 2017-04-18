@@ -47,7 +47,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
-use std::mem;
 use std::path::Path;
 use std::rc::Rc;
 use std::result;
@@ -80,7 +79,7 @@ struct State<'out, 'prompt> {
     cols: usize, // Number of columns in terminal
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
-    snapshot: LineBuffer, // Current edited line before history browsing/completion
+    saved_line_for_history: LineBuffer, // Current edited line before history browsing
     term: Terminal, // terminal
     edit_state: EditState,
     changes: Rc<RefCell<Changeset>>,
@@ -112,7 +111,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             cols: cols,
             old_rows: prompt_size.row,
             history_index: history_index,
-            snapshot: LineBuffer::with_capacity(capacity),
+            saved_line_for_history: LineBuffer::with_capacity(capacity),
             term: term,
             edit_state: EditState::new(config, custom_bindings),
             changes: Rc::new(RefCell::new(Changeset::new())),
@@ -131,9 +130,14 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    fn snapshot(&mut self) {
-        mem::swap(&mut self.line, &mut self.snapshot);
-        // TODO swap ChangeListener ?
+    fn backup(&mut self) {
+        self.saved_line_for_history
+            .update(self.line.as_str(), self.line.pos());
+    }
+    fn restore(&mut self) {
+        self.line
+            .update(self.saved_line_for_history.as_str(),
+                    self.saved_line_for_history.pos());
     }
 
     /// Rewrite the currently edited line accordingly to the buffer content,
@@ -251,7 +255,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("cols", &self.cols)
             .field("old_rows", &self.old_rows)
             .field("history_index", &self.history_index)
-            .field("snapshot", &self.snapshot)
+            .field("saved_line_for_history", &self.saved_line_for_history)
             .finish()
     }
 }
@@ -534,8 +538,8 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     }
     if s.history_index == history.len() {
         if prev {
-            // Save the current edited line before to overwrite it
-            s.snapshot();
+            // Save the current edited line before overwriting it
+            s.backup();
         } else {
             return Ok(());
         }
@@ -549,10 +553,12 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     }
     if s.history_index < history.len() {
         let buf = history.get(s.history_index).unwrap();
+        s.changes.borrow_mut().begin();
         s.line.update(buf, buf.len());
+        s.changes.borrow_mut().end();
     } else {
         // Restore current edited line
-        s.snapshot();
+        s.restore();
     }
     s.refresh_line()
 }
@@ -575,7 +581,9 @@ fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Resu
         history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir) {
         s.history_index = history_index;
         let buf = history.get(history_index).unwrap();
+        s.changes.borrow_mut().begin();
         s.line.update(buf, buf.len());
+        s.changes.borrow_mut().end();
         s.refresh_line()
     } else {
         beep()
@@ -589,8 +597,8 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
     }
     if s.history_index == history.len() {
         if first {
-            // Save the current edited line before to overwrite it
-            s.snapshot();
+            // Save the current edited line before overwriting it
+            s.backup();
         } else {
             return Ok(());
         }
@@ -600,11 +608,13 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
     if first {
         s.history_index = 0;
         let buf = history.get(s.history_index).unwrap();
+        s.changes.borrow_mut().begin();
         s.line.update(buf, buf.len());
+        s.changes.borrow_mut().end();
     } else {
         s.history_index = history.len();
         // Restore current edited line
-        s.snapshot();
+        s.restore();
     }
     s.refresh_line()
 }
@@ -1317,7 +1327,7 @@ mod test {
             cols: cols,
             old_rows: 0,
             history_index: 0,
-            snapshot: LineBuffer::with_capacity(100),
+            saved_line_for_history: LineBuffer::with_capacity(100),
             term: term,
             edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
             changes: Rc::new(RefCell::new(Changeset::new())),
@@ -1346,24 +1356,24 @@ mod test {
         }
 
         super::edit_history_next(&mut s, &history, true).unwrap();
-        assert_eq!(line, s.snapshot.as_str());
+        assert_eq!(line, s.saved_line_for_history.as_str());
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.line.as_str());
 
         for _ in 0..2 {
             super::edit_history_next(&mut s, &history, true).unwrap();
-            assert_eq!(line, s.snapshot.as_str());
+            assert_eq!(line, s.saved_line_for_history.as_str());
             assert_eq!(0, s.history_index);
             assert_eq!("line0", s.line.as_str());
         }
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        assert_eq!(line, s.snapshot.as_str());
+        assert_eq!(line, s.saved_line_for_history.as_str());
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.line.as_str());
 
         super::edit_history_next(&mut s, &history, false).unwrap();
-        // assert_eq!(line, s.snapshot);
+        // assert_eq!(line, s.saved_line_for_history);
         assert_eq!(2, s.history_index);
         assert_eq!(line, s.line.as_str());
     }

@@ -81,10 +81,12 @@ impl Changeset {
         }
     }
 
-    pub fn begin(&mut self) {
+    pub fn begin(&mut self) -> usize {
         debug!(target: "rustyline", "Changeset::begin");
         self.redos.clear();
+        let mark = self.undos.len();
         self.undos.push(Change::Begin);
+        mark
     }
 
     pub fn end(&mut self) {
@@ -108,7 +110,7 @@ impl Changeset {
     }
 
     pub fn insert(&mut self, idx: usize, c: char) {
-        debug!(target: "rustyline", "Changeset::insert({:?}, {:?})", idx, c);
+        debug!(target: "rustyline", "Changeset::insert({}, {:?})", idx, c);
         self.redos.clear();
         if !c.is_alphanumeric() {
             self.undos.push(Self::insert_char(idx, c));
@@ -138,7 +140,7 @@ impl Changeset {
     }
 
     pub fn insert_str<S: Into<String> + Debug>(&mut self, idx: usize, string: S) {
-        debug!(target: "rustyline", "Changeset::insert_str({:?}, {:?})", idx, string);
+        debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
         self.redos.clear();
         self.undos
             .push(Change::Insert {
@@ -148,7 +150,7 @@ impl Changeset {
     }
 
     pub fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
-        debug!(target: "rustyline", "Changeset::delete({:?}, {:?})", indx, string);
+        debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
         self.redos.clear();
 
         if !Self::single_char(string.as_ref()) {
@@ -244,27 +246,9 @@ impl Changeset {
         undone
     }
 
-    pub fn cancel(&mut self) {
-        debug!(target: "rustyline", "Changeset::cancel");
-        let mut waiting_for_begin = 1;
-        loop {
-            if let Some(change) = self.undos.pop() {
-                match change {
-                    Change::Begin => {
-                        waiting_for_begin -= 1;
-                    }
-                    Change::End => {
-                        waiting_for_begin += 1;
-                    }
-                    _ => {}
-                };
-            } else {
-                break;
-            }
-            if waiting_for_begin <= 0 {
-                break;
-            }
-        }
+    pub fn truncate(&mut self, len: usize) {
+        debug!(target: "rustyline", "Changeset::truncate({})", len);
+        self.undos.truncate(len);
     }
 
     #[cfg(test)]

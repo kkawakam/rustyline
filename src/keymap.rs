@@ -9,8 +9,10 @@ use consts::KeyPress;
 use tty::RawReader;
 use super::Result;
 
+/// The number of times one command should be repeated.
 pub type RepeatCount = usize;
 
+/// Commands
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     Abort, // Miscellaneous Command
@@ -101,16 +103,18 @@ fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount 
     }
 }
 
+/// Different word definitions
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Word {
-    // non-blanks characters
+    /// non-blanks characters
     Big,
-    // alphanumeric characters
+    /// alphanumeric characters
     Emacs,
-    // alphanumeric (and '_') characters
+    /// alphanumeric (and '_') characters
     Vi,
 }
 
+/// Where to move with respect to word boundary
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum At {
     Start,
@@ -118,12 +122,14 @@ pub enum At {
     AfterEnd,
 }
 
+/// Where to paste (relative to cursor position)
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Anchor {
     After,
     Before,
 }
 
+/// Vi charecter search
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharSearch {
     Forward(char),
@@ -145,7 +151,7 @@ impl CharSearch {
     }
 }
 
-
+// Where to move
 #[derive(Debug, Clone, PartialEq)]
 pub enum Movement {
     WholeLine, // not really a movement

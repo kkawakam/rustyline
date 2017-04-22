@@ -12,12 +12,14 @@ use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
 
+/// Word's case change
 pub enum WordAction {
     CAPITALIZE,
     LOWERCASE,
     UPPERCASE,
 }
 
+/// Delete (kill) direction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Forward,
@@ -30,16 +32,19 @@ impl Default for Direction {
     }
 }
 
+/// Listener to be notified when the some text is deleted.
 pub trait DeleteListener {
     fn delete(&mut self, idx: usize, string: &str, dir: Direction);
 }
 
+/// Listener to be notified when the line is modified.
 pub trait ChangeListener: DeleteListener {
     fn insert_char(&mut self, idx: usize, c: char);
     fn insert_str(&mut self, idx: usize, string: &str);
     fn replace(&mut self, idx: usize, old: &str, new: &str);
 }
 
+/// Line buffer
 pub struct LineBuffer {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
@@ -508,6 +513,8 @@ impl LineBuffer {
         }
     }
 
+    /// Move cursor to the matching character position.
+    /// Return `true` when the search succeeds.
     pub fn move_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
         if let Some(pos) = self.search_char_pos(&cs, n) {
             self.pos = pos;
@@ -639,6 +646,8 @@ impl LineBuffer {
         self.pos = start + text.len();
     }
 
+    /// Insert the `s`tring at the specified position.
+    /// Return `true` if the text has been inserted at the end of the line.
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
         for cl in &self.cl {
             cl.borrow_mut().insert_str(idx, s);
@@ -652,6 +661,7 @@ impl LineBuffer {
         }
     }
 
+    /// Remove the specified `range` in the line.
     pub fn delete_range(&mut self, range: Range<usize>) {
         self.set_pos(range.start);
         self.drain(range, Direction::default());
@@ -669,6 +679,8 @@ impl LineBuffer {
         self.buf.drain(range)
     }
 
+    /// Return the content between current cursor position and `mvt` position.
+    /// Return `None` when the buffer is empty or when the movement fails.
     pub fn copy(&self, mvt: Movement) -> Option<String> {
         if self.is_empty() {
             return None;

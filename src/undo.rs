@@ -1,7 +1,7 @@
 //! Undo API
 use std::fmt::Debug;
 
-use line_buffer::{ChangeListener, Direction, LineBuffer};
+use line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
 use unicode_segmentation::UnicodeSegmentation;
 
 enum Change {
@@ -9,7 +9,11 @@ enum Change {
     End,
     Insert { idx: usize, text: String }, // QuotedInsert, SelfInsert, Yank
     Delete { idx: usize, text: String }, /* BackwardDeleteChar, BackwardKillWord, DeleteChar, KillLine, KillWholeLine, KillWord, UnixLikeDiscard, ViDeleteTo */
-                                         //  Replace {idx: usize, old: String, new: String}, /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
+    Replace {
+        idx: usize,
+        old: String,
+        new: String,
+    }, /* CapitalizeWord, Complete, DowncaseWord, Replace, TransposeChars, TransposeWords, UpcaseWord, YankPop */
 }
 
 impl Change {
@@ -25,9 +29,13 @@ impl Change {
                 line.insert_str(idx, text);
                 line.set_pos(idx + text.len());
             }
-            /*Change::Replace{idx, ref old, ref new} => {
+            Change::Replace {
+                idx,
+                ref old,
+                ref new,
+            } => {
                 line.replace(idx..idx + new.len(), old);
-            }*/
+            }
         }
     }
 
@@ -43,9 +51,13 @@ impl Change {
             Change::Delete { idx, ref text } => {
                 line.delete_range(idx..idx + text.len());
             }
-            /*Change::Replace{idx, ref old, ref new} => {
+            Change::Replace {
+                idx,
+                ref old,
+                ref new,
+            } => {
                 line.replace(idx..idx + old.len(), new);
-            }*/
+            }
         }
     }
 
@@ -207,14 +219,15 @@ impl Changeset {
         graphemes.next().is_none()
     }
 
-    /*pub fn replace<S: Into<String>>(&mut self, idx: usize, old: String, new: S) {
+    pub fn replace<S: Into<String>>(&mut self, idx: usize, old: S, new: S) {
         self.redos.clear();
-        self.undos.push(Change::Replace {
-            idx: idx,
-            old: old.into(),
-            new: new.into(),
-        });
-    }*/
+        self.undos
+            .push(Change::Replace {
+                      idx: idx,
+                      old: old.into(),
+                      new: new.into(),
+                  });
+    }
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
         debug!(target: "rustyline", "Changeset::undo");
@@ -280,6 +293,11 @@ impl Changeset {
     }
 }
 
+impl DeleteListener for Changeset {
+    fn delete(&mut self, idx: usize, string: &str, _: Direction) {
+        self.delete(idx, string);
+    }
+}
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
         self.insert(idx, c);
@@ -287,8 +305,8 @@ impl ChangeListener for Changeset {
     fn insert_str(&mut self, idx: usize, string: &str) {
         self.insert_str(idx, string);
     }
-    fn delete(&mut self, idx: usize, string: &str, _: Direction) {
-        self.delete(idx, string);
+    fn replace(&mut self, idx: usize, old: &str, new: &str) {
+        self.replace(idx, old, new);
     }
 }
 
@@ -345,7 +363,7 @@ mod tests {
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello");
 
-        cs.delete(5, ", world!".to_owned());
+        cs.delete(5, ", world!");
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello, world!");
@@ -360,8 +378,8 @@ mod tests {
         buf.insert_str(0, "Hlo");
 
         let mut cs = Changeset::new();
-        cs.delete(1, "e".to_owned());
-        cs.delete(1, "l".to_owned());
+        cs.delete(1, "e");
+        cs.delete(1, "l");
         assert_eq!(1, cs.undos.len());
 
         cs.undo(&mut buf);
@@ -374,15 +392,15 @@ mod tests {
         buf.insert_str(0, "Hlo");
 
         let mut cs = Changeset::new();
-        cs.delete(2, "l".to_owned());
-        cs.delete(1, "e".to_owned());
+        cs.delete(2, "l");
+        cs.delete(1, "e");
         assert_eq!(1, cs.undos.len());
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello");
     }
 
-    /*#[test]
+    #[test]
     fn test_undo_replace() {
         let mut buf = LineBuffer::init("", 0, None);
         buf.insert_str(0, "Hello, world!");
@@ -391,12 +409,12 @@ mod tests {
 
         buf.replace(1..5, "i");
         assert_eq!(buf.as_str(), "Hi, world!");
-        cs.replace(1, "ello".to_owned(), "i");
+        cs.replace(1, "ello", "i");
 
         cs.undo(&mut buf);
         assert_eq!(buf.as_str(), "Hello, world!");
 
         cs.redo(&mut buf);
         assert_eq!(buf.as_str(), "Hi, world!");
-    }*/
+    }
 }

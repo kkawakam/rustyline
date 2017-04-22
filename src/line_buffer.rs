@@ -2,7 +2,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::iter;
-use std::ops::{Deref, Range};
+use std::ops::{Deref, Index, Range};
 use std::rc::Rc;
 use std::string::Drain;
 use std_unicode::str::UnicodeStr;
@@ -30,16 +30,21 @@ impl Default for Direction {
     }
 }
 
-pub trait ChangeListener {
+pub trait DeleteListener {
+    fn delete(&mut self, idx: usize, string: &str, dir: Direction);
+}
+
+pub trait ChangeListener: DeleteListener {
     fn insert_char(&mut self, idx: usize, c: char);
     fn insert_str(&mut self, idx: usize, string: &str);
-    fn delete(&mut self, idx: usize, string: &str, dir: Direction);
+    fn replace(&mut self, idx: usize, old: &str, new: &str);
 }
 
 pub struct LineBuffer {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)
-    cl: Vec<Rc<RefCell<ChangeListener>>>,
+    dl: Option<Rc<RefCell<DeleteListener>>>,
+    cl: Option<Rc<RefCell<ChangeListener>>>,
 }
 
 impl fmt::Debug for LineBuffer {
@@ -57,7 +62,8 @@ impl LineBuffer {
         LineBuffer {
             buf: String::with_capacity(capacity),
             pos: 0,
-            cl: Vec::new(),
+            dl: None,
+            cl: None,
         }
     }
 
@@ -66,17 +72,21 @@ impl LineBuffer {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
-        if cl.is_some() {
-            lb.bind(cl.unwrap());
-        }
+        lb.cl = cl;
         lb
     }
 
-    pub fn bind(&mut self, cl: Rc<RefCell<ChangeListener>>) {
-        self.cl.push(cl);
+    pub fn set_delete_listener(&mut self, dl: Rc<RefCell<DeleteListener>>) {
+        self.dl = Some(dl);
     }
-    pub fn unbind(&mut self) {
-        self.cl.pop();
+    pub fn remove_delete_listener(&mut self) {
+        self.dl = None;
+    }
+    pub fn set_change_listener(&mut self, dl: Rc<RefCell<ChangeListener>>) {
+        self.cl = Some(dl);
+    }
+    pub fn remove_change_listener(&mut self) {
+        self.cl = None;
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -616,8 +626,16 @@ impl LineBuffer {
     /// and positions the cursor to the end of text.
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
-        self.drain(range, Direction::default());
-        self.insert_str(start, text);
+        for cl in &self.cl {
+            cl.borrow_mut()
+                .replace(start, self.buf.index(range.clone()), text);
+        }
+        self.buf.drain(range);
+        if start == self.buf.len() {
+            self.buf.push_str(text);
+        } else {
+            self.buf.insert_str(start, text);
+        }
         self.pos = start + text.len();
     }
 
@@ -640,6 +658,10 @@ impl LineBuffer {
     }
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
+        for dl in &self.dl {
+            dl.borrow_mut()
+                .delete(range.start, &self.buf[range.start..range.end], dir);
+        }
         for cl in &self.cl {
             cl.borrow_mut()
                 .delete(range.start, &self.buf[range.start..range.end], dir);
@@ -764,7 +786,7 @@ mod test {
     use std::cell::RefCell;
     use std::rc::Rc;
     use keymap::{At, CharSearch, Word};
-    use super::{ChangeListener, Direction, LineBuffer, MAX_LINE, WordAction};
+    use super::{ChangeListener, DeleteListener, Direction, LineBuffer, MAX_LINE, WordAction};
 
     struct Listener {
         deleted_str: Option<String>,
@@ -782,12 +804,15 @@ mod test {
         }
     }
 
-    impl ChangeListener for Listener {
-        fn insert_char(&mut self, _: usize, _: char) {}
-        fn insert_str(&mut self, _: usize, _: &str) {}
+    impl DeleteListener for Listener {
         fn delete(&mut self, _: usize, string: &str, _: Direction) {
             self.deleted_str = Some(string.to_owned());
         }
+    }
+    impl ChangeListener for Listener {
+        fn insert_char(&mut self, _: usize, _: char) {}
+        fn insert_str(&mut self, _: usize, _: &str) {}
+        fn replace(&mut self, _: usize, _: &str, _: &str) {}
     }
 
     #[test]

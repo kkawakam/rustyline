@@ -1,5 +1,5 @@
 //! Kill Ring
-use line_buffer::{ChangeListener, Direction};
+use line_buffer::{DeleteListener, Direction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -112,9 +112,7 @@ impl KillRing {
     }
 }
 
-impl ChangeListener for KillRing {
-    fn insert_char(&mut self, _: usize, _: char) {}
-    fn insert_str(&mut self, _: usize, _: &str) {}
+impl DeleteListener for KillRing {
     fn delete(&mut self, _: usize, string: &str, dir: Direction) {
         if !self.killing {
             return;

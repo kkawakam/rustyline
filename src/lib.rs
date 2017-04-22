@@ -897,9 +897,8 @@ fn readline_edit<C: Completer>(prompt: &str,
                            editor.history.len(),
                            editor.custom_bindings.clone());
 
-    s.line.bind(editor.kill_ring.clone());
-    // must be the last
-    s.line.bind(s.changes.clone());
+    s.line.set_delete_listener(editor.kill_ring.clone());
+    s.line.set_change_listener(s.changes.clone());
 
     try!(s.refresh_line());
 
@@ -1104,11 +1103,11 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Undo => {
-                s.line.unbind();
+                s.line.remove_change_listener();
                 if s.changes.borrow_mut().undo(&mut s.line) {
                     try!(s.refresh_line());
                 }
-                s.line.bind(s.changes.clone());
+                s.line.set_change_listener(s.changes.clone());
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);

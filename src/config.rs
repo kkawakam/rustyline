@@ -1,6 +1,7 @@
 //! Customize line editor
 use std::default::Default;
 
+/// User preferences
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
     /// Maximum number of entries in History.
@@ -73,6 +74,7 @@ impl Default for Config {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryDuplicates {
     AlwaysAdd,
+    /// a line will not be added to the history if it matches the previous entry
     IgnoreConsecutive,
 }
 
@@ -86,12 +88,14 @@ pub enum CompletionType {
     List,
 }
 
+/// Style of editing / Standard keymaps
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditMode {
     Emacs,
     Vi,
 }
 
+/// Configuration builder
 #[derive(Debug, Default)]
 pub struct Builder {
     p: Config,

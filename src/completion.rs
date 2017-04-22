@@ -124,7 +124,7 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
 
 /// Escape any `break_chars` in `input` string with `esc_char`.
 /// For example, '/User Information' becomes '/User\ Information'
-/// when space is a breaking char and '\' the escape char.
+/// when space is a breaking char and '\\' the escape char.
 pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char>) -> String {
     if esc_char.is_none() {
         return input;

@@ -73,7 +73,7 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 struct State<'out, 'prompt> {
     out: &'out mut Write,
     prompt: &'prompt str, // Prompt to display
-    prompt_size: Position, // Prompt Unicode width and height
+    prompt_size: Position, // Prompt Unicode/visible width and height
     line: LineBuffer, // Edited line buffer
     cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
     cols: usize, // Number of columns in terminal
@@ -563,6 +563,7 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     s.refresh_line()
 }
 
+// Non-incremental, anchored search
 fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
     if history.is_empty() {
         return beep();
@@ -1271,6 +1272,7 @@ impl<C: Completer> fmt::Debug for Editor<C> {
     }
 }
 
+/// Edited lines iterator
 pub struct Iter<'a, C: Completer>
     where C: 'a
 {

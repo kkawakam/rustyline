@@ -12,6 +12,7 @@ use libc;
 use super::Result;
 use config::{Config, HistoryDuplicates};
 
+/// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Forward,
@@ -153,6 +154,7 @@ impl History {
         self.search_match(term, start, dir, test)
     }
 
+    /// Anchored search
     pub fn starts_with(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
         let test = |entry: &String| entry.starts_with(term);
         self.search_match(term, start, dir, test)

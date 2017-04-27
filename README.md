@@ -99,8 +99,10 @@ Ctrl-T       | Transpose previous character with current character
 Ctrl-U       | Delete from start of line to cursor
 Ctrl-V       | Insert any special character without perfoming its associated action (#65)
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
+Ctrl-X Ctrl-U | Undo
 Ctrl-Y       | Paste from Yank buffer
 Ctrl-Z       | Suspend (unix only)
+Ctrl-_       | Undo
 
 ### Emacs mode (default mode)
 
@@ -168,6 +170,7 @@ s            | Delete a single character under the cursor and enter input mode
 S            | Change current line (equivalent to 0c$)
 t<char>      | Move right to the next occurance of `char`, then one char backward
 T<char>      | Move left to the previous occurance of `char`, then one char forward
+u            | Undo
 w            | Move one word or token right
 W            | Move one non-blank word right
 x            | Delete a single character under the cursor
@@ -188,7 +191,6 @@ Esc          | Switch to command mode
 
 ## ToDo
 
- - Undos
  - expose an API callable from C
 
 ## Wine

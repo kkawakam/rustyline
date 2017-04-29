@@ -4,9 +4,6 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-#[cfg(windows)]
-use winapi;
-
 use Result;
 use config::Config;
 use consts::KeyPress;

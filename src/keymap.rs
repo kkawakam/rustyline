@@ -15,37 +15,67 @@ pub type RepeatCount = usize;
 /// Commands
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
+    /// abort
     Abort, // Miscellaneous Command
+    /// accept-line
     AcceptLine,
+    /// beginning-of-history
     BeginningOfHistory,
+    /// capitalize-word
     CapitalizeWord,
+    /// clear-screen
     ClearScreen,
+    /// complete
     Complete,
+    /// downcase-word
     DowncaseWord,
+    /// vi-eof-maybe
     EndOfFile,
+    /// end-of-history
     EndOfHistory,
+    /// forward-search-history
     ForwardSearchHistory,
+    /// history-search-backward
     HistorySearchBackward,
+    /// history-search-forward
     HistorySearchForward,
     Insert(RepeatCount, String),
     Interrupt,
+    /// backward-delete-char, backward-kill-line, backward-kill-word
+    /// delete-char, kill-line, kill-word, unix-line-discard, unix-word-rubout,
+    /// vi-change-to, vi-delete, vi-delete-to, vi-rubout, vi-subst
     Kill(Movement),
+    /// backward-char, backward-word, beginning-of-line, end-of-line,
+    /// forward-char, forward-word, vi-char-search, vi-end-word, vi-next-word, vi-prev-word
     Move(Movement),
+    /// next-history
     NextHistory,
     Noop,
+    /// previous-history
     PreviousHistory,
+    /// quoted-insert
     QuotedInsert,
+    /// vi-change-char (TODO: vi-replace)
     Replace(RepeatCount, char),
+    /// reverse-search-history
     ReverseSearchHistory,
+    /// self-insert
     SelfInsert(RepeatCount, char),
     Suspend,
+    /// transpose-chars
     TransposeChars,
+    /// transpose-words
     TransposeWords(RepeatCount),
+    /// undo
     Undo,
     Unknown,
+    /// upcase-word
     UpcaseWord,
+    /// vi-yank-to
     ViYankTo(Movement),
+    /// yank, vi-put
     Yank(RepeatCount, Anchor),
+    /// yank-pop
     YankPop,
 }
 
@@ -129,7 +159,7 @@ pub enum Anchor {
     Before,
 }
 
-/// Vi charecter search
+/// Vi character search
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharSearch {
     Forward(char),
@@ -151,17 +181,25 @@ impl CharSearch {
     }
 }
 
-// Where to move
+/// Where to move
 #[derive(Debug, Clone, PartialEq)]
 pub enum Movement {
     WholeLine, // not really a movement
+    /// beginning-of-line
     BeginningOfLine,
+    /// end-of-line
     EndOfLine,
+    /// backward-word, vi-prev-word
     BackwardWord(RepeatCount, Word), // Backward until start of word
+    /// forward-word, vi-end-word, vi-next-word
     ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
+    /// vi-char-search
     ViCharSearch(RepeatCount, CharSearch),
+    /// vi-first-print
     ViFirstPrint,
+    /// backward-char
     BackwardChar(RepeatCount),
+    /// forward-char
     ForwardChar(RepeatCount),
 }
 
@@ -187,6 +225,7 @@ impl Movement {
     }
 }
 
+/// Tranform key(s) to commands based on current input mode
 pub struct EditState {
     mode: EditMode,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
@@ -216,6 +255,7 @@ impl EditState {
         self.mode == EditMode::Emacs
     }
 
+    /// Parse user input into one command
     pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         match self.mode {
             EditMode::Emacs => self.emacs(rdr),

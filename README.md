@@ -221,3 +221,5 @@ $ bind -p
  - [liner](https://github.com/peterh/liner) (Go)
  - [readline](https://github.com/chzyer/readline) (Go)
  - [haskeline](https://github.com/judah/haskeline) (Haskell)
+ - [rb-readline](https://github.com/ConnorAtherton/rb-readline) (Ruby)
+ - [python-prompt-toolkit](https://github.com/jonathanslenders/python-prompt-toolkit) (Python)

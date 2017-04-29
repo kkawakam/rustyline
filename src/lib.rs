@@ -53,7 +53,7 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use tty::{RawMode, RawReader, Terminal, Term};
+use tty::{Position, RawMode, RawReader, Renderer, Terminal, Term};
 
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
@@ -71,49 +71,37 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 /// Represent the state during line editing.
 /// Implement rendering.
 struct State<'out, 'prompt> {
-    out: &'out mut Write,
+    out: &'out mut Renderer,
     prompt: &'prompt str, // Prompt to display
     prompt_size: Position, // Prompt Unicode/visible width and height
     line: LineBuffer, // Edited line buffer
     cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
-    cols: usize, // Number of columns in terminal
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
-    term: Terminal, // terminal
     byte_buffer: [u8; 4],
     edit_state: EditState,
     changes: Rc<RefCell<Changeset>>,
 }
 
-#[derive(Copy, Clone, Debug, Default)]
-struct Position {
-    col: usize,
-    row: usize,
-}
-
 impl<'out, 'prompt> State<'out, 'prompt> {
-    fn new(out: &'out mut Write,
-           term: Terminal,
+    fn new(out: &'out mut Renderer,
            config: &Config,
            prompt: &'prompt str,
            history_index: usize,
            custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
-        let cols = term.get_columns();
-        let prompt_size = calculate_position(prompt, Position::default(), cols);
+        let prompt_size = out.calculate_position(prompt, Position::default());
         State {
             out: out,
             prompt: prompt,
             prompt_size: prompt_size,
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
-            cols: cols,
             old_rows: prompt_size.row,
             history_index: history_index,
             saved_line_for_history: LineBuffer::with_capacity(capacity),
-            term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(config, custom_bindings),
             changes: Rc::new(RefCell::new(Changeset::new())),
@@ -123,8 +111,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         loop {
             let rc = self.edit_state.next_cmd(rdr);
-            if rc.is_err() && self.term.sigwinch() {
-                self.update_columns();
+            if rc.is_err() && self.out.sigwinch() {
+                self.out.update_size();
                 try!(self.refresh_line());
                 continue;
             }
@@ -142,6 +130,18 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                     self.saved_line_for_history.pos());
     }
 
+    fn move_cursor(&mut self) -> Result<()> {
+        // calculate the desired position of the cursor
+        let cursor = self.out
+            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+        if self.cursor == cursor {
+            return Ok(());
+        }
+        try!(self.out.move_cursor(self.cursor, cursor));
+        self.cursor = cursor;
+        Ok(())
+    }
+
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()> {
@@ -150,100 +150,21 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = calculate_position(prompt, Position::default(), self.cols);
+        let prompt_size = self.out.calculate_position(prompt, Position::default());
         self.refresh(prompt, prompt_size)
     }
 
-    #[cfg(unix)]
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
-        use std::fmt::Write;
-
-        // calculate the position of the end of the input line
-        let end_pos = calculate_position(&self.line, prompt_size, self.cols);
-        // calculate the desired position of the cursor
-        let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
-
-        let mut ab = String::new();
-
-        let cursor_row_movement = self.old_rows - self.cursor.row;
-        // move the cursor down as required
-        if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();
-        }
-        // clear old rows
-        for _ in 0..self.old_rows {
-            ab.push_str("\r\x1b[0K\x1b[1A");
-        }
-        // clear the line
-        ab.push_str("\r\x1b[0K");
-
-        // display the prompt
-        ab.push_str(prompt);
-        // display the input line
-        ab.push_str(&self.line);
-        // we have to generate our own newline on line wrap
-        if end_pos.col == 0 && end_pos.row > 0 {
-            ab.push_str("\n");
-        }
-        // position the cursor
-        let cursor_row_movement = end_pos.row - cursor.row;
-        // move the cursor up as required
-        if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
-        }
-        // position the cursor within the line
-        if cursor.col > 0 {
-            write!(ab, "\r\x1b[{}C", cursor.col).unwrap();
-        } else {
-            ab.push('\r');
-        }
+        let (cursor, end_pos) = try!(self.out
+                                         .refresh_line(prompt,
+                                                       prompt_size,
+                                                       &self.line,
+                                                       self.cursor.row,
+                                                       self.old_rows));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
-
-        write_and_flush(self.out, ab.as_bytes())
-    }
-
-    #[cfg(windows)]
-    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
-        // calculate the position of the end of the input line
-        let end_pos = calculate_position(&self.line, prompt_size, self.cols);
-        // calculate the desired position of the cursor
-        let cursor = calculate_position(&self.line[..self.line.pos()], prompt_size, self.cols);
-
-        // position at the start of the prompt, clear to end of previous input
-        let mut info = try!(self.term.get_console_screen_buffer_info());
-        info.dwCursorPosition.X = 0;
-        info.dwCursorPosition.Y -= self.cursor.row as i16;
-        try!(self.term
-                 .set_console_cursor_position(info.dwCursorPosition));
-        let mut _count = 0;
-        try!(self.term
-                 .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as
-                                                u32,
-                                                info.dwCursorPosition));
-        let mut ab = String::new();
-        // display the prompt
-        ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
-        // display the input line
-        ab.push_str(&self.line);
-        try!(write_and_flush(self.out, ab.as_bytes()));
-
-        // position the cursor
-        let mut info = try!(self.term.get_console_screen_buffer_info());
-        info.dwCursorPosition.X = cursor.col as i16;
-        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        try!(self.term
-                 .set_console_cursor_position(info.dwCursorPosition));
-
-        self.cursor = cursor;
-        self.old_rows = end_pos.row;
-
         Ok(())
-    }
-
-    fn update_columns(&mut self) {
-        self.cols = self.term.get_columns();
     }
 }
 
@@ -254,7 +175,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("prompt_size", &self.prompt_size)
             .field("buf", &self.line)
             .field("cursor", &self.cursor)
-            .field("cols", &self.cols)
+            .field("cols", &self.out.get_columns())
             .field("old_rows", &self.old_rows)
             .field("history_index", &self.history_index)
             .field("saved_line_for_history", &self.saved_line_for_history)
@@ -262,82 +183,18 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-fn write_and_flush(w: &mut Write, buf: &[u8]) -> Result<()> {
-    try!(w.write_all(buf));
-    try!(w.flush());
-    Ok(())
-}
-
-/// Beep, used for completion when there is nothing to complete or when all
-/// the choices were already shown.
-fn beep() -> Result<()> {
-    write_and_flush(&mut io::stderr(), b"\x07") // TODO bell-style
-}
-
-/// Calculate the number of columns and rows used to display `s` on a `cols` width terminal
-/// starting at `orig`.
-/// Control characters are treated as having zero width.
-/// Characters with 2 column width are correctly handled (not splitted).
-#[allow(if_same_then_else)]
-fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
-    let mut pos = orig;
-    let mut esc_seq = 0;
-    for c in s.chars() {
-        let cw = if esc_seq == 1 {
-            if c == '[' {
-                // CSI
-                esc_seq = 2;
-            } else {
-                // two-character sequence
-                esc_seq = 0;
-            }
-            None
-        } else if esc_seq == 2 {
-            if c == ';' || (c >= '0' && c <= '9') {
-            } else if c == 'm' {
-                // last
-                esc_seq = 0;
-            } else {
-                // not supported
-                esc_seq = 0;
-            }
-            None
-        } else if c == '\x1b' {
-            esc_seq = 1;
-            None
-        } else if c == '\n' {
-            pos.col = 0;
-            pos.row += 1;
-            None
-        } else {
-            c.width()
-        };
-        if let Some(cw) = cw {
-            pos.col += cw;
-            if pos.col > cols {
-                pos.row += 1;
-                pos.col = cw;
-            }
-        }
-    }
-    if pos.col == cols {
-        pos.col = 0;
-        pos.row += 1;
-    }
-    pos
-}
-
 /// Insert the character `ch` at cursor current position.
 fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if let Some(push) = s.line.insert(ch, n) {
         if push {
-            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() {
                 // Avoid a full update of the line in the trivial case.
-                let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
+                let cursor = s.out
+                    .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
                 s.cursor = cursor;
                 let bits = ch.encode_utf8(&mut s.byte_buffer);
                 let bits = bits.as_bytes();
-                write_and_flush(s.out, bits)
+                s.out.write_and_flush(bits)
             } else {
                 s.refresh_line()
             }
@@ -391,7 +248,7 @@ fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
 /// Move cursor on the left.
 fn edit_move_backward(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.move_backward(n) {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -400,7 +257,7 @@ fn edit_move_backward(s: &mut State, n: RepeatCount) -> Result<()> {
 /// Move cursor on the right.
 fn edit_move_forward(s: &mut State, n: RepeatCount) -> Result<()> {
     if s.line.move_forward(n) {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -409,7 +266,7 @@ fn edit_move_forward(s: &mut State, n: RepeatCount) -> Result<()> {
 /// Move cursor to the start of the line.
 fn edit_move_home(s: &mut State) -> Result<()> {
     if s.line.move_home() {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -418,7 +275,7 @@ fn edit_move_home(s: &mut State) -> Result<()> {
 /// Move cursor to the end of the line.
 fn edit_move_end(s: &mut State) -> Result<()> {
     if s.line.move_end() {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -471,7 +328,7 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
 
 fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
     if s.line.move_to_prev_word(word_def, n) {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -489,7 +346,7 @@ fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Resul
 
 fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
     if s.line.move_to_next_word(at, word_def, n) {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -497,7 +354,7 @@ fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: RepeatCount)
 
 fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
     if s.line.move_to(cs, n) {
-        s.refresh_line()
+        s.move_cursor()
     } else {
         Ok(())
     }
@@ -570,12 +427,12 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
 // Non-incremental, anchored search
 fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
     if history.is_empty() {
-        return beep();
+        return s.out.beep();
     }
     if s.history_index == history.len() && dir == Direction::Forward {
-        return beep();
+        return s.out.beep();
     } else if s.history_index == 0 && dir == Direction::Reverse {
-        return beep();
+        return s.out.beep();
     }
     if dir == Direction::Reverse {
         s.history_index -= 1;
@@ -591,7 +448,7 @@ fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Resu
         s.changes.borrow_mut().end();
         s.refresh_line()
     } else {
-        beep()
+        s.out.beep()
     }
 }
 
@@ -634,7 +491,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     // if no completions, we are done
     if candidates.is_empty() {
-        try!(beep());
+        try!(s.out.beep());
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
         let mark = s.changes.borrow_mut().begin();
@@ -659,7 +516,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
-                        try!(beep());
+                        try!(s.out.beep());
                     }
                 }
                 Cmd::Abort => {
@@ -681,7 +538,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
     } else if CompletionType::List == config.completion_type() {
         // beep if ambiguous
         if candidates.len() > 1 {
-            try!(beep());
+            try!(s.out.beep());
         }
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it and return to main loop
@@ -704,7 +561,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
         // we got a second tab, maybe show list of possible completions
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
-            try!(write_and_flush(s.out, msg.as_bytes()));
+            try!(s.out.write_and_flush(msg.as_bytes()));
             s.old_rows += 1;
             while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
                   cmd != Cmd::SelfInsert(1, 'n') &&
@@ -738,20 +595,21 @@ fn page_completions<R: RawReader>(rdr: &mut R,
     use std::cmp;
 
     let min_col_pad = 2;
-    let max_width = cmp::min(s.cols,
+    let cols = s.out.get_columns();
+    let max_width = cmp::min(cols,
                              candidates
                                  .into_iter()
                                  .map(|s| s.as_str().width())
                                  .max()
                                  .unwrap() + min_col_pad);
-    let num_cols = s.cols / max_width;
+    let num_cols = cols / max_width;
 
-    let mut pause_row = s.term.get_rows() - 1;
+    let mut pause_row = s.out.get_rows() - 1;
     let num_rows = (candidates.len() + num_cols - 1) / num_cols;
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
-            try!(write_and_flush(s.out, b"\n--More--"));
+            try!(s.out.write_and_flush(b"\n--More--"));
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1_, 'Y') &&
                   cmd != Cmd::SelfInsert(1, 'n') &&
@@ -767,16 +625,16 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                 Cmd::SelfInsert(1, 'y') |
                 Cmd::SelfInsert(1, 'Y') |
                 Cmd::SelfInsert(1, ' ') => {
-                    pause_row += s.term.get_rows() - 1;
+                    pause_row += s.out.get_rows() - 1;
                 }
                 Cmd::AcceptLine => {
                     pause_row += 1;
                 }
                 _ => break,
             }
-            try!(write_and_flush(s.out, b"\n"));
+            try!(s.out.write_and_flush(b"\n"));
         } else {
-            try!(write_and_flush(s.out, b"\n"));
+            try!(s.out.write_and_flush(b"\n"));
         }
         ab.clear();
         for col in 0..num_cols {
@@ -792,9 +650,9 @@ fn page_completions<R: RawReader>(rdr: &mut R,
                 }
             }
         }
-        try!(write_and_flush(s.out, ab.as_bytes()));
+        try!(s.out.write_and_flush(ab.as_bytes()));
     }
-    try!(write_and_flush(s.out, b"\n"));
+    try!(s.out.write_and_flush(b"\n"));
     try!(s.refresh_line());
     Ok(None)
 }
@@ -893,7 +751,6 @@ fn readline_edit<C: Completer>(prompt: &str,
 
     editor.reset_kill_ring();
     let mut s = State::new(&mut stdout,
-                           editor.term.clone(),
                            &editor.config,
                            prompt,
                            editor.history.len(),
@@ -904,7 +761,7 @@ fn readline_edit<C: Completer>(prompt: &str,
 
     try!(s.refresh_line());
 
-    let mut rdr = try!(s.term.create_reader(&editor.config));
+    let mut rdr = try!(editor.term.create_reader(&editor.config));
 
     loop {
         let rc = s.next_cmd(&mut rdr);
@@ -998,7 +855,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
-                try!(s.term.clear_screen(&mut s.out));
+                try!(s.out.clear_screen());
                 try!(s.refresh_line())
             }
             Cmd::NextHistory => {
@@ -1118,7 +975,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             Cmd::Suspend => {
                 try!(original_mode.disable_raw_mode());
                 try!(tty::suspend());
-                try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
+                try!(editor.term.enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line());
                 continue;
             }
@@ -1194,7 +1051,8 @@ impl<C: Completer> Editor<C> {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
-            try!(write_and_flush(&mut stdout, prompt.as_bytes()));
+            try!(stdout.write_all(prompt.as_bytes()));
+            try!(stdout.flush());
 
             readline_direct()
         } else if !self.term.is_stdin_tty() {
@@ -1304,7 +1162,6 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
 mod test {
     use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::io::Write;
     use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
@@ -1313,15 +1170,10 @@ mod test {
     use consts::KeyPress;
     use keymap::{Cmd, EditState};
     use super::{Editor, Position, Result, State};
-    use tty::{Terminal, Term};
+    use tty::Renderer;
     use undo::Changeset;
 
-    fn init_state<'out>(out: &'out mut Write,
-                        line: &str,
-                        pos: usize,
-                        cols: usize)
-                        -> State<'out, 'static> {
-        let term = Terminal::new();
+    fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> State<'out, 'static> {
         let config = Config::default();
         State {
             out: out,
@@ -1329,11 +1181,9 @@ mod test {
             prompt_size: Position::default(),
             line: LineBuffer::init(line, pos, None),
             cursor: Position::default(),
-            cols: cols,
             old_rows: 0,
             history_index: 0,
             saved_line_for_history: LineBuffer::with_capacity(100),
-            term: term,
             byte_buffer: [0; 4],
             edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
             changes: Rc::new(RefCell::new(Changeset::new())),
@@ -1350,7 +1200,7 @@ mod test {
     fn edit_history_next() {
         let mut out = ::std::io::sink();
         let line = "current edited line";
-        let mut s = init_state(&mut out, line, 6, 80);
+        let mut s = init_state(&mut out, line, 6);
         let mut history = History::new();
         history.add("line0");
         history.add("line1");
@@ -1394,7 +1244,7 @@ mod test {
     #[test]
     fn complete_line() {
         let mut out = ::std::io::sink();
-        let mut s = init_state(&mut out, "rus", 3, 80);
+        let mut s = init_state(&mut out, "rus", 3);
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
@@ -1402,13 +1252,6 @@ mod test {
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
-    }
-
-    #[test]
-    fn prompt_with_ansi_escape_codes() {
-        let pos = super::calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
-        assert_eq!(3, pos.col);
-        assert_eq!(0, pos.row);
     }
 
     fn assert_line(keys: &[KeyPress], expected_line: &str) {

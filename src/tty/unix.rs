@@ -3,17 +3,20 @@ use std;
 use std::io::{self, Chars, Read, Stdout, Write};
 use std::sync;
 use std::sync::atomic;
+
 use libc;
 use nix;
 use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
+use unicode_width::UnicodeWidthChar;
 
 use config::Config;
 use consts::{self, KeyPress};
 use Result;
 use error;
-use super::{RawMode, RawReader, Term};
+use line_buffer::LineBuffer;
+use super::{Position, RawMode, RawReader, Renderer, Term};
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -219,6 +222,198 @@ impl RawReader for PosixRawReader {
     }
 }
 
+/// Console output writer
+pub struct PosixRenderer {
+    out: Stdout,
+    cols: usize, // Number of columns in terminal
+}
+
+impl PosixRenderer {
+    fn new() -> PosixRenderer {
+        let (cols, _) = get_win_size();
+        PosixRenderer {
+            out: io::stdout(),
+            cols: cols,
+        }
+    }
+}
+
+impl Renderer for PosixRenderer {
+    fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
+        use std::fmt::Write;
+        let mut ab = String::new();
+        if new.row > old.row {
+            // move down
+            let row_shift = new.row - old.row;
+            if row_shift == 1 {
+                ab.push_str("\x1b[B");
+            } else {
+                write!(ab, "\x1b[{}B", row_shift).unwrap();
+            }
+        } else if new.row < old.row {
+            // move up
+            let row_shift = old.row - new.row;
+            if row_shift == 1 {
+                ab.push_str("\x1b[A");
+            } else {
+                write!(ab, "\x1b[{}A", row_shift).unwrap();
+            }
+        }
+        if new.col > old.col {
+            // move right
+            let col_shift = new.col - old.col;
+            if col_shift == 1 {
+                ab.push_str("\x1b[C");
+            } else {
+                write!(ab, "\x1b[{}C", col_shift).unwrap();
+            }
+        } else if new.col < old.col {
+            // move left
+            let col_shift = old.col - new.col;
+            if col_shift == 1 {
+                ab.push_str("\x1b[D");
+            } else {
+                write!(ab, "\x1b[{}D", col_shift).unwrap();
+            }
+        }
+        self.write_and_flush(ab.as_bytes())
+    }
+
+    fn refresh_line(&mut self,
+                    prompt: &str,
+                    prompt_size: Position,
+                    line: &LineBuffer,
+                    current_row: usize,
+                    old_rows: usize)
+                    -> Result<(Position, Position)> {
+        use std::fmt::Write;
+        let mut ab = String::new();
+
+        // calculate the position of the end of the input line
+        let end_pos = self.calculate_position(line, prompt_size);
+        // calculate the desired position of the cursor
+        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+
+        let cursor_row_movement = old_rows - current_row;
+        // move the cursor down as required
+        if cursor_row_movement > 0 {
+            write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();
+        }
+        // clear old rows
+        for _ in 0..old_rows {
+            ab.push_str("\r\x1b[0K\x1b[1A");
+        }
+        // clear the line
+        ab.push_str("\r\x1b[0K");
+
+        // display the prompt
+        ab.push_str(prompt);
+        // display the input line
+        ab.push_str(line);
+        // we have to generate our own newline on line wrap
+        if end_pos.col == 0 && end_pos.row > 0 {
+            ab.push_str("\n");
+        }
+        // position the cursor
+        let cursor_row_movement = end_pos.row - cursor.row;
+        // move the cursor up as required
+        if cursor_row_movement > 0 {
+            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
+        }
+        // position the cursor within the line
+        if cursor.col > 0 {
+            write!(ab, "\r\x1b[{}C", cursor.col).unwrap();
+        } else {
+            ab.push('\r');
+        }
+
+        try!(self.write_and_flush(ab.as_bytes()));
+        Ok((cursor, end_pos))
+    }
+
+    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
+        try!(self.out.write_all(buf));
+        try!(self.out.flush());
+        Ok(())
+    }
+
+    /// Control characters are treated as having zero width.
+    /// Characters with 2 column width are correctly handled (not splitted).
+    #[allow(if_same_then_else)]
+    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        let mut pos = orig;
+        let mut esc_seq = 0;
+        for c in s.chars() {
+            let cw = if esc_seq == 1 {
+                if c == '[' {
+                    // CSI
+                    esc_seq = 2;
+                } else {
+                    // two-character sequence
+                    esc_seq = 0;
+                }
+                None
+            } else if esc_seq == 2 {
+                if c == ';' || (c >= '0' && c <= '9') {
+                } else if c == 'm' {
+                    // last
+                    esc_seq = 0;
+                } else {
+                    // not supported
+                    esc_seq = 0;
+                }
+                None
+            } else if c == '\x1b' {
+                esc_seq = 1;
+                None
+            } else if c == '\n' {
+                pos.col = 0;
+                pos.row += 1;
+                None
+            } else {
+                c.width()
+            };
+            if let Some(cw) = cw {
+                pos.col += cw;
+                if pos.col > self.cols {
+                    pos.row += 1;
+                    pos.col = cw;
+                }
+            }
+        }
+        if pos.col == self.cols {
+            pos.col = 0;
+            pos.row += 1;
+        }
+        pos
+    }
+
+    /// Clear the screen. Used to handle ctrl+l
+    fn clear_screen(&mut self) -> Result<()> {
+        self.write_and_flush(b"\x1b[H\x1b[2J")
+    }
+
+    /// Check if a SIGWINCH signal has been received
+    fn sigwinch(&self) -> bool {
+        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+    }
+
+    /// Try to update the number of columns in the current terminal,
+    fn update_size(&mut self) {
+        let (cols, _) = get_win_size();
+        self.cols = cols;
+    }
+
+    fn get_columns(&self) -> usize {
+        self.cols
+    }
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
+    fn get_rows(&self) -> usize {
+        let (_, rows) = get_win_size();
+        rows
+    }
+}
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
@@ -247,7 +442,7 @@ pub struct PosixTerminal {
 
 impl Term for PosixTerminal {
     type Reader = PosixRawReader;
-    type Writer = Stdout;
+    type Writer = PosixRenderer;
     type Mode = Mode;
 
     fn new() -> PosixTerminal {
@@ -274,20 +469,6 @@ impl Term for PosixTerminal {
     }
 
     // Interactive loop:
-
-    /// Try to get the number of columns in the current terminal,
-    /// or assume 80 if it fails.
-    fn get_columns(&self) -> usize {
-        let (cols, _) = get_win_size();
-        cols
-    }
-
-    /// Try to get the number of rows in the current terminal,
-    /// or assume 24 if it fails.
-    fn get_rows(&self) -> usize {
-        let (_, rows) = get_win_size();
-        rows
-    }
 
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
@@ -317,20 +498,8 @@ impl Term for PosixTerminal {
         PosixRawReader::new(config)
     }
 
-    fn create_writer(&self) -> Stdout {
-        io::stdout()
-    }
-
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
-    }
-
-    /// Clear the screen. Used to handle ctrl+l
-    fn clear_screen(&mut self, w: &mut Write) -> Result<()> {
-        try!(w.write_all(b"\x1b[H\x1b[2J"));
-        try!(w.flush());
-        Ok(())
+    fn create_writer(&self) -> PosixRenderer {
+        PosixRenderer::new()
     }
 }
 
@@ -343,6 +512,17 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(all(unix,test))]
 mod test {
+    use std::io::{self, Stdout};
+    use super::{Position, Renderer};
+
+    #[test]
+    fn prompt_with_ansi_escape_codes() {
+        let out = io::stdout();
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
+        assert_eq!(3, pos.col);
+        assert_eq!(0, pos.row);
+    }
+
     #[test]
     fn test_unsupported_term() {
         ::std::env::set_var("TERM", "xterm");

@@ -68,7 +68,8 @@ pub use consts::KeyPress;
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
-// Represent the state during line editing.
+/// Represent the state during line editing.
+/// Implement rendering.
 struct State<'out, 'prompt> {
     out: &'out mut Write,
     prompt: &'prompt str, // Prompt to display

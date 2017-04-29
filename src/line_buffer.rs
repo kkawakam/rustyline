@@ -44,7 +44,9 @@ pub trait ChangeListener: DeleteListener {
     fn replace(&mut self, idx: usize, old: &str, new: &str);
 }
 
-/// Line buffer
+/// Represent the current input (text and cursor position).
+///
+/// The methods do text manipulations or/and cursor movements.
 pub struct LineBuffer {
     buf: String, // Edited line buffer
     pos: usize, // Current cursor position (byte position)

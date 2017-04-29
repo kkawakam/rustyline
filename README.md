@@ -77,7 +77,7 @@ rustyline = "1.0.0"
  - Filename completion
  - History search ([Searching for Commands in the History](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8))
  - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
- - Multi line mode
+ - Multi line mode (line wrapping)
  - Word commands
 
 ## Actions

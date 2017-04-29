@@ -4,13 +4,15 @@ use std::mem;
 use std::sync::atomic;
 
 use kernel32;
+use unicode_width::UnicodeWidthChar;
 use winapi;
 
 use config::Config;
 use consts::{self, KeyPress};
 use error;
 use Result;
-use super::{RawMode, RawReader, Term};
+use line_buffer::LineBuffer;
+use super::{Position, RawMode, RawReader, Renderer, Term};
 
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
 const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
@@ -182,6 +184,168 @@ impl Iterator for ConsoleRawReader {
     }
 }
 
+pub struct ConsoleRenderer {
+    out: Stdout,
+    handle: winapi::HANDLE,
+    cols: usize, // Number of columns in terminal
+}
+
+impl ConsoleRenderer {
+    fn new(handle: winapi::HANDLE) -> ConsoleRenderer {
+        let (cols, _) = get_win_size(handle);
+        ConsoleRenderer {
+            out: io::stdout(),
+            handle: handle,
+            cols: cols,
+        }
+    }
+
+    fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
+        let mut info = unsafe { mem::zeroed() };
+        check!(kernel32::GetConsoleScreenBufferInfo(self.handle, &mut info));
+        Ok(info)
+    }
+
+    fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
+        check!(kernel32::SetConsoleCursorPosition(self.handle, pos));
+        Ok(())
+    }
+
+    fn fill_console_output_character(&mut self,
+                                     length: winapi::DWORD,
+                                     pos: winapi::COORD)
+                                     -> Result<()> {
+        let mut _count = 0;
+        check!(kernel32::FillConsoleOutputCharacterA(self.handle,
+                                                     ' ' as winapi::CHAR,
+                                                     length,
+                                                     pos,
+                                                     &mut _count));
+        Ok(())
+    }
+}
+
+impl Renderer for ConsoleRenderer {
+    fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
+        let mut info = try!(self.get_console_screen_buffer_info());
+        if new.row > old.row {
+            info.dwCursorPosition.Y += (new.row - old.row) as i16;
+        } else {
+            info.dwCursorPosition.Y -= (old.row - new.row) as i16;
+        }
+        if new.col > old.col {
+            info.dwCursorPosition.X += (new.col - old.col) as i16;
+        } else {
+            info.dwCursorPosition.X -= (old.col - new.col) as i16;
+        }
+        self.set_console_cursor_position(info.dwCursorPosition)
+    }
+
+    fn refresh_line(&mut self,
+                    prompt: &str,
+                    prompt_size: Position,
+                    line: &LineBuffer,
+                    current_row: usize,
+                    old_rows: usize)
+                    -> Result<(Position, Position)> {
+        // calculate the position of the end of the input line
+        let end_pos = calculate_position(line, prompt_size);
+        // calculate the desired position of the cursor
+        let cursor = calculate_position(&line[..line.pos()], prompt_size);
+
+        // position at the start of the prompt, clear to end of previous input
+        let mut info = try!(self.get_console_screen_buffer_info());
+        info.dwCursorPosition.X = 0;
+        info.dwCursorPosition.Y -= current_row as i16;
+        try!(self.set_console_cursor_position(info.dwCursorPosition));
+        let mut _count = 0;
+        try!(self.fill_console_output_character((info.dwSize.X * (old_rows as i16 + 1)) as u32,
+                                                info.dwCursorPosition));
+        let mut ab = String::new();
+        // display the prompt
+        ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
+        // display the input line
+        ab.push_str(&line);
+        try!(self.write_and_flush(ab.as_bytes()));
+
+        // position the cursor
+        let mut info = try!(self.get_console_screen_buffer_info());
+        info.dwCursorPosition.X = cursor.col as i16;
+        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
+        try!(self.set_console_cursor_position(info.dwCursorPosition));
+        Ok((cursor, end_pos))
+    }
+
+    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
+        try!(self.out.write_all(buf));
+        try!(self.out.flush());
+        Ok(())
+    }
+
+    /// Characters with 2 column width are correctly handled (not splitted).
+    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        let mut pos = orig;
+        for c in s.chars() {
+            let cw = if c == '\n' {
+                pos.col = 0;
+                pos.row += 1;
+                None
+            } else {
+                c.width()
+            };
+            if let Some(cw) = cw {
+                pos.col += cw;
+                if pos.col > self.cols {
+                    pos.row += 1;
+                    pos.col = cw;
+                }
+            }
+        }
+        if pos.col == self.cols {
+            pos.col = 0;
+            pos.row += 1;
+        }
+        pos
+    }
+
+    /// Clear the screen. Used to handle ctrl+l
+    fn clear_screen(&mut self) -> Result<()> {
+        let info = try!(self.get_console_screen_buffer_info());
+        let coord = winapi::COORD { X: 0, Y: 0 };
+        check!(kernel32::SetConsoleCursorPosition(self.handle, coord));
+        let mut _count = 0;
+        let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
+        check!(kernel32::FillConsoleOutputCharacterA(self.handle,
+                                                     ' ' as winapi::CHAR,
+                                                     n,
+                                                     coord,
+                                                     &mut _count));
+        Ok(())
+    }
+
+    fn sigwinch(&self) -> bool {
+        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+    }
+
+    /// Try to get the number of columns in the current terminal,
+    /// or assume 80 if it fails.
+    fn update_size(&mut self) {
+        let (cols, _) = get_win_size(self.handle);
+        self.cols = cols;
+    }
+
+    fn get_columns(&self) -> usize {
+        self.cols
+    }
+
+    /// Try to get the number of rows in the current terminal,
+    /// or assume 24 if it fails.
+    fn get_rows(&self) -> usize {
+        let (_, rows) = get_win_size(self.handle);
+        rows
+    }
+}
+
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
 pub type Terminal = Console;
@@ -193,35 +357,11 @@ pub struct Console {
     stdout_handle: winapi::HANDLE,
 }
 
-impl Console {
-    pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
-        let mut info = unsafe { mem::zeroed() };
-        check!(kernel32::GetConsoleScreenBufferInfo(self.stdout_handle, &mut info));
-        Ok(info)
-    }
-
-    pub fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
-        check!(kernel32::SetConsoleCursorPosition(self.stdout_handle, pos));
-        Ok(())
-    }
-
-    pub fn fill_console_output_character(&mut self,
-                                         length: winapi::DWORD,
-                                         pos: winapi::COORD)
-                                         -> Result<()> {
-        let mut _count = 0;
-        check!(kernel32::FillConsoleOutputCharacterA(self.stdout_handle,
-                                                     ' ' as winapi::CHAR,
-                                                     length,
-                                                     pos,
-                                                     &mut _count));
-        Ok(())
-    }
-}
+impl Console {}
 
 impl Term for Console {
     type Reader = ConsoleRawReader;
-    type Writer = Stdout;
+    type Writer = ConsoleRenderer;
     type Mode = Mode;
 
     fn new() -> Console {
@@ -256,20 +396,6 @@ impl Term for Console {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
     // }
 
-    /// Try to get the number of columns in the current terminal,
-    /// or assume 80 if it fails.
-    fn get_columns(&self) -> usize {
-        let (cols, _) = get_win_size(self.stdout_handle);
-        cols
-    }
-
-    /// Try to get the number of rows in the current terminal,
-    /// or assume 24 if it fails.
-    fn get_rows(&self) -> usize {
-        let (_, rows) = get_win_size(self.stdout_handle);
-        rows
-    }
-
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&self) -> Result<Mode> {
         if !self.stdin_isatty {
@@ -297,26 +423,7 @@ impl Term for Console {
         ConsoleRawReader::new()
     }
 
-    fn create_writer(&self) -> Stdout {
-        io::stdout()
-    }
-
-    fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
-    }
-
-    /// Clear the screen. Used to handle ctrl+l
-    fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
-        let info = try!(self.get_console_screen_buffer_info());
-        let coord = winapi::COORD { X: 0, Y: 0 };
-        check!(kernel32::SetConsoleCursorPosition(self.stdout_handle, coord));
-        let mut _count = 0;
-        let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
-        check!(kernel32::FillConsoleOutputCharacterA(self.stdout_handle,
-                                                     ' ' as winapi::CHAR,
-                                                     n,
-                                                     coord,
-                                                     &mut _count));
-        Ok(())
+    fn create_writer(&self) -> ConsoleRenderer {
+        ConsoleRenderer::new(self.stdout_handle)
     }
 }

@@ -7,11 +7,12 @@ use std::vec::IntoIter;
 #[cfg(windows)]
 use winapi;
 
+use Result;
 use config::Config;
 use consts::KeyPress;
 use error::ReadlineError;
-use Result;
-use super::{RawMode, RawReader, Term};
+use line_buffer::LineBuffer;
+use super::{Position, RawMode, RawReader, Renderer, Term};
 
 pub type Mode = ();
 
@@ -47,46 +48,61 @@ impl RawReader for IntoIter<KeyPress> {
     }
 }
 
+impl Renderer for Sink {
+    fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
+        Ok(())
+    }
+
+    fn refresh_line(&mut self,
+                    prompt: &str,
+                    prompt_size: Position,
+                    line: &LineBuffer,
+                    _: usize,
+                    _: usize)
+                    -> Result<(Position, Position)> {
+        try!(self.write_all(prompt.as_bytes()));
+        try!(self.write_all(line.as_bytes()));
+        Ok((prompt_size, prompt_size))
+    }
+
+    /// Characters with 2 column width are correctly handled (not splitted).
+    fn calculate_position(&self, _: &str, orig: Position) -> Position {
+        orig
+    }
+
+    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
+        try!(self.write_all(buf));
+        try!(self.flush());
+        Ok(())
+    }
+
+    fn beep(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Clear the screen. Used to handle ctrl+l
+    fn clear_screen(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Check if a SIGWINCH signal has been received
+    fn sigwinch(&self) -> bool {
+        false
+    }
+    fn update_size(&mut self) {}
+    fn get_columns(&self) -> usize {
+        80
+    }
+    fn get_rows(&self) -> usize {
+        24
+    }
+}
+
 pub type Terminal = DummyTerminal;
 
 #[derive(Clone,Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
-}
-
-impl DummyTerminal {
-    #[cfg(windows)]
-    pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
-        let dw_size = winapi::COORD { X: 80, Y: 24 };
-        let dw_cursor_osition = winapi::COORD { X: 0, Y: 0 };
-        let sr_window = winapi::SMALL_RECT {
-            Left: 0,
-            Top: 0,
-            Right: 0,
-            Bottom: 0,
-        };
-        let info = winapi::CONSOLE_SCREEN_BUFFER_INFO {
-            dwSize: dw_size,
-            dwCursorPosition: dw_cursor_osition,
-            wAttributes: 0,
-            srWindow: sr_window,
-            dwMaximumWindowSize: dw_size,
-        };
-        Ok(info)
-    }
-
-    #[cfg(windows)]
-    pub fn set_console_cursor_position(&mut self, _: winapi::COORD) -> Result<()> {
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    pub fn fill_console_output_character(&mut self,
-                                         _: winapi::DWORD,
-                                         _: winapi::COORD)
-                                         -> Result<()> {
-        Ok(())
-    }
 }
 
 impl Term for DummyTerminal {
@@ -112,21 +128,6 @@ impl Term for DummyTerminal {
 
     // Interactive loop:
 
-    /// Get the number of columns in the current terminal.
-    fn get_columns(&self) -> usize {
-        80
-    }
-
-    /// Get the number of rows in the current terminal.
-    fn get_rows(&self) -> usize {
-        24
-    }
-
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool {
-        false
-    }
-
     fn enable_raw_mode(&self) -> Result<Mode> {
         Ok(())
     }
@@ -138,11 +139,6 @@ impl Term for DummyTerminal {
 
     fn create_writer(&self) -> Sink {
         io::sink()
-    }
-
-    /// Clear the screen. Used to handle ctrl+l
-    fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
-        Ok(())
     }
 }
 

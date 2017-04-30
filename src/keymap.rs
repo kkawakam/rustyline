@@ -345,7 +345,8 @@ impl EditState {
                 }
             }
             KeyPress::Ctrl('G') |
-            KeyPress::Esc => Cmd::Abort,
+            KeyPress::Esc |
+            KeyPress::Meta('\x07') => Cmd::Abort,
             KeyPress::Ctrl('H') |
             KeyPress::Backspace => {
                 if positive {
@@ -383,32 +384,40 @@ impl EditState {
             }
             KeyPress::Meta('<') => Cmd::BeginningOfHistory,
             KeyPress::Meta('>') => Cmd::EndOfHistory,
-            KeyPress::Meta('B') => {
+            KeyPress::Meta('B') |
+            KeyPress::Meta('b') => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
-            KeyPress::Meta('C') => Cmd::CapitalizeWord,
-            KeyPress::Meta('D') => {
+            KeyPress::Meta('C') |
+            KeyPress::Meta('c') => Cmd::CapitalizeWord,
+            KeyPress::Meta('D') |
+            KeyPress::Meta('d') => {
                 if positive {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            KeyPress::Meta('F') => {
+            KeyPress::Meta('F') |
+            KeyPress::Meta('f') => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            KeyPress::Meta('L') => Cmd::DowncaseWord,
-            KeyPress::Meta('T') => Cmd::TransposeWords(n),
-            KeyPress::Meta('U') => Cmd::UpcaseWord,
-            KeyPress::Meta('Y') => Cmd::YankPop,
+            KeyPress::Meta('L') |
+            KeyPress::Meta('l') => Cmd::DowncaseWord,
+            KeyPress::Meta('T') |
+            KeyPress::Meta('t') => Cmd::TransposeWords(n),
+            KeyPress::Meta('U') |
+            KeyPress::Meta('u') => Cmd::UpcaseWord,
+            KeyPress::Meta('Y') |
+            KeyPress::Meta('y') => Cmd::YankPop,
             _ => self.common(key, n, positive),
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);

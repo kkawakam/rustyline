@@ -119,21 +119,58 @@ impl RawReader for ConsoleRawReader {
 
             // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
-            // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
+            let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt;
 
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => return Ok(KeyPress::Left),
-                    winapi::VK_RIGHT => return Ok(KeyPress::Right),
-                    winapi::VK_UP => return Ok(KeyPress::Up),
-                    winapi::VK_DOWN => return Ok(KeyPress::Down),
+                    winapi::VK_LEFT => {
+                        return Ok(if ctrl {
+                                      KeyPress::ControlLeft
+                                  } else {
+                                      KeyPress::Left
+                                  })
+                    }
+                    winapi::VK_RIGHT => {
+                        return Ok(if ctrl {
+                                      KeyPress::ControlRight
+                                  } else {
+                                      KeyPress::Right
+                                  })
+                    }
+                    winapi::VK_UP => {
+                        return Ok(if ctrl {
+                                      KeyPress::ControlUp
+                                  } else {
+                                      KeyPress::Up
+                                  })
+                    }
+                    winapi::VK_DOWN => {
+                        return Ok(if ctrl {
+                                      KeyPress::ControlDown
+                                  } else {
+                                      KeyPress::Down
+                                  })
+                    }
                     winapi::VK_DELETE => return Ok(KeyPress::Delete),
                     winapi::VK_HOME => return Ok(KeyPress::Home),
                     winapi::VK_END => return Ok(KeyPress::End),
                     winapi::VK_PRIOR => return Ok(KeyPress::PageUp),
                     winapi::VK_NEXT => return Ok(KeyPress::PageDown),
+                    winapi::VK_INSERT => return Ok(KeyPress::Insert),
+                    winapi::VK_F1 => return Ok(KeyPress::F(1)),
+                    winapi::VK_F2 => return Ok(KeyPress::F(2)),
+                    winapi::VK_F3 => return Ok(KeyPress::F(3)),
+                    winapi::VK_F4 => return Ok(KeyPress::F(4)),
+                    winapi::VK_F5 => return Ok(KeyPress::F(5)),
+                    winapi::VK_F6 => return Ok(KeyPress::F(6)),
+                    winapi::VK_F7 => return Ok(KeyPress::F(7)),
+                    winapi::VK_F8 => return Ok(KeyPress::F(8)),
+                    winapi::VK_F9 => return Ok(KeyPress::F(9)),
+                    winapi::VK_F10 => return Ok(KeyPress::F(10)),
+                    winapi::VK_F11 => return Ok(KeyPress::F(11)),
+                    winapi::VK_F12 => return Ok(KeyPress::F(12)),
                     // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is also set.
                     _ => continue,
                 };
@@ -148,26 +185,7 @@ impl RawReader for ConsoleRawReader {
                 }
                 let c = try!(orc.unwrap());
                 if meta {
-                    return Ok(match c {
-                                  '-' => KeyPress::Meta('-'),
-                                  '0'...'9' => KeyPress::Meta(c),
-                                  '<' => KeyPress::Meta('<'),
-                                  '>' => KeyPress::Meta('>'),
-                                  'b' | 'B' => KeyPress::Meta('B'),
-                                  'c' | 'C' => KeyPress::Meta('C'),
-                                  'd' | 'D' => KeyPress::Meta('D'),
-                                  'f' | 'F' => KeyPress::Meta('F'),
-                                  'l' | 'L' => KeyPress::Meta('L'),
-                                  'n' | 'N' => KeyPress::Meta('N'),
-                                  'p' | 'P' => KeyPress::Meta('P'),
-                                  't' | 'T' => KeyPress::Meta('T'),
-                                  'u' | 'U' => KeyPress::Meta('U'),
-                                  'y' | 'Y' => KeyPress::Meta('Y'),
-                                  _ => {
-                        debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", c);
-                        KeyPress::UnknownEscSeq
-                    }
-                              });
+                    return Ok(KeyPress::Meta(c));
                 } else {
                     return Ok(consts::char_to_key_press(c));
                 }

@@ -5,19 +5,29 @@ pub enum KeyPress {
     UnknownEscSeq,
     Backspace,
     Char(char),
+    ControlDown,
+    ControlLeft,
+    ControlRight,
+    ControlUp,
     Ctrl(char),
     Delete,
     Down,
     End,
     Enter, // Ctrl('M')
     Esc,
+    F(u8),
     Home,
+    Insert,
     Left,
     Meta(char),
     Null,
     PageDown,
     PageUp,
     Right,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    ShiftUp,
     Tab, // Ctrl('I')
     Up,
 }
@@ -28,7 +38,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         return KeyPress::Char(c);
     }
     match c {
-        '\x00' => KeyPress::Null,
+        '\x00' => KeyPress::Ctrl(' '),
         '\x01' => KeyPress::Ctrl('A'),
         '\x02' => KeyPress::Ctrl('B'),
         '\x03' => KeyPress::Ctrl('C'),
@@ -43,6 +53,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x0c' => KeyPress::Ctrl('L'),
         '\x0d' => KeyPress::Enter, // '\r' (13)
         '\x0e' => KeyPress::Ctrl('N'),
+        '\x0f' => KeyPress::Ctrl('O'),
         '\x10' => KeyPress::Ctrl('P'),
         '\x12' => KeyPress::Ctrl('R'),
         '\x13' => KeyPress::Ctrl('S'),
@@ -54,6 +65,9 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x19' => KeyPress::Ctrl('Y'),
         '\x1a' => KeyPress::Ctrl('Z'),
         '\x1b' => KeyPress::Esc, // Ctrl-[
+        '\x1c' => KeyPress::Ctrl('\\'),
+        '\x1d' => KeyPress::Ctrl(']'),
+        '\x1e' => KeyPress::Ctrl('^'),
         '\x1f' => KeyPress::Ctrl('_'),
         '\x7f' => KeyPress::Backspace, // Rubout
         _ => KeyPress::Null,

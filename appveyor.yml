@@ -10,7 +10,7 @@ install:
 build: false
 
 test_script:
-  - cargo test --lib --verbose
+  - cargo test --verbose
 
 cache:
   - C:\Users\appveyor\.cargo

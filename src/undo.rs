@@ -78,6 +78,14 @@ impl Change {
             false
         }
     }
+
+    fn replace_seq(&self, indx: usize) -> bool {
+        if let Change::Replace { idx, ref new, .. } = *self {
+            idx + new.len() == indx
+        } else {
+            false
+        }
+    }
 }
 
 pub struct Changeset {
@@ -124,31 +132,18 @@ impl Changeset {
     pub fn insert(&mut self, idx: usize, c: char) {
         debug!(target: "rustyline", "Changeset::insert({}, {:?})", idx, c);
         self.redos.clear();
-        if !c.is_alphanumeric() {
+        if !c.is_alphanumeric() || !self.undos.last().map_or(false, |lc| lc.insert_seq(idx)) {
             self.undos.push(Self::insert_char(idx, c));
             return;
         }
-        let last_change = self.undos.pop();
-        match last_change {
-            Some(last_change) => {
-                // merge consecutive char insertions when char is alphanumeric
-                if last_change.insert_seq(idx) {
-                    let mut last_change = last_change;
-                    if let Change::Insert { ref mut text, .. } = last_change {
-                        text.push(c);
-                    } else {
-                        unreachable!();
-                    }
-                    self.undos.push(last_change);
-                } else {
-                    self.undos.push(last_change);
-                    self.undos.push(Self::insert_char(idx, c));
-                }
-            }
-            None => {
-                self.undos.push(Self::insert_char(idx, c));
-            }
-        };
+        // merge consecutive char insertions when char is alphanumeric
+        let mut last_change = self.undos.pop().unwrap();
+        if let Change::Insert { ref mut text, .. } = last_change {
+            text.push(c);
+        } else {
+            unreachable!();
+        }
+        self.undos.push(last_change);
     }
 
     pub fn insert_str<S: Into<String> + Debug>(&mut self, idx: usize, string: S) {
@@ -165,7 +160,10 @@ impl Changeset {
         debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
         self.redos.clear();
 
-        if !Self::single_char(string.as_ref()) {
+        if !Self::single_char(string.as_ref()) ||
+           !self.undos
+                .last()
+                .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len())) {
             self.undos
                 .push(Change::Delete {
                           idx: indx,
@@ -173,43 +171,22 @@ impl Changeset {
                       });
             return;
         }
-        let last_change = self.undos.pop();
-        match last_change {
-            Some(last_change) => {
-                // merge consecutive char deletions when char is alphanumeric
-                if last_change.delete_seq(indx, string.as_ref().len()) {
-                    let mut last_change = last_change;
-                    if let Change::Delete {
-                               ref mut idx,
-                               ref mut text,
-                           } = last_change {
-                        if *idx == indx {
-                            text.push_str(string.as_ref());
-                        } else {
-                            text.insert_str(0, string.as_ref());
-                            *idx = indx;
-                        }
-                    } else {
-                        unreachable!();
-                    }
-                    self.undos.push(last_change);
-                } else {
-                    self.undos.push(last_change);
-                    self.undos
-                        .push(Change::Delete {
-                                  idx: indx,
-                                  text: string.into(),
-                              });
-                }
+        // merge consecutive char deletions when char is alphanumeric
+        let mut last_change = self.undos.pop().unwrap();
+        if let Change::Delete {
+                   ref mut idx,
+                   ref mut text,
+               } = last_change {
+            if *idx == indx {
+                text.push_str(string.as_ref());
+            } else {
+                text.insert_str(0, string.as_ref());
+                *idx = indx;
             }
-            None => {
-                self.undos
-                    .push(Change::Delete {
-                              idx: indx,
-                              text: string.into(),
-                          });
-            }
-        };
+        } else {
+            unreachable!();
+        }
+        self.undos.push(last_change);
     }
 
     fn single_char(s: &str) -> bool {
@@ -220,14 +197,38 @@ impl Changeset {
         graphemes.next().is_none()
     }
 
-    pub fn replace<S: Into<String>>(&mut self, idx: usize, old: S, new: S) {
+    pub fn replace<S: AsRef<str> + Into<String> + Debug>(&mut self,
+                                                         indx: usize,
+                                                         old_: S,
+                                                         new_: S) {
+        debug!(target: "rustyline", "Changeset::replace({}, {:?}, {:?})", indx, old_, new_);
         self.redos.clear();
-        self.undos
-            .push(Change::Replace {
-                      idx: idx,
-                      old: old.into(),
-                      new: new.into(),
-                  });
+
+        if !self.undos
+                .last()
+                .map_or(false, |lc| lc.replace_seq(indx)) {
+            self.undos
+                .push(Change::Replace {
+                          idx: indx,
+                          old: old_.into(),
+                          new: new_.into(),
+                      });
+            return;
+        }
+
+        // merge consecutive char replacements
+        let mut last_change = self.undos.pop().unwrap();
+        if let Change::Replace {
+                   ref mut old,
+                   ref mut new,
+                   ..
+               } = last_change {
+            old.push_str(old_.as_ref());
+            new.push_str(new_.as_ref());
+        } else {
+            unreachable!();
+        }
+        self.undos.push(last_change);
     }
 
     pub fn undo(&mut self, line: &mut LineBuffer) -> bool {

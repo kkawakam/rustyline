@@ -152,7 +152,7 @@ impl LineBuffer {
         }
     }
 
-    fn next_pos(&self, n: RepeatCount) -> Option<usize> {
+    pub fn next_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == self.buf.len() {
             return None;
         }

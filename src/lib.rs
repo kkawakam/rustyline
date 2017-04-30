@@ -220,6 +220,20 @@ fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if succeed { s.refresh_line() } else { Ok(()) }
 }
 
+/// Overwrite the character under the cursor (Vi mode)
+fn edit_overwrite_char(s: &mut State, ch: char) -> Result<()> {
+    if let Some(end) = s.line.next_pos(1) {
+        {
+            let text = ch.encode_utf8(&mut s.byte_buffer);
+            let start = s.line.pos();
+            s.line.replace(start..end, text);
+        }
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 // Yank/paste `text` at current position.
 fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
     if let Anchor::After = anchor {
@@ -817,6 +831,9 @@ fn readline_edit<C: Completer>(prompt: &str,
             }
             Cmd::Replace(n, c) => {
                 try!(edit_replace_char(&mut s, c, n));
+            }
+            Cmd::Overwrite(c) => {
+                try!(edit_overwrite_char(&mut s, c));
             }
             Cmd::EndOfFile => {
                 if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {

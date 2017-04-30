@@ -249,9 +249,9 @@ impl Renderer for ConsoleRenderer {
                     old_rows: usize)
                     -> Result<(Position, Position)> {
         // calculate the position of the end of the input line
-        let end_pos = calculate_position(line, prompt_size);
+        let end_pos = self.calculate_position(line, prompt_size);
         // calculate the desired position of the cursor
-        let cursor = calculate_position(&line[..line.pos()], prompt_size);
+        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
         // position at the start of the prompt, clear to end of previous input
         let mut info = try!(self.get_console_screen_buffer_info());

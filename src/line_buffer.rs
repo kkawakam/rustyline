@@ -162,7 +162,8 @@ impl LineBuffer {
             .last()
             .map(|(i, s)| i + self.pos + s.len())
     }
-    /// Returns the position of the character just before the current cursor position.
+    /// Returns the position of the character just before the current cursor
+    /// position.
     fn prev_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == 0 {
             return None;
@@ -270,7 +271,8 @@ impl LineBuffer {
         }
     }
 
-    /// Delete the character at the right of the cursor without altering the cursor
+    /// Delete the character at the right of the cursor without altering the
+    /// cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
     /// Return the number of characters deleted.
     pub fn delete(&mut self, n: RepeatCount) -> Option<String> {

@@ -89,7 +89,8 @@ impl History {
 
     /// Set the maximum length for the history. This function can be called even
     /// if there is already some history, the function will make sure to retain
-    /// just the latest `len` elements if the new history length value is smaller
+    /// just the latest `len` elements if the new history length value is
+    /// smaller
     /// than the amount of items already inside the history.
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
@@ -106,8 +107,10 @@ impl History {
     }
 
     /// Save the history in the specified file.
-    /// TODO append_history http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
-    /// TODO history_truncate_file http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
+    /// TODO append_history
+    /// http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
+    /// TODO history_truncate_file
+    /// http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
@@ -148,8 +151,10 @@ impl History {
     }
 
     /// Search history (start position inclusive [0, len-1]).
-    /// Return the absolute index of the nearest history entry that matches `term`.
-    /// Return None if no entry contains `term` between [start, len -1] for forward search
+    /// Return the absolute index of the nearest history entry that matches
+    /// `term`.
+    /// Return None if no entry contains `term` between [start, len -1] for
+    /// forward search
     /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
         let test = |entry: &String| entry.contains(term);

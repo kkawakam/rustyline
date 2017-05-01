@@ -76,7 +76,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
 
 #[cfg(test)]
 mod tests {
-    use super::{char_to_key_press, KeyPress};
+    use super::{KeyPress, char_to_key_press};
 
     #[test]
     fn char_to_key() {

@@ -513,7 +513,8 @@ impl Term for PosixTerminal {
 
     // Init checks:
 
-    /// Check if current terminal can provide a rich line-editing user interface.
+    /// Check if current terminal can provide a rich line-editing user
+    /// interface.
     fn is_unsupported(&self) -> bool {
         self.unsupported
     }

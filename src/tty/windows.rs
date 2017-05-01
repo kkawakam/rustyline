@@ -114,9 +114,11 @@ impl RawReader for ConsoleRawReader {
                key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
                 continue;
             }
-            // key_event.wRepeatCount seems to be always set to 1 (maybe because we only read one character at a time)
+            // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
+            // read one character at a time)
 
-            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) != 0;
+            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED |
+            // RIGHT_ALT_PRESSED) != 0;
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt;
@@ -170,7 +172,8 @@ impl RawReader for ConsoleRawReader {
                     winapi::VK_F10 => return Ok(KeyPress::F(10)),
                     winapi::VK_F11 => return Ok(KeyPress::F(11)),
                     winapi::VK_F12 => return Ok(KeyPress::F(12)),
-                    // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is also set.
+                    // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is also
+                    // set.
                     _ => continue,
                 };
             } else if utf16 == 27 {

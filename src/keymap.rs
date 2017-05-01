@@ -46,7 +46,8 @@ pub enum Cmd {
     /// vi-change-to, vi-delete, vi-delete-to, vi-rubout, vi-subst
     Kill(Movement),
     /// backward-char, backward-word, beginning-of-line, end-of-line,
-    /// forward-char, forward-word, vi-char-search, vi-end-word, vi-next-word, vi-prev-word
+    /// forward-char, forward-word, vi-char-search, vi-end-word, vi-next-word,
+    /// vi-prev-word
     Move(Movement),
     /// next-history
     NextHistory,
@@ -120,7 +121,7 @@ impl Cmd {
             Cmd::Move(ref mvt) => Cmd::Move(mvt.redo(new)),
             Cmd::Replace(previous, c) => Cmd::Replace(repeat_count(previous, new), c),
             Cmd::SelfInsert(previous, c) => Cmd::SelfInsert(repeat_count(previous, new), c),
-            //Cmd::TransposeChars => Cmd::TransposeChars,
+            // Cmd::TransposeChars => Cmd::TransposeChars,
             Cmd::ViYankTo(ref mvt) => Cmd::ViYankTo(mvt.redo(new)),
             Cmd::Yank(previous, anchor) => Cmd::Yank(repeat_count(previous, new), anchor),
             _ => unreachable!(),
@@ -472,12 +473,12 @@ impl EditState {
             KeyPress::Char('0') => Cmd::Move(Movement::BeginningOfLine),
             KeyPress::Char('^') => Cmd::Move(Movement::ViFirstPrint),
             KeyPress::Char('a') => {
-                // vi-append-mode: Vi enter insert mode after the cursor.
+                // vi-append-mode
                 self.input_mode = InputMode::Insert;
                 Cmd::Move(Movement::ForwardChar(n))
             }
             KeyPress::Char('A') => {
-                // vi-append-eol: Vi enter insert mode at end of line.
+                // vi-append-eol
                 self.input_mode = InputMode::Insert;
                 Cmd::Move(Movement::EndOfLine)
             }
@@ -538,7 +539,7 @@ impl EditState {
             KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put
             KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
             KeyPress::Char('r') => {
-                // vi-replace-char: Vi replace character under the cursor with the next character typed.
+                // vi-replace-char:
                 let ch = try!(rdr.next_key());
                 match ch {
                     KeyPress::Char(c) => Cmd::Replace(n, c),
@@ -547,17 +548,17 @@ impl EditState {
                 }
             }
             KeyPress::Char('R') => {
-                //  vi-replace-mode: Vi enter replace mode. Replaces characters under the cursor. (overwrite-mode)
+                //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
                 Cmd::Noop
             }
             KeyPress::Char('s') => {
-                // vi-substitute-char: Vi replace character under the cursor and enter insert mode.
+                // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
                 Cmd::Kill(Movement::ForwardChar(n))
             }
             KeyPress::Char('S') => {
-                // vi-substitute-line: Vi substitute entire line.
+                // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
                 Cmd::Kill(Movement::WholeLine)
             }
@@ -627,7 +628,7 @@ impl EditState {
             KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
             KeyPress::Esc => {
-                // vi-movement-mode/vi-command-mode: Vi enter command mode (use alternative key bindings).
+                // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;
                 Cmd::Move(Movement::BackwardChar(1))
             }
@@ -660,8 +661,8 @@ impl EditState {
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
-               KeyPress::Char('$') => Some(Movement::EndOfLine), // vi-change-to-eol: Vi change to end of line.
-               KeyPress::Char('0') => Some(Movement::BeginningOfLine), // vi-kill-line-prev: Vi cut from beginning of line to cursor.
+               KeyPress::Char('$') => Some(Movement::EndOfLine),
+               KeyPress::Char('0') => Some(Movement::BeginningOfLine),
                KeyPress::Char('^') => Some(Movement::ViFirstPrint),
                KeyPress::Char('b') => Some(Movement::BackwardWord(n, Word::Vi)),
                KeyPress::Char('B') => Some(Movement::BackwardWord(n, Word::Big)),
@@ -688,7 +689,7 @@ impl EditState {
                }
                KeyPress::Char('h') |
                KeyPress::Ctrl('H') |
-               KeyPress::Backspace => Some(Movement::BackwardChar(n)), // vi-delete-prev-char: Vi move to previous character (backspace).
+               KeyPress::Backspace => Some(Movement::BackwardChar(n)),
                KeyPress::Char('l') |
                KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
                KeyPress::Char('w') => {

@@ -1,6 +1,7 @@
 //! Readline for Rust
 //!
-//! This implementation is based on [Antirez's Linenoise](https://github.com/antirez/linenoise)
+//! This implementation is based on [Antirez's
+//! Linenoise](https://github.com/antirez/linenoise)
 //!
 //! # Example
 //!
@@ -53,14 +54,14 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use tty::{Position, RawMode, RawReader, Renderer, Terminal, Term};
+use tty::{Position, RawMode, RawReader, Renderer, Term, Terminal};
 
 use completion::{Completer, longest_common_prefix};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use keymap::EditState;
-use kill_ring::{Mode, KillRing};
+use kill_ring::{KillRing, Mode};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 use undo::Changeset;
 pub use consts::KeyPress;
@@ -374,7 +375,8 @@ fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
     }
 }
 
-/// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
+/// Kill from the cursor to the end of the current word, or, if between words,
+/// to the end of the next word.
 fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
     if s.line.delete_word(at, word_def, n) {
         s.refresh_line()

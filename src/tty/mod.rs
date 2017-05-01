@@ -40,7 +40,8 @@ pub trait Renderer {
                     old_rows: usize)
                     -> Result<(Position, Position)>;
 
-    /// Calculate the number of columns and rows used to display `s` on a `cols` width terminal
+    /// Calculate the number of columns and rows used to display `s` on a
+    /// `cols` width terminal
     /// starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
@@ -114,7 +115,8 @@ pub trait Term {
     type Mode: RawMode;
 
     fn new() -> Self;
-    /// Check if current terminal can provide a rich line-editing user interface.
+    /// Check if current terminal can provide a rich line-editing user
+    /// interface.
     fn is_unsupported(&self) -> bool;
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool;

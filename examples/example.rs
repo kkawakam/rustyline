@@ -2,11 +2,11 @@ extern crate log;
 extern crate rustyline;
 
 use std::io::{self, Write};
-use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
+use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::{Cmd, Config, CompletionType, Editor, EditMode, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -72,7 +72,7 @@ impl log::Log for Logger {
 
 fn init_logger() -> Result<(), SetLoggerError> {
     log::set_logger(|max_log_level| {
-                        max_log_level.set(LogLevelFilter::Info);
-                        Box::new(Logger)
-                    })
+        max_log_level.set(LogLevelFilter::Info);
+        Box::new(Logger)
+    })
 }

@@ -127,7 +127,7 @@ impl DeleteListener for KillRing {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Mode, KillRing};
+    use super::{Action, KillRing, Mode};
 
     #[test]
     fn disabled() {

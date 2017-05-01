@@ -8,13 +8,15 @@ use super::Result;
 use line_buffer::LineBuffer;
 
 // TODO: let the implementers choose/find word boudaries ???
-// (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion ("select t.na| from tbl as t")
+// (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
+// ("select t.na| from tbl as t")
 // TOOD: make &self &mut self ???
 
 /// To be called for tab-completion.
 pub trait Completer {
     /// Takes the currently edited `line` with the cursor `pos`ition and
-    /// returns the start position and the completion candidates for the partial word to be completed.
+    /// returns the start position and the completion candidates for the
+    /// partial word to be completed.
     /// "ls /usr/loc" => Ok((3, vec!["/usr/local/"]))
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
     /// Updates the edited `line` with the `elected` candidate.

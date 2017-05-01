@@ -1,3 +1,6 @@
-reorder_imports = false
-normalise_comments = false
+closure_block_indent_threshold = 0
+wrap_comments = true
+force_format_strings = true
+format_strings = true
+reorder_imported_names = true
 write_mode = "Overwrite"

@@ -963,6 +963,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                 editor.kill_ring.reset();
                 try!(edit_history(&mut s, &editor.history, false))
             }
+            KeyPress::CtrlLeft |
             KeyPress::Meta('B') => {
                 // move backwards one word
                 editor.kill_ring.reset();
@@ -979,6 +980,7 @@ fn readline_edit<C: Completer>(prompt: &str,
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
+            KeyPress::CtrlRight |
             KeyPress::Meta('F') => {
                 // move forwards one word
                 editor.kill_ring.reset();

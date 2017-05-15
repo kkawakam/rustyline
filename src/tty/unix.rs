@@ -121,6 +121,33 @@ impl PosixRawReader {
                         '8' => Ok(KeyPress::End),
                         _ => Ok(KeyPress::UnknownEscSeq),
                     }
+                } else if seq2 == '1' && seq3 == ';' {
+                    let seq4 = try!(self.next_char());
+                    if seq4 == '5' {
+                        let seq5 = try!(self.next_char());
+                        match seq5 {
+                            // 'A' => Ok(KeyPress::CtrlUp),
+                            // 'B' => Ok(KeyPress::CtrlDown),
+                            'C' => Ok(KeyPress::CtrlRight),
+                            'D' => Ok(KeyPress::CtrlLeft),
+                            // 'F' => Ok(KeyPress::CtrlEnd),
+                            // 'H' => Ok(KeyPress::CtrlHome),
+                            _ => Ok(KeyPress::UnknownEscSeq),
+                        }
+                    } else if seq4 == '3' {
+                        let seq5 = try!(self.next_char());
+                        match seq5 {
+                            // 'A' => Ok(KeyPress::AltUp),
+                            // 'B' => Ok(KeyPress::AltDown),
+                            // 'C' => Ok(KeyPress::AltRight),
+                            // 'D' => Ok(KeyPress::AltLeft),
+                            // 'F' => Ok(KeyPress::AltEnd),
+                            // 'H' => Ok(KeyPress::AltHome),
+                            _ => Ok(KeyPress::UnknownEscSeq),
+                        }
+                    } else {
+                        Ok(KeyPress::UnknownEscSeq)
+                    }
                 } else {
                     Ok(KeyPress::UnknownEscSeq)
                 }

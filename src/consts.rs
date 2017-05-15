@@ -19,6 +19,8 @@ pub enum KeyPress {
     Right,
     Tab, // Ctrl('I')
     Up,
+    CtrlLeft,
+    CtrlRight,
 }
 
 #[allow(match_same_arms)]

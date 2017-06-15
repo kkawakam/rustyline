@@ -50,13 +50,14 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn refresh_line(&mut self,
-                    prompt: &str,
-                    prompt_size: Position,
-                    line: &LineBuffer,
-                    _: usize,
-                    _: usize)
-                    -> Result<(Position, Position)> {
+    fn refresh_line(
+        &mut self,
+        prompt: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        _: usize,
+        _: usize,
+    ) -> Result<(Position, Position)> {
         try!(self.write_all(prompt.as_bytes()));
         try!(self.write_all(line.as_bytes()));
         Ok((prompt_size, prompt_size))
@@ -97,7 +98,7 @@ impl Renderer for Sink {
 
 pub type Terminal = DummyTerminal;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
 }

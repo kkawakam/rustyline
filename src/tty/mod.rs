@@ -32,13 +32,14 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display prompt, line and cursor in terminal output
-    fn refresh_line(&mut self,
-                    prompt: &str,
-                    prompt_size: Position,
-                    line: &LineBuffer,
-                    current_row: usize,
-                    old_rows: usize)
-                    -> Result<(Position, Position)>;
+    fn refresh_line(
+        &mut self,
+        prompt: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        current_row: usize,
+        old_rows: usize,
+    ) -> Result<(Position, Position)>;
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal
@@ -73,13 +74,14 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         (**self).move_cursor(old, new)
     }
-    fn refresh_line(&mut self,
-                    prompt: &str,
-                    prompt_size: Position,
-                    line: &LineBuffer,
-                    current_row: usize,
-                    old_rows: usize)
-                    -> Result<(Position, Position)> {
+    fn refresh_line(
+        &mut self,
+        prompt: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        current_row: usize,
+        old_rows: usize,
+    ) -> Result<(Position, Position)> {
         (**self).refresh_line(prompt, prompt_size, line, current_row, old_rows)
     }
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

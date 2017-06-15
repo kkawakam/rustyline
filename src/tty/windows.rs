@@ -22,8 +22,10 @@ fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
     if handle == winapi::INVALID_HANDLE_VALUE {
         try!(Err(io::Error::last_os_error()));
     } else if handle.is_null() {
-        try!(Err(io::Error::new(io::ErrorKind::Other,
-                                "no stdio handle available for this process")));
+        try!(Err(io::Error::new(
+            io::ErrorKind::Other,
+            "no stdio handle available for this process",
+        )));
     }
     Ok(handle)
 }
@@ -45,7 +47,10 @@ fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
-        _ => (info.dwSize.X as usize, (1 + info.srWindow.Bottom - info.srWindow.Top) as usize), // (info.srWindow.Right - info.srWindow.Left + 1)
+        _ => (
+            info.dwSize.X as usize,
+            (1 + info.srWindow.Bottom - info.srWindow.Top) as usize,
+        ), // (info.srWindow.Right - info.srWindow.Left + 1)
     }
 }
 
@@ -57,7 +62,7 @@ fn get_console_mode(handle: winapi::HANDLE) -> Result<winapi::DWORD> {
 
 pub type Mode = ConsoleMode;
 
-#[derive(Clone,Copy,Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ConsoleMode {
     original_mode: winapi::DWORD,
     stdin_handle: winapi::HANDLE,
@@ -66,7 +71,10 @@ pub struct ConsoleMode {
 impl RawMode for Mode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        check!(kernel32::SetConsoleMode(self.stdin_handle, self.original_mode));
+        check!(kernel32::SetConsoleMode(
+            self.stdin_handle,
+            self.original_mode,
+        ));
         Ok(())
     }
 }
@@ -81,9 +89,9 @@ impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
-               handle: handle,
-               buf: None,
-           })
+            handle: handle,
+            buf: None,
+        })
     }
 }
 
@@ -96,10 +104,12 @@ impl RawReader for ConsoleRawReader {
         let mut count = 0;
         loop {
             // TODO GetNumberOfConsoleInputEvents
-            check!(kernel32::ReadConsoleInputW(self.handle,
-                                               &mut rec,
-                                               1 as winapi::DWORD,
-                                               &mut count));
+            check!(kernel32::ReadConsoleInputW(
+                self.handle,
+                &mut rec,
+                1 as winapi::DWORD,
+                &mut count,
+            ));
 
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
@@ -111,7 +121,8 @@ impl RawReader for ConsoleRawReader {
             let key_event = unsafe { rec.KeyEvent() };
             // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
             if key_event.bKeyDown == 0 &&
-               key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD {
+                key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD
+            {
                 continue;
             }
             // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
@@ -128,31 +139,31 @@ impl RawReader for ConsoleRawReader {
                 match key_event.wVirtualKeyCode as i32 {
                     winapi::VK_LEFT => {
                         return Ok(if ctrl {
-                                      KeyPress::ControlLeft
-                                  } else {
-                                      KeyPress::Left
-                                  })
+                            KeyPress::ControlLeft
+                        } else {
+                            KeyPress::Left
+                        })
                     }
                     winapi::VK_RIGHT => {
                         return Ok(if ctrl {
-                                      KeyPress::ControlRight
-                                  } else {
-                                      KeyPress::Right
-                                  })
+                            KeyPress::ControlRight
+                        } else {
+                            KeyPress::Right
+                        })
                     }
                     winapi::VK_UP => {
                         return Ok(if ctrl {
-                                      KeyPress::ControlUp
-                                  } else {
-                                      KeyPress::Up
-                                  })
+                            KeyPress::ControlUp
+                        } else {
+                            KeyPress::Up
+                        })
                     }
                     winapi::VK_DOWN => {
                         return Ok(if ctrl {
-                                      KeyPress::ControlDown
-                                  } else {
-                                      KeyPress::Down
-                                  })
+                            KeyPress::ControlDown
+                        } else {
+                            KeyPress::Down
+                        })
                     }
                     winapi::VK_DELETE => return Ok(KeyPress::Delete),
                     winapi::VK_HOME => return Ok(KeyPress::Home),
@@ -233,16 +244,19 @@ impl ConsoleRenderer {
         Ok(())
     }
 
-    fn fill_console_output_character(&mut self,
-                                     length: winapi::DWORD,
-                                     pos: winapi::COORD)
-                                     -> Result<()> {
+    fn fill_console_output_character(
+        &mut self,
+        length: winapi::DWORD,
+        pos: winapi::COORD,
+    ) -> Result<()> {
         let mut _count = 0;
-        check!(kernel32::FillConsoleOutputCharacterA(self.handle,
-                                                     ' ' as winapi::CHAR,
-                                                     length,
-                                                     pos,
-                                                     &mut _count));
+        check!(kernel32::FillConsoleOutputCharacterA(
+            self.handle,
+            ' ' as winapi::CHAR,
+            length,
+            pos,
+            &mut _count,
+        ));
         Ok(())
     }
 }
@@ -263,13 +277,14 @@ impl Renderer for ConsoleRenderer {
         self.set_console_cursor_position(info.dwCursorPosition)
     }
 
-    fn refresh_line(&mut self,
-                    prompt: &str,
-                    prompt_size: Position,
-                    line: &LineBuffer,
-                    current_row: usize,
-                    old_rows: usize)
-                    -> Result<(Position, Position)> {
+    fn refresh_line(
+        &mut self,
+        prompt: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        current_row: usize,
+        old_rows: usize,
+    ) -> Result<(Position, Position)> {
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
         // calculate the desired position of the cursor
@@ -281,8 +296,10 @@ impl Renderer for ConsoleRenderer {
         info.dwCursorPosition.Y -= current_row as i16;
         try!(self.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
-        try!(self.fill_console_output_character((info.dwSize.X * (old_rows as i16 + 1)) as u32,
-                                                info.dwCursorPosition));
+        try!(self.fill_console_output_character(
+            (info.dwSize.X * (old_rows as i16 + 1)) as u32,
+            info.dwCursorPosition,
+        ));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -337,11 +354,13 @@ impl Renderer for ConsoleRenderer {
         check!(kernel32::SetConsoleCursorPosition(self.handle, coord));
         let mut _count = 0;
         let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
-        check!(kernel32::FillConsoleOutputCharacterA(self.handle,
-                                                     ' ' as winapi::CHAR,
-                                                     n,
-                                                     coord,
-                                                     &mut _count));
+        check!(kernel32::FillConsoleOutputCharacterA(
+            self.handle,
+            ' ' as winapi::CHAR,
+            n,
+            coord,
+            &mut _count,
+        ));
         Ok(())
     }
 
@@ -372,7 +391,7 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
 pub type Terminal = Console;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Console {
     stdin_isatty: bool,
     stdin_handle: winapi::HANDLE,
@@ -421,14 +440,16 @@ impl Term for Console {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&self) -> Result<Mode> {
         if !self.stdin_isatty {
-            try!(Err(io::Error::new(io::ErrorKind::Other,
-                                    "no stdio handle available for this process")));
+            try!(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "no stdio handle available for this process",
+            )));
         }
         let original_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
         let raw = original_mode &
-                  !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
-                    winapi::wincon::ENABLE_PROCESSED_INPUT);
+            !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
+                  winapi::wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
         let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
@@ -436,9 +457,9 @@ impl Term for Console {
         let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
         check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
-               original_mode: original_mode,
-               stdin_handle: self.stdin_handle,
-           })
+            original_mode: original_mode,
+            stdin_handle: self.stdin_handle,
+        })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {

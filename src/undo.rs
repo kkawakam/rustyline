@@ -152,11 +152,10 @@ impl Changeset {
     pub fn insert_str<S: Into<String> + Debug>(&mut self, idx: usize, string: S) {
         debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
         self.redos.clear();
-        self.undos
-            .push(Change::Insert {
-                      idx: idx,
-                      text: string.into(),
-                  });
+        self.undos.push(Change::Insert {
+            idx: idx,
+            text: string.into(),
+        });
     }
 
     pub fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
@@ -164,22 +163,23 @@ impl Changeset {
         self.redos.clear();
 
         if !Self::single_char(string.as_ref()) ||
-           !self.undos
-                .last()
-                .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len())) {
-            self.undos
-                .push(Change::Delete {
-                          idx: indx,
-                          text: string.into(),
-                      });
+            !self.undos.last().map_or(false, |lc| {
+                lc.delete_seq(indx, string.as_ref().len())
+            })
+        {
+            self.undos.push(Change::Delete {
+                idx: indx,
+                text: string.into(),
+            });
             return;
         }
         // merge consecutive char deletions when char is alphanumeric
         let mut last_change = self.undos.pop().unwrap();
         if let Change::Delete {
-                   ref mut idx,
-                   ref mut text,
-               } = last_change {
+            ref mut idx,
+            ref mut text,
+        } = last_change
+        {
             if *idx == indx {
                 text.push_str(string.as_ref());
             } else {
@@ -194,38 +194,33 @@ impl Changeset {
 
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
-        graphemes
-            .next()
-            .map_or(false, |grapheme| grapheme.is_alphanumeric()) &&
-        graphemes.next().is_none()
+        graphemes.next().map_or(
+            false,
+            |grapheme| grapheme.is_alphanumeric(),
+        ) && graphemes.next().is_none()
     }
 
-    pub fn replace<S: AsRef<str> + Into<String> + Debug>(&mut self,
-                                                         indx: usize,
-                                                         old_: S,
-                                                         new_: S) {
+    pub fn replace<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, old_: S, new_: S) {
         debug!(target: "rustyline", "Changeset::replace({}, {:?}, {:?})", indx, old_, new_);
         self.redos.clear();
 
-        if !self.undos
-                .last()
-                .map_or(false, |lc| lc.replace_seq(indx)) {
-            self.undos
-                .push(Change::Replace {
-                          idx: indx,
-                          old: old_.into(),
-                          new: new_.into(),
-                      });
+        if !self.undos.last().map_or(false, |lc| lc.replace_seq(indx)) {
+            self.undos.push(Change::Replace {
+                idx: indx,
+                old: old_.into(),
+                new: new_.into(),
+            });
             return;
         }
 
         // merge consecutive char replacements
         let mut last_change = self.undos.pop().unwrap();
         if let Change::Replace {
-                   ref mut old,
-                   ref mut new,
-                   ..
-               } = last_change {
+            ref mut old,
+            ref mut new,
+            ..
+        } = last_change
+        {
             old.push_str(old_.as_ref());
             new.push_str(new_.as_ref());
         } else {

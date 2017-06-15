@@ -57,11 +57,12 @@ impl History {
             return false;
         }
         if line.as_ref().is_empty() ||
-           (self.ignore_space &&
-            line.as_ref()
-                .chars()
-                .next()
-                .map_or(true, |c| c.is_whitespace())) {
+            (self.ignore_space &&
+                 line.as_ref().chars().next().map_or(
+                    true,
+                    |c| c.is_whitespace(),
+                ))
+        {
             return false;
         }
         if self.ignore_dups {
@@ -168,7 +169,8 @@ impl History {
     }
 
     fn search_match<F>(&self, term: &str, start: usize, dir: Direction, test: F) -> Option<usize>
-        where F: Fn(&String) -> bool
+    where
+        F: Fn(&String) -> bool,
     {
         if term.is_empty() || start >= self.len() {
             return None;

@@ -77,9 +77,11 @@ impl Read for StdinRaw {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             let res = unsafe {
-                libc::read(STDIN_FILENO,
-                           buf.as_mut_ptr() as *mut libc::c_void,
-                           buf.len() as libc::size_t)
+                libc::read(
+                    STDIN_FILENO,
+                    buf.as_mut_ptr() as *mut libc::c_void,
+                    buf.len() as libc::size_t,
+                )
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
@@ -103,9 +105,9 @@ impl PosixRawReader {
     fn new(config: &Config) -> Result<PosixRawReader> {
         let stdin = StdinRaw {};
         Ok(PosixRawReader {
-               chars: stdin.chars(),
-               timeout_ms: config.keyseq_timeout(),
-           })
+            chars: stdin.chars(),
+            timeout_ms: config.keyseq_timeout(),
+        })
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
@@ -119,38 +121,38 @@ impl PosixRawReader {
                 let seq3 = try!(self.next_char());
                 if seq3 == '~' {
                     Ok(match seq2 {
-                           '1' | '7' => KeyPress::Home, // tmux, xrvt
-                           '2' => KeyPress::Insert,
-                           '3' => KeyPress::Delete, // kdch1
-                           '4' | '8' => KeyPress::End, // tmux, xrvt
-                           '5' => KeyPress::PageUp, // kpp
-                           '6' => KeyPress::PageDown, // knp
-                           _ => {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ~", seq2);
-                        KeyPress::UnknownEscSeq
-                    }
-                       })
+                        '1' | '7' => KeyPress::Home, // tmux, xrvt
+                        '2' => KeyPress::Insert,
+                        '3' => KeyPress::Delete, // kdch1
+                        '4' | '8' => KeyPress::End, // tmux, xrvt
+                        '5' => KeyPress::PageUp, // kpp
+                        '6' => KeyPress::PageDown, // knp
+                        _ => {
+                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ~", seq2);
+                            KeyPress::UnknownEscSeq
+                        }
+                    })
                 } else if seq3.is_digit(10) {
                     let seq4 = try!(self.next_char());
                     if seq4 == '~' {
                         Ok(match (seq2, seq3) {
-                               ('1', '1') => KeyPress::F(1), // rxvt-unicode
-                               ('1', '2') => KeyPress::F(2), // rxvt-unicode
-                               ('1', '3') => KeyPress::F(3), // rxvt-unicode
-                               ('1', '4') => KeyPress::F(4), // rxvt-unicode
-                               ('1', '5') => KeyPress::F(5), // kf5
-                               ('1', '7') => KeyPress::F(6), // kf6
-                               ('1', '8') => KeyPress::F(7), // kf7
-                               ('1', '9') => KeyPress::F(8), // kf8
-                               ('2', '0') => KeyPress::F(9), // kf9
-                               ('2', '1') => KeyPress::F(10), // kf10
-                               ('2', '3') => KeyPress::F(11), // kf11
-                               ('2', '4') => KeyPress::F(12), // kf12
-                               _ => {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} ~", seq1, seq2);
-                            KeyPress::UnknownEscSeq
-                        }
-                           })
+                            ('1', '1') => KeyPress::F(1), // rxvt-unicode
+                            ('1', '2') => KeyPress::F(2), // rxvt-unicode
+                            ('1', '3') => KeyPress::F(3), // rxvt-unicode
+                            ('1', '4') => KeyPress::F(4), // rxvt-unicode
+                            ('1', '5') => KeyPress::F(5), // kf5
+                            ('1', '7') => KeyPress::F(6), // kf6
+                            ('1', '8') => KeyPress::F(7), // kf7
+                            ('1', '9') => KeyPress::F(8), // kf8
+                            ('2', '0') => KeyPress::F(9), // kf9
+                            ('2', '1') => KeyPress::F(10), // kf10
+                            ('2', '3') => KeyPress::F(11), // kf11
+                            ('2', '4') => KeyPress::F(12), // kf12
+                            _ => {
+                                debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} ~", seq1, seq2);
+                                KeyPress::UnknownEscSeq
+                            }
+                        })
                     } else if seq4 == ';' {
                         let seq5 = try!(self.next_char());
                         if seq5.is_digit(10) {
@@ -170,19 +172,19 @@ impl PosixRawReader {
                         let seq5 = try!(self.next_char());
                         if seq2 == '1' {
                             Ok(match (seq4, seq5) {
-                                   ('5', 'A') => KeyPress::ControlUp,
-                                   ('5', 'B') => KeyPress::ControlDown,
-                                   ('5', 'C') => KeyPress::ControlRight,
-                                   ('5', 'D') => KeyPress::ControlLeft,
-                                   ('2', 'A') => KeyPress::ShiftUp,
-                                   ('2', 'B') => KeyPress::ShiftDown,
-                                   ('2', 'C') => KeyPress::ShiftRight,
-                                   ('2', 'D') => KeyPress::ShiftLeft,
-                                   _ => {
-                                debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
-                                KeyPress::UnknownEscSeq
-                            }
-                               })
+                                ('5', 'A') => KeyPress::ControlUp,
+                                ('5', 'B') => KeyPress::ControlDown,
+                                ('5', 'C') => KeyPress::ControlRight,
+                                ('5', 'D') => KeyPress::ControlLeft,
+                                ('2', 'A') => KeyPress::ShiftUp,
+                                ('2', 'B') => KeyPress::ShiftDown,
+                                ('2', 'C') => KeyPress::ShiftRight,
+                                ('2', 'D') => KeyPress::ShiftLeft,
+                                _ => {
+                                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                                    KeyPress::UnknownEscSeq
+                                }
+                            })
                         } else {
                             debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
                             Ok(KeyPress::UnknownEscSeq)
@@ -193,51 +195,51 @@ impl PosixRawReader {
                     }
                 } else {
                     Ok(match (seq2, seq3) {
-                           ('5', 'A') => KeyPress::ControlUp,
-                           ('5', 'B') => KeyPress::ControlDown,
-                           ('5', 'C') => KeyPress::ControlRight,
-                           ('5', 'D') => KeyPress::ControlLeft,
-                           _ => {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
-                        KeyPress::UnknownEscSeq
-                    }
-                       })
+                        ('5', 'A') => KeyPress::ControlUp,
+                        ('5', 'B') => KeyPress::ControlDown,
+                        ('5', 'C') => KeyPress::ControlRight,
+                        ('5', 'D') => KeyPress::ControlLeft,
+                        _ => {
+                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
+                            KeyPress::UnknownEscSeq
+                        }
+                    })
                 }
             } else {
                 // ANSI
                 Ok(match seq2 {
-                       'A' => KeyPress::Up, // kcuu1
-                       'B' => KeyPress::Down, // kcud1
-                       'C' => KeyPress::Right, // kcuf1
-                       'D' => KeyPress::Left, // kcub1
-                       'F' => KeyPress::End,
-                       'H' => KeyPress::Home, // khome
-                       _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                    KeyPress::UnknownEscSeq
-                }
-                   })
+                    'A' => KeyPress::Up, // kcuu1
+                    'B' => KeyPress::Down, // kcud1
+                    'C' => KeyPress::Right, // kcuf1
+                    'D' => KeyPress::Left, // kcub1
+                    'F' => KeyPress::End,
+                    'H' => KeyPress::Home, // khome
+                    _ => {
+                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
+                        KeyPress::UnknownEscSeq
+                    }
+                })
             }
         } else if seq1 == 'O' {
             // xterm
             // ESC O sequences. (SS3)
             let seq2 = try!(self.next_char());
             Ok(match seq2 {
-                   'A' => KeyPress::Up, // kcuu1
-                   'B' => KeyPress::Down, // kcud1
-                   'C' => KeyPress::Right, // kcuf1
-                   'D' => KeyPress::Left, // kcub1
-                   'F' => KeyPress::End, // kend
-                   'H' => KeyPress::Home, // khome
-                   'P' => KeyPress::F(1), // kf1
-                   'Q' => KeyPress::F(2), // kf2
-                   'R' => KeyPress::F(3), // kf3
-                   'S' => KeyPress::F(4), // kf4
-                   _ => {
-                debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
-                KeyPress::UnknownEscSeq
-            }
-               })
+                'A' => KeyPress::Up, // kcuu1
+                'B' => KeyPress::Down, // kcud1
+                'C' => KeyPress::Right, // kcuf1
+                'D' => KeyPress::Left, // kcub1
+                'F' => KeyPress::End, // kend
+                'H' => KeyPress::Home, // khome
+                'P' => KeyPress::F(1), // kf1
+                'Q' => KeyPress::F(2), // kf2
+                'R' => KeyPress::F(3), // kf3
+                'S' => KeyPress::F(4), // kf4
+                _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
+                    KeyPress::UnknownEscSeq
+                }
+            })
         } else {
             // TODO ESC-R (r): Undo all changes made to this line.
             Ok(KeyPress::Meta(seq1))
@@ -251,8 +253,9 @@ impl RawReader for PosixRawReader {
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
-            let mut fds =
-                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+            let mut fds = [
+                poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty()),
+            ];
             match poll::poll(&mut fds, self.timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
@@ -334,13 +337,14 @@ impl Renderer for PosixRenderer {
         self.write_and_flush(ab.as_bytes())
     }
 
-    fn refresh_line(&mut self,
-                    prompt: &str,
-                    prompt_size: Position,
-                    line: &LineBuffer,
-                    current_row: usize,
-                    old_rows: usize)
-                    -> Result<(Position, Position)> {
+    fn refresh_line(
+        &mut self,
+        prompt: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        current_row: usize,
+        old_rows: usize,
+    ) -> Result<(Position, Position)> {
         use std::fmt::Write;
         let mut ab = String::new();
 
@@ -475,9 +479,11 @@ static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
-        let sigwinch = signal::SigAction::new(signal::SigHandler::Handler(sigwinch_handler),
-                                              signal::SaFlags::empty(),
-                                              signal::SigSet::empty());
+        let sigwinch = signal::SigAction::new(
+            signal::SigHandler::Handler(sigwinch_handler),
+            signal::SaFlags::empty(),
+            signal::SigSet::empty(),
+        );
         let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
     });
 }
@@ -489,7 +495,7 @@ extern "C" fn sigwinch_handler(_: libc::c_int) {
 
 pub type Terminal = PosixTerminal;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
@@ -566,7 +572,7 @@ pub fn suspend() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(unix,test))]
+#[cfg(all(unix, test))]
 mod test {
     use std::io::{self, Stdout};
     use super::{Position, Renderer};

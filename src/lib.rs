@@ -86,12 +86,13 @@ struct State<'out, 'prompt> {
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
-    fn new(out: &'out mut Renderer,
-           config: &Config,
-           prompt: &'prompt str,
-           history_index: usize,
-           custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>)
-           -> State<'out, 'prompt> {
+    fn new(
+        out: &'out mut Renderer,
+        config: &Config,
+        prompt: &'prompt str,
+        history_index: usize,
+        custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+    ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
@@ -122,19 +123,24 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn backup(&mut self) {
-        self.saved_line_for_history
-            .update(self.line.as_str(), self.line.pos());
+        self.saved_line_for_history.update(
+            self.line.as_str(),
+            self.line.pos(),
+        );
     }
     fn restore(&mut self) {
-        self.line
-            .update(self.saved_line_for_history.as_str(),
-                    self.saved_line_for_history.pos());
+        self.line.update(
+            self.saved_line_for_history.as_str(),
+            self.saved_line_for_history.pos(),
+        );
     }
 
     fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
-        let cursor = self.out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+        let cursor = self.out.calculate_position(
+            &self.line[..self.line.pos()],
+            self.prompt_size,
+        );
         if self.cursor == cursor {
             return Ok(());
         }
@@ -156,12 +162,13 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
-        let (cursor, end_pos) = try!(self.out
-                                         .refresh_line(prompt,
-                                                       prompt_size,
-                                                       &self.line,
-                                                       self.cursor.row,
-                                                       self.old_rows));
+        let (cursor, end_pos) = try!(self.out.refresh_line(
+            prompt,
+            prompt_size,
+            &self.line,
+            self.cursor.row,
+            self.old_rows,
+        ));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
@@ -190,8 +197,10 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
         if push {
             if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() {
                 // Avoid a full update of the line in the trivial case.
-                let cursor = s.out
-                    .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
+                let cursor = s.out.calculate_position(
+                    &s.line[..s.line.pos()],
+                    s.prompt_size,
+                );
                 s.cursor = cursor;
                 let bits = ch.encode_utf8(&mut s.byte_buffer);
                 let bits = bits.as_bytes();
@@ -456,7 +465,8 @@ fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Resu
         s.history_index += 1;
     }
     if let Some(history_index) =
-        history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir) {
+        history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir)
+    {
         s.history_index = history_index;
         let buf = history.get(history_index).unwrap();
         s.changes.borrow_mut().begin();
@@ -498,11 +508,12 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: RawReader>(rdr: &mut R,
-                               s: &mut State,
-                               completer: &Completer,
-                               config: &Config)
-                               -> Result<Option<Cmd>> {
+fn complete_line<R: RawReader>(
+    rdr: &mut R,
+    s: &mut State,
+    completer: &Completer,
+    config: &Config,
+) -> Result<Option<Cmd>> {
     // get a list of completions
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     // if no completions, we are done
@@ -580,9 +591,10 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             try!(s.out.write_and_flush(msg.as_bytes()));
             s.old_rows += 1;
             while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
-                  cmd != Cmd::SelfInsert(1, 'n') &&
-                  cmd != Cmd::SelfInsert(1, 'N') &&
-                  cmd != Cmd::Kill(Movement::BackwardChar(1)) {
+                cmd != Cmd::SelfInsert(1, 'n') &&
+                cmd != Cmd::SelfInsert(1, 'N') &&
+                cmd != Cmd::Kill(Movement::BackwardChar(1))
+            {
                 cmd = try!(s.next_cmd(rdr));
             }
             match cmd {
@@ -604,20 +616,23 @@ fn complete_line<R: RawReader>(rdr: &mut R,
     }
 }
 
-fn page_completions<R: RawReader>(rdr: &mut R,
-                                  s: &mut State,
-                                  candidates: &[String])
-                                  -> Result<Option<Cmd>> {
+fn page_completions<R: RawReader>(
+    rdr: &mut R,
+    s: &mut State,
+    candidates: &[String],
+) -> Result<Option<Cmd>> {
     use std::cmp;
 
     let min_col_pad = 2;
     let cols = s.out.get_columns();
-    let max_width = cmp::min(cols,
-                             candidates
-                                 .into_iter()
-                                 .map(|s| s.as_str().width())
-                                 .max()
-                                 .unwrap() + min_col_pad);
+    let max_width = cmp::min(
+        cols,
+        candidates
+            .into_iter()
+            .map(|s| s.as_str().width())
+            .max()
+            .unwrap() + min_col_pad,
+    );
     let num_cols = cols / max_width;
 
     let mut pause_row = s.out.get_rows() - 1;
@@ -628,13 +643,14 @@ fn page_completions<R: RawReader>(rdr: &mut R,
             try!(s.out.write_and_flush(b"\n--More--"));
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1_, 'Y') &&
-                  cmd != Cmd::SelfInsert(1, 'n') &&
-                  cmd != Cmd::SelfInsert(1_, 'N') &&
-                  cmd != Cmd::SelfInsert(1, 'q') &&
-                  cmd != Cmd::SelfInsert(1, 'Q') &&
-                  cmd != Cmd::SelfInsert(1, ' ') &&
-                  cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
-                  cmd != Cmd::AcceptLine {
+                cmd != Cmd::SelfInsert(1, 'n') &&
+                cmd != Cmd::SelfInsert(1_, 'N') &&
+                cmd != Cmd::SelfInsert(1, 'q') &&
+                cmd != Cmd::SelfInsert(1, 'Q') &&
+                cmd != Cmd::SelfInsert(1, ' ') &&
+                cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
+                cmd != Cmd::AcceptLine
+            {
                 cmd = try!(s.next_cmd(rdr));
             }
             match cmd {
@@ -674,10 +690,11 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 }
 
 /// Incremental search
-fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
-                                            s: &mut State,
-                                            history: &History)
-                                            -> Result<Option<Cmd>> {
+fn reverse_incremental_search<R: RawReader>(
+    rdr: &mut R,
+    s: &mut State,
+    history: &History,
+) -> Result<Option<Cmd>> {
     if history.is_empty() {
         return Ok(None);
     }
@@ -757,20 +774,23 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[allow(let_unit_value)]
-fn readline_edit<C: Completer>(prompt: &str,
-                               editor: &mut Editor<C>,
-                               original_mode: tty::Mode)
-                               -> Result<String> {
+fn readline_edit<C: Completer>(
+    prompt: &str,
+    editor: &mut Editor<C>,
+    original_mode: tty::Mode,
+) -> Result<String> {
     let completer = editor.completer.as_ref().map(|c| c as &Completer);
 
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring();
-    let mut s = State::new(&mut stdout,
-                           &editor.config,
-                           prompt,
-                           editor.history.len(),
-                           editor.custom_bindings.clone());
+    let mut s = State::new(
+        &mut stdout,
+        &editor.config,
+        prompt,
+        editor.history.len(),
+        editor.custom_bindings.clone(),
+    );
 
     s.line.set_delete_listener(editor.kill_ring.clone());
     s.line.set_change_listener(s.changes.clone());
@@ -789,7 +809,12 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         // autocomplete
         if cmd == Cmd::Complete && completer.is_some() {
-            let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
+            let next = try!(complete_line(
+                &mut rdr,
+                &mut s,
+                completer.unwrap(),
+                &editor.config,
+            ));
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -807,7 +832,11 @@ fn readline_edit<C: Completer>(prompt: &str,
 
         if cmd == Cmd::ReverseSearchHistory {
             // Search history backward
-            let next = try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
+            let next = try!(reverse_incremental_search(
+                &mut rdr,
+                &mut s,
+                &editor.history,
+            ));
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -886,10 +915,18 @@ fn readline_edit<C: Completer>(prompt: &str,
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
             Cmd::HistorySearchBackward => {
-                try!(edit_history_search(&mut s, &editor.history, Direction::Reverse))
+                try!(edit_history_search(
+                    &mut s,
+                    &editor.history,
+                    Direction::Reverse,
+                ))
             }
             Cmd::HistorySearchForward => {
-                try!(edit_history_search(&mut s, &editor.history, Direction::Forward))
+                try!(edit_history_search(
+                    &mut s,
+                    &editor.history,
+                    Direction::Forward,
+                ))
             }
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
@@ -1155,7 +1192,8 @@ impl<C: Completer> fmt::Debug for Editor<C> {
 
 /// Edited lines iterator
 pub struct Iter<'a, C: Completer>
-    where C: 'a
+where
+    C: 'a,
 {
     editor: &'a mut Editor<C>,
     prompt: &'a str,
@@ -1281,13 +1319,19 @@ mod test {
 
     #[test]
     fn delete_key() {
-        assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
-                    "a");
-        assert_line(&[KeyPress::Char('a'),
-                      KeyPress::Left,
-                      KeyPress::Delete,
-                      KeyPress::Enter],
-                    "");
+        assert_line(
+            &[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
+            "a",
+        );
+        assert_line(
+            &[
+                KeyPress::Char('a'),
+                KeyPress::Left,
+                KeyPress::Delete,
+                KeyPress::Enter,
+            ],
+            "",
+        );
     }
 
     #[test]

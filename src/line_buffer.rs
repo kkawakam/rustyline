@@ -500,18 +500,18 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             Some(match *cs {
-                     CharSearch::Backward(_) => pos,
-                     CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
-                     CharSearch::Forward(_) => shift + pos,
-                     CharSearch::ForwardBefore(_) => {
-                         shift + pos -
-                         self.buf[..shift + pos]
-                             .chars()
-                             .next_back()
-                             .unwrap()
-                             .len_utf8()
-                     }
-                 })
+                CharSearch::Backward(_) => pos,
+                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                CharSearch::Forward(_) => shift + pos,
+                CharSearch::ForwardBefore(_) => {
+                    shift + pos -
+                        self.buf[..shift + pos]
+                            .chars()
+                            .next_back()
+                            .unwrap()
+                            .len_utf8()
+                }
+            })
         } else {
             None
         }
@@ -638,8 +638,11 @@ impl LineBuffer {
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
         for cl in &self.cl {
-            cl.borrow_mut()
-                .replace(start, self.buf.index(range.clone()), text);
+            cl.borrow_mut().replace(
+                start,
+                self.buf.index(range.clone()),
+                text,
+            );
         }
         self.buf.drain(range);
         if start == self.buf.len() {
@@ -673,12 +676,18 @@ impl LineBuffer {
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
         for dl in &self.dl {
-            dl.borrow_mut()
-                .delete(range.start, &self.buf[range.start..range.end], dir);
+            dl.borrow_mut().delete(
+                range.start,
+                &self.buf[range.start..range.end],
+                dir,
+            );
         }
         for cl in &self.cl {
-            cl.borrow_mut()
-                .delete(range.start, &self.buf[range.start..range.end], dir);
+            cl.borrow_mut().delete(
+                range.start,
+                &self.buf[range.start..range.end],
+                dir,
+            );
         }
         self.buf.drain(range)
     }
@@ -737,13 +746,11 @@ impl LineBuffer {
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {
-                             CharSearch::Backward(_) |
-                             CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_owned(),
-                             CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
-                             CharSearch::Forward(c) => {
-                                 self.buf[self.pos..pos + c.len_utf8()].to_owned()
-                             }
-                         })
+                        CharSearch::Backward(_) |
+                        CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_owned(),
+                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
+                        CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
+                    })
                 } else {
                     None
                 }
@@ -776,11 +783,11 @@ impl Deref for LineBuffer {
 
 fn is_start_of_word(word_def: Word, previous: &str, grapheme: &str) -> bool {
     (!is_word_char(word_def, previous) && is_word_char(word_def, grapheme)) ||
-    (word_def == Word::Vi && !is_other_char(previous) && is_other_char(grapheme))
+        (word_def == Word::Vi && !is_other_char(previous) && is_other_char(grapheme))
 }
 fn is_end_of_word(word_def: Word, grapheme: &str, next: &str) -> bool {
     (!is_word_char(word_def, next) && is_word_char(word_def, grapheme)) ||
-    (word_def == Word::Vi && !is_other_char(next) && is_other_char(grapheme))
+        (word_def == Word::Vi && !is_other_char(next) && is_other_char(grapheme))
 }
 
 fn is_word_char(word_def: Word, grapheme: &str) -> bool {

@@ -68,14 +68,49 @@ pub struct FilenameCompleter {
 }
 
 #[cfg(unix)]
-static DEFAULT_BREAK_CHARS: [char; 18] = [' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>',
-                                          '<', '=', ';', '|', '&', '{', '(', '\0'];
+static DEFAULT_BREAK_CHARS: [char; 18] = [
+    ' ',
+    '\t',
+    '\n',
+    '"',
+    '\\',
+    '\'',
+    '`',
+    '@',
+    '$',
+    '>',
+    '<',
+    '=',
+    ';',
+    '|',
+    '&',
+    '{',
+    '(',
+    '\0',
+];
 #[cfg(unix)]
 static ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
-static DEFAULT_BREAK_CHARS: [char; 17] = [' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<',
-                                          '=', ';', '|', '&', '{', '(', '\0'];
+static DEFAULT_BREAK_CHARS: [char; 17] = [
+    ' ',
+    '\t',
+    '\n',
+    '"',
+    '\'',
+    '`',
+    '@',
+    '$',
+    '>',
+    '<',
+    '=',
+    ';',
+    '|',
+    '&',
+    '{',
+    '(',
+    '\0',
+];
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;
 
@@ -132,10 +167,7 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input
-        .chars()
-        .filter(|c| break_chars.contains(c))
-        .count();
+    let n = input.chars().filter(|c| break_chars.contains(c)).count();
     if n == 0 {
         return input;
     }
@@ -150,10 +182,11 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
     result
 }
 
-fn filename_complete(path: &str,
-                     esc_char: Option<char>,
-                     break_chars: &BTreeSet<char>)
-                     -> Result<Vec<String>> {
+fn filename_complete(
+    path: &str,
+    esc_char: Option<char>,
+    break_chars: &BTreeSet<char>,
+) -> Result<Vec<String>> {
     use std::env::{current_dir, home_dir};
 
     let sep = path::MAIN_SEPARATOR;
@@ -204,11 +237,12 @@ fn filename_complete(path: &str,
 /// try to find backward the start of a word.
 /// Return (0, `line[..pos]`) if no break char has been found.
 /// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
-pub fn extract_word<'l>(line: &'l str,
-                        pos: usize,
-                        esc_char: Option<char>,
-                        break_chars: &BTreeSet<char>)
-                        -> (usize, &'l str) {
+pub fn extract_word<'l>(
+    line: &'l str,
+    pos: usize,
+    esc_char: Option<char>,
+    break_chars: &BTreeSet<char>,
+) -> (usize, &'l str) {
     let line = &line[..pos];
     if line.is_empty() {
         return (0, line);
@@ -250,7 +284,8 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
             let b1 = c1.as_bytes();
             let b2 = candidates[i + 1].as_bytes();
             if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
-               b1[longest_common_prefix] != b2[longest_common_prefix] {
+                b1[longest_common_prefix] != b2[longest_common_prefix]
+            {
                 break 'o;
             }
         }
@@ -273,11 +308,15 @@ mod tests {
     pub fn extract_word() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
         let line = "ls '/usr/local/b";
-        assert_eq!((4, "/usr/local/b"),
-                   super::extract_word(line, line.len(), Some('\\'), &break_chars));
+        assert_eq!(
+            (4, "/usr/local/b"),
+            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+        );
         let line = "ls /User\\ Information";
-        assert_eq!((3, "/User\\ Information"),
-                   super::extract_word(line, line.len(), Some('\\'), &break_chars));
+        assert_eq!(
+            (3, "/User\\ Information"),
+            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+        );
     }
 
     #[test]
@@ -294,8 +333,10 @@ mod tests {
     pub fn escape() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
         let input = String::from("/usr/local/b");
-        assert_eq!(input.clone(),
-                   super::escape(input, Some('\\'), &break_chars));
+        assert_eq!(
+            input.clone(),
+            super::escape(input, Some('\\'), &break_chars)
+        );
         let input = String::from("/User Information");
         let result = String::from("/User\\ Information");
         assert_eq!(result, super::escape(input, Some('\\'), &break_chars));

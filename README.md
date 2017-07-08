@@ -223,3 +223,14 @@ $ bind -p
  - [haskeline](https://github.com/judah/haskeline) (Haskell)
  - [rb-readline](https://github.com/ConnorAtherton/rb-readline) (Ruby)
  - [python-prompt-toolkit](https://github.com/jonathanslenders/python-prompt-toolkit) (Python)
+
+Library        | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo |
+--------       | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- |
+Haskeline      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
+Linenoise      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   |
+Linenoise-ng   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   |
+Linefeed       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   |
+Liner          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  |
+prompt-toolkit | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
+Rb-readline    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  |
+Rustyline      | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  |

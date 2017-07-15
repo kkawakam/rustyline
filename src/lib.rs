@@ -27,6 +27,7 @@ extern crate winapi;
 extern crate kernel32;
 
 pub mod completion;
+#[macro_use]
 mod consts;
 pub mod error;
 pub mod history;
@@ -47,7 +48,7 @@ use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
-use consts::KeyPress;
+use consts::{Key, KeyPress};
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
 use kill_ring::{Mode, KillRing};
@@ -552,13 +553,13 @@ fn complete_line<R: RawReader>(rdr: &mut R,
 
             key = try!(rdr.next_key(config.keyseq_timeout()));
             match key {
-                KeyPress::Tab => {
+                key!(Key::Tab) => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
                         try!(beep());
                     }
                 }
-                KeyPress::Esc => {
+                key!(Key::Esc) => {
                     // Re-show original buffer
                     s.snapshot();
                     if i < candidates.len() {
@@ -591,7 +592,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
         // we can't complete any further, wait for second tab
         let mut key = try!(rdr.next_key(config.keyseq_timeout()));
         // if any character other than tab, pass it to the main loop
-        if key != KeyPress::Tab {
+        if key != key!(Key::Tab) {
             return Ok(Some(key));
         }
         // move cursor to EOL to avoid overwriting the command line
@@ -604,14 +605,14 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(write_and_flush(s.out, msg.as_bytes()));
             s.old_rows += 1;
-            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
-                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
-                  key != KeyPress::Backspace {
+            while key != key!('y') && key != key!('Y') &&
+                  key != key!('n') && key != key!('N') &&
+                  key != key!(Key::Backspace) {
                 key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             show_completions = match key {
-                KeyPress::Char('y') |
-                KeyPress::Char('Y') => true,
+                key!('y') |
+                key!('Y') => true,
                 _ => false,
             };
         }
@@ -648,22 +649,22 @@ fn page_completions<R: RawReader>(rdr: &mut R,
     for row in 0..num_rows {
         if row == pause_row {
             try!(write_and_flush(s.out, b"\n--More--"));
-            let mut key = KeyPress::Null;
-            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
-                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
-                  key != KeyPress::Char('q') &&
-                  key != KeyPress::Char('Q') &&
-                  key != KeyPress::Char(' ') &&
-                  key != KeyPress::Backspace && key != KeyPress::Enter {
+            let mut key = key!(Key::Null);
+            while key != key!('y') && key != key!('Y') &&
+                  key != key!('n') && key != key!('N') &&
+                  key != key!('q') &&
+                  key != key!('Q') &&
+                  key != key!(' ') &&
+                  key != key!(Key::Backspace) && key != key!(Key::Enter) {
                 key = try!(rdr.next_key(config.keyseq_timeout()));
             }
             match key {
-                KeyPress::Char('y') |
-                KeyPress::Char('Y') |
-                KeyPress::Char(' ') => {
+                key!('y') |
+                key!('Y') |
+                key!(' ') => {
                     pause_row += s.term.get_rows() - 1;
                 }
-                KeyPress::Enter => {
+                key!(Key::Enter) => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -721,16 +722,16 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         try!(s.refresh_prompt_and_line(&prompt));
 
         key = try!(rdr.next_key(config.keyseq_timeout()));
-        if let KeyPress::Char(c) = key {
+        if let key!(c) = key {
             search_buf.push(c);
         } else {
             match key {
-                KeyPress::Ctrl('H') |
-                KeyPress::Backspace => {
+                ctrl!('H') |
+                key!(Key::Backspace) => {
                     search_buf.pop();
                     continue;
                 }
-                KeyPress::Ctrl('R') => {
+                ctrl!('R') => {
                     direction = Direction::Reverse;
                     if history_idx > 0 {
                         history_idx -= 1;
@@ -739,7 +740,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                         continue;
                     }
                 }
-                KeyPress::Ctrl('S') => {
+                ctrl!('S') => {
                     direction = Direction::Forward;
                     if history_idx < history.len() - 1 {
                         history_idx += 1;
@@ -748,7 +749,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                         continue;
                     }
                 }
-                KeyPress::Ctrl('G') => {
+                ctrl!('G') => {
                     // Restore current edited line (before search)
                     s.snapshot();
                     try!(s.refresh_line());
@@ -800,26 +801,26 @@ fn readline_edit<C: Completer>(prompt: &str,
             continue;
         }
         let mut key = try!(rk);
-        if let KeyPress::Char(c) = key {
+        if let key!(c) = key {
             editor.kill_ring.reset();
             try!(edit_insert(&mut s, c));
             continue;
         }
 
         // autocomplete
-        if key == KeyPress::Tab && completer.is_some() {
+        if key == key!(Key::Tab) && completer.is_some() {
             let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
             if next.is_some() {
                 editor.kill_ring.reset();
                 key = next.unwrap();
-                if let KeyPress::Char(c) = key {
+                if let key!(c) = key {
                     try!(edit_insert(&mut s, c));
                     continue;
                 }
             } else {
                 continue;
             }
-        } else if key == KeyPress::Ctrl('R') {
+        } else if key == ctrl!('R') {
             // Search history backward
             let next =
                 try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history, &editor.config));
@@ -828,28 +829,28 @@ fn readline_edit<C: Completer>(prompt: &str,
             } else {
                 continue;
             }
-        } else if key == KeyPress::UnknownEscSeq {
+        } else if key == key!(Key::Unknown) {
             continue;
         }
 
         match key {
-            KeyPress::Ctrl('A') |
-            KeyPress::Home => {
+            ctrl!('A') |
+            key!(Key::Home) => {
                 editor.kill_ring.reset();
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
-            KeyPress::Ctrl('B') |
-            KeyPress::Left => {
+            ctrl!('B') |
+            key!(Key::Left) => {
                 editor.kill_ring.reset();
                 // Move back a character.
                 try!(edit_move_left(&mut s))
             }
-            KeyPress::Ctrl('C') => {
+            ctrl!('C') => {
                 editor.kill_ring.reset();
                 return Err(error::ReadlineError::Interrupted);
             }
-            KeyPress::Ctrl('D') => {
+            ctrl!('D') => {
                 editor.kill_ring.reset();
                 if s.line.is_empty() {
                     return Err(error::ReadlineError::Eof);
@@ -858,94 +859,94 @@ fn readline_edit<C: Completer>(prompt: &str,
                     try!(edit_delete(&mut s))
                 }
             }
-            KeyPress::Ctrl('E') |
-            KeyPress::End => {
+            ctrl!('E') |
+            key!(Key::End) => {
                 editor.kill_ring.reset();
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
-            KeyPress::Ctrl('F') |
-            KeyPress::Right => {
+            ctrl!('F') |
+            key!(Key::Right) => {
                 editor.kill_ring.reset();
                 // Move forward a character.
                 try!(edit_move_right(&mut s))
             }
-            KeyPress::Ctrl('H') |
-            KeyPress::Backspace => {
+            ctrl!('H') |
+            key!(Key::Backspace) => {
                 editor.kill_ring.reset();
                 // Delete one character backward.
                 try!(edit_backspace(&mut s))
             }
-            KeyPress::Ctrl('K') => {
+            ctrl!('K') => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            KeyPress::Ctrl('L') => {
+            ctrl!('L') => {
                 // Clear the screen leaving the current line at the top of the screen.
                 try!(s.term.clear_screen(&mut s.out));
                 try!(s.refresh_line())
             }
-            KeyPress::Ctrl('N') |
-            KeyPress::Down => {
+            ctrl!('N') |
+            key!(Key::Down) => {
                 editor.kill_ring.reset();
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, false))
             }
-            KeyPress::Ctrl('P') |
-            KeyPress::Up => {
+            ctrl!('P') |
+            key!(Key::Up) => {
                 editor.kill_ring.reset();
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
-            KeyPress::Ctrl('T') => {
+            ctrl!('T') => {
                 editor.kill_ring.reset();
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
-            KeyPress::Ctrl('U') => {
+            ctrl!('U') => {
                 // Kill backward from point to the beginning of the line.
                 if let Some(text) = try!(edit_discard_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
             #[cfg(unix)]
-            KeyPress::Ctrl('V') => {
+            ctrl!('V') => {
                 // Quoted insert
                 editor.kill_ring.reset();
                 let c = try!(rdr.next_char());
                 try!(edit_insert(&mut s, c)) // FIXME
             }
-            KeyPress::Ctrl('W') => {
+            ctrl!('W') => {
                 // Kill the word behind point, using white space as a word boundary
                 if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
-            KeyPress::Ctrl('Y') => {
+            ctrl!('Y') => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.yank() {
                     try!(edit_yank(&mut s, text))
                 }
             }
             #[cfg(unix)]
-            KeyPress::Ctrl('Z') => {
+            ctrl!('Z') => {
                 try!(original_mode.disable_raw_mode());
                 try!(tty::suspend());
                 try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
                 try!(s.refresh_line())
             }
             // TODO CTRL-_ // undo
-            KeyPress::Enter |
-            KeyPress::Ctrl('J') => {
+            key!(Key::Enter) |
+            ctrl!('J') => {
                 // Accept the line regardless of where the cursor is.
                 editor.kill_ring.reset();
                 try!(edit_move_end(&mut s));
                 break;
             }
-            KeyPress::Meta('\x08') |
-            KeyPress::Meta('\x7f') => {
+            alt!('\x08') |
+            alt!('\x7f') => {
                 // kill one word backward
                 // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
                 if let Some(text) = try!(edit_delete_prev_word(&mut s,
@@ -953,59 +954,59 @@ fn readline_edit<C: Completer>(prompt: &str,
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
-            KeyPress::Meta('<') => {
+            alt!('<') => {
                 // move to first entry in history
                 editor.kill_ring.reset();
                 try!(edit_history(&mut s, &editor.history, true))
             }
-            KeyPress::Meta('>') => {
+            alt!('>') => {
                 // move to last entry in history
                 editor.kill_ring.reset();
                 try!(edit_history(&mut s, &editor.history, false))
             }
-            KeyPress::Meta('B') => {
+            alt!('B') => {
                 // move backwards one word
                 editor.kill_ring.reset();
                 try!(edit_move_to_prev_word(&mut s))
             }
-            KeyPress::Meta('C') => {
+            alt!('C') => {
                 // capitalize word after point
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::CAPITALIZE))
             }
-            KeyPress::Meta('D') => {
+            alt!('D') => {
                 // kill one word forward
                 if let Some(text) = try!(edit_delete_word(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            KeyPress::Meta('F') => {
+            alt!('F') => {
                 // move forwards one word
                 editor.kill_ring.reset();
                 try!(edit_move_to_next_word(&mut s))
             }
-            KeyPress::Meta('L') => {
+            alt!('L') => {
                 // lowercase word after point
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
-            KeyPress::Meta('T') => {
+            alt!('T') => {
                 // transpose words
                 editor.kill_ring.reset();
                 try!(edit_transpose_words(&mut s))
             }
-            KeyPress::Meta('U') => {
+            alt!('U') => {
                 // uppercase word after point
                 editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
-            KeyPress::Meta('Y') => {
+            alt!('Y') => {
                 // yank-pop
                 if let Some((yank_size, text)) = editor.kill_ring.yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            KeyPress::Delete => {
+            key!(Key::Delete) => {
                 editor.kill_ring.reset();
                 try!(edit_delete(&mut s))
             }
@@ -1176,7 +1177,7 @@ mod test {
     use history::History;
     use completion::Completer;
     use config::Config;
-    use consts::KeyPress;
+    use consts::{Key, KeyPress};
     use {Position, State};
     use super::{Editor, Result};
     use tty::{Terminal, Term};
@@ -1256,11 +1257,11 @@ mod test {
     fn complete_line() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3, 80);
-        let keys = &[KeyPress::Enter];
+        let keys = &[key!(Key::Enter)];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
         let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
-        assert_eq!(Some(KeyPress::Enter), key);
+        assert_eq!(Some(key!(Key::Enter)), key);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }
@@ -1280,54 +1281,54 @@ mod test {
 
     #[test]
     fn delete_key() {
-        assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
+        assert_line(&[key!('a'), key!(Key::Delete), key!(Key::Enter)],
                     "a");
-        assert_line(&[KeyPress::Char('a'), KeyPress::Left, KeyPress::Delete, KeyPress::Enter],
+        assert_line(&[key!('a'), key!(Key::Left), key!(Key::Delete), key!(Key::Enter)],
                     "");
     }
 
     #[test]
     fn down_key() {
-        assert_line(&[KeyPress::Down, KeyPress::Enter], "");
+        assert_line(&[key!(Key::Down), key!(Key::Enter)], "");
     }
 
     #[test]
     fn end_key() {
-        assert_line(&[KeyPress::End, KeyPress::Enter], "");
+        assert_line(&[key!(Key::End), key!(Key::Enter)], "");
     }
 
     #[test]
     fn home_key() {
-        assert_line(&[KeyPress::Home, KeyPress::Enter], "");
+        assert_line(&[key!(Key::Home), key!(Key::Enter)], "");
     }
 
     #[test]
     fn left_key() {
-        assert_line(&[KeyPress::Left, KeyPress::Enter], "");
+        assert_line(&[key!(Key::Left), key!(Key::Enter)], "");
     }
 
     #[test]
     fn meta_backspace_key() {
-        assert_line(&[KeyPress::Meta('\x08'), KeyPress::Enter], "");
+        assert_line(&[alt!('\x08'), key!(Key::Enter)], "");
     }
 
     #[test]
     fn page_down_key() {
-        assert_line(&[KeyPress::PageDown, KeyPress::Enter], "");
+        assert_line(&[key!(Key::PageDown), key!(Key::Enter)], "");
     }
 
     #[test]
     fn page_up_key() {
-        assert_line(&[KeyPress::PageUp, KeyPress::Enter], "");
+        assert_line(&[key!(Key::PageUp), key!(Key::Enter)], "");
     }
 
     #[test]
     fn right_key() {
-        assert_line(&[KeyPress::Right, KeyPress::Enter], "");
+        assert_line(&[key!(Key::Right), key!(Key::Enter)], "");
     }
 
     #[test]
     fn up_key() {
-        assert_line(&[KeyPress::Up, KeyPress::Enter], "");
+        assert_line(&[key!(Key::Up), key!(Key::Enter)], "");
     }
 }

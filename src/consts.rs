@@ -1,68 +1,101 @@
-
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum KeyPress {
-    UnknownEscSeq,
+pub enum Key {
     Backspace,
     Char(char),
-    Ctrl(char),
     Delete,
     Down,
     End,
     Enter, // Ctrl('M')
     Esc,
     Home,
+    Insert,
     Left,
-    Meta(char),
     Null,
     PageDown,
     PageUp,
     Right,
     Tab, // Ctrl('I')
+    Unknown,
     Up,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct KeyPress {
+    pub key: Key,
+    pub alt: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub sup: bool,
+}
+
+macro_rules! key {
+    ($key:tt) => (key!(Key::Char($key)));
+    ($($key:tt)*) => (KeyPress { key: $($key)*, alt: false, ctrl: false, shift: false, sup: false });
+}
+
+macro_rules! alt {
+    ($key:tt) => (alt!(Key::Char($key)));
+    ($($key:tt)*) => (KeyPress { key: $($key)*, alt: true, ctrl: false, shift: false, sup: false });
+}
+
+macro_rules! ctrl {
+    ($key:tt) => (ctrl!(Key::Char($key)));
+    ($($key:tt)*) => (KeyPress { key: $($key)*, alt: false, ctrl: true, shift: false, sup: false });
+}
+
+macro_rules! shift {
+    ($key:tt) => (shift!(Key::Char($key)));
+    ($($key:tt)*) => (KeyPress { key: $($key)*, alt: false, ctrl: false, shift: true, sup: false });
+}
+
+macro_rules! sup {
+    ($key:tt) => (sup!(Key::Char($key)));
+    ($($key:tt)*) => (KeyPress { key: $($key)*, alt: false, ctrl: false, shift: false, sup: true });
 }
 
 #[allow(match_same_arms)]
 pub fn char_to_key_press(c: char) -> KeyPress {
     if !c.is_control() {
-        return KeyPress::Char(c);
+        return key!(c);
     }
+
     match c {
-        '\x00' => KeyPress::Null,
-        '\x01' => KeyPress::Ctrl('A'),
-        '\x02' => KeyPress::Ctrl('B'),
-        '\x03' => KeyPress::Ctrl('C'),
-        '\x04' => KeyPress::Ctrl('D'),
-        '\x05' => KeyPress::Ctrl('E'),
-        '\x06' => KeyPress::Ctrl('F'),
-        '\x07' => KeyPress::Ctrl('G'),
-        '\x08' => KeyPress::Backspace, // '\b'
-        '\x09' => KeyPress::Tab,
-        '\x0a' => KeyPress::Ctrl('J'), // '\n' (10)
-        '\x0b' => KeyPress::Ctrl('K'),
-        '\x0c' => KeyPress::Ctrl('L'),
-        '\x0d' => KeyPress::Enter, // '\r' (13)
-        '\x0e' => KeyPress::Ctrl('N'),
-        '\x10' => KeyPress::Ctrl('P'),
-        '\x12' => KeyPress::Ctrl('R'),
-        '\x13' => KeyPress::Ctrl('S'),
-        '\x14' => KeyPress::Ctrl('T'),
-        '\x15' => KeyPress::Ctrl('U'),
-        '\x16' => KeyPress::Ctrl('V'),
-        '\x17' => KeyPress::Ctrl('W'),
-        '\x19' => KeyPress::Ctrl('Y'),
-        '\x1a' => KeyPress::Ctrl('Z'),
-        '\x1b' => KeyPress::Esc,
-        '\x7f' => KeyPress::Backspace, // TODO Validate
-        _ => KeyPress::Null,
+        '\x00' => key!(Key::Null),
+        '\x01' => ctrl!('A'),
+        '\x02' => ctrl!('B'),
+        '\x03' => ctrl!('C'),
+        '\x04' => ctrl!('D'),
+        '\x05' => ctrl!('E'),
+        '\x06' => ctrl!('F'),
+        '\x07' => ctrl!('G'),
+        '\x08' => key!(Key::Backspace), // '\b'
+        '\x09' => key!(Key::Tab),
+        '\x0a' => ctrl!('J'), // '\n' (10)
+        '\x0b' => ctrl!('K'),
+        '\x0c' => ctrl!('L'),
+        '\x0d' => key!(Key::Enter), // '\r' (13)
+        '\x0e' => ctrl!('N'),
+        '\x10' => ctrl!('P'),
+        '\x12' => ctrl!('R'),
+        '\x13' => ctrl!('S'),
+        '\x14' => ctrl!('T'),
+        '\x15' => ctrl!('U'),
+        '\x16' => ctrl!('V'),
+        '\x17' => ctrl!('W'),
+        '\x19' => ctrl!('Y'),
+        '\x1a' => ctrl!('Z'),
+        '\x1b' => key!(Key::Esc),
+        '\x7f' => key!(Key::Backspace), // TODO Validate
+        _ => key!(Key::Null),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{char_to_key_press, KeyPress};
+    use super::{char_to_key_press, Key, KeyPress};
 
     #[test]
     fn char_to_key() {
-        assert_eq!(KeyPress::Esc, char_to_key_press('\x1b'));
+        assert_eq!(key!(Key::Esc), char_to_key_press('\x1b'));
     }
 }

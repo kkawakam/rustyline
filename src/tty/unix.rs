@@ -10,7 +10,7 @@ use nix::sys::signal;
 use nix::sys::termios;
 
 use char_iter;
-use consts::{self, KeyPress};
+use consts::{self, Key, KeyPress};
 use ::Result;
 use ::error;
 use super::{RawMode, RawReader, Term};
@@ -102,72 +102,90 @@ impl PosixRawReader {
     }
 
     fn escape_sequence(&mut self) -> Result<KeyPress> {
-        // Read the next two bytes representing the escape sequence.
-        let seq1 = try!(self.next_char());
-        if seq1 == '[' {
-            // ESC [ sequences.
-            let seq2 = try!(self.next_char());
-            if seq2.is_digit(10) {
-                // Extended escape, read additional byte.
-                let seq3 = try!(self.next_char());
-                if seq3 == '~' {
-                    match seq2 {
-                        '1' => Ok(KeyPress::Home), // xterm
-                        '3' => Ok(KeyPress::Delete),
-                        '4' => Ok(KeyPress::End), // xterm
-                        '5' => Ok(KeyPress::PageUp),
-                        '6' => Ok(KeyPress::PageDown),
-                        '7' => Ok(KeyPress::Home),
-                        '8' => Ok(KeyPress::End),
-                        _ => Ok(KeyPress::UnknownEscSeq),
-                    }
-                } else {
-                    Ok(KeyPress::UnknownEscSeq)
-                }
-            } else {
-                match seq2 {
-                    'A' => Ok(KeyPress::Up), // ANSI
-                    'B' => Ok(KeyPress::Down),
-                    'C' => Ok(KeyPress::Right),
-                    'D' => Ok(KeyPress::Left),
-                    'F' => Ok(KeyPress::End),
-                    'H' => Ok(KeyPress::Home),
-                    _ => Ok(KeyPress::UnknownEscSeq),
-                }
-            }
-        } else if seq1 == 'O' {
-            // ESC O sequences.
-            let seq2 = try!(self.next_char());
-            match seq2 {
-                'A' => Ok(KeyPress::Up),
-                'B' => Ok(KeyPress::Down),
-                'C' => Ok(KeyPress::Right),
-                'D' => Ok(KeyPress::Left),
-                'F' => Ok(KeyPress::End),
-                'H' => Ok(KeyPress::Home),
-                _ => Ok(KeyPress::UnknownEscSeq),
-            }
-        } else {
-            // TODO ESC-N (n): search history forward not interactively
-            // TODO ESC-P (p): search history backward not interactively
-            // TODO ESC-R (r): Undo all changes made to this line.
-            match seq1 {
-                '\x08' => Ok(KeyPress::Meta('\x08')), // Backspace
-                '<' => Ok(KeyPress::Meta('<')),
-                '>' => Ok(KeyPress::Meta('>')),
-                'b' | 'B' => Ok(KeyPress::Meta('B')),
-                'c' | 'C' => Ok(KeyPress::Meta('C')),
-                'd' | 'D' => Ok(KeyPress::Meta('D')),
-                'f' | 'F' => Ok(KeyPress::Meta('F')),
-                'l' | 'L' => Ok(KeyPress::Meta('L')),
-                't' | 'T' => Ok(KeyPress::Meta('T')),
-                'u' | 'U' => Ok(KeyPress::Meta('U')),
-                'y' | 'Y' => Ok(KeyPress::Meta('Y')),
-                '\x7f' => Ok(KeyPress::Meta('\x7f')), // Delete
-                _ => {
-                    // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", KeyPress::Esc, seq1).unwrap();
-                    Ok(KeyPress::UnknownEscSeq)
-                }
+        // try to match the next several characters against known escape sequences
+        match try!(self.next_char()) {
+            '[' => match try!(self.next_char()) {
+                '1' => match try!(self.next_char()) {
+                    ';' => match try!(self.next_char()) {
+                        '3' => match try!(self.next_char()) {
+                            'A' => Ok(alt!(Key::Up)),
+                            'B' => Ok(alt!(Key::Down)),
+                            'C' => Ok(alt!(Key::Right)),
+                            'D' => Ok(alt!(Key::Left)),
+                            'F' => Ok(alt!(Key::End)),
+                            'H' => Ok(alt!(Key::Home)),
+                            _ => Ok(key!(Key::Unknown)),
+                        },
+                        '5' => match try!(self.next_char()) {
+                            'A' => Ok(ctrl!(Key::Up)),
+                            'B' => Ok(ctrl!(Key::Down)),
+                            'C' => Ok(ctrl!(Key::Right)),
+                            'D' => Ok(ctrl!(Key::Left)),
+                            'F' => Ok(ctrl!(Key::End)),
+                            'H' => Ok(ctrl!(Key::Home)),
+                            _ => Ok(key!(Key::Unknown)),
+                        },
+                        _ => Ok(key!(Key::Unknown)),
+                    },
+                    '~' => Ok(key!(Key::Home)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '3' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::Delete)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '4' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::End)), // xterm
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '5' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::PageUp)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '6' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::PageDown)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '7' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::Home)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                '8' => match try!(self.next_char()) {
+                    '~' => Ok(key!(Key::End)),
+                    _ => Ok(key!(Key::Unknown)),
+                },
+                'A' => Ok(key!(Key::Up)),
+                'B' => Ok(key!(Key::Down)),
+                'C' => Ok(key!(Key::Right)),
+                'D' => Ok(key!(Key::Left)),
+                'F' => Ok(key!(Key::End)),
+                'H' => Ok(key!(Key::Home)),
+                _ => Ok(key!(Key::Unknown)),
+            },
+            'O' => match try!(self.next_char()) {
+                'A' => Ok(key!(Key::Up)),
+                'B' => Ok(key!(Key::Down)),
+                'C' => Ok(key!(Key::Right)),
+                'D' => Ok(key!(Key::Left)),
+                'F' => Ok(key!(Key::End)),
+                'H' => Ok(key!(Key::Home)),
+                _ => Ok(key!(Key::Unknown)),
+            },
+            '\x08' => Ok(alt!('\x08') ), // Backspace
+            '<' => Ok(alt!('<') ),
+            '>' => Ok(alt!('>') ),
+            'b' | 'B' => Ok(alt!('B') ),
+            'c' | 'C' => Ok(alt!('C') ),
+            'd' | 'D' => Ok(alt!('D') ),
+            'f' | 'F' => Ok(alt!('F') ),
+            'l' | 'L' => Ok(alt!('L') ),
+            't' | 'T' => Ok(alt!('T') ),
+            'u' | 'U' => Ok(alt!('U') ),
+            'y' | 'Y' => Ok(alt!('Y') ),
+            '\x7f' => Ok(alt!('\x7f') ), // Delete
+            _ => {
+                // writeln!(io::stderr(), "key: {:?}, seq1: {:?}", key!(Key::Esc,) seq1).unwrap();
+                Ok(key!(Key::Unknown))
             }
         }
     }
@@ -178,7 +196,7 @@ impl RawReader for PosixRawReader {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
-        if key == KeyPress::Esc {
+        if key == key!(Key::Esc) {
             let mut fds =
                 [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
             match poll::poll(&mut fds, timeout_ms) {

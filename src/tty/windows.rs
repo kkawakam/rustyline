@@ -7,7 +7,7 @@ use std::sync::atomic;
 use kernel32;
 use winapi;
 
-use consts::{self, KeyPress};
+use consts::{self, Key, KeyPress};
 use ::error;
 use ::Result;
 use super::{RawMode, RawReader, Term};
@@ -125,15 +125,15 @@ impl RawReader for ConsoleRawReader {
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => return Ok(KeyPress::Left),
-                    winapi::VK_RIGHT => return Ok(KeyPress::Right),
-                    winapi::VK_UP => return Ok(KeyPress::Up),
-                    winapi::VK_DOWN => return Ok(KeyPress::Down),
-                    winapi::VK_DELETE => return Ok(KeyPress::Delete),
-                    winapi::VK_HOME => return Ok(KeyPress::Home),
-                    winapi::VK_END => return Ok(KeyPress::End),
-                    winapi::VK_PRIOR => return Ok(KeyPress::PageUp),
-                    winapi::VK_NEXT => return Ok(KeyPress::PageDown),
+                    winapi::VK_LEFT => return Ok(key!(Key::Left)),
+                    winapi::VK_RIGHT => return Ok(key!(Key::Right)),
+                    winapi::VK_UP => return Ok(key!(Key::Up)),
+                    winapi::VK_DOWN => return Ok(key!(Key::Down)),
+                    winapi::VK_DELETE => return Ok(key!(Key::Delete)),
+                    winapi::VK_HOME => return Ok(key!(Key::Home)),
+                    winapi::VK_END => return Ok(key!(Key::End)),
+                    winapi::VK_PRIOR => return Ok(key!(Key::PageUp)),
+                    winapi::VK_NEXT => return Ok(key!(Key::PageDown)),
                     _ => continue,
                 };
             } else if utf16 == 27 {
@@ -149,15 +149,15 @@ impl RawReader for ConsoleRawReader {
                 let c = try!(orc.unwrap());
                 if meta {
                     match c {
-                        'b' | 'B' => return Ok(KeyPress::Meta('B')),
-                        'c' | 'C' => return Ok(KeyPress::Meta('C')),
-                        'd' | 'D' => return Ok(KeyPress::Meta('D')),
-                        'f' | 'F' => return Ok(KeyPress::Meta('F')),
-                        'l' | 'L' => return Ok(KeyPress::Meta('L')),
-                        't' | 'T' => return Ok(KeyPress::Meta('T')),
-                        'u' | 'U' => return Ok(KeyPress::Meta('U')),
-                        'y' | 'Y' => return Ok(KeyPress::Meta('Y')),
-                        _ => return Ok(KeyPress::UnknownEscSeq),
+                        'b' | 'B' => return Ok(alt!(Key::Char('B')) ),
+                        'c' | 'C' => return Ok(alt!(Key::Char('C')) ),
+                        'd' | 'D' => return Ok(alt!(Key::Char('D')) ),
+                        'f' | 'F' => return Ok(alt!(Key::Char('F')) ),
+                        'l' | 'L' => return Ok(alt!(Key::Char('L')) ),
+                        't' | 'T' => return Ok(alt!(Key::Char('T')) ),
+                        'u' | 'U' => return Ok(alt!(Key::Char('U')) ),
+                        'y' | 'Y' => return Ok(alt!(Key::Char('Y')) ),
+                        _ => return Ok(key!(Key::Unknown)),
                     }
                 } else {
                     return Ok(consts::char_to_key_press(c));

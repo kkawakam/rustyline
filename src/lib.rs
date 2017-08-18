@@ -642,9 +642,9 @@ fn page_completions<R: RawReader>(
         if row == pause_row {
             try!(s.out.write_and_flush(b"\n--More--"));
             let mut cmd = Cmd::Noop;
-            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1_, 'Y') &&
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
                 cmd != Cmd::SelfInsert(1, 'n') &&
-                cmd != Cmd::SelfInsert(1_, 'N') &&
+                cmd != Cmd::SelfInsert(1, 'N') &&
                 cmd != Cmd::SelfInsert(1, 'q') &&
                 cmd != Cmd::SelfInsert(1, 'Q') &&
                 cmd != Cmd::SelfInsert(1, ' ') &&

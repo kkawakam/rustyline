@@ -17,4 +17,4 @@ touch .
 
 git add -A .
 git commit -m "rebuild pages at ${rev}"
-git push -q upstream HEAD:gh-pages > /dev/null 2>&1
+git push -f -q upstream HEAD:gh-pages > /dev/null 2>&1

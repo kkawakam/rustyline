@@ -9,40 +9,75 @@ use consts::KeyPress;
 use tty::RawReader;
 use super::Result;
 
+/// The number of times one command should be repeated.
 pub type RepeatCount = usize;
 
+/// Commands
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
+    /// abort
     Abort, // Miscellaneous Command
+    /// accept-line
     AcceptLine,
+    /// beginning-of-history
     BeginningOfHistory,
+    /// capitalize-word
     CapitalizeWord,
+    /// clear-screen
     ClearScreen,
+    /// complete
     Complete,
+    /// downcase-word
     DowncaseWord,
+    /// vi-eof-maybe
     EndOfFile,
+    /// end-of-history
     EndOfHistory,
+    /// forward-search-history
     ForwardSearchHistory,
+    /// history-search-backward
     HistorySearchBackward,
+    /// history-search-forward
     HistorySearchForward,
     Insert(RepeatCount, String),
     Interrupt,
+    /// backward-delete-char, backward-kill-line, backward-kill-word
+    /// delete-char, kill-line, kill-word, unix-line-discard, unix-word-rubout,
+    /// vi-change-to, vi-delete, vi-delete-to, vi-rubout, vi-subst
     Kill(Movement),
+    /// backward-char, backward-word, beginning-of-line, end-of-line,
+    /// forward-char, forward-word, vi-char-search, vi-end-word, vi-next-word, vi-prev-word
     Move(Movement),
+    /// next-history
     NextHistory,
     Noop,
+    /// vi-replace
+    Overwrite(char),
+    /// previous-history
     PreviousHistory,
+    /// quoted-insert
     QuotedInsert,
+    /// vi-change-char
     Replace(RepeatCount, char),
+    /// reverse-search-history
     ReverseSearchHistory,
+    /// self-insert
     SelfInsert(RepeatCount, char),
     Suspend,
+    /// transpose-chars
     TransposeChars,
+    /// transpose-words
     TransposeWords(RepeatCount),
+    /// undo
+    Undo,
     Unknown,
+    /// upcase-word
     UpcaseWord,
+    /// vi-yank-to
     ViYankTo(Movement),
+    /// yank, vi-put
     Yank(RepeatCount, Anchor),
+    /// yank-pop
     YankPop,
 }
 
@@ -59,13 +94,13 @@ impl Cmd {
 
     fn is_repeatable_change(&self) -> bool {
         match *self {
-            Cmd::Insert(_, _) => true,
-            Cmd::Kill(_) => true,
-            Cmd::Replace(_, _) => true,
-            Cmd::SelfInsert(_, _) => true,
-            Cmd::TransposeChars => false, // TODO Validate
-            Cmd::ViYankTo(_) => true,
+            Cmd::Insert(_, _) |
+            Cmd::Kill(_) |
+            Cmd::Replace(_, _) |
+            Cmd::SelfInsert(_, _) |
+            Cmd::ViYankTo(_) |
             Cmd::Yank(_, _) => true,
+            Cmd::TransposeChars => false, // TODO Validate
             _ => false,
         }
     }
@@ -100,16 +135,18 @@ fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount 
     }
 }
 
+/// Different word definitions
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Word {
-    // non-blanks characters
+    /// non-blanks characters
     Big,
-    // alphanumeric characters
+    /// alphanumeric characters
     Emacs,
-    // alphanumeric (and '_') characters
+    /// alphanumeric (and '_') characters
     Vi,
 }
 
+/// Where to move with respect to word boundary
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum At {
     Start,
@@ -117,12 +154,14 @@ pub enum At {
     AfterEnd,
 }
 
+/// Where to paste (relative to cursor position)
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Anchor {
     After,
     Before,
 }
 
+/// Vi character search
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharSearch {
     Forward(char),
@@ -144,17 +183,25 @@ impl CharSearch {
     }
 }
 
-
+/// Where to move
 #[derive(Debug, Clone, PartialEq)]
 pub enum Movement {
     WholeLine, // not really a movement
+    /// beginning-of-line
     BeginningOfLine,
+    /// end-of-line
     EndOfLine,
+    /// backward-word, vi-prev-word
     BackwardWord(RepeatCount, Word), // Backward until start of word
+    /// forward-word, vi-end-word, vi-next-word
     ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
+    /// vi-char-search
     ViCharSearch(RepeatCount, CharSearch),
+    /// vi-first-print
     ViFirstPrint,
+    /// backward-char
     BackwardChar(RepeatCount),
+    /// forward-char
     ForwardChar(RepeatCount),
 }
 
@@ -180,11 +227,21 @@ impl Movement {
     }
 }
 
+#[derive(PartialEq)]
+enum InputMode {
+    /// Vi Command/Alternate
+    Command,
+    /// Insert/Input mode
+    Insert,
+    /// Overwrite mode
+    Replace,
+}
+
+/// Tranform key(s) to commands based on current input mode
 pub struct EditState {
     mode: EditMode,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
-    // Vi Command/Alternate, Insert/Input mode
-    insert: bool, // vi only ?
+    input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd, // vi only
@@ -197,7 +254,7 @@ impl EditState {
         EditState {
             mode: config.edit_mode(),
             custom_bindings: custom_bindings,
-            insert: true,
+            input_mode: InputMode::Insert,
             num_args: 0,
             last_cmd: Cmd::Noop,
             consecutive_insert: false,
@@ -209,10 +266,11 @@ impl EditState {
         self.mode == EditMode::Emacs
     }
 
+    /// Parse user input into one command
     pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
         match self.mode {
             EditMode::Emacs => self.emacs(rdr),
-            EditMode::Vi if self.insert => self.vi_insert(rdr),
+            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr),
             EditMode::Vi => self.vi_command(rdr),
         }
     }
@@ -307,6 +365,14 @@ impl EditState {
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
+            KeyPress::Ctrl('X') => {
+                let snd_key = try!(rdr.next_key());
+                match snd_key {
+                    KeyPress::Ctrl('G') => Cmd::Abort,
+                    KeyPress::Ctrl('U') => Cmd::Undo,
+                    _ => Cmd::Unknown,
+                }
+            }
             KeyPress::Meta('\x08') |
             KeyPress::Meta('\x7f') => {
                 if positive {
@@ -398,25 +464,25 @@ impl EditState {
             KeyPress::Char('^') => Cmd::Move(Movement::ViFirstPrint),
             KeyPress::Char('a') => {
                 // vi-append-mode: Vi enter insert mode after the cursor.
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Move(Movement::ForwardChar(n))
             }
             KeyPress::Char('A') => {
                 // vi-append-eol: Vi enter insert mode at end of line.
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Move(Movement::EndOfLine)
             }
             KeyPress::Char('b') => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), // vi-prev-word
             KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             KeyPress::Char('c') => {
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 match try!(self.vi_cmd_motion(rdr, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
             }
             KeyPress::Char('C') => {
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Kill(Movement::EndOfLine)
             }
             KeyPress::Char('d') => {
@@ -431,12 +497,12 @@ impl EditState {
             KeyPress::Char('E') => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big)),
             KeyPress::Char('i') => {
                 // vi-insertion-mode
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Noop
             }
             KeyPress::Char('I') => {
                 // vi-insert-beg
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Move(Movement::BeginningOfLine)
             }
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
@@ -471,17 +537,22 @@ impl EditState {
                     _ => Cmd::Unknown,
                 }
             }
-            // TODO KeyPress::Char('R') => Cmd::???, vi-replace-mode: Vi enter replace mode. Replaces characters under the cursor. (overwrite-mode)
+            KeyPress::Char('R') => {
+                //  vi-replace-mode: Vi enter replace mode. Replaces characters under the cursor. (overwrite-mode)
+                self.input_mode = InputMode::Replace;
+                Cmd::Noop
+            }
             KeyPress::Char('s') => {
                 // vi-substitute-char: Vi replace character under the cursor and enter insert mode.
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Kill(Movement::ForwardChar(n))
             }
             KeyPress::Char('S') => {
                 // vi-substitute-line: Vi substitute entire line.
-                self.insert = true;
+                self.input_mode = InputMode::Insert;
                 Cmd::Kill(Movement::WholeLine)
             }
+            KeyPress::Char('u') => Cmd::Undo,
             // KeyPress::Char('U') => Cmd::???, // revert-line
             KeyPress::Char('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), // vi-next-word
             KeyPress::Char('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), // vi-next-word
@@ -508,11 +579,11 @@ impl EditState {
             KeyPress::Char('k') | // TODO: move to the start of the line.
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('R') => {
-                self.insert = true; // TODO Validate
+                self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ReverseSearchHistory
             }
             KeyPress::Ctrl('S') => {
-                self.insert = true; // TODO Validate
+                self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ForwardSearchHistory
             }
             KeyPress::Esc => Cmd::Noop,
@@ -536,13 +607,19 @@ impl EditState {
                       });
         }
         let cmd = match key {
-            KeyPress::Char(c) => Cmd::SelfInsert(1, c),
+            KeyPress::Char(c) => {
+                if self.input_mode == InputMode::Replace {
+                    Cmd::Overwrite(c)
+                } else {
+                    Cmd::SelfInsert(1, c)
+                }
+            }
             KeyPress::Ctrl('H') |
             KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode: Vi enter command mode (use alternative key bindings).
-                self.insert = false;
+                self.input_mode = InputMode::Command;
                 Cmd::Move(Movement::BackwardChar(1))
             }
             _ => self.common(key, 1, true),
@@ -704,6 +781,7 @@ impl EditState {
                 }
             }
             KeyPress::Ctrl('Z') => Cmd::Suspend,
+            KeyPress::Ctrl('_') => Cmd::Undo,
             KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         }

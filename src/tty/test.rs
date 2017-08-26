@@ -1,5 +1,5 @@
 //! Tests specific definitions
-use std::io::Write;
+use std::io::{self, Sink, Write};
 use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -7,9 +7,10 @@ use std::vec::IntoIter;
 #[cfg(windows)]
 use winapi;
 
+use config::Config;
 use consts::KeyPress;
-use ::error::ReadlineError;
-use ::Result;
+use error::ReadlineError;
+use Result;
 use super::{RawMode, RawReader, Term};
 
 pub type Mode = ();
@@ -21,7 +22,7 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(*key),
             None => Err(ReadlineError::Eof),
@@ -34,7 +35,7 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
 }
 
 impl RawReader for IntoIter<KeyPress> {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(key),
             None => Err(ReadlineError::Eof),
@@ -90,6 +91,7 @@ impl DummyTerminal {
 
 impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
+    type Writer = Sink;
     type Mode = Mode;
 
     fn new() -> DummyTerminal {
@@ -130,10 +132,13 @@ impl Term for DummyTerminal {
     }
 
     /// Create a RAW reader
-    fn create_reader(&self) -> Result<IntoIter<KeyPress>> {
+    fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyPress>> {
         Ok(self.keys.clone().into_iter())
     }
 
+    fn create_writer(&self) -> Sink {
+        io::sink()
+    }
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self, _: &mut Write) -> Result<()> {

@@ -13,6 +13,8 @@ pub struct Config {
     completion_prompt_limit: usize,
     /// Duration (milliseconds) Rustyline will wait for a character when reading an ambiguous key sequence.
     keyseq_timeout: i32,
+    // Emacs or Vi mode
+    edit_mode: EditMode,
 }
 
 impl Config {
@@ -48,6 +50,10 @@ impl Config {
     pub fn keyseq_timeout(&self) -> i32 {
         self.keyseq_timeout
     }
+
+    pub fn edit_mode(&self) -> EditMode {
+        self.edit_mode
+    }
 }
 
 impl Default for Config {
@@ -59,6 +65,7 @@ impl Default for Config {
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
             keyseq_timeout: 500,
+            edit_mode: EditMode::Emacs,
         }
     }
 }
@@ -79,7 +86,13 @@ pub enum CompletionType {
     List,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditMode {
+    Emacs,
+    Vi,
+}
+
+#[derive(Debug, Default)]
 pub struct Builder {
     p: Config,
 }
@@ -119,14 +132,24 @@ impl Builder {
         self
     }
 
+    /// The number of possible completions that determines when the user is asked
+    /// whether the list of possibilities should be displayed.
     pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Builder {
         self.p.completion_prompt_limit = completion_prompt_limit;
         self
     }
 
-    /// Set `keyseq_timeout` in milliseconds.
+    /// Timeout for ambiguous key sequences in milliseconds.
+    /// Currently, it is used only to distinguish a single ESC from an ESC sequence.
+    /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another byte.
     pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
         self.p.keyseq_timeout = keyseq_timeout_ms;
+        self
+    }
+
+    /// Choose between Emacs or Vi mode.
+    pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
+        self.p.edit_mode = edit_mode;
         self
     }
 

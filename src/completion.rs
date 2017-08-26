@@ -20,7 +20,7 @@ pub trait Completer {
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
-        line.replace(start, end, elected)
+        line.replace(start..end, elected)
     }
 }
 
@@ -60,6 +60,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 box_completer! { Box Rc Arc }
 
+/// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
 }
@@ -121,12 +122,18 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
     Owned(result)
 }
 
+/// Escape any `break_chars` in `input` string with `esc_char`.
+/// For example, '/User Information' becomes '/User\ Information'
+/// when space is a breaking char and '\' the escape char.
 pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char>) -> String {
     if esc_char.is_none() {
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input.chars().filter(|c| break_chars.contains(c)).count();
+    let n = input
+        .chars()
+        .filter(|c| break_chars.contains(c))
+        .count();
     if n == 0 {
         return input;
     }

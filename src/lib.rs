@@ -17,10 +17,13 @@
 #![allow(unknown_lints)]
 
 extern crate libc;
+extern crate encode_unicode;
+#[macro_use]
+extern crate log;
+extern crate unicode_segmentation;
+extern crate unicode_width;
 #[cfg(unix)]
 extern crate nix;
-extern crate unicode_width;
-extern crate encode_unicode;
 #[cfg(windows)]
 extern crate winapi;
 #[cfg(windows)]
@@ -30,6 +33,7 @@ pub mod completion;
 mod consts;
 pub mod error;
 pub mod history;
+mod keymap;
 mod kill_ring;
 pub mod line_buffer;
 #[cfg(unix)]
@@ -38,20 +42,28 @@ pub mod config;
 
 mod tty;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
+use std::rc::Rc;
 use std::result;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
 use tty::{RawMode, RawReader, Terminal, Term};
 
 use encode_unicode::CharExt;
 use completion::{Completer, longest_common_prefix};
-use consts::KeyPress;
 use history::{Direction, History};
 use line_buffer::{LineBuffer, MAX_LINE, WordAction};
+pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+use keymap::EditState;
 use kill_ring::{Mode, KillRing};
-pub use config::{CompletionType, Config, HistoryDuplicates};
+pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
+pub use consts::KeyPress;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -68,6 +80,7 @@ struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     snapshot: LineBuffer, // Current edited line before history browsing/completion
     term: Terminal, // terminal
+    edit_state: EditState,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -79,8 +92,10 @@ struct Position {
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(out: &'out mut Write,
            term: Terminal,
+           config: &Config,
            prompt: &'prompt str,
-           history_index: usize)
+           history_index: usize,
+           custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>)
            -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let cols = term.get_columns();
@@ -96,6 +111,19 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index: history_index,
             snapshot: LineBuffer::with_capacity(capacity),
             term: term,
+            edit_state: EditState::new(config, custom_bindings),
+        }
+    }
+
+    fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+        loop {
+            let rc = self.edit_state.next_cmd(rdr);
+            if rc.is_err() && self.term.sigwinch() {
+                self.update_columns();
+                try!(self.refresh_line());
+                continue;
+            }
+            return rc;
         }
     }
 
@@ -180,11 +208,13 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let mut info = try!(self.term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= self.cursor.row as i16;
-        try!(self.term.set_console_cursor_position(info.dwCursorPosition));
+        try!(self.term
+                 .set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
         try!(self.term
-            .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as u32,
-                                           info.dwCursorPosition));
+                 .fill_console_output_character((info.dwSize.X * (self.old_rows as i16 + 1)) as
+                                                u32,
+                                                info.dwCursorPosition));
         let mut ab = String::new();
         // display the prompt
         ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -196,7 +226,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let mut info = try!(self.term.get_console_screen_buffer_info());
         info.dwCursorPosition.X = cursor.col as i16;
         info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        try!(self.term.set_console_cursor_position(info.dwCursorPosition));
+        try!(self.term
+                 .set_console_cursor_position(info.dwCursorPosition));
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;
@@ -272,7 +303,7 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
             pos.row += 1;
             None
         } else {
-            unicode_width::UnicodeWidthChar::width(c)
+            c.width()
         };
         if let Some(cw) = cw {
             pos.col += cw;
@@ -290,10 +321,10 @@ fn calculate_position(s: &str, orig: Position, cols: usize) -> Position {
 }
 
 /// Insert the character `ch` at cursor current position.
-fn edit_insert(s: &mut State, ch: char) -> Result<()> {
-    if let Some(push) = s.line.insert(ch) {
+fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
+    if let Some(push) = s.line.insert(ch, n) {
         if push {
-            if s.cursor.col + unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0) < s.cols {
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.cols {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = calculate_position(&s.line[..s.line.pos()], s.prompt_size, s.cols);
                 s.cursor = cursor;
@@ -309,9 +340,27 @@ fn edit_insert(s: &mut State, ch: char) -> Result<()> {
     }
 }
 
+/// Replace a single (or n) character(s) under the cursor (Vi mode)
+fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
+    if let Some(chars) = s.line.delete(n) {
+        let count = chars.graphemes(true).count();
+        s.line.insert(ch, count);
+        s.line.move_backward(1);
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, text: &str) -> Result<()> {
-    if s.line.yank(text).is_some() {
+fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
+    if let Anchor::After = anchor {
+        s.line.move_forward(1);
+    }
+    if s.line.yank(text, n).is_some() {
+        if !s.edit_state.is_emacs_mode() {
+            s.line.move_backward(1);
+        }
         s.refresh_line()
     } else {
         Ok(())
@@ -321,12 +370,12 @@ fn edit_yank(s: &mut State, text: &str) -> Result<()> {
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.line.yank_pop(yank_size, text);
-    edit_yank(s, text)
+    edit_yank(s, text, Anchor::Before, 1)
 }
 
 /// Move cursor on the left.
-fn edit_move_left(s: &mut State) -> Result<()> {
-    if s.line.move_left() {
+fn edit_move_backward(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.move_backward(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -334,8 +383,8 @@ fn edit_move_left(s: &mut State) -> Result<()> {
 }
 
 /// Move cursor on the right.
-fn edit_move_right(s: &mut State) -> Result<()> {
-    if s.line.move_right() {
+fn edit_move_forward(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.move_forward(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -362,8 +411,8 @@ fn edit_move_end(s: &mut State) -> Result<()> {
 
 /// Delete the character at the right of the cursor without altering the cursor
 /// position. Basically this is what happens with the "Delete" keyboard key.
-fn edit_delete(s: &mut State) -> Result<()> {
-    if s.line.delete() {
+fn edit_delete(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.delete(n).is_some() {
         s.refresh_line()
     } else {
         Ok(())
@@ -371,8 +420,8 @@ fn edit_delete(s: &mut State) -> Result<()> {
 }
 
 /// Backspace implementation.
-fn edit_backspace(s: &mut State) -> Result<()> {
-    if s.line.backspace() {
+fn edit_backspace(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.backspace(n).is_some() {
         s.refresh_line()
     } else {
         Ok(())
@@ -408,8 +457,8 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     }
 }
 
-fn edit_move_to_prev_word(s: &mut State) -> Result<()> {
-    if s.line.move_to_prev_word() {
+fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
+    if s.line.move_to_prev_word(word_def, n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -418,10 +467,8 @@ fn edit_move_to_prev_word(s: &mut State) -> Result<()> {
 
 /// Delete the previous word, maintaining the cursor at the start of the
 /// current word.
-fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
-    where F: Fn(char) -> bool
-{
-    if let Some(text) = s.line.delete_prev_word(test) {
+fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_prev_word(word_def, n) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -429,8 +476,16 @@ fn edit_delete_prev_word<F>(s: &mut State, test: F) -> Result<Option<String>>
     }
 }
 
-fn edit_move_to_next_word(s: &mut State) -> Result<()> {
-    if s.line.move_to_next_word() {
+fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
+    if s.line.move_to_next_word(at, word_def, n) {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
+}
+
+fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
+    if s.line.move_to(cs, n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -438,8 +493,21 @@ fn edit_move_to_next_word(s: &mut State) -> Result<()> {
 }
 
 /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-fn edit_delete_word(s: &mut State) -> Result<Option<String>> {
-    if let Some(text) = s.line.delete_word() {
+fn edit_delete_word(s: &mut State,
+                    at: At,
+                    word_def: Word,
+                    n: RepeatCount)
+                    -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_word(at, word_def, n) {
+        try!(s.refresh_line());
+        Ok(Some(text))
+    } else {
+        Ok(None)
+    }
+}
+
+fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<Option<String>> {
+    if let Some(text) = s.line.delete_to(cs, n) {
         try!(s.refresh_line());
         Ok(Some(text))
     } else {
@@ -455,8 +523,8 @@ fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
     }
 }
 
-fn edit_transpose_words(s: &mut State) -> Result<()> {
-    if s.line.transpose_words() {
+fn edit_transpose_words(s: &mut State, n: RepeatCount) -> Result<()> {
+    if s.line.transpose_words(n) {
         s.refresh_line()
     } else {
         Ok(())
@@ -494,6 +562,31 @@ fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()>
     s.refresh_line()
 }
 
+fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
+    if history.is_empty() {
+        return beep();
+    }
+    if s.history_index == history.len() && dir == Direction::Forward {
+        return beep();
+    } else if s.history_index == 0 && dir == Direction::Reverse {
+        return beep();
+    }
+    if dir == Direction::Reverse {
+        s.history_index -= 1;
+    } else {
+        s.history_index += 1;
+    }
+    if let Some(history_index) =
+        history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir) {
+        s.history_index = history_index;
+        let buf = history.get(history_index).unwrap();
+        s.line.update(buf, buf.len());
+        s.refresh_line()
+    } else {
+        beep()
+    }
+}
+
 /// Substitute the currently edited line with the first/last history entry.
 fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
     if history.is_empty() {
@@ -526,7 +619,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                                s: &mut State,
                                completer: &Completer,
                                config: &Config)
-                               -> Result<Option<KeyPress>> {
+                               -> Result<Option<Cmd>> {
     // get a list of completions
     let (start, candidates) = try!(completer.complete(&s.line, s.line.pos()));
     // if no completions, we are done
@@ -536,7 +629,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
     } else if CompletionType::Circular == config.completion_type() {
         // Save the current edited line before to overwrite it
         s.backup();
-        let mut key;
+        let mut cmd;
         let mut i = 0;
         loop {
             // Show completion or original buffer
@@ -550,15 +643,15 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 s.snapshot();
             }
 
-            key = try!(rdr.next_key(config.keyseq_timeout()));
-            match key {
-                KeyPress::Tab => {
+            cmd = try!(s.next_cmd(rdr));
+            match cmd {
+                Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
                         try!(beep());
                     }
                 }
-                KeyPress::Esc => {
+                Cmd::Abort => {
                     // Re-show original buffer
                     s.snapshot();
                     if i < candidates.len() {
@@ -574,7 +667,7 @@ fn complete_line<R: RawReader>(rdr: &mut R,
                 }
             }
         }
-        Ok(Some(key))
+        Ok(Some(cmd))
     } else if CompletionType::List == config.completion_type() {
         // beep if ambiguous
         if candidates.len() > 1 {
@@ -589,34 +682,36 @@ fn complete_line<R: RawReader>(rdr: &mut R,
             }
         }
         // we can't complete any further, wait for second tab
-        let mut key = try!(rdr.next_key(config.keyseq_timeout()));
+        let mut cmd = try!(s.next_cmd(rdr));
         // if any character other than tab, pass it to the main loop
-        if key != KeyPress::Tab {
-            return Ok(Some(key));
+        if cmd != Cmd::Complete {
+            return Ok(Some(cmd));
         }
         // move cursor to EOL to avoid overwriting the command line
         let save_pos = s.line.pos();
         try!(edit_move_end(s));
         s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
-        let mut show_completions = true;
-        if candidates.len() > config.completion_prompt_limit() {
+        let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(write_and_flush(s.out, msg.as_bytes()));
             s.old_rows += 1;
-            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
-                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
-                  key != KeyPress::Backspace {
-                key = try!(rdr.next_key(config.keyseq_timeout()));
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
+                  cmd != Cmd::SelfInsert(1, 'n') &&
+                  cmd != Cmd::SelfInsert(1, 'N') &&
+                  cmd != Cmd::Kill(Movement::BackwardChar(1)) {
+                cmd = try!(s.next_cmd(rdr));
             }
-            show_completions = match key {
-                KeyPress::Char('y') |
-                KeyPress::Char('Y') => true,
+            match cmd {
+                Cmd::SelfInsert(1, 'y') |
+                Cmd::SelfInsert(1, 'Y') => true,
                 _ => false,
-            };
-        }
+            }
+        } else {
+            true
+        };
         if show_completions {
-            page_completions(rdr, s, config, &candidates)
+            page_completions(rdr, s, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -628,16 +723,15 @@ fn complete_line<R: RawReader>(rdr: &mut R,
 
 fn page_completions<R: RawReader>(rdr: &mut R,
                                   s: &mut State,
-                                  config: &Config,
                                   candidates: &[String])
-                                  -> Result<Option<KeyPress>> {
+                                  -> Result<Option<Cmd>> {
     use std::cmp;
-    use unicode_width::UnicodeWidthStr;
 
     let min_col_pad = 2;
     let max_width = cmp::min(s.cols,
-                             candidates.into_iter()
-                                 .map(|s| UnicodeWidthStr::width(s.as_str()))
+                             candidates
+                                 .into_iter()
+                                 .map(|s| s.as_str().width())
                                  .max()
                                  .unwrap() + min_col_pad);
     let num_cols = s.cols / max_width;
@@ -648,22 +742,24 @@ fn page_completions<R: RawReader>(rdr: &mut R,
     for row in 0..num_rows {
         if row == pause_row {
             try!(write_and_flush(s.out, b"\n--More--"));
-            let mut key = KeyPress::Null;
-            while key != KeyPress::Char('y') && key != KeyPress::Char('Y') &&
-                  key != KeyPress::Char('n') && key != KeyPress::Char('N') &&
-                  key != KeyPress::Char('q') &&
-                  key != KeyPress::Char('Q') &&
-                  key != KeyPress::Char(' ') &&
-                  key != KeyPress::Backspace && key != KeyPress::Enter {
-                key = try!(rdr.next_key(config.keyseq_timeout()));
+            let mut cmd = Cmd::Noop;
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1_, 'Y') &&
+                  cmd != Cmd::SelfInsert(1, 'n') &&
+                  cmd != Cmd::SelfInsert(1_, 'N') &&
+                  cmd != Cmd::SelfInsert(1, 'q') &&
+                  cmd != Cmd::SelfInsert(1, 'Q') &&
+                  cmd != Cmd::SelfInsert(1, ' ') &&
+                  cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
+                  cmd != Cmd::AcceptLine {
+                cmd = try!(s.next_cmd(rdr));
             }
-            match key {
-                KeyPress::Char('y') |
-                KeyPress::Char('Y') |
-                KeyPress::Char(' ') => {
+            match cmd {
+                Cmd::SelfInsert(1, 'y') |
+                Cmd::SelfInsert(1, 'Y') |
+                Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.term.get_rows() - 1;
                 }
-                KeyPress::Enter => {
+                Cmd::AcceptLine => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -678,7 +774,7 @@ fn page_completions<R: RawReader>(rdr: &mut R,
             if i < candidates.len() {
                 let candidate = &candidates[i];
                 ab.push_str(candidate);
-                let width = UnicodeWidthStr::width(candidate.as_str());
+                let width = candidate.as_str().width();
                 if ((col + 1) * num_rows) + row < candidates.len() {
                     for _ in width..max_width {
                         ab.push(' ');
@@ -696,9 +792,8 @@ fn page_completions<R: RawReader>(rdr: &mut R,
 /// Incremental search
 fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                                             s: &mut State,
-                                            history: &History,
-                                            config: &Config)
-                                            -> Result<Option<KeyPress>> {
+                                            history: &History)
+                                            -> Result<Option<Cmd>> {
     if history.is_empty() {
         return Ok(None);
     }
@@ -710,7 +805,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
     let mut direction = Direction::Reverse;
     let mut success = true;
 
-    let mut key;
+    let mut cmd;
     // Display the reverse-i-search prompt and process chars
     loop {
         let prompt = if success {
@@ -720,17 +815,16 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        key = try!(rdr.next_key(config.keyseq_timeout()));
-        if let KeyPress::Char(c) = key {
+        cmd = try!(s.next_cmd(rdr));
+        if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
-            match key {
-                KeyPress::Ctrl('H') |
-                KeyPress::Backspace => {
+            match cmd {
+                Cmd::Kill(Movement::BackwardChar(_)) => {
                     search_buf.pop();
                     continue;
                 }
-                KeyPress::Ctrl('R') => {
+                Cmd::ReverseSearchHistory => {
                     direction = Direction::Reverse;
                     if history_idx > 0 {
                         history_idx -= 1;
@@ -739,7 +833,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                         continue;
                     }
                 }
-                KeyPress::Ctrl('S') => {
+                Cmd::ForwardSearchHistory => {
                     direction = Direction::Forward;
                     if history_idx < history.len() - 1 {
                         history_idx += 1;
@@ -748,7 +842,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
                         continue;
                     }
                 }
-                KeyPress::Ctrl('G') => {
+                Cmd::Abort => {
                     // Restore current edited line (before search)
                     s.snapshot();
                     try!(s.refresh_line());
@@ -768,7 +862,7 @@ fn reverse_incremental_search<R: RawReader>(rdr: &mut R,
             _ => false,
         };
     }
-    Ok(Some(key))
+    Ok(Some(cmd))
 }
 
 /// Handles reading and editting the readline buffer.
@@ -781,236 +875,230 @@ fn readline_edit<C: Completer>(prompt: &str,
                                -> Result<String> {
     let completer = editor.completer.as_ref().map(|c| c as &Completer);
 
-    let mut stdout = io::stdout();
+    let mut stdout = editor.term.create_writer();
 
     editor.kill_ring.reset();
     let mut s = State::new(&mut stdout,
                            editor.term.clone(),
+                           &editor.config,
                            prompt,
-                           editor.history.len());
+                           editor.history.len(),
+                           editor.custom_bindings.clone());
     try!(s.refresh_line());
 
-    let mut rdr = try!(s.term.create_reader());
+    let mut rdr = try!(s.term.create_reader(&editor.config));
 
     loop {
-        let rk = rdr.next_key(editor.config.keyseq_timeout());
-        if rk.is_err() && s.term.sigwinch() {
-            s.update_columns();
-            try!(s.refresh_line());
-            continue;
-        }
-        let mut key = try!(rk);
-        if let KeyPress::Char(c) = key {
+        let rc = s.next_cmd(&mut rdr);
+        let mut cmd = try!(rc);
+
+        if cmd.should_reset_kill_ring() {
             editor.kill_ring.reset();
-            try!(edit_insert(&mut s, c));
-            continue;
         }
 
         // autocomplete
-        if key == KeyPress::Tab && completer.is_some() {
+        if cmd == Cmd::Complete && completer.is_some() {
             let next = try!(complete_line(&mut rdr, &mut s, completer.unwrap(), &editor.config));
             if next.is_some() {
-                editor.kill_ring.reset();
-                key = next.unwrap();
-                if let KeyPress::Char(c) = key {
-                    try!(edit_insert(&mut s, c));
-                    continue;
-                }
+                cmd = next.unwrap();
             } else {
                 continue;
             }
-        } else if key == KeyPress::Ctrl('R') {
-            // Search history backward
-            let next =
-                try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history, &editor.config));
-            if next.is_some() {
-                key = next.unwrap();
-            } else {
-                continue;
-            }
-        } else if key == KeyPress::UnknownEscSeq {
+        }
+
+        if let Cmd::SelfInsert(n, c) = cmd {
+            try!(edit_insert(&mut s, c, n));
+            continue;
+        } else if let Cmd::Insert(n, text) = cmd {
+            try!(edit_yank(&mut s, &text, Anchor::Before, n));
             continue;
         }
 
-        match key {
-            KeyPress::Ctrl('A') |
-            KeyPress::Home => {
-                editor.kill_ring.reset();
+        if cmd == Cmd::ReverseSearchHistory {
+            // Search history backward
+            let next = try!(reverse_incremental_search(&mut rdr, &mut s, &editor.history));
+            if next.is_some() {
+                cmd = next.unwrap();
+            } else {
+                continue;
+            }
+        }
+
+        match cmd {
+            Cmd::Move(Movement::BeginningOfLine) => {
                 // Move to the beginning of line.
                 try!(edit_move_home(&mut s))
             }
-            KeyPress::Ctrl('B') |
-            KeyPress::Left => {
-                editor.kill_ring.reset();
+            Cmd::Move(Movement::ViFirstPrint) => {
+                try!(edit_move_home(&mut s));
+                try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
+            }
+            Cmd::Move(Movement::BackwardChar(n)) => {
                 // Move back a character.
-                try!(edit_move_left(&mut s))
+                try!(edit_move_backward(&mut s, n))
             }
-            KeyPress::Ctrl('C') => {
-                editor.kill_ring.reset();
-                return Err(error::ReadlineError::Interrupted);
+            Cmd::Kill(Movement::ForwardChar(n)) => {
+                // Delete (forward) one character at point.
+                try!(edit_delete(&mut s, n))
             }
-            KeyPress::Ctrl('D') => {
-                editor.kill_ring.reset();
-                if s.line.is_empty() {
+            Cmd::Replace(n, c) => {
+                try!(edit_replace_char(&mut s, c, n));
+            }
+            Cmd::EndOfFile => {
+                if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
+                    try!(edit_move_end(&mut s));
+                    break;
+                } else if s.line.is_empty() {
                     return Err(error::ReadlineError::Eof);
                 } else {
-                    // Delete (forward) one character at point.
-                    try!(edit_delete(&mut s))
+                    try!(edit_delete(&mut s, 1))
                 }
             }
-            KeyPress::Ctrl('E') |
-            KeyPress::End => {
-                editor.kill_ring.reset();
+            Cmd::Move(Movement::EndOfLine) => {
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
             }
-            KeyPress::Ctrl('F') |
-            KeyPress::Right => {
-                editor.kill_ring.reset();
+            Cmd::Move(Movement::ForwardChar(n)) => {
                 // Move forward a character.
-                try!(edit_move_right(&mut s))
+                try!(edit_move_forward(&mut s, n))
             }
-            KeyPress::Ctrl('H') |
-            KeyPress::Backspace => {
-                editor.kill_ring.reset();
+            Cmd::Kill(Movement::BackwardChar(n)) => {
                 // Delete one character backward.
-                try!(edit_backspace(&mut s))
+                try!(edit_backspace(&mut s, n))
             }
-            KeyPress::Ctrl('K') => {
+            Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
                 if let Some(text) = try!(edit_kill_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            KeyPress::Ctrl('L') => {
+            Cmd::Kill(Movement::WholeLine) => {
+                try!(edit_move_home(&mut s));
+                if let Some(text) = try!(edit_kill_line(&mut s)) {
+                    editor.kill_ring.kill(&text, Mode::Append)
+                }
+            }
+            Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
                 try!(s.term.clear_screen(&mut s.out));
                 try!(s.refresh_line())
             }
-            KeyPress::Ctrl('N') |
-            KeyPress::Down => {
-                editor.kill_ring.reset();
+            Cmd::NextHistory => {
                 // Fetch the next command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, false))
             }
-            KeyPress::Ctrl('P') |
-            KeyPress::Up => {
-                editor.kill_ring.reset();
+            Cmd::PreviousHistory => {
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
-            KeyPress::Ctrl('T') => {
-                editor.kill_ring.reset();
+            Cmd::HistorySearchBackward => {
+                try!(edit_history_search(&mut s, &editor.history, Direction::Reverse))
+            }
+            Cmd::HistorySearchForward => {
+                try!(edit_history_search(&mut s, &editor.history, Direction::Forward))
+            }
+            Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
             }
-            KeyPress::Ctrl('U') => {
+            Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
                 if let Some(text) = try!(edit_discard_line(&mut s)) {
                     editor.kill_ring.kill(&text, Mode::Prepend)
                 }
             }
             #[cfg(unix)]
-            KeyPress::Ctrl('V') => {
+            Cmd::QuotedInsert => {
                 // Quoted insert
-                editor.kill_ring.reset();
                 let c = try!(rdr.next_char());
-                try!(edit_insert(&mut s, c)) // FIXME
+                try!(edit_insert(&mut s, c, 1)) // FIXME
             }
-            KeyPress::Ctrl('W') => {
-                // Kill the word behind point, using white space as a word boundary
-                if let Some(text) = try!(edit_delete_prev_word(&mut s, char::is_whitespace)) {
-                    editor.kill_ring.kill(&text, Mode::Prepend)
-                }
-            }
-            KeyPress::Ctrl('Y') => {
+            Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.yank() {
-                    try!(edit_yank(&mut s, text))
+                    try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
-            #[cfg(unix)]
-            KeyPress::Ctrl('Z') => {
-                try!(original_mode.disable_raw_mode());
-                try!(tty::suspend());
-                try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
-                try!(s.refresh_line())
-            }
-            // TODO CTRL-_ // undo
-            KeyPress::Enter |
-            KeyPress::Ctrl('J') => {
-                // Accept the line regardless of where the cursor is.
-                editor.kill_ring.reset();
-                try!(edit_move_end(&mut s));
-                break;
-            }
-            KeyPress::Meta('\x08') |
-            KeyPress::Meta('\x7f') => {
-                // kill one word backward
-                // Kill from the cursor to the start of the current word, or, if between words, to the start of the previous word.
-                if let Some(text) = try!(edit_delete_prev_word(&mut s,
-                                                               |ch| !ch.is_alphanumeric())) {
-                    editor.kill_ring.kill(&text, Mode::Prepend)
-                }
-            }
-            KeyPress::Meta('<') => {
-                // move to first entry in history
-                editor.kill_ring.reset();
-                try!(edit_history(&mut s, &editor.history, true))
-            }
-            KeyPress::Meta('>') => {
-                // move to last entry in history
-                editor.kill_ring.reset();
-                try!(edit_history(&mut s, &editor.history, false))
-            }
-            KeyPress::Meta('B') => {
-                // move backwards one word
-                editor.kill_ring.reset();
-                try!(edit_move_to_prev_word(&mut s))
-            }
-            KeyPress::Meta('C') => {
-                // capitalize word after point
-                editor.kill_ring.reset();
-                try!(edit_word(&mut s, WordAction::CAPITALIZE))
-            }
-            KeyPress::Meta('D') => {
-                // kill one word forward
-                if let Some(text) = try!(edit_delete_word(&mut s)) {
+            Cmd::ViYankTo(mvt) => {
+                if let Some(text) = s.line.copy(mvt) {
                     editor.kill_ring.kill(&text, Mode::Append)
                 }
             }
-            KeyPress::Meta('F') => {
-                // move forwards one word
-                editor.kill_ring.reset();
-                try!(edit_move_to_next_word(&mut s))
+            // TODO CTRL-_ // undo
+            Cmd::AcceptLine => {
+                // Accept the line regardless of where the cursor is.
+                try!(edit_move_end(&mut s));
+                break;
             }
-            KeyPress::Meta('L') => {
+            Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
+                // kill one word backward (until start of word)
+                if let Some(text) = try!(edit_delete_prev_word(&mut s, word_def, n)) {
+                    editor.kill_ring.kill(&text, Mode::Prepend)
+                }
+            }
+            Cmd::BeginningOfHistory => {
+                // move to first entry in history
+                try!(edit_history(&mut s, &editor.history, true))
+            }
+            Cmd::EndOfHistory => {
+                // move to last entry in history
+                try!(edit_history(&mut s, &editor.history, false))
+            }
+            Cmd::Move(Movement::BackwardWord(n, word_def)) => {
+                // move backwards one word
+                try!(edit_move_to_prev_word(&mut s, word_def, n))
+            }
+            Cmd::CapitalizeWord => {
+                // capitalize word after point
+                try!(edit_word(&mut s, WordAction::CAPITALIZE))
+            }
+            Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
+                // kill one word forward (until start/end of word)
+                if let Some(text) = try!(edit_delete_word(&mut s, at, word_def, n)) {
+                    editor.kill_ring.kill(&text, Mode::Append)
+                }
+            }
+            Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
+                // move forwards one word
+                try!(edit_move_to_next_word(&mut s, at, word_def, n))
+            }
+            Cmd::DowncaseWord => {
                 // lowercase word after point
-                editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::LOWERCASE))
             }
-            KeyPress::Meta('T') => {
+            Cmd::TransposeWords(n) => {
                 // transpose words
-                editor.kill_ring.reset();
-                try!(edit_transpose_words(&mut s))
+                try!(edit_transpose_words(&mut s, n))
             }
-            KeyPress::Meta('U') => {
+            Cmd::UpcaseWord => {
                 // uppercase word after point
-                editor.kill_ring.reset();
                 try!(edit_word(&mut s, WordAction::UPPERCASE))
             }
-            KeyPress::Meta('Y') => {
+            Cmd::YankPop => {
                 // yank-pop
                 if let Some((yank_size, text)) = editor.kill_ring.yank_pop() {
                     try!(edit_yank_pop(&mut s, yank_size, text))
                 }
             }
-            KeyPress::Delete => {
-                editor.kill_ring.reset();
-                try!(edit_delete(&mut s))
+            Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(edit_move_to(&mut s, cs, n)),
+            Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
+                if let Some(text) = try!(edit_delete_to(&mut s, cs, n)) {
+                    editor.kill_ring.kill(&text, Mode::Append)
+                }
             }
+            Cmd::Interrupt => {
+                return Err(error::ReadlineError::Interrupted);
+            }
+            #[cfg(unix)]
+            Cmd::Suspend => {
+                try!(original_mode.disable_raw_mode());
+                try!(tty::suspend());
+                try!(s.term.enable_raw_mode()); // TODO original_mode may have changed
+                try!(s.refresh_line());
+                continue;
+            }
+            Cmd::Noop => {}
             _ => {
-                editor.kill_ring.reset();
                 // Ignore the character typed.
             }
         }
@@ -1055,6 +1143,7 @@ pub struct Editor<C: Completer> {
     completer: Option<C>,
     kill_ring: KillRing,
     config: Config,
+    custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
 }
 
 impl<C: Completer> Editor<C> {
@@ -1070,18 +1159,21 @@ impl<C: Completer> Editor<C> {
             completer: None,
             kill_ring: KillRing::new(60),
             config: config,
+            custom_bindings: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     /// This method will read a line from STDIN and will display a `prompt`
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         if self.term.is_unsupported() {
+            debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
             try!(write_and_flush(&mut stdout, prompt.as_bytes()));
 
             readline_direct()
         } else if !self.term.is_stdin_tty() {
+            debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {
@@ -1113,6 +1205,15 @@ impl<C: Completer> Editor<C> {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<C>) {
         self.completer = completer;
+    }
+
+    /// Bind a sequence to a command.
+    pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
+        self.custom_bindings.borrow_mut().insert(key_seq, cmd)
+    }
+    /// Remove a binding for the given sequence.
+    pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
+        self.custom_bindings.borrow_mut().remove(&key_seq)
     }
 
     /// ```
@@ -1171,14 +1272,17 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::io::Write;
+    use std::rc::Rc;
     use line_buffer::LineBuffer;
     use history::History;
     use completion::Completer;
     use config::Config;
     use consts::KeyPress;
-    use {Position, State};
-    use super::{Editor, Result};
+    use keymap::{Cmd, EditState};
+    use super::{Editor, Position, Result, State};
     use tty::{Terminal, Term};
 
     fn init_state<'out>(out: &'out mut Write,
@@ -1187,6 +1291,7 @@ mod test {
                         cols: usize)
                         -> State<'out, 'static> {
         let term = Terminal::new();
+        let config = Config::default();
         State {
             out: out,
             prompt: "",
@@ -1198,6 +1303,7 @@ mod test {
             history_index: 0,
             snapshot: LineBuffer::with_capacity(100),
             term: term,
+            edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
         }
     }
 
@@ -1259,8 +1365,8 @@ mod test {
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
-        let key = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
-        assert_eq!(Some(KeyPress::Enter), key);
+        let cmd = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
+        assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());
     }
@@ -1282,7 +1388,10 @@ mod test {
     fn delete_key() {
         assert_line(&[KeyPress::Char('a'), KeyPress::Delete, KeyPress::Enter],
                     "a");
-        assert_line(&[KeyPress::Char('a'), KeyPress::Left, KeyPress::Delete, KeyPress::Enter],
+        assert_line(&[KeyPress::Char('a'),
+                      KeyPress::Left,
+                      KeyPress::Delete,
+                      KeyPress::Enter],
                     "");
     }
 
@@ -1329,5 +1438,10 @@ mod test {
     #[test]
     fn up_key() {
         assert_line(&[KeyPress::Up, KeyPress::Enter], "");
+    }
+
+    #[test]
+    fn unknown_esc_key() {
+        assert_line(&[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
     }
 }

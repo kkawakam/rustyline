@@ -1,5 +1,6 @@
+//! Key constants
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyPress {
     UnknownEscSeq,
     Backspace,
@@ -52,7 +53,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x19' => KeyPress::Ctrl('Y'),
         '\x1a' => KeyPress::Ctrl('Z'),
         '\x1b' => KeyPress::Esc,
-        '\x7f' => KeyPress::Backspace, // TODO Validate
+        '\x7f' => KeyPress::Backspace,
         _ => KeyPress::Null,
     }
 }

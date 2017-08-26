@@ -1,5 +1,8 @@
 //! Line buffer with current cursor position
-use std::ops::{Add, Deref};
+use std::iter;
+use std::ops::{Deref, Range};
+use unicode_segmentation::UnicodeSegmentation;
+use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -27,10 +30,10 @@ impl LineBuffer {
 
     #[cfg(test)]
     pub fn init(line: &str, pos: usize) -> LineBuffer {
-        LineBuffer {
-            buf: String::from(line),
-            pos: pos,
-        }
+        let mut lb = Self::with_capacity(MAX_LINE);
+        assert!(lb.insert_str(0, line));
+        lb.set_pos(pos);
+        lb
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -87,36 +90,58 @@ impl LineBuffer {
     }
 
     /// Returns the character at current cursor position.
-    fn char_at_cursor(&self) -> Option<char> {
+    fn grapheme_at_cursor(&self) -> Option<&str> {
         if self.pos == self.buf.len() {
             None
         } else {
-            self.buf[self.pos..].chars().next()
+            self.buf[self.pos..].graphemes(true).next()
         }
     }
-    /// Returns the character just before the current cursor position.
-    fn char_before_cursor(&self) -> Option<char> {
-        if self.pos == 0 {
-            None
-        } else {
-            self.buf[..self.pos].chars().next_back()
+
+    fn next_pos(&self, n: RepeatCount) -> Option<usize> {
+        if self.pos == self.buf.len() {
+            return None;
         }
+        self.buf[self.pos..]
+            .grapheme_indices(true)
+            .take(n)
+            .last()
+            .map(|(i, s)| i + self.pos + s.len())
+    }
+    /// Returns the position of the character just before the current cursor position.
+    fn prev_pos(&self, n: RepeatCount) -> Option<usize> {
+        if self.pos == 0 {
+            return None;
+        }
+        self.buf[..self.pos]
+            .grapheme_indices(true)
+            .rev()
+            .take(n)
+            .last()
+            .map(|(i, _)| i)
     }
 
     /// Insert the character `ch` at current cursor position
     /// and advance cursor position accordingly.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn insert(&mut self, ch: char) -> Option<bool> {
-        let shift = ch.len_utf8();
+    pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
+        let shift = ch.len_utf8() * n;
         if self.buf.len() + shift > self.buf.capacity() {
             return None;
         }
         let push = self.pos == self.buf.len();
         if push {
-            self.buf.push(ch);
-        } else {
+            self.buf.reserve(shift);
+            for _ in 0..n {
+                self.buf.push(ch);
+            }
+        } else if n == 1 {
             self.buf.insert(self.pos, ch);
+        } else {
+            let text = iter::repeat(ch).take(n).collect::<String>();
+            let pos = self.pos;
+            self.insert_str(pos, &text);
         }
         self.pos += shift;
         Some(push)
@@ -125,13 +150,22 @@ impl LineBuffer {
     /// Yank/paste `text` at current position.
     /// Return `None` when maximum buffer size has been reached,
     /// `true` when the character has been appended to the end of the line.
-    pub fn yank(&mut self, text: &str) -> Option<bool> {
-        let shift = text.len();
+    pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
+        let shift = text.len() * n;
         if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
             return None;
         }
-        let pos = self.pos;
-        let push = self.insert_str(pos, text);
+        let push = self.pos == self.buf.len();
+        if push {
+            self.buf.reserve(shift);
+            for _ in 0..n {
+                self.buf.push_str(text);
+            }
+        } else {
+            let text = iter::repeat(text).take(n).collect::<String>();
+            let pos = self.pos;
+            self.insert_str(pos, &text);
+        }
         self.pos += shift;
         Some(push)
     }
@@ -140,26 +174,28 @@ impl LineBuffer {
     pub fn yank_pop(&mut self, yank_size: usize, text: &str) -> Option<bool> {
         self.buf.drain((self.pos - yank_size)..self.pos);
         self.pos -= yank_size;
-        self.yank(text)
+        self.yank(text, 1)
     }
 
     /// Move cursor on the left.
-    pub fn move_left(&mut self) -> bool {
-        if let Some(ch) = self.char_before_cursor() {
-            self.pos -= ch.len_utf8();
-            true
-        } else {
-            false
+    pub fn move_backward(&mut self, n: RepeatCount) -> bool {
+        match self.prev_pos(n) {
+            Some(pos) => {
+                self.pos = pos;
+                true
+            }
+            None => false,
         }
     }
 
     /// Move cursor on the right.
-    pub fn move_right(&mut self) -> bool {
-        if let Some(ch) = self.char_at_cursor() {
-            self.pos += ch.len_utf8();
-            true
-        } else {
-            false
+    pub fn move_forward(&mut self, n: RepeatCount) -> bool {
+        match self.next_pos(n) {
+            Some(pos) => {
+                self.pos = pos;
+                true
+            }
+            None => false,
         }
     }
 
@@ -185,24 +221,27 @@ impl LineBuffer {
 
     /// Delete the character at the right of the cursor without altering the cursor
     /// position. Basically this is what happens with the "Delete" keyboard key.
-    pub fn delete(&mut self) -> bool {
-        if !self.buf.is_empty() && self.pos < self.buf.len() {
-            self.buf.remove(self.pos);
-            true
-        } else {
-            false
+    /// Return the number of characters deleted.
+    pub fn delete(&mut self, n: RepeatCount) -> Option<String> {
+        match self.next_pos(n) {
+            Some(pos) => {
+                let chars = self.buf.drain(self.pos..pos).collect::<String>();
+                Some(chars)
+            }
+            None => None,
         }
     }
 
     /// Delete the character at the left of the cursor.
     /// Basically that is what happens with the "Backspace" keyboard key.
-    pub fn backspace(&mut self) -> bool {
-        if let Some(ch) = self.char_before_cursor() {
-            self.pos -= ch.len_utf8();
-            self.buf.remove(self.pos);
-            true
-        } else {
-            false
+    pub fn backspace(&mut self, n: RepeatCount) -> Option<String> {
+        match self.prev_pos(n) {
+            Some(pos) => {
+                let chars = self.buf.drain(pos..self.pos).collect::<String>();
+                self.pos = pos;
+                Some(chars)
+            }
+            None => None,
         }
     }
 
@@ -229,56 +268,57 @@ impl LineBuffer {
 
     /// Exchange the char before cursor with the character at cursor.
     pub fn transpose_chars(&mut self) -> bool {
-        if self.pos == 0 || self.buf.chars().count() < 2 {
+        if self.pos == 0 || self.buf.graphemes(true).count() < 2 {
             return false;
         }
         if self.pos == self.buf.len() {
-            self.move_left();
+            self.move_backward(1);
         }
-        let ch = self.buf.remove(self.pos);
-        let size = ch.len_utf8();
-        let other_ch = self.char_before_cursor().unwrap();
-        let other_size = other_ch.len_utf8();
-        self.buf.insert(self.pos - other_size, ch);
-        if self.pos != self.buf.len() - size {
-            self.pos += size;
-        } else if size >= other_size {
-            self.pos += size - other_size;
-        } else {
-            self.pos -= other_size - size;
-        }
+        let chars = self.delete(1).unwrap();
+        self.move_backward(1);
+        self.yank(&chars, 1);
+        self.move_forward(1);
         true
     }
 
-    fn prev_word_pos<F>(&self, pos: usize, test: F) -> Option<usize>
-        where F: Fn(char) -> bool
-    {
+    /// Go left until start of word
+    fn prev_word_pos(&self, pos: usize, word_def: Word, n: RepeatCount) -> Option<usize> {
         if pos == 0 {
             return None;
         }
-        let mut pos = pos;
-        // eat any spaces on the left
-        pos -= self.buf[..pos]
-            .chars()
-            .rev()
-            .take_while(|ch| test(*ch))
-            .map(char::len_utf8)
-            .fold(0, Add::add);
-        if pos > 0 {
-            // eat any non-spaces on the left
-            pos -= self.buf[..pos]
-                .chars()
-                .rev()
-                .take_while(|ch| !test(*ch))
-                .map(char::len_utf8)
-                .fold(0, Add::add);
+        let mut sow = 0;
+        let mut gis = self.buf[..pos].grapheme_indices(true).rev();
+        'outer: for _ in 0..n {
+            let mut gj = gis.next();
+            'inner: loop {
+                match gj {
+                    Some((j, y)) => {
+                        let gi = gis.next();
+                        match gi {
+                            Some((_, x)) => {
+                                if is_start_of_word(word_def, x, y) {
+                                    sow = j;
+                                    break 'inner;
+                                }
+                                gj = gi;
+                            }
+                            None => {
+                                break 'outer;
+                            }
+                        }
+                    }
+                    None => {
+                        break 'outer;
+                    }
+                }
+            }
         }
-        Some(pos)
+        Some(sow)
     }
 
     /// Moves the cursor to the beginning of previous word.
-    pub fn move_to_prev_word(&mut self) -> bool {
-        if let Some(pos) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
+    pub fn move_to_prev_word(&mut self, word_def: Word, n: RepeatCount) -> bool {
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             self.pos = pos;
             true
         } else {
@@ -288,10 +328,8 @@ impl LineBuffer {
 
     /// Delete the previous word, maintaining the cursor at the start of the
     /// current word.
-    pub fn delete_prev_word<F>(&mut self, test: F) -> Option<String>
-        where F: Fn(char) -> bool
-    {
-        if let Some(pos) = self.prev_word_pos(self.pos, test) {
+    pub fn delete_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Option<String> {
+        if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
             let word = self.buf.drain(pos..self.pos).collect();
             self.pos = pos;
             Some(word)
@@ -300,120 +338,235 @@ impl LineBuffer {
         }
     }
 
-    /// Returns the position (start, end) of the next word.
-    pub fn next_word_pos(&self, pos: usize) -> Option<(usize, usize)> {
-        if pos < self.buf.len() {
-            let mut pos = pos;
-            // eat any spaces
-            pos += self.buf[pos..]
-                .chars()
-                .take_while(|ch| !ch.is_alphanumeric())
-                .map(char::len_utf8)
-                .fold(0, Add::add);
-            let start = pos;
-            if pos < self.buf.len() {
-                // eat any non-spaces
-                pos += self.buf[pos..]
-                    .chars()
-                    .take_while(|ch| ch.is_alphanumeric())
-                    .map(char::len_utf8)
-                    .fold(0, Add::add);
-            }
-            Some((start, pos))
+    fn next_word_pos(&self, pos: usize, at: At, word_def: Word, n: RepeatCount) -> Option<usize> {
+        if pos == self.buf.len() {
+            return None;
+        }
+        let mut wp = 0;
+        let mut gis = self.buf[pos..].grapheme_indices(true);
+        let mut gi = if at != At::Start {
+            // TODO Validate
+            gis.next()
         } else {
             None
+        };
+        'outer: for _ in 0..n {
+            gi = gis.next();
+            'inner: loop {
+                match gi {
+                    Some((i, x)) => {
+                        let gj = gis.next();
+                        match gj {
+                            Some((j, y)) => {
+                                if at == At::Start && is_start_of_word(word_def, x, y) {
+                                    wp = j;
+                                    break 'inner;
+                                } else if at != At::Start && is_end_of_word(word_def, x, y) {
+                                    if word_def == Word::Emacs || at == At::AfterEnd {
+                                        wp = j;
+                                    } else {
+                                        wp = i;
+                                    }
+                                    break 'inner;
+                                }
+                                gi = gj;
+                            }
+                            None => {
+                                break 'outer;
+                            }
+                        }
+                    }
+                    None => {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        if wp == 0 {
+            if word_def == Word::Emacs || at == At::AfterEnd {
+                Some(self.buf.len())
+            } else {
+                match gi {
+                    Some((i, _)) if i != 0 => Some(i + pos),
+                    _ => None,
+                }
+            }
+        } else {
+            Some(wp + pos)
         }
     }
 
     /// Moves the cursor to the end of next word.
-    pub fn move_to_next_word(&mut self) -> bool {
-        if let Some((_, end)) = self.next_word_pos(self.pos) {
-            self.pos = end;
+    pub fn move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> bool {
+        if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
+            self.pos = pos;
             true
         } else {
             false
         }
     }
 
-    /// Kill from the cursor to the end of the current word, or, if between words, to the end of the next word.
-    pub fn delete_word(&mut self) -> Option<String> {
-        if let Some((_, end)) = self.next_word_pos(self.pos) {
-            let word = self.buf.drain(self.pos..end).collect();
+    fn search_char_pos(&self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
+        let mut shift = 0;
+        let search_result = match *cs {
+            CharSearch::Backward(c) |
+            CharSearch::BackwardAfter(c) => {
+                self.buf[..self.pos]
+                    .char_indices()
+                    .rev()
+                    .filter(|&(_, ch)| ch == c)
+                    .take(n)
+                    .last()
+                    .map(|(i, _)| i)
+            }
+            CharSearch::Forward(c) |
+            CharSearch::ForwardBefore(c) => {
+                if let Some(cc) = self.grapheme_at_cursor() {
+                    shift = self.pos + cc.len();
+                    if shift < self.buf.len() {
+                        self.buf[shift..]
+                            .char_indices()
+                            .filter(|&(_, ch)| ch == c)
+                            .take(n)
+                            .last()
+                            .map(|(i, _)| i)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        };
+        if let Some(pos) = search_result {
+            Some(match *cs {
+                     CharSearch::Backward(_) => pos,
+                     CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+                     CharSearch::Forward(_) => shift + pos,
+                     CharSearch::ForwardBefore(_) => {
+                         shift + pos -
+                         self.buf[..shift + pos]
+                             .chars()
+                             .next_back()
+                             .unwrap()
+                             .len_utf8()
+                     }
+                 })
+        } else {
+            None
+        }
+    }
+
+    pub fn move_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
+        if let Some(pos) = self.search_char_pos(&cs, n) {
+            self.pos = pos;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Kill from the cursor to the end of the current word,
+    /// or, if between words, to the end of the next word.
+    pub fn delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Option<String> {
+        if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
+            let word = self.buf.drain(self.pos..pos).collect();
             Some(word)
         } else {
             None
         }
     }
 
-    /// Alter the next word.
-    pub fn edit_word(&mut self, a: WordAction) -> bool {
-        if let Some((start, end)) = self.next_word_pos(self.pos) {
-            if start == end {
-                return false;
-            }
-            let word = self.buf.drain(start..end).collect::<String>();
-            let result = match a {
-                WordAction::CAPITALIZE => {
-                    if let Some(ch) = word.chars().next() {
-                        let cap = ch.to_uppercase().collect::<String>();
-                        cap + &word[ch.len_utf8()..].to_lowercase()
-                    } else {
-                        word
-                    }
+    pub fn delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> Option<String> {
+        let search_result = match cs {
+            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c), n),
+            _ => self.search_char_pos(&cs, n),
+        };
+        if let Some(pos) = search_result {
+            let chunk = match cs {
+                CharSearch::Backward(_) |
+                CharSearch::BackwardAfter(_) => {
+                    let end = self.pos;
+                    self.pos = pos;
+                    self.buf.drain(pos..end).collect()
                 }
-                WordAction::LOWERCASE => word.to_lowercase(),
-                WordAction::UPPERCASE => word.to_uppercase(),
+                CharSearch::ForwardBefore(_) => self.buf.drain(self.pos..pos).collect(),
+                CharSearch::Forward(c) => self.buf.drain(self.pos..pos + c.len_utf8()).collect(),
             };
-            self.insert_str(start, &result);
-            self.pos = start + result.len();
-            true
+            Some(chunk)
         } else {
-            false
+            None
         }
     }
 
-    /// Transpose two words
-    pub fn transpose_words(&mut self) -> bool {
-        // prevword___oneword__
-        // ^          ^       ^
-        // prev_start start   self.pos/end
-        if let Some(start) = self.prev_word_pos(self.pos, |ch| !ch.is_alphanumeric()) {
-            if let Some(prev_start) = self.prev_word_pos(start, |ch| !ch.is_alphanumeric()) {
-                let (_, prev_end) = self.next_word_pos(prev_start).unwrap();
-                if prev_end >= start {
+    fn skip_whitespace(&self) -> Option<usize> {
+        if self.pos == self.buf.len() {
+            return None;
+        }
+        self.buf[self.pos..]
+            .grapheme_indices(true)
+            .filter(|&(_, ch)| ch.chars().all(|c| c.is_alphanumeric()))
+            .map(|(i, _)| i)
+            .next()
+            .map(|i| i + self.pos)
+    }
+    /// Alter the next word.
+    pub fn edit_word(&mut self, a: WordAction) -> bool {
+        if let Some(start) = self.skip_whitespace() {
+            if let Some(end) = self.next_word_pos(start, At::AfterEnd, Word::Emacs, 1) {
+                if start == end {
                     return false;
                 }
-                let (_, mut end) = self.next_word_pos(start).unwrap();
-                if end < self.pos {
-                    if self.pos < self.buf.len() {
-                        let (s, _) = self.next_word_pos(self.pos).unwrap();
-                        end = s;
-                    } else {
-                        end = self.pos;
+                let word = self.buf.drain(start..end).collect::<String>();
+                let result = match a {
+                    WordAction::CAPITALIZE => {
+                        let ch = (&word).graphemes(true).next().unwrap();
+                        let cap = ch.to_uppercase();
+                        cap + &word[ch.len()..].to_lowercase()
                     }
-                }
-
-                let oneword = self.buf.drain(start..end).collect::<String>();
-                let sep = self.buf.drain(prev_end..start).collect::<String>();
-                let prevword = self.buf.drain(prev_start..prev_end).collect::<String>();
-
-                let mut idx = prev_start;
-                self.insert_str(idx, &oneword);
-                idx += oneword.len();
-                self.insert_str(idx, &sep);
-                idx += sep.len();
-                self.insert_str(idx, &prevword);
-
-                self.pos = idx + prevword.len();
+                    WordAction::LOWERCASE => word.to_lowercase(),
+                    WordAction::UPPERCASE => word.to_uppercase(),
+                };
+                self.insert_str(start, &result);
+                self.pos = start + result.len();
                 return true;
             }
         }
         false
     }
 
-    /// Replaces the content between [`start`..`end`] with `text` and positions the cursor to the end of text.
-    pub fn replace(&mut self, start: usize, end: usize, text: &str) {
-        self.buf.drain(start..end);
+    /// Transpose two words
+    pub fn transpose_words(&mut self, n: RepeatCount) -> bool {
+        let word_def = Word::Emacs;
+        self.move_to_next_word(At::AfterEnd, word_def, n);
+        let w2_end = self.pos;
+        self.move_to_prev_word(word_def, 1);
+        let w2_beg = self.pos;
+        self.move_to_prev_word(word_def, n);
+        let w1_beg = self.pos;
+        self.move_to_next_word(At::AfterEnd, word_def, 1);
+        let w1_end = self.pos;
+        if w1_beg == w2_beg || w2_beg < w1_end {
+            return false;
+        }
+
+        let w1 = self.buf[w1_beg..w1_end].to_string();
+
+        let w2 = self.buf.drain(w2_beg..w2_end).collect::<String>();
+        self.insert_str(w2_beg, &w1);
+
+        self.buf.drain(w1_beg..w1_end);
+        self.insert_str(w1_beg, &w2);
+
+        self.pos = w2_end;
+        true
+    }
+
+    /// Replaces the content between [`start`..`end`] with `text`
+    /// and positions the cursor to the end of text.
+    pub fn replace(&mut self, range: Range<usize>, text: &str) {
+        let start = range.start;
+        self.buf.drain(range);
         self.insert_str(start, text);
         self.pos = start + text.len();
     }
@@ -425,6 +578,86 @@ impl LineBuffer {
         } else {
             insert_str(&mut self.buf, idx, s);
             false
+        }
+    }
+
+    pub fn copy(&self, mvt: Movement) -> Option<String> {
+        if self.is_empty() {
+            return None;
+        }
+        match mvt {
+            Movement::WholeLine => Some(self.buf.clone()),
+            Movement::BeginningOfLine => {
+                if self.pos == 0 {
+                    None
+                } else {
+                    Some(self.buf[..self.pos].to_string())
+                }
+            }
+            Movement::ViFirstPrint => {
+                if self.pos == 0 {
+                    None
+                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
+                    Some(self.buf[pos..self.pos].to_owned())
+                } else {
+                    None
+                }
+            }
+            Movement::EndOfLine => {
+                if self.pos == self.buf.len() {
+                    None
+                } else {
+                    Some(self.buf[self.pos..].to_string())
+                }
+            }
+            Movement::BackwardWord(n, word_def) => {
+                if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
+                    Some(self.buf[pos..self.pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ForwardWord(n, at, word_def) => {
+                if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
+                    Some(self.buf[self.pos..pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ViCharSearch(n, cs) => {
+                let search_result = match cs {
+                    CharSearch::ForwardBefore(c) => {
+                        self.search_char_pos(&CharSearch::Forward(c), n)
+                    }
+                    _ => self.search_char_pos(&cs, n),
+                };
+                if let Some(pos) = search_result {
+                    Some(match cs {
+                             CharSearch::Backward(_) |
+                             CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_string(),
+                             CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_string(),
+                             CharSearch::Forward(c) => {
+                                 self.buf[self.pos..pos + c.len_utf8()].to_string()
+                             }
+                         })
+                } else {
+                    None
+                }
+            }
+            Movement::BackwardChar(n) => {
+                if let Some(pos) = self.prev_pos(n) {
+                    Some(self.buf[pos..self.pos].to_string())
+                } else {
+                    None
+                }
+            }
+            Movement::ForwardChar(n) => {
+                if let Some(pos) = self.next_pos(n) {
+                    Some(self.buf[self.pos..pos].to_string())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -456,39 +689,106 @@ fn insert_str(buf: &mut String, idx: usize, s: &str) {
     }
 }
 
+fn is_start_of_word(word_def: Word, previous: &str, grapheme: &str) -> bool {
+    (!is_word_char(word_def, previous) && is_word_char(word_def, grapheme)) ||
+    (word_def == Word::Vi && !is_other_char(previous) && is_other_char(grapheme))
+}
+fn is_end_of_word(word_def: Word, grapheme: &str, next: &str) -> bool {
+    (!is_word_char(word_def, next) && is_word_char(word_def, grapheme)) ||
+    (word_def == Word::Vi && !is_other_char(next) && is_other_char(grapheme))
+}
+
+fn is_word_char(word_def: Word, grapheme: &str) -> bool {
+    match word_def {
+        Word::Emacs => grapheme.chars().all(|c| c.is_alphanumeric()),
+        Word::Vi => is_vi_word_char(grapheme),
+        Word::Big => !grapheme.chars().all(|c| c.is_whitespace()),
+    }
+}
+fn is_vi_word_char(grapheme: &str) -> bool {
+    grapheme.chars().all(|c| c.is_alphanumeric()) || grapheme == "_"
+}
+fn is_other_char(grapheme: &str) -> bool {
+    !(grapheme.chars().all(|c| c.is_whitespace()) || is_vi_word_char(grapheme))
+}
+
 #[cfg(test)]
 mod test {
+    use keymap::{At, CharSearch, Word};
     use super::{LineBuffer, MAX_LINE, WordAction};
+
+    #[test]
+    fn next_pos() {
+        let s = LineBuffer::init("ö̲g̈", 0);
+        assert_eq!(7, s.len());
+        let pos = s.next_pos(1);
+        assert_eq!(Some(4), pos);
+
+        let s = LineBuffer::init("ö̲g̈", 4);
+        let pos = s.next_pos(1);
+        assert_eq!(Some(7), pos);
+    }
+
+    #[test]
+    fn prev_pos() {
+        let s = LineBuffer::init("ö̲g̈", 4);
+        assert_eq!(7, s.len());
+        let pos = s.prev_pos(1);
+        assert_eq!(Some(0), pos);
+
+        let s = LineBuffer::init("ö̲g̈", 7);
+        let pos = s.prev_pos(1);
+        assert_eq!(Some(4), pos);
+    }
 
     #[test]
     fn insert() {
         let mut s = LineBuffer::with_capacity(MAX_LINE);
-        let push = s.insert('α').unwrap();
+        let push = s.insert('α', 1).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, push);
 
-        let push = s.insert('ß').unwrap();
+        let push = s.insert('ß', 1).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, push);
 
         s.pos = 0;
-        let push = s.insert('γ').unwrap();
+        let push = s.insert('γ', 1).unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(false, push);
     }
 
     #[test]
+    fn yank_after() {
+        let mut s = LineBuffer::init("αß", 2);
+        s.move_forward(1);
+        let ok = s.yank("γδε", 1);
+        assert_eq!(Some(true), ok);
+        assert_eq!("αßγδε", s.buf);
+        assert_eq!(10, s.pos);
+    }
+
+    #[test]
+    fn yank_before() {
+        let mut s = LineBuffer::init("αε", 2);
+        let ok = s.yank("ßγδ", 1);
+        assert_eq!(Some(false), ok);
+        assert_eq!("αßγδε", s.buf);
+        assert_eq!(8, s.pos);
+    }
+
+    #[test]
     fn moves() {
         let mut s = LineBuffer::init("αß", 4);
-        let ok = s.move_left();
+        let ok = s.move_backward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
 
-        let ok = s.move_right();
+        let ok = s.move_forward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
@@ -505,17 +805,30 @@ mod test {
     }
 
     #[test]
+    fn move_grapheme() {
+        let mut s = LineBuffer::init("ag̈", 4);
+        assert_eq!(4, s.len());
+        let ok = s.move_backward(1);
+        assert_eq!(true, ok);
+        assert_eq!(1, s.pos);
+
+        let ok = s.move_forward(1);
+        assert_eq!(true, ok);
+        assert_eq!(4, s.pos);
+    }
+
+    #[test]
     fn delete() {
         let mut s = LineBuffer::init("αß", 2);
-        let ok = s.delete();
+        let chars = s.delete(1);
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert_eq!(Some("ß".to_string()), chars);
 
-        let ok = s.backspace();
+        let chars = s.backspace(1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert_eq!(Some("α".to_string()), chars);
     }
 
     #[test]
@@ -545,30 +858,105 @@ mod test {
         s.pos = 3;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
-        assert_eq!(2, s.pos);
+        assert_eq!(4, s.pos);
         assert_eq!(true, ok);
 
         s.buf = String::from("aßc");
         s.pos = 4;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
-        assert_eq!(2, s.pos);
+        assert_eq!(4, s.pos);
         assert_eq!(true, ok);
     }
 
     #[test]
     fn move_to_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let ok = s.move_to_prev_word();
+        let ok = s.move_to_prev_word(Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
     }
 
     #[test]
+    fn move_to_prev_vi_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 19);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(17, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(15, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(12, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(11, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(7, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(6, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(0, s.pos);
+        let ok = s.move_to_prev_word(Word::Vi, 1);
+        assert!(!ok);
+    }
+
+    #[test]
+    fn move_to_prev_big_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 19);
+        let ok = s.move_to_prev_word(Word::Big, 1);
+        assert!(ok);
+        assert_eq!(17, s.pos);
+        let ok = s.move_to_prev_word(Word::Big, 1);
+        assert!(ok);
+        assert_eq!(6, s.pos);
+        let ok = s.move_to_prev_word(Word::Big, 1);
+        assert!(ok);
+        assert_eq!(0, s.pos);
+        let ok = s.move_to_prev_word(Word::Big, 1);
+        assert!(!ok);
+    }
+
+    #[test]
+    fn move_to_forward() {
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::ForwardBefore('ε'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(6, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::Forward('ε'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(8, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let ok = s.move_to(CharSearch::Forward('ε'), 10);
+        assert_eq!(true, ok);
+        assert_eq!(8, s.pos);
+    }
+
+    #[test]
+    fn move_to_backward() {
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let ok = s.move_to(CharSearch::BackwardAfter('ß'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(4, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let ok = s.move_to(CharSearch::Backward('ß'), 1);
+        assert_eq!(true, ok);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
     fn delete_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6);
-        let text = s.delete_prev_word(char::is_whitespace);
+        let text = s.delete_prev_word(Word::Big, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß  ".to_string()), text);
@@ -577,19 +965,170 @@ mod test {
     #[test]
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let ok = s.move_to_next_word();
+        let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
     }
 
     #[test]
+    fn move_to_end_of_word() {
+        let mut s = LineBuffer::init("a ßeta  c", 1);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert_eq!("a ßeta  c", s.buf);
+        assert_eq!(6, s.pos);
+        assert_eq!(true, ok);
+    }
+
+    #[test]
+    fn move_to_end_of_vi_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(4, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(6, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(10, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(11, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(14, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(15, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(18, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
+        assert!(!ok);
+    }
+
+    #[test]
+    fn move_to_end_of_big_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(4, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(15, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(18, s.pos);
+        let ok = s.move_to_next_word(At::BeforeEnd, Word::Big, 1);
+        assert!(!ok);
+    }
+
+    #[test]
+    fn move_to_start_of_word() {
+        let mut s = LineBuffer::init("a ß  c", 2);
+        let ok = s.move_to_next_word(At::Start, Word::Emacs, 1);
+        assert_eq!("a ß  c", s.buf);
+        assert_eq!(6, s.pos);
+        assert_eq!(true, ok);
+    }
+
+    #[test]
+    fn move_to_start_of_vi_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(6, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(7, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(11, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(12, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(15, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(17, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(ok);
+        assert_eq!(18, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Vi, 1);
+        assert!(!ok);
+    }
+
+    #[test]
+    fn move_to_start_of_big_word() {
+        let mut s = LineBuffer::init("alpha ,beta/rho; mu", 0);
+        let ok = s.move_to_next_word(At::Start, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(6, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(17, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Big, 1);
+        assert!(ok);
+        assert_eq!(18, s.pos);
+        let ok = s.move_to_next_word(At::Start, Word::Big, 1);
+        assert!(!ok);
+    }
+
+    #[test]
     fn delete_word() {
         let mut s = LineBuffer::init("a ß  c", 1);
-        let text = s.delete_word();
+        let text = s.delete_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(Some(" ß".to_string()), text);
+
+        let mut s = LineBuffer::init("test", 0);
+        let text = s.delete_word(At::AfterEnd, Word::Vi, 1);
+        assert_eq!("", s.buf);
+        assert_eq!(0, s.pos);
+        assert_eq!(Some("test".to_string()), text);
+    }
+
+    #[test]
+    fn delete_til_start_of_word() {
+        let mut s = LineBuffer::init("a ß  c", 2);
+        let text = s.delete_word(At::Start, Word::Emacs, 1);
+        assert_eq!("a c", s.buf);
+        assert_eq!(2, s.pos);
+        assert_eq!(Some("ß  ".to_string()), text);
+    }
+
+    #[test]
+    fn delete_to_forward() {
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let text = s.delete_to(CharSearch::ForwardBefore('ε'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 2);
+        let text = s.delete_to(CharSearch::Forward('ε'), 1);
+        assert_eq!(Some("ßγδε".to_string()), text);
+        assert_eq!("α", s.buf);
+        assert_eq!(2, s.pos);
+    }
+
+    #[test]
+    fn delete_to_backward() {
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let text = s.delete_to(CharSearch::BackwardAfter('α'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
+
+        let mut s = LineBuffer::init("αßγδε", 8);
+        let text = s.delete_to(CharSearch::Backward('ß'), 1);
+        assert_eq!(Some("ßγδ".to_string()), text);
+        assert_eq!("αε", s.buf);
+        assert_eq!(2, s.pos);
     }
 
     #[test]
@@ -608,24 +1147,29 @@ mod test {
         assert!(s.edit_word(WordAction::CAPITALIZE));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
+
+        let mut s = LineBuffer::init("test", 1);
+        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert_eq!("tEst", s.buf);
+        assert_eq!(4, s.pos);
     }
 
     #[test]
     fn transpose_words() {
         let mut s = LineBuffer::init("ßeta / δelta__", 15);
-        assert!(s.transpose_words());
+        assert!(s.transpose_words(1));
         assert_eq!("δelta__ / ßeta", s.buf);
         assert_eq!(16, s.pos);
 
         let mut s = LineBuffer::init("ßeta / δelta", 14);
-        assert!(s.transpose_words());
+        assert!(s.transpose_words(1));
         assert_eq!("δelta / ßeta", s.buf);
         assert_eq!(14, s.pos);
 
         let mut s = LineBuffer::init(" / δelta", 8);
-        assert!(!s.transpose_words());
+        assert!(!s.transpose_words(1));
 
         let mut s = LineBuffer::init("ßeta / __", 9);
-        assert!(!s.transpose_words());
+        assert!(!s.transpose_words(1));
     }
 }

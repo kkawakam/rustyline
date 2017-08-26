@@ -15,7 +15,9 @@ pub enum Mode {
 
 pub struct KillRing {
     slots: Vec<String>,
+    // where we are in the kill ring
     index: usize,
+    // whether or not the last command was a kill or a yank
     last_action: Action,
 }
 
@@ -44,9 +46,7 @@ impl KillRing {
                 }
                 match dir {
                     Mode::Append => self.slots[self.index].push_str(text),
-                    Mode::Prepend => {
-                        self.slots[self.index] = String::from(text) + &self.slots[self.index]
-                    }
+                    Mode::Prepend => self.slots[self.index].insert_str(0, text),
                 };
             }
             _ => {

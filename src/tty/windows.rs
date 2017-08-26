@@ -1,15 +1,15 @@
 //! Windows specific definitions
-use std::io;
-use std::io::Write;
+use std::io::{self, Stdout, Write};
 use std::mem;
 use std::sync::atomic;
 
 use kernel32;
 use winapi;
 
+use config::Config;
 use consts::{self, KeyPress};
-use ::error;
-use ::Result;
+use error;
+use Result;
 use super::{RawMode, RawReader, Term};
 
 const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
@@ -79,21 +79,20 @@ impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
-            handle: handle,
-            buf: None,
-        })
+               handle: handle,
+               buf: None,
+           })
     }
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: i32) -> Result<KeyPress> {
+    fn next_key(&mut self) -> Result<KeyPress> {
         use std::char::decode_utf16;
         // use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
         use winapi::{LEFT_ALT_PRESSED, RIGHT_ALT_PRESSED};
 
         let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
-        let mut esc_seen = false;
         loop {
             // TODO GetNumberOfConsoleInputEvents
             check!(kernel32::ReadConsoleInputW(self.handle,
@@ -103,6 +102,7 @@ impl RawReader for ConsoleRawReader {
 
             if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
+                debug!(target: "rustyline", "SIGWINCH");
                 return Err(error::ReadlineError::WindowResize);
             } else if rec.EventType != winapi::KEY_EVENT {
                 continue;
@@ -114,13 +114,10 @@ impl RawReader for ConsoleRawReader {
                 continue;
             }
 
-            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) ==
-            // (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) ==
-                      (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED);
-            // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) ==
-            // (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED);
-            let meta = alt || esc_seen;
+            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED) != 0;
+            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
+            // let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
+            let meta = alt;
 
             let utf16 = key_event.UnicodeChar;
             if utf16 == 0 {
@@ -137,8 +134,7 @@ impl RawReader for ConsoleRawReader {
                     _ => continue,
                 };
             } else if utf16 == 27 {
-                esc_seen = true;
-                continue;
+                return Ok(KeyPress::Esc);
             } else {
                 // TODO How to support surrogate pair ?
                 self.buf = Some(utf16);
@@ -148,17 +144,26 @@ impl RawReader for ConsoleRawReader {
                 }
                 let c = try!(orc.unwrap());
                 if meta {
-                    match c {
-                        'b' | 'B' => return Ok(KeyPress::Meta('B')),
-                        'c' | 'C' => return Ok(KeyPress::Meta('C')),
-                        'd' | 'D' => return Ok(KeyPress::Meta('D')),
-                        'f' | 'F' => return Ok(KeyPress::Meta('F')),
-                        'l' | 'L' => return Ok(KeyPress::Meta('L')),
-                        't' | 'T' => return Ok(KeyPress::Meta('T')),
-                        'u' | 'U' => return Ok(KeyPress::Meta('U')),
-                        'y' | 'Y' => return Ok(KeyPress::Meta('Y')),
-                        _ => return Ok(KeyPress::UnknownEscSeq),
+                    return Ok(match c {
+                                  '-' => KeyPress::Meta('-'),
+                                  '0'...'9' => KeyPress::Meta(c),
+                                  '<' => KeyPress::Meta('<'),
+                                  '>' => KeyPress::Meta('>'),
+                                  'b' | 'B' => KeyPress::Meta('B'),
+                                  'c' | 'C' => KeyPress::Meta('C'),
+                                  'd' | 'D' => KeyPress::Meta('D'),
+                                  'f' | 'F' => KeyPress::Meta('F'),
+                                  'l' | 'L' => KeyPress::Meta('L'),
+                                  'n' | 'N' => KeyPress::Meta('N'),
+                                  'p' | 'P' => KeyPress::Meta('P'),
+                                  't' | 'T' => KeyPress::Meta('T'),
+                                  'u' | 'U' => KeyPress::Meta('U'),
+                                  'y' | 'Y' => KeyPress::Meta('Y'),
+                                  _ => {
+                        debug!(target: "rustyline", "unsupported esc sequence: M-{:?}", c);
+                        KeyPress::UnknownEscSeq
                     }
+                              });
                 } else {
                     return Ok(consts::char_to_key_press(c));
                 }
@@ -216,6 +221,7 @@ impl Console {
 
 impl Term for Console {
     type Reader = ConsoleRawReader;
+    type Writer = Stdout;
     type Mode = Mode;
 
     fn new() -> Console {
@@ -282,14 +288,17 @@ impl Term for Console {
         let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
         check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
-            original_mode: original_mode,
-            stdin_handle: self.stdin_handle,
-        })
+               original_mode: original_mode,
+               stdin_handle: self.stdin_handle,
+           })
     }
 
-
-    fn create_reader(&self) -> Result<ConsoleRawReader> {
+    fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
         ConsoleRawReader::new()
+    }
+
+    fn create_writer(&self) -> Stdout {
+        io::stdout()
     }
 
     fn sigwinch(&self) -> bool {

@@ -49,7 +49,7 @@ pub trait ChangeListener: DeleteListener {
 /// The methods do text manipulations or/and cursor movements.
 pub struct LineBuffer {
     buf: String, // Edited line buffer
-    pos: usize, // Current cursor position (byte position)
+    pos: usize,  // Current cursor position (byte position)
     dl: Option<Rc<RefCell<DeleteListener>>>,
     cl: Option<Rc<RefCell<ChangeListener>>>,
 }
@@ -469,18 +469,14 @@ impl LineBuffer {
     fn search_char_pos(&self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
         let search_result = match *cs {
-            CharSearch::Backward(c) |
-            CharSearch::BackwardAfter(c) => {
-                self.buf[..self.pos]
-                    .char_indices()
-                    .rev()
-                    .filter(|&(_, ch)| ch == c)
-                    .take(n)
-                    .last()
-                    .map(|(i, _)| i)
-            }
-            CharSearch::Forward(c) |
-            CharSearch::ForwardBefore(c) => {
+            CharSearch::Backward(c) | CharSearch::BackwardAfter(c) => self.buf[..self.pos]
+                .char_indices()
+                .rev()
+                .filter(|&(_, ch)| ch == c)
+                .take(n)
+                .last()
+                .map(|(i, _)| i),
+            CharSearch::Forward(c) | CharSearch::ForwardBefore(c) => {
                 if let Some(cc) = self.grapheme_at_cursor() {
                     shift = self.pos + cc.len();
                     if shift < self.buf.len() {
@@ -547,8 +543,7 @@ impl LineBuffer {
         };
         if let Some(pos) = search_result {
             match cs {
-                CharSearch::Backward(_) |
-                CharSearch::BackwardAfter(_) => {
+                CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
                     let end = self.pos;
                     self.pos = pos;
                     self.drain(pos..end, Direction::Backward);
@@ -638,11 +633,8 @@ impl LineBuffer {
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
         for cl in &self.cl {
-            cl.borrow_mut().replace(
-                start,
-                self.buf.index(range.clone()),
-                text,
-            );
+            cl.borrow_mut()
+                .replace(start, self.buf.index(range.clone()), text);
         }
         self.buf.drain(range);
         if start == self.buf.len() {
@@ -676,18 +668,12 @@ impl LineBuffer {
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
         for dl in &self.dl {
-            dl.borrow_mut().delete(
-                range.start,
-                &self.buf[range.start..range.end],
-                dir,
-            );
+            dl.borrow_mut()
+                .delete(range.start, &self.buf[range.start..range.end], dir);
         }
         for cl in &self.cl {
-            cl.borrow_mut().delete(
-                range.start,
-                &self.buf[range.start..range.end],
-                dir,
-            );
+            cl.borrow_mut()
+                .delete(range.start, &self.buf[range.start..range.end], dir);
         }
         self.buf.drain(range)
     }
@@ -700,29 +686,23 @@ impl LineBuffer {
         }
         match mvt {
             Movement::WholeLine => Some(self.buf.clone()),
-            Movement::BeginningOfLine => {
-                if self.pos == 0 {
-                    None
-                } else {
-                    Some(self.buf[..self.pos].to_owned())
-                }
-            }
-            Movement::ViFirstPrint => {
-                if self.pos == 0 {
-                    None
-                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::EndOfLine => {
-                if self.pos == self.buf.len() {
-                    None
-                } else {
-                    Some(self.buf[self.pos..].to_owned())
-                }
-            }
+            Movement::BeginningOfLine => if self.pos == 0 {
+                None
+            } else {
+                Some(self.buf[..self.pos].to_owned())
+            },
+            Movement::ViFirstPrint => if self.pos == 0 {
+                None
+            } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
+                Some(self.buf[pos..self.pos].to_owned())
+            } else {
+                None
+            },
+            Movement::EndOfLine => if self.pos == self.buf.len() {
+                None
+            } else {
+                Some(self.buf[self.pos..].to_owned())
+            },
             Movement::BackwardWord(n, word_def) => {
                 if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
                     Some(self.buf[pos..self.pos].to_owned())
@@ -746,8 +726,9 @@ impl LineBuffer {
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {
-                        CharSearch::Backward(_) |
-                        CharSearch::BackwardAfter(_) => self.buf[pos..self.pos].to_owned(),
+                        CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
+                            self.buf[pos..self.pos].to_owned()
+                        }
                         CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
                         CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
                     })
@@ -755,20 +736,16 @@ impl LineBuffer {
                     None
                 }
             }
-            Movement::BackwardChar(n) => {
-                if let Some(pos) = self.prev_pos(n) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::ForwardChar(n) => {
-                if let Some(pos) = self.next_pos(n) {
-                    Some(self.buf[self.pos..pos].to_owned())
-                } else {
-                    None
-                }
-            }
+            Movement::BackwardChar(n) => if let Some(pos) = self.prev_pos(n) {
+                Some(self.buf[pos..self.pos].to_owned())
+            } else {
+                None
+            },
+            Movement::ForwardChar(n) => if let Some(pos) = self.next_pos(n) {
+                Some(self.buf[self.pos..pos].to_owned())
+            } else {
+                None
+            },
         }
     }
 }
@@ -809,7 +786,7 @@ mod test {
     use std::cell::RefCell;
     use std::rc::Rc;
     use keymap::{At, CharSearch, Word};
-    use super::{ChangeListener, DeleteListener, Direction, LineBuffer, MAX_LINE, WordAction};
+    use super::{ChangeListener, DeleteListener, Direction, LineBuffer, WordAction, MAX_LINE};
 
     struct Listener {
         deleted_str: Option<String>,

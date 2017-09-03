@@ -106,7 +106,9 @@ pub struct Builder {
 
 impl Builder {
     pub fn new() -> Builder {
-        Builder { p: Config::default() }
+        Builder {
+            p: Config::default(),
+        }
     }
 
     /// Set the maximum length for the history.

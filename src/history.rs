@@ -58,10 +58,10 @@ impl History {
         }
         if line.as_ref().is_empty() ||
             (self.ignore_space &&
-                 line.as_ref().chars().next().map_or(
-                    true,
-                    |c| c.is_whitespace(),
-                ))
+                line.as_ref()
+                    .chars()
+                    .next()
+                    .map_or(true, |c| c.is_whitespace()))
         {
             return false;
         }

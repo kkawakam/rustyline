@@ -19,18 +19,18 @@
 #![feature(unicode)]
 #![allow(unknown_lints)]
 
+#[cfg(windows)]
+extern crate kernel32;
 extern crate libc;
 #[macro_use]
 extern crate log;
+#[cfg(unix)]
+extern crate nix;
 extern crate std_unicode;
 extern crate unicode_segmentation;
 extern crate unicode_width;
-#[cfg(unix)]
-extern crate nix;
 #[cfg(windows)]
 extern crate winapi;
-#[cfg(windows)]
-extern crate kernel32;
 
 pub mod completion;
 mod consts;
@@ -56,9 +56,9 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use tty::{Position, RawMode, RawReader, Renderer, Term, Terminal};
 
-use completion::{Completer, longest_common_prefix};
+use completion::{longest_common_prefix, Completer};
 use history::{Direction, History};
-use line_buffer::{LineBuffer, MAX_LINE, WordAction};
+use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use keymap::EditState;
 use kill_ring::{KillRing, Mode};
@@ -73,10 +73,11 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 /// Implement rendering.
 struct State<'out, 'prompt> {
     out: &'out mut Renderer,
-    prompt: &'prompt str, // Prompt to display
-    prompt_size: Position, // Prompt Unicode/visible width and height
-    line: LineBuffer, // Edited line buffer
-    cursor: Position, // Cursor position (relative to the start of the prompt for `row`)
+    prompt: &'prompt str,               // Prompt to display
+    prompt_size: Position,              // Prompt Unicode/visible width and height
+    line: LineBuffer,                   // Edited line buffer
+    cursor: Position,                   /* Cursor position (relative to the start of the prompt
+                                         * for `row`) */
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
@@ -123,10 +124,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn backup(&mut self) {
-        self.saved_line_for_history.update(
-            self.line.as_str(),
-            self.line.pos(),
-        );
+        self.saved_line_for_history
+            .update(self.line.as_str(), self.line.pos());
     }
     fn restore(&mut self) {
         self.line.update(
@@ -137,10 +136,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
-        let cursor = self.out.calculate_position(
-            &self.line[..self.line.pos()],
-            self.prompt_size,
-        );
+        let cursor = self.out
+            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
         if self.cursor == cursor {
             return Ok(());
         }
@@ -197,10 +194,8 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
         if push {
             if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() {
                 // Avoid a full update of the line in the trivial case.
-                let cursor = s.out.calculate_position(
-                    &s.line[..s.line.pos()],
-                    s.prompt_size,
-                );
+                let cursor = s.out
+                    .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
                 s.cursor = cursor;
                 let bits = ch.encode_utf8(&mut s.byte_buffer);
                 let bits = bits.as_bytes();
@@ -228,7 +223,11 @@ fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
         false
     };
     s.changes.borrow_mut().end();
-    if succeed { s.refresh_line() } else { Ok(()) }
+    if succeed {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
 }
 
 /// Overwrite the character under the cursor (Vi mode)
@@ -347,7 +346,11 @@ fn edit_transpose_chars(s: &mut State) -> Result<()> {
     s.changes.borrow_mut().begin();
     let succeed = s.line.transpose_chars();
     s.changes.borrow_mut().end();
-    if succeed { s.refresh_line() } else { Ok(()) }
+    if succeed {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
 }
 
 fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
@@ -406,14 +409,22 @@ fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
     s.changes.borrow_mut().begin();
     let succeed = s.line.edit_word(a);
     s.changes.borrow_mut().end();
-    if succeed { s.refresh_line() } else { Ok(()) }
+    if succeed {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
 }
 
 fn edit_transpose_words(s: &mut State, n: RepeatCount) -> Result<()> {
     s.changes.borrow_mut().begin();
     let succeed = s.line.transpose_words(n);
     s.changes.borrow_mut().end();
-    if succeed { s.refresh_line() } else { Ok(()) }
+    if succeed {
+        s.refresh_line()
+    } else {
+        Ok(())
+    }
 }
 
 /// Substitute the currently edited line with the next or previous history
@@ -598,8 +609,7 @@ fn complete_line<R: RawReader>(
                 cmd = try!(s.next_cmd(rdr));
             }
             match cmd {
-                Cmd::SelfInsert(1, 'y') |
-                Cmd::SelfInsert(1, 'Y') => true,
+                Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
                 _ => false,
             }
         } else {
@@ -654,9 +664,7 @@ fn page_completions<R: RawReader>(
                 cmd = try!(s.next_cmd(rdr));
             }
             match cmd {
-                Cmd::SelfInsert(1, 'y') |
-                Cmd::SelfInsert(1, 'Y') |
-                Cmd::SelfInsert(1, ' ') => {
+                Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
                 Cmd::AcceptLine => {
@@ -867,16 +875,14 @@ fn readline_edit<C: Completer>(
             Cmd::Overwrite(c) => {
                 try!(edit_overwrite_char(&mut s, c));
             }
-            Cmd::EndOfFile => {
-                if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
-                    try!(edit_move_end(&mut s));
-                    break;
-                } else if s.line.is_empty() {
-                    return Err(error::ReadlineError::Eof);
-                } else {
-                    try!(edit_delete(&mut s, 1))
-                }
-            }
+            Cmd::EndOfFile => if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
+                try!(edit_move_end(&mut s));
+                break;
+            } else if s.line.is_empty() {
+                return Err(error::ReadlineError::Eof);
+            } else {
+                try!(edit_delete(&mut s, 1))
+            },
             Cmd::Move(Movement::EndOfLine) => {
                 // Move to the end of line.
                 try!(edit_move_end(&mut s))
@@ -914,20 +920,16 @@ fn readline_edit<C: Completer>(
                 // Fetch the previous command from the history list.
                 try!(edit_history_next(&mut s, &editor.history, true))
             }
-            Cmd::HistorySearchBackward => {
-                try!(edit_history_search(
-                    &mut s,
-                    &editor.history,
-                    Direction::Reverse,
-                ))
-            }
-            Cmd::HistorySearchForward => {
-                try!(edit_history_search(
-                    &mut s,
-                    &editor.history,
-                    Direction::Forward,
-                ))
-            }
+            Cmd::HistorySearchBackward => try!(edit_history_search(
+                &mut s,
+                &editor.history,
+                Direction::Reverse,
+            )),
+            Cmd::HistorySearchForward => try!(edit_history_search(
+                &mut s,
+                &editor.history,
+                Direction::Forward,
+            )),
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
                 try!(edit_transpose_chars(&mut s))
@@ -950,11 +952,9 @@ fn readline_edit<C: Completer>(
                     try!(edit_yank(&mut s, text, anchor, n))
                 }
             }
-            Cmd::ViYankTo(mvt) => {
-                if let Some(text) = s.line.copy(mvt) {
-                    editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
-                }
-            }
+            Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {
+                editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
+            },
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.

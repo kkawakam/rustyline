@@ -116,7 +116,9 @@ static ESCAPE_CHAR: Option<char> = None;
 
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
-        FilenameCompleter { break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect() }
+        FilenameCompleter {
+            break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect(),
+        }
     }
 }
 
@@ -167,10 +169,7 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input
-        .chars()
-        .filter(|c| break_chars.contains(c))
-        .count();
+    let n = input.chars().filter(|c| break_chars.contains(c)).count();
     if n == 0 {
         return input;
     }

@@ -25,7 +25,7 @@ fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
         try!(Err(io::Error::new(
             io::ErrorKind::Other,
             "no stdio handle available for this process",
-        )));
+        ),));
     }
     Ok(handle)
 }
@@ -89,9 +89,9 @@ impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
-               handle: handle,
-               buf: None,
-           })
+            handle: handle,
+            buf: None,
+        })
     }
 }
 
@@ -183,7 +183,8 @@ impl RawReader for ConsoleRawReader {
                     winapi::VK_F10 => return Ok(KeyPress::F(10)),
                     winapi::VK_F11 => return Ok(KeyPress::F(11)),
                     winapi::VK_F12 => return Ok(KeyPress::F(12)),
-                    // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is also
+                    // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is
+                    // also
                     // set.
                     _ => continue,
                 };
@@ -443,13 +444,13 @@ impl Term for Console {
             try!(Err(io::Error::new(
                 io::ErrorKind::Other,
                 "no stdio handle available for this process",
-            )));
+            ),));
         }
         let original_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
         let raw = original_mode &
             !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
-                  winapi::wincon::ENABLE_PROCESSED_INPUT);
+                winapi::wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
         let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
@@ -457,9 +458,9 @@ impl Term for Console {
         let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
         check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
-               original_mode: original_mode,
-               stdin_handle: self.stdin_handle,
-           })
+            original_mode: original_mode,
+            stdin_handle: self.stdin_handle,
+        })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {

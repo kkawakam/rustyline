@@ -123,10 +123,10 @@ impl PosixRawReader {
                     Ok(match seq2 {
                         '1' | '7' => KeyPress::Home, // tmux, xrvt
                         '2' => KeyPress::Insert,
-                        '3' => KeyPress::Delete, // kdch1
+                        '3' => KeyPress::Delete,    // kdch1
                         '4' | '8' => KeyPress::End, // tmux, xrvt
-                        '5' => KeyPress::PageUp, // kpp
-                        '6' => KeyPress::PageDown, // knp
+                        '5' => KeyPress::PageUp,    // kpp
+                        '6' => KeyPress::PageDown,  // knp
                         _ => {
                             debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ~", seq2);
                             KeyPress::UnknownEscSeq
@@ -136,15 +136,15 @@ impl PosixRawReader {
                     let seq4 = try!(self.next_char());
                     if seq4 == '~' {
                         Ok(match (seq2, seq3) {
-                            ('1', '1') => KeyPress::F(1), // rxvt-unicode
-                            ('1', '2') => KeyPress::F(2), // rxvt-unicode
-                            ('1', '3') => KeyPress::F(3), // rxvt-unicode
-                            ('1', '4') => KeyPress::F(4), // rxvt-unicode
-                            ('1', '5') => KeyPress::F(5), // kf5
-                            ('1', '7') => KeyPress::F(6), // kf6
-                            ('1', '8') => KeyPress::F(7), // kf7
-                            ('1', '9') => KeyPress::F(8), // kf8
-                            ('2', '0') => KeyPress::F(9), // kf9
+                            ('1', '1') => KeyPress::F(1),  // rxvt-unicode
+                            ('1', '2') => KeyPress::F(2),  // rxvt-unicode
+                            ('1', '3') => KeyPress::F(3),  // rxvt-unicode
+                            ('1', '4') => KeyPress::F(4),  // rxvt-unicode
+                            ('1', '5') => KeyPress::F(5),  // kf5
+                            ('1', '7') => KeyPress::F(6),  // kf6
+                            ('1', '8') => KeyPress::F(7),  // kf7
+                            ('1', '9') => KeyPress::F(8),  // kf8
+                            ('2', '0') => KeyPress::F(9),  // kf9
                             ('2', '1') => KeyPress::F(10), // kf10
                             ('2', '3') => KeyPress::F(11), // kf11
                             ('2', '4') => KeyPress::F(12), // kf12
@@ -208,10 +208,10 @@ impl PosixRawReader {
             } else {
                 // ANSI
                 Ok(match seq2 {
-                    'A' => KeyPress::Up, // kcuu1
-                    'B' => KeyPress::Down, // kcud1
+                    'A' => KeyPress::Up,    // kcuu1
+                    'B' => KeyPress::Down,  // kcud1
                     'C' => KeyPress::Right, // kcuf1
-                    'D' => KeyPress::Left, // kcub1
+                    'D' => KeyPress::Left,  // kcub1
                     'F' => KeyPress::End,
                     'H' => KeyPress::Home, // khome
                     _ => {
@@ -225,16 +225,16 @@ impl PosixRawReader {
             // ESC O sequences. (SS3)
             let seq2 = try!(self.next_char());
             Ok(match seq2 {
-                'A' => KeyPress::Up, // kcuu1
-                'B' => KeyPress::Down, // kcud1
+                'A' => KeyPress::Up,    // kcuu1
+                'B' => KeyPress::Down,  // kcud1
                 'C' => KeyPress::Right, // kcuf1
-                'D' => KeyPress::Left, // kcub1
-                'F' => KeyPress::End, // kend
-                'H' => KeyPress::Home, // khome
-                'P' => KeyPress::F(1), // kf1
-                'Q' => KeyPress::F(2), // kf2
-                'R' => KeyPress::F(3), // kf3
-                'S' => KeyPress::F(4), // kf4
+                'D' => KeyPress::Left,  // kcub1
+                'F' => KeyPress::End,   // kend
+                'H' => KeyPress::Home,  // khome
+                'P' => KeyPress::F(1),  // kf1
+                'Q' => KeyPress::F(2),  // kf2
+                'R' => KeyPress::F(3),  // kf3
+                'S' => KeyPress::F(4),  // kf4
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
                     KeyPress::UnknownEscSeq
@@ -534,7 +534,7 @@ impl Term for PosixTerminal {
 
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
+        use nix::sys::termios::{CS8, BRKINT, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
                                 IXON, /* OPOST, */ VMIN, VTIME};
         if !self.stdin_isatty {
             try!(Err(nix::Error::from_errno(ENOTTY)));

@@ -1136,9 +1136,13 @@ impl<C: Completer> Editor<C> {
     pub fn clear_history(&mut self) {
         self.history.clear()
     }
-    /// Return a reference to the history object.
+    /// Return a mutable reference to the history object.
     pub fn get_history(&mut self) -> &mut History {
         &mut self.history
+    }
+    /// Return an immutable reference to the history object.
+    pub fn get_history_const(&self) -> &History {
+        &self.history
     }
 
     /// Register a callback function to be called for tab-completion.

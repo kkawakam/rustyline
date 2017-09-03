@@ -8,6 +8,11 @@ repository = "https://github.com/kkawakam/rustyline"
 readme = "README.md"
 keywords = ["readline"]
 license = "MIT"
+categories = ["command-line-interface"]
+
+[badges]
+travis-ci = { repository = "kkawakam/rustyline" }
+appveyor = { repository = "kkawakam/rustyline" }
 
 [dependencies]
 libc = "0.2"

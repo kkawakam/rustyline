@@ -32,7 +32,7 @@ impl Default for Direction {
     }
 }
 
-/// Listener to be notified when the some text is deleted.
+/// Listener to be notified when some text is deleted.
 pub trait DeleteListener {
     fn delete(&mut self, idx: usize, string: &str, dir: Direction);
 }

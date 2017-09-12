@@ -784,6 +784,7 @@ fn reverse_incremental_search<R: RawReader>(
 #[allow(let_unit_value)]
 fn readline_edit<C: Completer>(
     prompt: &str,
+    initial: Option<(&str, &str)>,
     editor: &mut Editor<C>,
     original_mode: tty::Mode,
 ) -> Result<String> {
@@ -802,6 +803,10 @@ fn readline_edit<C: Completer>(
 
     s.line.set_delete_listener(editor.kill_ring.clone());
     s.line.set_change_listener(s.changes.clone());
+
+    if let Some((left, right)) = initial {
+        s.line.update((left.to_owned() + right).as_ref(), left.len());
+    }
 
     try!(s.refresh_line());
 
@@ -1056,10 +1061,10 @@ impl Drop for Guard {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw<C: Completer>(prompt: &str, editor: &mut Editor<C>) -> Result<String> {
+fn readline_raw<C: Completer>(prompt: &str, initial: Option<(&str, &str)>, editor: &mut Editor<C>) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
-    let user_input = readline_edit(prompt, editor, original_mode);
+    let user_input = readline_edit(prompt, initial, editor, original_mode);
     drop(guard); // try!(disable_raw_mode(original_mode));
     println!("");
     user_input
@@ -1109,6 +1114,18 @@ impl<C: Completer> Editor<C> {
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
+        self.readline_with(prompt, None)
+    }
+    /// This function behaves in the exact same manner as `readline`, except that it pre-populates the input area.
+    ///
+    /// The text that resides in the input area is given as a 2-tuple.
+    /// The string on the left of the tuple what will appear to the left of the cursor
+    /// and the string on the right is what will appear to the right of the cursor.
+    pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str,&str)) -> Result<String> {
+        self.readline_with(prompt, Some(initial))
+    }
+
+    fn readline_with(&mut self, prompt: &str, initial: Option<(&str,&str)>) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
@@ -1122,7 +1139,7 @@ impl<C: Completer> Editor<C> {
             // Not a tty: read from file / pipe.
             readline_direct()
         } else {
-            readline_raw(prompt, self)
+            readline_raw(prompt, initial, self)
         }
     }
 

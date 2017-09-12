@@ -15,8 +15,11 @@ pub struct Config {
     /// Duration (milliseconds) Rustyline will wait for a character when
     /// reading an ambiguous key sequence.
     keyseq_timeout: i32,
-    // Emacs or Vi mode
+    /// Emacs or Vi mode
     edit_mode: EditMode,
+    /// If true, each nonblank line returned by `readline` will be
+    /// automatically added to the history.
+    auto_add_history: bool,
 }
 
 impl Config {
@@ -60,6 +63,13 @@ impl Config {
     pub fn edit_mode(&self) -> EditMode {
         self.edit_mode
     }
+
+    /// Tell if lines are automatically added to the history.
+    ///
+    /// By default, they are not.
+    pub fn auto_add_history(&self) -> bool {
+        self.auto_add_history
+    }
 }
 
 impl Default for Config {
@@ -72,6 +82,7 @@ impl Default for Config {
             completion_prompt_limit: 100,
             keyseq_timeout: 500,
             edit_mode: EditMode::Emacs,
+            auto_add_history: false,
         }
     }
 }
@@ -167,6 +178,14 @@ impl Builder {
     /// Choose between Emacs or Vi mode.
     pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
         self.p.edit_mode = edit_mode;
+        self
+    }
+
+    /// Tell if lines are automatically added to the history.
+    ///
+    /// By default, they are not.
+    pub fn auto_add_history(mut self, yes: bool) -> Builder {
+        self.p.auto_add_history = yes;
         self
     }
 

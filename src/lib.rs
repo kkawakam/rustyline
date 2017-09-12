@@ -1065,6 +1065,11 @@ fn readline_raw<C: Completer>(prompt: &str, initial: Option<(&str, &str)>, edito
     let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, initial, editor, original_mode);
+    if editor.config.auto_add_history() {
+        if let Ok(ref line) = user_input {
+            editor.add_history_entry(line.as_ref());
+        }
+    }
     drop(guard); // try!(disable_raw_mode(original_mode));
     println!("");
     user_input
@@ -1233,7 +1238,6 @@ impl<'a, C: Completer> Iterator for Iter<'a, C> {
         let readline = self.editor.readline(self.prompt);
         match readline {
             Ok(l) => {
-                self.editor.add_history_entry(l.as_ref()); // TODO Validate
                 Some(Ok(l))
             }
             Err(error::ReadlineError::Eof) => None,

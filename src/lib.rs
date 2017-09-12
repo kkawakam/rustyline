@@ -1085,10 +1085,12 @@ pub struct Editor<C: Completer> {
 }
 
 impl<C: Completer> Editor<C> {
+    /// Create an editor with the default configuration
     pub fn new() -> Editor<C> {
         Self::with_config(Config::default())
     }
 
+    /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Editor<C> {
         let term = Terminal::new();
         Editor {
@@ -1101,7 +1103,11 @@ impl<C: Completer> Editor<C> {
         }
     }
 
-    /// This method will read a line from STDIN and will display a `prompt`
+    /// This method will read a line from STDIN and will display a `prompt`.
+    ///
+    /// It uses terminal-style interaction if `stdin` is connected to a terminal.
+    /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
+    /// it uses file-style interaction.
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");

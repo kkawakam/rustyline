@@ -79,11 +79,11 @@ impl History {
         true
     }
 
-    /// Returns the number of entries in the history.
+    /// Return the number of entries in the history.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
-    /// Returns true if the history has no entry.
+    /// Return true if the history has no entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -91,8 +91,9 @@ impl History {
     /// Set the maximum length for the history. This function can be called even
     /// if there is already some history, the function will make sure to retain
     /// just the latest `len` elements if the new history length value is
-    /// smaller
-    /// than the amount of items already inside the history.
+    /// smaller than the amount of items already inside the history.
+    ///
+    /// Like [stifle_history](http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
         if len == 0 {
@@ -108,10 +109,10 @@ impl History {
     }
 
     /// Save the history in the specified file.
-    /// TODO append_history
-    /// http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
-    /// TODO history_truncate_file
-    /// http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
+    // TODO append_history
+    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
+    // TODO history_truncate_file
+    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
@@ -133,8 +134,8 @@ impl History {
 
     /// Load the history from the specified file.
     ///
-    /// # Failure
-    /// Will return `Err` if path does not already exist.
+    /// # Errors
+    /// Will return `Err` if path does not already exist or could not be read.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
@@ -152,8 +153,10 @@ impl History {
     }
 
     /// Search history (start position inclusive [0, len-1]).
+    ///
     /// Return the absolute index of the nearest history entry that matches
     /// `term`.
+    ///
     /// Return None if no entry contains `term` between [start, len -1] for
     /// forward search
     /// or between [0, start] for reverse search.

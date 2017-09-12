@@ -31,6 +31,7 @@ impl Config {
 
     /// Tell if lines which match the previous history entry are saved or not
     /// in the history list.
+    ///
     /// By default, they are ignored.
     pub fn history_duplicates(&self) -> HistoryDuplicates {
         self.history_duplicates
@@ -38,6 +39,7 @@ impl Config {
 
     /// Tell if lines which begin with a space character are saved or not in
     /// the history list.
+    ///
     /// By default, they are saved.
     pub fn history_ignore_space(&self) -> bool {
         self.history_ignore_space
@@ -119,6 +121,7 @@ impl Builder {
 
     /// Tell if lines which match the previous history entry are saved or not
     /// in the history list.
+    ///
     /// By default, they are ignored.
     pub fn history_ignore_dups(mut self, yes: bool) -> Builder {
         self.p.history_duplicates = if yes {
@@ -131,6 +134,7 @@ impl Builder {
 
     /// Tell if lines which begin with a space character are saved or not in
     /// the history list.
+    ///
     /// By default, they are saved.
     pub fn history_ignore_space(mut self, yes: bool) -> Builder {
         self.p.history_ignore_space = yes;
@@ -144,8 +148,7 @@ impl Builder {
     }
 
     /// The number of possible completions that determines when the user is
-    /// asked
-    /// whether the list of possibilities should be displayed.
+    /// asked whether the list of possibilities should be displayed.
     pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Builder {
         self.p.completion_prompt_limit = completion_prompt_limit;
         self

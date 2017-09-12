@@ -17,6 +17,7 @@ pub trait Completer {
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the start position and the completion candidates for the
     /// partial word to be completed.
+    ///
     /// "ls /usr/loc" => Ok((3, vec!["/usr/local/"]))
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
     /// Updates the edited `line` with the `elected` candidate.

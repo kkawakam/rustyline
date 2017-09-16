@@ -37,6 +37,7 @@ pub trait Renderer {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
+        hint: Option<String>,
         current_row: usize,
         old_rows: usize,
     ) -> Result<(Position, Position)>;
@@ -79,10 +80,11 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
+        hint: Option<String>,
         current_row: usize,
         old_rows: usize,
     ) -> Result<(Position, Position)> {
-        (**self).refresh_line(prompt, prompt_size, line, current_row, old_rows)
+        (**self).refresh_line(prompt, prompt_size, line, hint, current_row, old_rows)
     }
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         (**self).calculate_position(s, orig)

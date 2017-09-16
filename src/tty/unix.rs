@@ -9,7 +9,8 @@ use nix;
 use nix::poll;
 use nix::sys::signal;
 use nix::sys::termios;
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use config::Config;
 use consts::{self, KeyPress};
@@ -342,6 +343,7 @@ impl Renderer for PosixRenderer {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
+        hint: Option<String>,
         current_row: usize,
         old_rows: usize,
     ) -> Result<(Position, Position)> {
@@ -369,6 +371,10 @@ impl Renderer for PosixRenderer {
         ab.push_str(prompt);
         // display the input line
         ab.push_str(line);
+        // display hint
+        if let Some(hint) = hint {
+            ab.push_str(truncate(&hint, end_pos.col, self.cols));
+        }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 {
             ab.push_str("\n");
@@ -402,42 +408,17 @@ impl Renderer for PosixRenderer {
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
-        for c in s.chars() {
-            let cw = if esc_seq == 1 {
-                if c == '[' {
-                    // CSI
-                    esc_seq = 2;
-                } else {
-                    // two-character sequence
-                    esc_seq = 0;
-                }
-                None
-            } else if esc_seq == 2 {
-                if c == ';' || (c >= '0' && c <= '9') {
-                } else if c == 'm' {
-                    // last
-                    esc_seq = 0;
-                } else {
-                    // not supported
-                    esc_seq = 0;
-                }
-                None
-            } else if c == '\x1b' {
-                esc_seq = 1;
-                None
-            } else if c == '\n' {
-                pos.col = 0;
+        for c in s.graphemes(true) {
+            if c == "\n" {
                 pos.row += 1;
-                None
-            } else {
-                c.width()
-            };
-            if let Some(cw) = cw {
-                pos.col += cw;
-                if pos.col > self.cols {
-                    pos.row += 1;
-                    pos.col = cw;
-                }
+                pos.col = 0;
+                continue;
+            }
+            let cw = width(c, &mut esc_seq);
+            pos.col += cw;
+            if pos.col > self.cols {
+                pos.row += 1;
+                pos.col = cw;
             }
         }
         if pos.col == self.cols {
@@ -472,6 +453,50 @@ impl Renderer for PosixRenderer {
         let (_, rows) = get_win_size();
         rows
     }
+}
+
+fn width(s: &str, esc_seq: &mut u8) -> usize {
+    if *esc_seq == 1 {
+        if s == "[" {
+            // CSI
+            *esc_seq = 2;
+        } else {
+            // two-character sequence
+            *esc_seq = 0;
+        }
+        0
+    } else if *esc_seq == 2 {
+        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
+        } else if s == "m" {
+            // last
+            *esc_seq = 0;
+        } else {
+            // not supported
+            *esc_seq = 0;
+        }
+        0
+    } else if s == "\x1b" {
+        *esc_seq = 1;
+        0
+    } else if s == "\n" {
+        0
+    } else {
+        s.width()
+    }
+}
+
+fn truncate(text: &str, col: usize, max_col: usize) -> &str {
+    let mut col = col;
+    let mut esc_seq = 0;
+    let mut end = text.len();
+    for (i, s) in text.grapheme_indices(true) {
+        col += width(s, &mut esc_seq);
+        if col > max_col {
+            end = i;
+            break;
+        }
+    }
+    &text[..end]
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;

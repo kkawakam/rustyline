@@ -7,6 +7,7 @@ use std::rc::Rc;
 use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
+use rustyline::hint::Hinter;
 use rustyline::error::ReadlineError;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
 
@@ -19,6 +20,18 @@ static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 #[cfg(windows)]
 static PROMPT: &'static str = ">> ";
 
+struct Hints {}
+
+impl Hinter for Hints {
+    fn hint(&mut self, line: &str, _pos: usize) -> Option<String> {
+        if line == "hello" {
+            Some(" \x1b[1mWorld\x1b[m".to_owned())
+        } else {
+            None
+        }
+    }
+}
+
 fn main() {
     init_logger().is_ok();
     let config = Config::builder()
@@ -29,6 +42,7 @@ fn main() {
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
     rl.set_completer(Some(Rc::new(RefCell::new(c))));
+    rl.set_hinter(Some(Rc::new(RefCell::new(Hints{}))));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

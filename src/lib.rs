@@ -35,6 +35,7 @@ extern crate winapi;
 pub mod completion;
 mod consts;
 pub mod error;
+pub mod hint;
 pub mod history;
 mod keymap;
 mod kill_ring;
@@ -57,6 +58,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use tty::{Position, RawMode, RawReader, Renderer, Term, Terminal};
 
 use completion::{longest_common_prefix, Completer};
+use hint::Hinter;
 use history::{Direction, History};
 use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -84,6 +86,7 @@ struct State<'out, 'prompt> {
     byte_buffer: [u8; 4],
     edit_state: EditState,
     changes: Rc<RefCell<Changeset>>,
+    hinter: Option<Rc<RefCell<Hinter>>>,
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -93,6 +96,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         prompt: &'prompt str,
         history_index: usize,
         custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+        hinter: Option<Rc<RefCell<Hinter>>>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -108,6 +112,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             byte_buffer: [0; 4],
             edit_state: EditState::new(config, custom_bindings),
             changes: Rc::new(RefCell::new(Changeset::new())),
+            hinter: hinter,
         }
     }
 
@@ -150,19 +155,22 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
-        self.refresh(self.prompt, prompt_size)
+        let hint = self.hint();
+        self.refresh(self.prompt, prompt_size, hint)
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
-        self.refresh(prompt, prompt_size)
+        let hint = self.hint();
+        self.refresh(prompt, prompt_size, hint)
     }
 
-    fn refresh(&mut self, prompt: &str, prompt_size: Position) -> Result<()> {
+    fn refresh(&mut self, prompt: &str, prompt_size: Position, hint: Option<String>) -> Result<()> {
         let (cursor, end_pos) = try!(self.out.refresh_line(
             prompt,
             prompt_size,
             &self.line,
+            hint,
             self.cursor.row,
             self.old_rows,
         ));
@@ -170,6 +178,14 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         self.cursor = cursor;
         self.old_rows = end_pos.row;
         Ok(())
+    }
+
+    fn hint(&self) -> Option<String> {
+        if let Some(ref hinter) = self.hinter {
+            hinter.borrow_mut().hint(self.line.as_str(), self.line.pos())
+        } else {
+            None
+        }
     }
 }
 
@@ -192,7 +208,9 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
 fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
     if let Some(push) = s.line.insert(ch, n) {
         if push {
-            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() {
+            let prompt_size = s.prompt_size;
+            let hint = s.hint();
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() && hint.is_none() {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = s.out
                     .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
@@ -201,7 +219,7 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
                 let bits = bits.as_bytes();
                 s.out.write_and_flush(bits)
             } else {
-                s.refresh_line()
+                s.refresh(s.prompt, prompt_size, hint)
             }
         } else {
             s.refresh_line()
@@ -789,6 +807,7 @@ fn readline_edit(
     original_mode: tty::Mode,
 ) -> Result<String> {
     let completer = editor.completer.as_ref();
+    let hinter = editor.hinter.as_ref().map(|h| h.clone());
 
     let mut stdout = editor.term.create_writer();
 
@@ -799,6 +818,7 @@ fn readline_edit(
         prompt,
         editor.history.len(),
         editor.custom_bindings.clone(),
+        hinter,
     );
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -965,6 +985,12 @@ fn readline_edit(
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.
                 try!(edit_move_end(&mut s));
+                if s.hinter.is_some() {
+                    // Force a refresh without hints to leave the previous
+                    // line as the user typed it after a newline.
+                    s.hinter = None;
+                    try!(s.refresh_line());
+                }
                 break;
             }
             Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
@@ -1093,6 +1119,7 @@ pub struct Editor {
     kill_ring: Rc<RefCell<KillRing>>,
     config: Config,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+    hinter: Option<Rc<RefCell<Hinter>>>,
 }
 
 impl Editor {
@@ -1111,6 +1138,7 @@ impl Editor {
             kill_ring: Rc::new(RefCell::new(KillRing::new(60))),
             config: config,
             custom_bindings: Rc::new(RefCell::new(HashMap::new())),
+            hinter: None,
         }
     }
 
@@ -1177,6 +1205,12 @@ impl Editor {
     /// Register a callback function to be called for tab-completion.
     pub fn set_completer(&mut self, completer: Option<Rc<RefCell<Completer>>>) {
         self.completer = completer;
+    }
+
+    /// Register a hints function to be called to show hints to the uer at the
+    /// right of the prompt.
+    pub fn set_hinter(&mut self, hinter: Option<Rc<RefCell<Hinter>>>) {
+        self.hinter = hinter;
     }
 
     /// Bind a sequence to a command.
@@ -1274,6 +1308,7 @@ mod test {
             byte_buffer: [0; 4],
             edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
             changes: Rc::new(RefCell::new(Changeset::new())),
+            hinter: None,
         }
     }
 

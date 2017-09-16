@@ -55,6 +55,7 @@ impl Renderer for Sink {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
+        _hint: Option<String>,
         _: usize,
         _: usize,
     ) -> Result<(Position, Position)> {

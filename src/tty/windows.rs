@@ -226,6 +226,7 @@ pub struct ConsoleRenderer {
 
 impl ConsoleRenderer {
     fn new(handle: winapi::HANDLE) -> ConsoleRenderer {
+        // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
             out: io::stdout(),
@@ -283,6 +284,7 @@ impl Renderer for ConsoleRenderer {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
+        hint: Option<String>,
         current_row: usize,
         old_rows: usize,
     ) -> Result<(Position, Position)> {

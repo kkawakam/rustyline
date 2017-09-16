@@ -1,7 +1,9 @@
 extern crate log;
 extern crate rustyline;
 
+use std::cell::RefCell;
 use std::io::{self, Write};
+use std::rc::Rc;
 use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
@@ -26,7 +28,7 @@ fn main() {
         .build();
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
-    rl.set_completer(Some(c));
+    rl.set_completer(Some(Rc::new(RefCell::new(c))));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

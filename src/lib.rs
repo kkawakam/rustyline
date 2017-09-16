@@ -8,7 +8,7 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::<()>::new();
+//! let mut rl = rustyline::Editor::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -519,10 +519,10 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: RawReader>(
+fn complete_line<R: RawReader, C: Completer+?Sized>(
     rdr: &mut R,
     s: &mut State,
-    completer: &Completer,
+    completer: &mut C,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -782,13 +782,13 @@ fn reverse_incremental_search<R: RawReader>(
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[allow(let_unit_value)]
-fn readline_edit<C: Completer>(
+fn readline_edit(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor<C>,
+    editor: &mut Editor,
     original_mode: tty::Mode,
 ) -> Result<String> {
-    let completer = editor.completer.as_ref().map(|c| c as &Completer);
+    let completer = editor.completer.as_ref();
 
     let mut stdout = editor.term.create_writer();
 
@@ -822,10 +822,11 @@ fn readline_edit<C: Completer>(
 
         // autocomplete
         if cmd == Cmd::Complete && completer.is_some() {
+            use std::ops::DerefMut;
             let next = try!(complete_line(
                 &mut rdr,
                 &mut s,
-                completer.unwrap(),
+                completer.unwrap().borrow_mut().deref_mut(),
                 &editor.config,
             ));
             if next.is_some() {
@@ -1061,7 +1062,7 @@ impl Drop for Guard {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw<C: Completer>(prompt: &str, initial: Option<(&str, &str)>, editor: &mut Editor<C>) -> Result<String> {
+fn readline_raw(prompt: &str, initial: Option<(&str, &str)>, editor: &mut Editor) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, initial, editor, original_mode);
@@ -1085,23 +1086,23 @@ fn readline_direct() -> Result<String> {
 }
 
 /// Line editor
-pub struct Editor<C: Completer> {
+pub struct Editor {
     term: Terminal,
     history: History,
-    completer: Option<C>,
+    completer: Option<Rc<RefCell<Completer>>>,
     kill_ring: Rc<RefCell<KillRing>>,
     config: Config,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
 }
 
-impl<C: Completer> Editor<C> {
+impl Editor {
     /// Create an editor with the default configuration
-    pub fn new() -> Editor<C> {
+    pub fn new() -> Editor {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    pub fn with_config(config: Config) -> Editor<C> {
+    pub fn with_config(config: Config) -> Editor {
         let term = Terminal::new();
         Editor {
             term: term,
@@ -1174,7 +1175,7 @@ impl<C: Completer> Editor<C> {
     }
 
     /// Register a callback function to be called for tab-completion.
-    pub fn set_completer(&mut self, completer: Option<C>) {
+    pub fn set_completer(&mut self, completer: Option<Rc<RefCell<Completer>>>) {
         self.completer = completer;
     }
 
@@ -1188,7 +1189,7 @@ impl<C: Completer> Editor<C> {
     }
 
     /// ```
-    /// let mut rl = rustyline::Editor::<()>::new();
+    /// let mut rl = rustyline::Editor::new();
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -1201,7 +1202,7 @@ impl<C: Completer> Editor<C> {
     ///     }
     /// }
     /// ```
-    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<C> {
+    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter {
         Iter {
             editor: self,
             prompt: prompt,
@@ -1213,7 +1214,7 @@ impl<C: Completer> Editor<C> {
     }
 }
 
-impl<C: Completer> fmt::Debug for Editor<C> {
+impl fmt::Debug for Editor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
@@ -1223,15 +1224,13 @@ impl<C: Completer> fmt::Debug for Editor<C> {
 }
 
 /// Edited lines iterator
-pub struct Iter<'a, C: Completer>
-where
-    C: 'a,
+pub struct Iter<'a>
 {
-    editor: &'a mut Editor<C>,
+    editor: &'a mut Editor,
     prompt: &'a str,
 }
 
-impl<'a, C: Completer> Iterator for Iter<'a, C> {
+impl<'a> Iterator for Iter<'a> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
@@ -1278,8 +1277,8 @@ mod test {
         }
     }
 
-    fn init_editor(keys: &[KeyPress]) -> Editor<()> {
-        let mut editor = Editor::<()>::new();
+    fn init_editor(keys: &[KeyPress]) -> Editor {
+        let mut editor = Editor::new();
         editor.term.keys.extend(keys.iter().cloned());
         editor
     }
@@ -1324,7 +1323,7 @@ mod test {
 
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
-        fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+        fn complete(&mut self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
             Ok((0, vec![line.to_owned() + "t"]))
         }
     }
@@ -1335,8 +1334,8 @@ mod test {
         let mut s = init_state(&mut out, "rus", 3);
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
-        let completer = SimpleCompleter;
-        let cmd = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
+        let mut completer = SimpleCompleter;
+        let cmd = super::complete_line(&mut rdr, &mut s, &mut completer, &Config::default()).unwrap();
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

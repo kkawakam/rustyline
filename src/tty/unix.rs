@@ -129,7 +129,8 @@ impl PosixRawReader {
                         '5' => KeyPress::PageUp,    // kpp
                         '6' => KeyPress::PageDown,  // knp
                         _ => {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ~", seq2);
+                            debug!(target: "rustyline",
+                            "unsupported esc sequence: ESC [ {} ~", seq2);
                             KeyPress::UnknownEscSeq
                         }
                     })
@@ -150,7 +151,8 @@ impl PosixRawReader {
                             ('2', '3') => KeyPress::F(11), // kf11
                             ('2', '4') => KeyPress::F(12), // kf12
                             _ => {
-                                debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} ~", seq1, seq2);
+                                debug!(target: "rustyline",
+                                "unsupported esc sequence: ESC [ {}{} ~", seq1, seq2);
                                 KeyPress::UnknownEscSeq
                             }
                         })
@@ -158,13 +160,16 @@ impl PosixRawReader {
                         let seq5 = try!(self.next_char());
                         if seq5.is_digit(10) {
                             let seq6 = try!(self.next_char()); // '~' expected
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                            debug!(target: "rustyline",
+                            "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
                         } else {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
+                            debug!(target: "rustyline",
+                            "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
                         }
                         Ok(KeyPress::UnknownEscSeq)
                     } else {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
+                        debug!(target: "rustyline",
+                        "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
                         Ok(KeyPress::UnknownEscSeq)
                     }
                 } else if seq3 == ';' {
@@ -182,16 +187,19 @@ impl PosixRawReader {
                                 ('2', 'C') => KeyPress::ShiftRight,
                                 ('2', 'D') => KeyPress::ShiftLeft,
                                 _ => {
-                                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                                    debug!(target: "rustyline",
+                                    "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
                                     KeyPress::UnknownEscSeq
                                 }
                             })
                         } else {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                            debug!(target: "rustyline",
+                            "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
                             Ok(KeyPress::UnknownEscSeq)
                         }
                     } else {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
+                        debug!(target: "rustyline",
+                        "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
                         Ok(KeyPress::UnknownEscSeq)
                     }
                 } else {
@@ -201,7 +209,8 @@ impl PosixRawReader {
                         ('5', 'C') => KeyPress::ControlRight,
                         ('5', 'D') => KeyPress::ControlLeft,
                         _ => {
-                            debug!(target: "rustyline", "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
+                            debug!(target: "rustyline",
+                            "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
                             KeyPress::UnknownEscSeq
                         }
                     })

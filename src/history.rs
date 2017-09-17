@@ -93,7 +93,8 @@ impl History {
     /// just the latest `len` elements if the new history length value is
     /// smaller than the amount of items already inside the history.
     ///
-    /// Like [stifle_history](http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX11).
+    /// Like [stifle_history](http://cnswww.cns.cwru.
+    /// edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
         if len == 0 {

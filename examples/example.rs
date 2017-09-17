@@ -42,7 +42,7 @@ fn main() {
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
     rl.set_completer(Some(Rc::new(RefCell::new(c))));
-    rl.set_hinter(Some(Rc::new(RefCell::new(Hints{}))));
+    rl.set_hinter(Some(Rc::new(RefCell::new(Hints {}))));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

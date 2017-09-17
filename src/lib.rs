@@ -75,11 +75,11 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 /// Implement rendering.
 struct State<'out, 'prompt> {
     out: &'out mut Renderer,
-    prompt: &'prompt str,               // Prompt to display
-    prompt_size: Position,              // Prompt Unicode/visible width and height
-    line: LineBuffer,                   // Edited line buffer
-    cursor: Position,                   /* Cursor position (relative to the start of the prompt
-                                         * for `row`) */
+    prompt: &'prompt str,  // Prompt to display
+    prompt_size: Position, // Prompt Unicode/visible width and height
+    line: LineBuffer,      // Edited line buffer
+    cursor: Position,      /* Cursor position (relative to the start of the prompt
+                            * for `row`) */
     old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
@@ -182,7 +182,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn hint(&self) -> Option<String> {
         if let Some(ref hinter) = self.hinter {
-            hinter.borrow_mut().hint(self.line.as_str(), self.line.pos())
+            hinter
+                .borrow_mut()
+                .hint(self.line.as_str(), self.line.pos())
         } else {
             None
         }
@@ -210,7 +212,9 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
         if push {
             let prompt_size = s.prompt_size;
             let hint = s.hint();
-            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() && hint.is_none() {
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() &&
+                hint.is_none()
+            {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = s.out
                     .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
@@ -537,7 +541,7 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: RawReader, C: Completer+?Sized>(
+fn complete_line<R: RawReader, C: Completer + ?Sized>(
     rdr: &mut R,
     s: &mut State,
     completer: &mut C,
@@ -807,7 +811,7 @@ fn readline_edit(
     original_mode: tty::Mode,
 ) -> Result<String> {
     let completer = editor.completer.as_ref();
-    let hinter = editor.hinter.as_ref().map(|h| h.clone());
+    let hinter = editor.hinter.as_ref().cloned();
 
     let mut stdout = editor.term.create_writer();
 
@@ -825,7 +829,8 @@ fn readline_edit(
     s.line.set_change_listener(s.changes.clone());
 
     if let Some((left, right)) = initial {
-        s.line.update((left.to_owned() + right).as_ref(), left.len());
+        s.line
+            .update((left.to_owned() + right).as_ref(), left.len());
     }
 
     try!(s.refresh_line());
@@ -1088,7 +1093,11 @@ impl Drop for Guard {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw(prompt: &str, initial: Option<(&str, &str)>, editor: &mut Editor) -> Result<String> {
+fn readline_raw(
+    prompt: &str,
+    initial: Option<(&str, &str)>,
+    editor: &mut Editor,
+) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
     let user_input = readline_edit(prompt, initial, editor, original_mode);
@@ -1144,22 +1153,26 @@ impl Editor {
 
     /// This method will read a line from STDIN and will display a `prompt`.
     ///
-    /// It uses terminal-style interaction if `stdin` is connected to a terminal.
+    /// It uses terminal-style interaction if `stdin` is connected to a
+    /// terminal.
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         self.readline_with(prompt, None)
     }
-    /// This function behaves in the exact same manner as `readline`, except that it pre-populates the input area.
+    /// This function behaves in the exact same manner as `readline`, except
+    /// that it pre-populates the input area.
     ///
     /// The text that resides in the input area is given as a 2-tuple.
-    /// The string on the left of the tuple what will appear to the left of the cursor
-    /// and the string on the right is what will appear to the right of the cursor.
-    pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str,&str)) -> Result<String> {
+    /// The string on the left of the tuple what will appear to the left of the
+    /// cursor
+    /// and the string on the right is what will appear to the right of the
+    /// cursor.
+    pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
         self.readline_with(prompt, Some(initial))
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str,&str)>) -> Result<String> {
+    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
@@ -1258,8 +1271,7 @@ impl fmt::Debug for Editor {
 }
 
 /// Edited lines iterator
-pub struct Iter<'a>
-{
+pub struct Iter<'a> {
     editor: &'a mut Editor,
     prompt: &'a str,
 }
@@ -1270,9 +1282,7 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Result<String>> {
         let readline = self.editor.readline(self.prompt);
         match readline {
-            Ok(l) => {
-                Some(Ok(l))
-            }
+            Ok(l) => Some(Ok(l)),
             Err(error::ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
@@ -1370,7 +1380,8 @@ mod test {
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let mut completer = SimpleCompleter;
-        let cmd = super::complete_line(&mut rdr, &mut s, &mut completer, &Config::default()).unwrap();
+        let cmd =
+            super::complete_line(&mut rdr, &mut s, &mut completer, &Config::default()).unwrap();
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

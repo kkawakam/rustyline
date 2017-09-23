@@ -120,8 +120,8 @@ impl RawReader for ConsoleRawReader {
             }
             let key_event = unsafe { rec.KeyEvent() };
             // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
-            if key_event.bKeyDown == 0 &&
-                key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD
+            if key_event.bKeyDown == 0
+                && key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD
             {
                 continue;
             }
@@ -450,9 +450,9 @@ impl Term for Console {
         }
         let original_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
-        let raw = original_mode &
-            !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT |
-                winapi::wincon::ENABLE_PROCESSED_INPUT);
+        let raw = original_mode
+            & !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT
+                | winapi::wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
         let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;

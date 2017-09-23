@@ -500,8 +500,8 @@ impl LineBuffer {
                 CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
                 CharSearch::ForwardBefore(_) => {
-                    shift + pos -
-                        self.buf[..shift + pos]
+                    shift + pos
+                        - self.buf[..shift + pos]
                             .chars()
                             .next_back()
                             .unwrap()
@@ -759,12 +759,12 @@ impl Deref for LineBuffer {
 }
 
 fn is_start_of_word(word_def: Word, previous: &str, grapheme: &str) -> bool {
-    (!is_word_char(word_def, previous) && is_word_char(word_def, grapheme)) ||
-        (word_def == Word::Vi && !is_other_char(previous) && is_other_char(grapheme))
+    (!is_word_char(word_def, previous) && is_word_char(word_def, grapheme))
+        || (word_def == Word::Vi && !is_other_char(previous) && is_other_char(grapheme))
 }
 fn is_end_of_word(word_def: Word, grapheme: &str, next: &str) -> bool {
-    (!is_word_char(word_def, next) && is_word_char(word_def, grapheme)) ||
-        (word_def == Word::Vi && !is_other_char(next) && is_other_char(grapheme))
+    (!is_word_char(word_def, next) && is_word_char(word_def, grapheme))
+        || (word_def == Word::Vi && !is_other_char(next) && is_other_char(grapheme))
 }
 
 fn is_word_char(word_def: Word, grapheme: &str) -> bool {

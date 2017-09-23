@@ -19,13 +19,49 @@ pub trait Completer {
     /// partial word to be completed.
     ///
     /// "ls /usr/loc" => Ok((3, vec!["/usr/local/"]))
-    fn complete(&mut self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
         line.replace(start..end, elected)
     }
 }
+
+impl Completer for () {
+    fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+        Ok((0, Vec::with_capacity(0)))
+    }
+    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
+        unreachable!()
+    }
+}
+
+impl<'c, C: ?Sized + Completer> Completer for &'c C {
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+        (**self).complete(line, pos)
+    }
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+        (**self).update(line, start, elected)
+    }
+}
+macro_rules! box_completer {
+    ($($id: ident)*) => {
+        $(
+            impl<C: ?Sized + Completer> Completer for $id<C> {
+                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+                    (**self).complete(line, pos)
+                }
+                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+                    (**self).update(line, start, elected)
+                }
+            }
+        )*
+    }
+}
+
+use std::rc::Rc;
+use std::sync::Arc;
+box_completer! { Box Rc Arc }
 
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
@@ -94,7 +130,7 @@ impl Default for FilenameCompleter {
 }
 
 impl Completer for FilenameCompleter {
-    fn complete(&mut self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
         let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
         let path = unescape(path, ESCAPE_CHAR);
         let matches = try!(filename_complete(&path, ESCAPE_CHAR, &self.break_chars));
@@ -250,8 +286,8 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
         for (i, c1) in candidates.iter().enumerate().take(candidates.len() - 1) {
             let b1 = c1.as_bytes();
             let b2 = candidates[i + 1].as_bytes();
-            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
-                b1[longest_common_prefix] != b2[longest_common_prefix]
+            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix
+                || b1[longest_common_prefix] != b2[longest_common_prefix]
             {
                 break 'o;
             }

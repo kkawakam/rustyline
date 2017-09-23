@@ -13,7 +13,7 @@ pub trait RawMode: Copy + Sized {
 }
 
 /// Translate bytes read from stdin to keys.
-pub trait RawReader: Sized {
+pub trait RawReader {
     /// Blocking read of key pressed.
     fn next_key(&mut self) -> Result<KeyPress>;
     /// For CTRL-V support

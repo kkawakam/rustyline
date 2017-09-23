@@ -1,9 +1,7 @@
 extern crate log;
 extern crate rustyline;
 
-use std::cell::RefCell;
 use std::io::{self, Write};
-use std::rc::Rc;
 use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
@@ -23,7 +21,7 @@ static PROMPT: &'static str = ">> ";
 struct Hints {}
 
 impl Hinter for Hints {
-    fn hint(&mut self, line: &str, _pos: usize) -> Option<String> {
+    fn hint(&self, line: &str, _pos: usize) -> Option<String> {
         if line == "hello" {
             Some(" \x1b[1mWorld\x1b[m".to_owned())
         } else {
@@ -41,8 +39,7 @@ fn main() {
         .build();
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
-    rl.set_completer(Some(Rc::new(RefCell::new(c))));
-    rl.set_hinter(Some(Rc::new(RefCell::new(Hints {}))));
+    rl.set_helper(Some((c, Hints {})));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

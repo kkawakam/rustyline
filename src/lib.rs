@@ -8,7 +8,7 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::new();
+//! let mut rl = rustyline::Editor::<()>::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}",line),
@@ -86,7 +86,7 @@ struct State<'out, 'prompt> {
     byte_buffer: [u8; 4],
     edit_state: EditState,
     changes: Rc<RefCell<Changeset>>,
-    hinter: Option<Rc<RefCell<Hinter>>>,
+    hinter: Option<&'out Hinter>,
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -96,7 +96,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         prompt: &'prompt str,
         history_index: usize,
         custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
-        hinter: Option<Rc<RefCell<Hinter>>>,
+        hinter: Option<&'out Hinter>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -181,10 +181,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn hint(&self) -> Option<String> {
-        if let Some(ref hinter) = self.hinter {
-            hinter
-                .borrow_mut()
-                .hint(self.line.as_str(), self.line.pos())
+        if let Some(hinter) = self.hinter {
+            hinter.hint(self.line.as_str(), self.line.pos())
         } else {
             None
         }
@@ -212,8 +210,8 @@ fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
         if push {
             let prompt_size = s.prompt_size;
             let hint = s.hint();
-            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns() &&
-                hint.is_none()
+            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns()
+                && hint.is_none()
             {
                 // Avoid a full update of the line in the trivial case.
                 let cursor = s.out
@@ -541,10 +539,10 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 }
 
 /// Completes the line/word
-fn complete_line<R: RawReader, C: Completer + ?Sized>(
+fn complete_line<R: RawReader, C: Completer>(
     rdr: &mut R,
     s: &mut State,
-    completer: &mut C,
+    completer: &C,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -623,10 +621,10 @@ fn complete_line<R: RawReader, C: Completer + ?Sized>(
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(s.out.write_and_flush(msg.as_bytes()));
             s.old_rows += 1;
-            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
-                cmd != Cmd::SelfInsert(1, 'n') &&
-                cmd != Cmd::SelfInsert(1, 'N') &&
-                cmd != Cmd::Kill(Movement::BackwardChar(1))
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y')
+                && cmd != Cmd::SelfInsert(1, 'n')
+                && cmd != Cmd::SelfInsert(1, 'N')
+                && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
                 cmd = try!(s.next_cmd(rdr));
             }
@@ -674,14 +672,14 @@ fn page_completions<R: RawReader>(
         if row == pause_row {
             try!(s.out.write_and_flush(b"\n--More--"));
             let mut cmd = Cmd::Noop;
-            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y') &&
-                cmd != Cmd::SelfInsert(1, 'n') &&
-                cmd != Cmd::SelfInsert(1, 'N') &&
-                cmd != Cmd::SelfInsert(1, 'q') &&
-                cmd != Cmd::SelfInsert(1, 'Q') &&
-                cmd != Cmd::SelfInsert(1, ' ') &&
-                cmd != Cmd::Kill(Movement::BackwardChar(1)) &&
-                cmd != Cmd::AcceptLine
+            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y')
+                && cmd != Cmd::SelfInsert(1, 'n')
+                && cmd != Cmd::SelfInsert(1, 'N')
+                && cmd != Cmd::SelfInsert(1, 'q')
+                && cmd != Cmd::SelfInsert(1, 'Q')
+                && cmd != Cmd::SelfInsert(1, ' ')
+                && cmd != Cmd::Kill(Movement::BackwardChar(1))
+                && cmd != Cmd::AcceptLine
             {
                 cmd = try!(s.next_cmd(rdr));
             }
@@ -804,14 +802,14 @@ fn reverse_incremental_search<R: RawReader>(
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 #[allow(let_unit_value)]
-fn readline_edit(
+fn readline_edit<H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor,
+    editor: &mut Editor<H>,
     original_mode: tty::Mode,
 ) -> Result<String> {
-    let completer = editor.completer.as_ref();
-    let hinter = editor.hinter.as_ref().cloned();
+    let completer = editor.helper.as_ref().map(|h| h.completer());
+    let hinter = editor.helper.as_ref().map(|h| h.hinter() as &Hinter);
 
     let mut stdout = editor.term.create_writer();
 
@@ -821,7 +819,7 @@ fn readline_edit(
         &editor.config,
         prompt,
         editor.history.len(),
-        editor.custom_bindings.clone(),
+        Rc::clone(&editor.custom_bindings),
         hinter,
     );
 
@@ -847,11 +845,10 @@ fn readline_edit(
 
         // autocomplete
         if cmd == Cmd::Complete && completer.is_some() {
-            use std::ops::DerefMut;
             let next = try!(complete_line(
                 &mut rdr,
                 &mut s,
-                completer.unwrap().borrow_mut().deref_mut(),
+                completer.unwrap(),
                 &editor.config,
             ));
             if next.is_some() {
@@ -1093,10 +1090,10 @@ impl Drop for Guard {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw(
+fn readline_raw<H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor,
+    editor: &mut Editor<H>,
 ) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
     let guard = Guard(original_mode);
@@ -1120,34 +1117,64 @@ fn readline_direct() -> Result<String> {
     }
 }
 
+pub trait Helper {
+    type Completer: Completer;
+    type Hinter: Hinter;
+
+    fn completer(&self) -> &Self::Completer;
+    fn hinter(&self) -> &Self::Hinter;
+}
+
+impl<C: Completer, H: Hinter> Helper for (C, H) {
+    type Completer = C;
+    type Hinter = H;
+
+    fn completer(&self) -> &C {
+        &self.0
+    }
+    fn hinter(&self) -> &H {
+        &self.1
+    }
+}
+impl<C: Completer> Helper for C {
+    type Completer = C;
+    type Hinter = ();
+
+
+    fn completer(&self) -> &C {
+        self
+    }
+    fn hinter(&self) -> &() {
+        &()
+    }
+}
+
 /// Line editor
-pub struct Editor {
+pub struct Editor<H: Helper> {
     term: Terminal,
     history: History,
-    completer: Option<Rc<RefCell<Completer>>>,
+    helper: Option<H>,
     kill_ring: Rc<RefCell<KillRing>>,
     config: Config,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
-    hinter: Option<Rc<RefCell<Hinter>>>,
 }
 
-impl Editor {
+impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
-    pub fn new() -> Editor {
+    pub fn new() -> Editor<H> {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    pub fn with_config(config: Config) -> Editor {
+    pub fn with_config(config: Config) -> Editor<H> {
         let term = Terminal::new();
         Editor {
             term: term,
             history: History::with_config(config),
-            completer: None,
+            helper: None,
             kill_ring: Rc::new(RefCell::new(KillRing::new(60))),
             config: config,
             custom_bindings: Rc::new(RefCell::new(HashMap::new())),
-            hinter: None,
         }
     }
 
@@ -1215,15 +1242,10 @@ impl Editor {
         &self.history
     }
 
-    /// Register a callback function to be called for tab-completion.
-    pub fn set_completer(&mut self, completer: Option<Rc<RefCell<Completer>>>) {
-        self.completer = completer;
-    }
-
-    /// Register a hints function to be called to show hints to the uer at the
-    /// right of the prompt.
-    pub fn set_hinter(&mut self, hinter: Option<Rc<RefCell<Hinter>>>) {
-        self.hinter = hinter;
+    /// Register a callback function to be called for tab-completion
+    /// or to show hints to the user at the right of the prompt.
+    pub fn set_helper(&mut self, helper: Option<H>) {
+        self.helper = helper;
     }
 
     /// Bind a sequence to a command.
@@ -1236,7 +1258,7 @@ impl Editor {
     }
 
     /// ```
-    /// let mut rl = rustyline::Editor::new();
+    /// let mut rl = rustyline::Editor::<()>::new();
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -1249,7 +1271,7 @@ impl Editor {
     ///     }
     /// }
     /// ```
-    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter {
+    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<H> {
         Iter {
             editor: self,
             prompt: prompt,
@@ -1261,7 +1283,7 @@ impl Editor {
     }
 }
 
-impl fmt::Debug for Editor {
+impl<H: Helper> fmt::Debug for Editor<H> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
@@ -1271,12 +1293,15 @@ impl fmt::Debug for Editor {
 }
 
 /// Edited lines iterator
-pub struct Iter<'a> {
-    editor: &'a mut Editor,
+pub struct Iter<'a, H: Helper>
+where
+    H: 'a,
+{
+    editor: &'a mut Editor<H>,
     prompt: &'a str,
 }
 
-impl<'a> Iterator for Iter<'a> {
+impl<'a, H: Helper> Iterator for Iter<'a, H> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
@@ -1322,8 +1347,8 @@ mod test {
         }
     }
 
-    fn init_editor(keys: &[KeyPress]) -> Editor {
-        let mut editor = Editor::new();
+    fn init_editor(keys: &[KeyPress]) -> Editor<()> {
+        let mut editor = Editor::<()>::new();
         editor.term.keys.extend(keys.iter().cloned());
         editor
     }
@@ -1368,7 +1393,7 @@ mod test {
 
     struct SimpleCompleter;
     impl Completer for SimpleCompleter {
-        fn complete(&mut self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+        fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
             Ok((0, vec![line.to_owned() + "t"]))
         }
     }
@@ -1379,9 +1404,8 @@ mod test {
         let mut s = init_state(&mut out, "rus", 3);
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
-        let mut completer = SimpleCompleter;
-        let cmd =
-            super::complete_line(&mut rdr, &mut s, &mut completer, &Config::default()).unwrap();
+        let completer = SimpleCompleter;
+        let cmd = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

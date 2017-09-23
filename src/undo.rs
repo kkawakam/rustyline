@@ -162,8 +162,8 @@ impl Changeset {
         debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
         self.redos.clear();
 
-        if !Self::single_char(string.as_ref()) ||
-            !self.undos
+        if !Self::single_char(string.as_ref())
+            || !self.undos
                 .last()
                 .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
         {
@@ -196,8 +196,8 @@ impl Changeset {
         let mut graphemes = s.graphemes(true);
         graphemes
             .next()
-            .map_or(false, |grapheme| grapheme.is_alphanumeric()) &&
-            graphemes.next().is_none()
+            .map_or(false, |grapheme| grapheme.is_alphanumeric())
+            && graphemes.next().is_none()
     }
 
     pub fn replace<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, old_: S, new_: S) {

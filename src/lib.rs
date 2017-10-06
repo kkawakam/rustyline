@@ -806,7 +806,7 @@ fn readline_edit<H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
-    original_mode: tty::Mode,
+    original_mode: &tty::Mode,
 ) -> Result<String> {
     let completer = editor.helper.as_ref().map(|h| h.completer());
     let hinter = editor.helper.as_ref().map(|h| h.hinter() as &Hinter);
@@ -1078,12 +1078,12 @@ fn readline_edit<H: Helper>(
     Ok(s.line.into_string())
 }
 
-struct Guard(tty::Mode);
+struct Guard<'m>(&'m tty::Mode);
 
 #[allow(unused_must_use)]
-impl Drop for Guard {
+impl<'m> Drop for Guard<'m> {
     fn drop(&mut self) {
-        let Guard(mode) = *self;
+        let Guard(ref mode) = *self;
         mode.disable_raw_mode();
     }
 }
@@ -1096,8 +1096,8 @@ fn readline_raw<H: Helper>(
     editor: &mut Editor<H>,
 ) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
-    let guard = Guard(original_mode);
-    let user_input = readline_edit(prompt, initial, editor, original_mode);
+    let guard = Guard(&original_mode);
+    let user_input = readline_edit(prompt, initial, editor, &original_mode);
     if editor.config.auto_add_history() {
         if let Ok(ref line) = user_input {
             editor.add_history_entry(line.as_ref());

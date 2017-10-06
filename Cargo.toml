@@ -21,7 +21,7 @@ unicode-width = "0.1"
 unicode-segmentation = "1.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.8"
+nix = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.2"

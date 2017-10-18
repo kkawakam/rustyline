@@ -2,12 +2,9 @@
 [![Build Status](https://travis-ci.org/gwenn/rustyline.svg?branch=master)](https://travis-ci.org/gwenn/rustyline)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/gwenn/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/gwenn/rustyline)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
+[![Docs](https://docs.rs/rustyline/badge.svg)](https://docs.rs/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
-
-[Documentation (Releases)](https://docs.rs/rustyline)
-
-[Documentation (Master)](https://kkawakam.github.io/rustyline/rustyline/)
 
 **Supported Platforms**
 * Unix
@@ -15,7 +12,9 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
    * cmd.exe
    * Powershell
 
-**Note**: Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
+**Note**:
+* Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
+* Mintty (Cygwin/Mingw) is not supported
 
 ## Build
 This project uses Cargo and Rust nightly
@@ -79,6 +78,7 @@ rustyline = "1.0.0"
  - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
  - Multi line mode (line wrapping)
  - Word commands
+ - Hints (WIP: only on unix)
 
 ## Actions
 
@@ -215,22 +215,25 @@ $ bind -p
 ## Similar projects
 
  - [copperline](https://github.com/srijs/rust-copperline) (Rust)
- - [linefeed](https://github.com/murarth/linefeed) (Rust)
- - [liner](https://github.com/MovingtoMars/liner) (Rust)
- - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
  - [liner](https://github.com/peterh/liner) (Go)
  - [readline](https://github.com/chzyer/readline) (Go)
- - [haskeline](https://github.com/judah/haskeline) (Haskell)
- - [rb-readline](https://github.com/ConnorAtherton/rb-readline) (Ruby)
- - [python-prompt-toolkit](https://github.com/jonathanslenders/python-prompt-toolkit) (Python)
 
-Library        | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo |
---------       | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- |
-Haskeline      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
-Linenoise      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   |
-Linenoise-ng   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   |
-Linefeed       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   |
-Liner          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  |
-prompt-toolkit | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
-Rb-readline    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  |
-Rustyline      | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  |
+Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo |
+--------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
+[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   |
+[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   |
+[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  |
+[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
+[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  |
+
+[Haskeline]: https://github.com/judah/haskeline
+[Linefeed]: https://github.com/murarth/linefeed
+[Linenoise]: https://github.com/antirez/linenoise
+[Linenoise-ng]: https://github.com/arangodb/linenoise-ng
+[Liner]: https://github.com/MovingtoMars/liner
+[Prompt-toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
+[Rb-readline]: https://github.com/ConnorAtherton/rb-readline
+

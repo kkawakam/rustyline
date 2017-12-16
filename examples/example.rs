@@ -1,7 +1,6 @@
 extern crate log;
 extern crate rustyline;
 
-use std::io::{self, Write};
 use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
@@ -78,7 +77,7 @@ impl log::Log for Logger {
 
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
-            writeln!(io::stderr(), "{} - {}", record.level(), record.args()).unwrap();
+            eprintln!("{} - {}", record.level(), record.args());
         }
     }
 }

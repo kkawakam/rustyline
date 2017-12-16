@@ -1083,7 +1083,7 @@ struct Guard<'m>(&'m tty::Mode);
 #[allow(unused_must_use)]
 impl<'m> Drop for Guard<'m> {
     fn drop(&mut self) {
-        let Guard(ref mode) = *self;
+        let Guard(mode) = *self;
         mode.disable_raw_mode();
     }
 }
@@ -1104,7 +1104,7 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // try!(disable_raw_mode(original_mode));
-    println!("");
+    println!();
     user_input
 }
 

@@ -3,9 +3,9 @@ use std::io::{self, Stdout, Write};
 use std::mem;
 use std::sync::atomic;
 
-use kernel32;
 use unicode_width::UnicodeWidthChar;
-use winapi;
+use winapi::shared::minwindef;
+use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winnt, winuser};
 
 use config::Config;
 use consts::{self, KeyPress};
@@ -14,12 +14,12 @@ use Result;
 use line_buffer::LineBuffer;
 use super::{Position, RawMode, RawReader, Renderer, Term};
 
-const STDIN_FILENO: winapi::DWORD = winapi::STD_INPUT_HANDLE;
-const STDOUT_FILENO: winapi::DWORD = winapi::STD_OUTPUT_HANDLE;
+const STDIN_FILENO: minwindef::DWORD = winbase::STD_INPUT_HANDLE;
+const STDOUT_FILENO: minwindef::DWORD = winbase::STD_OUTPUT_HANDLE;
 
-fn get_std_handle(fd: winapi::DWORD) -> Result<winapi::HANDLE> {
-    let handle = unsafe { kernel32::GetStdHandle(fd) };
-    if handle == winapi::INVALID_HANDLE_VALUE {
+fn get_std_handle(fd: minwindef::DWORD) -> Result<winnt::HANDLE> {
+    let handle = unsafe { processenv::GetStdHandle(fd) };
+    if handle == handleapi::INVALID_HANDLE_VALUE {
         try!(Err(io::Error::last_os_error()));
     } else if handle.is_null() {
         try!(Err(io::Error::new(
@@ -43,9 +43,9 @@ macro_rules! check {
     };
 }
 
-fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
+fn get_win_size(handle: winnt::HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
-    match unsafe { kernel32::GetConsoleScreenBufferInfo(handle, &mut info) } {
+    match unsafe { wincon::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
         _ => (
             info.dwSize.X as usize,
@@ -54,9 +54,9 @@ fn get_win_size(handle: winapi::HANDLE) -> (usize, usize) {
     }
 }
 
-fn get_console_mode(handle: winapi::HANDLE) -> Result<winapi::DWORD> {
+fn get_console_mode(handle: winnt::HANDLE) -> Result<minwindef::DWORD> {
     let mut original_mode = 0;
-    check!(kernel32::GetConsoleMode(handle, &mut original_mode));
+    check!(consoleapi::GetConsoleMode(handle, &mut original_mode));
     Ok(original_mode)
 }
 
@@ -64,14 +64,14 @@ pub type Mode = ConsoleMode;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConsoleMode {
-    original_mode: winapi::DWORD,
-    stdin_handle: winapi::HANDLE,
+    original_mode: minwindef::DWORD,
+    stdin_handle: winnt::HANDLE,
 }
 
 impl RawMode for Mode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        check!(kernel32::SetConsoleMode(
+        check!(consoleapi::SetConsoleMode(
             self.stdin_handle,
             self.original_mode,
         ));
@@ -81,7 +81,7 @@ impl RawMode for Mode {
 
 /// Console input reader
 pub struct ConsoleRawReader {
-    handle: winapi::HANDLE,
+    handle: winnt::HANDLE,
     buf: Option<u16>,
 }
 
@@ -98,30 +98,30 @@ impl ConsoleRawReader {
 impl RawReader for ConsoleRawReader {
     fn next_key(&mut self) -> Result<KeyPress> {
         use std::char::decode_utf16;
-        use winapi::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
+        use winapi::um::wincon::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
 
-        let mut rec: winapi::INPUT_RECORD = unsafe { mem::zeroed() };
+        let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
         loop {
             // TODO GetNumberOfConsoleInputEvents
-            check!(kernel32::ReadConsoleInputW(
+            check!(consoleapi::ReadConsoleInputW(
                 self.handle,
                 &mut rec,
-                1 as winapi::DWORD,
+                1 as minwindef::DWORD,
                 &mut count,
             ));
 
-            if rec.EventType == winapi::WINDOW_BUFFER_SIZE_EVENT {
+            if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
                 return Err(error::ReadlineError::WindowResize);
-            } else if rec.EventType != winapi::KEY_EVENT {
+            } else if rec.EventType != wincon::KEY_EVENT {
                 continue;
             }
-            let key_event = unsafe { rec.KeyEvent() };
+            let key_event = unsafe { rec.Event.KeyEvent() };
             // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
             if key_event.bKeyDown == 0
-                && key_event.wVirtualKeyCode != winapi::VK_MENU as winapi::WORD
+                && key_event.wVirtualKeyCode != winuser::VK_MENU as minwindef::WORD
             {
                 continue;
             }
@@ -134,56 +134,56 @@ impl RawReader for ConsoleRawReader {
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt;
 
-            let utf16 = key_event.UnicodeChar;
+            let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
                 match key_event.wVirtualKeyCode as i32 {
-                    winapi::VK_LEFT => {
+                    winuser::VK_LEFT => {
                         return Ok(if ctrl {
                             KeyPress::ControlLeft
                         } else {
                             KeyPress::Left
                         })
                     }
-                    winapi::VK_RIGHT => {
+                    winuser::VK_RIGHT => {
                         return Ok(if ctrl {
                             KeyPress::ControlRight
                         } else {
                             KeyPress::Right
                         })
                     }
-                    winapi::VK_UP => {
+                    winuser::VK_UP => {
                         return Ok(if ctrl {
                             KeyPress::ControlUp
                         } else {
                             KeyPress::Up
                         })
                     }
-                    winapi::VK_DOWN => {
+                    winuser::VK_DOWN => {
                         return Ok(if ctrl {
                             KeyPress::ControlDown
                         } else {
                             KeyPress::Down
                         })
                     }
-                    winapi::VK_DELETE => return Ok(KeyPress::Delete),
-                    winapi::VK_HOME => return Ok(KeyPress::Home),
-                    winapi::VK_END => return Ok(KeyPress::End),
-                    winapi::VK_PRIOR => return Ok(KeyPress::PageUp),
-                    winapi::VK_NEXT => return Ok(KeyPress::PageDown),
-                    winapi::VK_INSERT => return Ok(KeyPress::Insert),
-                    winapi::VK_F1 => return Ok(KeyPress::F(1)),
-                    winapi::VK_F2 => return Ok(KeyPress::F(2)),
-                    winapi::VK_F3 => return Ok(KeyPress::F(3)),
-                    winapi::VK_F4 => return Ok(KeyPress::F(4)),
-                    winapi::VK_F5 => return Ok(KeyPress::F(5)),
-                    winapi::VK_F6 => return Ok(KeyPress::F(6)),
-                    winapi::VK_F7 => return Ok(KeyPress::F(7)),
-                    winapi::VK_F8 => return Ok(KeyPress::F(8)),
-                    winapi::VK_F9 => return Ok(KeyPress::F(9)),
-                    winapi::VK_F10 => return Ok(KeyPress::F(10)),
-                    winapi::VK_F11 => return Ok(KeyPress::F(11)),
-                    winapi::VK_F12 => return Ok(KeyPress::F(12)),
-                    // winapi::VK_BACK is correctly handled because the key_event.UnicodeChar is
+                    winuser::VK_DELETE => return Ok(KeyPress::Delete),
+                    winuser::VK_HOME => return Ok(KeyPress::Home),
+                    winuser::VK_END => return Ok(KeyPress::End),
+                    winuser::VK_PRIOR => return Ok(KeyPress::PageUp),
+                    winuser::VK_NEXT => return Ok(KeyPress::PageDown),
+                    winuser::VK_INSERT => return Ok(KeyPress::Insert),
+                    winuser::VK_F1 => return Ok(KeyPress::F(1)),
+                    winuser::VK_F2 => return Ok(KeyPress::F(2)),
+                    winuser::VK_F3 => return Ok(KeyPress::F(3)),
+                    winuser::VK_F4 => return Ok(KeyPress::F(4)),
+                    winuser::VK_F5 => return Ok(KeyPress::F(5)),
+                    winuser::VK_F6 => return Ok(KeyPress::F(6)),
+                    winuser::VK_F7 => return Ok(KeyPress::F(7)),
+                    winuser::VK_F8 => return Ok(KeyPress::F(8)),
+                    winuser::VK_F9 => return Ok(KeyPress::F(9)),
+                    winuser::VK_F10 => return Ok(KeyPress::F(10)),
+                    winuser::VK_F11 => return Ok(KeyPress::F(11)),
+                    winuser::VK_F12 => return Ok(KeyPress::F(12)),
+                    // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also
                     // set.
                     _ => continue,
@@ -220,12 +220,12 @@ impl Iterator for ConsoleRawReader {
 
 pub struct ConsoleRenderer {
     out: Stdout,
-    handle: winapi::HANDLE,
+    handle: winnt::HANDLE,
     cols: usize, // Number of columns in terminal
 }
 
 impl ConsoleRenderer {
-    fn new(handle: winapi::HANDLE) -> ConsoleRenderer {
+    fn new(handle: winnt::HANDLE) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
@@ -235,26 +235,26 @@ impl ConsoleRenderer {
         }
     }
 
-    fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
+    fn get_console_screen_buffer_info(&self) -> Result<wincon::CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
-        check!(kernel32::GetConsoleScreenBufferInfo(self.handle, &mut info));
+        check!(wincon::GetConsoleScreenBufferInfo(self.handle, &mut info));
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, pos: winapi::COORD) -> Result<()> {
-        check!(kernel32::SetConsoleCursorPosition(self.handle, pos));
+    fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
+        check!(wincon::SetConsoleCursorPosition(self.handle, pos));
         Ok(())
     }
 
     fn fill_console_output_character(
         &mut self,
-        length: winapi::DWORD,
-        pos: winapi::COORD,
+        length: minwindef::DWORD,
+        pos: wincon::COORD,
     ) -> Result<()> {
         let mut _count = 0;
-        check!(kernel32::FillConsoleOutputCharacterA(
+        check!(wincon::FillConsoleOutputCharacterA(
             self.handle,
-            ' ' as winapi::CHAR,
+            ' ' as winnt::CHAR,
             length,
             pos,
             &mut _count,
@@ -353,13 +353,13 @@ impl Renderer for ConsoleRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = try!(self.get_console_screen_buffer_info());
-        let coord = winapi::COORD { X: 0, Y: 0 };
-        check!(kernel32::SetConsoleCursorPosition(self.handle, coord));
+        let coord = wincon::COORD { X: 0, Y: 0 };
+        check!(wincon::SetConsoleCursorPosition(self.handle, coord));
         let mut _count = 0;
-        let n = info.dwSize.X as winapi::DWORD * info.dwSize.Y as winapi::DWORD;
-        check!(kernel32::FillConsoleOutputCharacterA(
+        let n = info.dwSize.X as minwindef::DWORD * info.dwSize.Y as minwindef::DWORD;
+        check!(wincon::FillConsoleOutputCharacterA(
             self.handle,
-            ' ' as winapi::CHAR,
+            ' ' as winnt::CHAR,
             n,
             coord,
             &mut _count,
@@ -397,8 +397,8 @@ pub type Terminal = Console;
 #[derive(Clone, Debug)]
 pub struct Console {
     stdin_isatty: bool,
-    stdin_handle: winapi::HANDLE,
-    stdout_handle: winapi::HANDLE,
+    stdin_handle: winnt::HANDLE,
+    stdout_handle: winnt::HANDLE,
 }
 
 impl Console {}
@@ -451,14 +451,14 @@ impl Term for Console {
         let original_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
         let raw = original_mode
-            & !(winapi::wincon::ENABLE_LINE_INPUT | winapi::wincon::ENABLE_ECHO_INPUT
-                | winapi::wincon::ENABLE_PROCESSED_INPUT);
+            & !(wincon::ENABLE_LINE_INPUT | wincon::ENABLE_ECHO_INPUT
+                | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
-        let raw = raw | winapi::wincon::ENABLE_EXTENDED_FLAGS;
-        let raw = raw | winapi::wincon::ENABLE_INSERT_MODE;
-        let raw = raw | winapi::wincon::ENABLE_QUICK_EDIT_MODE;
-        let raw = raw | winapi::wincon::ENABLE_WINDOW_INPUT;
-        check!(kernel32::SetConsoleMode(self.stdin_handle, raw));
+        let raw = raw | wincon::ENABLE_EXTENDED_FLAGS;
+        let raw = raw | wincon::ENABLE_INSERT_MODE;
+        let raw = raw | wincon::ENABLE_QUICK_EDIT_MODE;
+        let raw = raw | wincon::ENABLE_WINDOW_INPUT;
+        check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
         Ok(Mode {
             original_mode: original_mode,
             stdin_handle: self.stdin_handle,

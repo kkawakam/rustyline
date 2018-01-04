@@ -20,7 +20,6 @@
 #![allow(unknown_lints)]
 
 #[cfg(windows)]
-extern crate kernel32;
 extern crate libc;
 #[macro_use]
 extern crate log;

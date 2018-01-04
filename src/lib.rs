@@ -19,7 +19,6 @@
 #![feature(unicode)]
 #![allow(unknown_lints)]
 
-#[cfg(windows)]
 extern crate libc;
 #[macro_use]
 extern crate log;

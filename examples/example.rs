@@ -1,7 +1,7 @@
 extern crate log;
 extern crate rustyline;
 
-use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
+use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::hint::Hinter;
@@ -68,23 +68,26 @@ fn main() {
     rl.save_history("history.txt").unwrap();
 }
 
+static LOGGER: Logger = Logger;
 struct Logger;
 
 impl log::Log for Logger {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= LogLevel::Debug
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Debug
     }
 
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             eprintln!("{} - {}", record.level(), record.args());
         }
     }
+
+    fn flush(&self) {
+    }
 }
 
 fn init_logger() -> Result<(), SetLoggerError> {
-    log::set_logger(|max_log_level| {
-        max_log_level.set(LogLevelFilter::Info);
-        Box::new(Logger)
-    })
+    try!(log::set_logger(&LOGGER));
+    log::set_max_level(LevelFilter::Info);
+    Ok(())
 }

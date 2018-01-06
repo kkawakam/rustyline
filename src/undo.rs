@@ -8,10 +8,16 @@ use unicode_segmentation::UnicodeSegmentation;
 enum Change {
     Begin,
     End,
-    Insert { idx: usize, text: String }, // QuotedInsert, SelfInsert, Yank
-    Delete { idx: usize, text: String }, /* BackwardDeleteChar, BackwardKillWord, DeleteChar,
-                                          * KillLine, KillWholeLine, KillWord,
-                                          * UnixLikeDiscard, ViDeleteTo */
+    Insert {
+        idx: usize,
+        text: String,
+    }, // QuotedInsert, SelfInsert, Yank
+    Delete {
+        idx: usize,
+        text: String,
+    }, /* BackwardDeleteChar, BackwardKillWord, DeleteChar,
+        * KillLine, KillWholeLine, KillWord,
+        * UnixLikeDiscard, ViDeleteTo */
     Replace {
         idx: usize,
         old: String,

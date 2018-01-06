@@ -86,24 +86,24 @@ impl Cmd {
     pub fn should_reset_kill_ring(&self) -> bool {
         match *self {
             Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
-            Cmd::ClearScreen |
-            Cmd::Kill(_) |
-            Cmd::Noop |
-            Cmd::Suspend |
-            Cmd::Yank(_, _) |
-            Cmd::YankPop => false,
+            Cmd::ClearScreen
+            | Cmd::Kill(_)
+            | Cmd::Noop
+            | Cmd::Suspend
+            | Cmd::Yank(_, _)
+            | Cmd::YankPop => false,
             _ => true,
         }
     }
 
     fn is_repeatable_change(&self) -> bool {
         match *self {
-            Cmd::Insert(_, _) |
-            Cmd::Kill(_) |
-            Cmd::Replace(_, _) |
-            Cmd::SelfInsert(_, _) |
-            Cmd::ViYankTo(_) |
-            Cmd::Yank(_, _) => true,
+            Cmd::Insert(_, _)
+            | Cmd::Kill(_)
+            | Cmd::Replace(_, _)
+            | Cmd::SelfInsert(_, _)
+            | Cmd::ViYankTo(_)
+            | Cmd::Yank(_, _) => true,
             Cmd::TransposeChars => false, // TODO Validate
             _ => false,
         }

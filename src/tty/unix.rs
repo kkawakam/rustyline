@@ -54,7 +54,6 @@ fn is_unsupported_term() -> bool {
     }
 }
 
-
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
 fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
@@ -263,9 +262,7 @@ impl RawReader for PosixRawReader {
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
-            let mut fds = [
-                poll::PollFd::new(STDIN_FILENO, poll::POLLIN),
-            ];
+            let mut fds = [poll::PollFd::new(STDIN_FILENO, poll::POLLIN)];
             match poll::poll(&mut fds, self.timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
@@ -569,7 +566,7 @@ impl Term for PosixTerminal {
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{CS8, BRKINT, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
-                                IXON, /* OPOST, */};
+                                IXON /* OPOST, */};
         use nix::sys::termios::SpecialCharacterIndices;
         if !self.stdin_isatty {
             try!(Err(nix::Error::from_errno(ENOTTY)));
@@ -582,7 +579,7 @@ impl Term for PosixTerminal {
         // we don't want raw output, it turns newlines into straight linefeeds
         // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
         raw.control_flags |= CS8; // character-size mark (8 bits)
-                            // disable echoing, canonical mode, extended input processing and signals
+                                  // disable echoing, canonical mode, extended input processing and signals
         raw.local_flags &= !(ECHO | ICANON | IEXTEN | ISIG);
         raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read

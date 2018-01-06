@@ -103,7 +103,8 @@ impl ConsoleRawReader {
 impl RawReader for ConsoleRawReader {
     fn next_key(&mut self) -> Result<KeyPress> {
         use std::char::decode_utf16;
-        use winapi::um::wincon::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED};
+        use winapi::um::wincon::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED,
+                                 RIGHT_CTRL_PRESSED};
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
@@ -125,9 +126,7 @@ impl RawReader for ConsoleRawReader {
             }
             let key_event = unsafe { rec.Event.KeyEvent() };
             // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
-            if key_event.bKeyDown == 0
-                && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD
-            {
+            if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD {
                 continue;
             }
             // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
@@ -251,11 +250,7 @@ impl ConsoleRenderer {
         Ok(())
     }
 
-    fn fill_console_output_character(
-        &mut self,
-        length: DWORD,
-        pos: wincon::COORD,
-    ) -> Result<()> {
+    fn fill_console_output_character(&mut self, length: DWORD, pos: wincon::COORD) -> Result<()> {
         let mut _count = 0;
         check!(wincon::FillConsoleOutputCharacterA(
             self.handle,

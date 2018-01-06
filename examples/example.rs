@@ -82,8 +82,7 @@ impl log::Log for Logger {
         }
     }
 
-    fn flush(&self) {
-    }
+    fn flush(&self) {}
 }
 
 fn init_logger() -> Result<(), SetLoggerError> {

@@ -1138,7 +1138,6 @@ impl<C: Completer> Helper for C {
     type Completer = C;
     type Hinter = ();
 
-
     fn completer(&self) -> &C {
         self
     }

@@ -189,10 +189,6 @@ Esc          | Switch to command mode
 
 [Terminal codes (ANSI/VT100)](http://wiki.bash-hackers.org/scripting/terminalcodes)
 
-## ToDo
-
- - expose an API callable from C
-
 ## Wine
 
 ```sh

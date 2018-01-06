@@ -4,8 +4,9 @@ use std::mem;
 use std::sync::atomic;
 
 use unicode_width::UnicodeWidthChar;
-use winapi::shared::minwindef;
-use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winnt, winuser};
+use winapi::shared::minwindef::{DWORD, WORD};
+use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
+use win::winapi::um::winnt::{CHAR, HANDLE};
 
 use config::Config;
 use consts::{self, KeyPress};
@@ -14,10 +15,14 @@ use Result;
 use line_buffer::LineBuffer;
 use super::{Position, RawMode, RawReader, Renderer, Term};
 
-const STDIN_FILENO: minwindef::DWORD = winbase::STD_INPUT_HANDLE;
-const STDOUT_FILENO: minwindef::DWORD = winbase::STD_OUTPUT_HANDLE;
+const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
+const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
 
-fn get_std_handle(fd: minwindef::DWORD) -> Result<winnt::HANDLE> {
+// To enable ANSI colors (Windows 10 only):
+// https://docs.microsoft.com/en-us/windows/console/setconsolemode
+// ENABLE_VIRTUAL_TERMINAL_PROCESSING
+
+fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
     if handle == handleapi::INVALID_HANDLE_VALUE {
         try!(Err(io::Error::last_os_error()));
@@ -43,7 +48,7 @@ macro_rules! check {
     };
 }
 
-fn get_win_size(handle: winnt::HANDLE) -> (usize, usize) {
+fn get_win_size(handle: HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { wincon::GetConsoleScreenBufferInfo(handle, &mut info) } {
         0 => (80, 24),
@@ -54,7 +59,7 @@ fn get_win_size(handle: winnt::HANDLE) -> (usize, usize) {
     }
 }
 
-fn get_console_mode(handle: winnt::HANDLE) -> Result<minwindef::DWORD> {
+fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     let mut original_mode = 0;
     check!(consoleapi::GetConsoleMode(handle, &mut original_mode));
     Ok(original_mode)
@@ -64,8 +69,8 @@ pub type Mode = ConsoleMode;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConsoleMode {
-    original_mode: minwindef::DWORD,
-    stdin_handle: winnt::HANDLE,
+    original_mode: DWORD,
+    stdin_handle: HANDLE,
 }
 
 impl RawMode for Mode {
@@ -81,7 +86,7 @@ impl RawMode for Mode {
 
 /// Console input reader
 pub struct ConsoleRawReader {
-    handle: winnt::HANDLE,
+    handle: HANDLE,
     buf: Option<u16>,
 }
 
@@ -107,7 +112,7 @@ impl RawReader for ConsoleRawReader {
             check!(consoleapi::ReadConsoleInputW(
                 self.handle,
                 &mut rec,
-                1 as minwindef::DWORD,
+                1 as DWORD,
                 &mut count,
             ));
 
@@ -121,7 +126,7 @@ impl RawReader for ConsoleRawReader {
             let key_event = unsafe { rec.Event.KeyEvent() };
             // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
             if key_event.bKeyDown == 0
-                && key_event.wVirtualKeyCode != winuser::VK_MENU as minwindef::WORD
+                && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD
             {
                 continue;
             }
@@ -220,12 +225,12 @@ impl Iterator for ConsoleRawReader {
 
 pub struct ConsoleRenderer {
     out: Stdout,
-    handle: winnt::HANDLE,
+    handle: HANDLE,
     cols: usize, // Number of columns in terminal
 }
 
 impl ConsoleRenderer {
-    fn new(handle: winnt::HANDLE) -> ConsoleRenderer {
+    fn new(handle: HANDLE) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
@@ -248,13 +253,13 @@ impl ConsoleRenderer {
 
     fn fill_console_output_character(
         &mut self,
-        length: minwindef::DWORD,
+        length: DWORD,
         pos: wincon::COORD,
     ) -> Result<()> {
         let mut _count = 0;
         check!(wincon::FillConsoleOutputCharacterA(
             self.handle,
-            ' ' as winnt::CHAR,
+            ' ' as CHAR,
             length,
             pos,
             &mut _count,
@@ -300,12 +305,13 @@ impl Renderer for ConsoleRenderer {
         try!(self.set_console_cursor_position(info.dwCursorPosition));
         let mut _count = 0;
         try!(self.fill_console_output_character(
-            (info.dwSize.X * (old_rows as i16 + 1)) as u32,
+            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
             info.dwCursorPosition,
         ));
         let mut ab = String::new();
         // display the prompt
-        ab.push_str(prompt); // TODO handle ansi escape code (SetConsoleTextAttribute)
+        // TODO handle ansi escape code (SetConsoleTextAttribute)
+        ab.push_str(prompt);
         // display the input line
         ab.push_str(&line);
         try!(self.write_and_flush(ab.as_bytes()));
@@ -356,10 +362,10 @@ impl Renderer for ConsoleRenderer {
         let coord = wincon::COORD { X: 0, Y: 0 };
         check!(wincon::SetConsoleCursorPosition(self.handle, coord));
         let mut _count = 0;
-        let n = info.dwSize.X as minwindef::DWORD * info.dwSize.Y as minwindef::DWORD;
+        let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
         check!(wincon::FillConsoleOutputCharacterA(
             self.handle,
-            ' ' as winnt::CHAR,
+            ' ' as CHAR,
             n,
             coord,
             &mut _count,
@@ -397,8 +403,8 @@ pub type Terminal = Console;
 #[derive(Clone, Debug)]
 pub struct Console {
     stdin_isatty: bool,
-    stdin_handle: winnt::HANDLE,
-    stdout_handle: winnt::HANDLE,
+    stdin_handle: HANDLE,
+    stdout_handle: HANDLE,
 }
 
 impl Console {}

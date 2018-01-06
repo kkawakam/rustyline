@@ -6,7 +6,7 @@ use std::sync::atomic;
 use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
-use win::winapi::um::winnt::{CHAR, HANDLE};
+use winapi::um::winnt::{CHAR, HANDLE};
 
 use config::Config;
 use consts::{self, KeyPress};

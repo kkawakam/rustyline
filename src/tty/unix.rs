@@ -370,7 +370,7 @@ impl Renderer for PosixRenderer {
         }
         // clear old rows
         for _ in 0..old_rows {
-            ab.push_str("\r\x1b[0K\x1b[1A");
+            ab.push_str("\r\x1b[0K\x1b[A");
         }
         // clear the line
         ab.push_str("\r\x1b[0K");

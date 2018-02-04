@@ -11,8 +11,8 @@
 //! let mut rl = rustyline::Editor::<()>::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
-//!     Ok(line) => println!("Line: {:?}",line),
-//!     Err(_)   => println!("No input"),
+//!     Ok(line) => println!("Line: {:?}", line),
+//!     Err(_) => println!("No input"),
 //! }
 //! ```
 #![feature(io)]
@@ -1263,10 +1263,10 @@ impl<H: Helper> Editor<H> {
     ///     match readline {
     ///         Ok(line) => {
     ///             println!("Line: {}", line);
-    ///         },
+    ///         }
     ///         Err(err) => {
     ///             println!("Error: {:?}", err);
-    ///             break
+    ///             break;
     ///         }
     ///     }
     /// }

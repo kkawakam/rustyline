@@ -302,6 +302,7 @@ impl EditState {
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }
                 }
+                KeyPress::Char('-') | KeyPress::Meta('-') => {}
                 _ => return Ok(key),
             };
         }

@@ -668,8 +668,9 @@ impl LineBuffer {
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
         for dl in &self.dl {
-            dl.borrow_mut()
-                .delete(range.start, &self.buf[range.start..range.end], dir);
+            if let Ok(mut dl) = dl.try_borrow_mut() {
+                dl.delete(range.start, &self.buf[range.start..range.end], dir);
+            }
         }
         for cl in &self.cl {
             cl.borrow_mut()

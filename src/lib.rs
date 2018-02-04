@@ -280,8 +280,11 @@ fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Resul
 // Delete previously yanked text and yank/paste `text` at current position.
 fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
     s.changes.borrow_mut().begin();
-    s.line.yank_pop(yank_size, text);
-    let result = edit_yank(s, text, Anchor::Before, 1);
+    let result = if s.line.yank_pop(yank_size, text).is_some() {
+        s.refresh_line()
+    } else {
+        Ok(())
+    };
     s.changes.borrow_mut().end();
     result
 }

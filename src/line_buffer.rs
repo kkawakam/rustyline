@@ -974,11 +974,17 @@ mod test {
 
     #[test]
     fn move_to_prev_word() {
-        let mut s = LineBuffer::init("a ß  c", 6, None);
+        let mut s = LineBuffer::init("a ß  c", 6, None); // before 'c'
         let ok = s.move_to_prev_word(Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
-        assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert_eq!(2, s.pos); // before 'ß'
+        assert!(true, ok);
+
+        assert!(s.move_end()); // after 'c'
+        assert_eq!(7, s.pos);
+        let ok = s.move_to_prev_word(Word::Emacs, 1);
+        assert!(true, ok);
+        assert_eq!(6, s.pos); // before 'c'
     }
 
     #[test]
@@ -1069,11 +1075,15 @@ mod test {
 
     #[test]
     fn move_to_next_word() {
-        let mut s = LineBuffer::init("a ß  c", 1, None);
+        let mut s = LineBuffer::init("a ß  c", 1, None); // after 'a'
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
-        assert_eq!(4, s.pos);
         assert_eq!(true, ok);
+        assert_eq!(4, s.pos); // after 'ß'
+
+        let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
+        assert_eq!(true, ok);
+        assert_eq!(7, s.pos); // after 'c'
     }
 
     #[test]

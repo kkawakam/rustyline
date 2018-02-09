@@ -23,8 +23,10 @@ pub enum ReadlineError {
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
-    #[cfg(windows)] WindowResize,
-    #[cfg(windows)] Decode(char::DecodeUtf16Error),
+    #[cfg(windows)]
+    WindowResize,
+    #[cfg(windows)]
+    Decode(char::DecodeUtf16Error),
 }
 
 impl fmt::Display for ReadlineError {

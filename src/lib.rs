@@ -1191,10 +1191,8 @@ impl<H: Helper> Editor<H> {
     /// that it pre-populates the input area.
     ///
     /// The text that resides in the input area is given as a 2-tuple.
-    /// The string on the left of the tuple what will appear to the left of the
-    /// cursor
-    /// and the string on the right is what will appear to the right of the
-    /// cursor.
+    /// The string on the left of the tuple is what will appear to the left of the cursor
+    /// and the string on the right is what will appear to the right of the cursor.
     pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
         self.readline_with(prompt, Some(initial))
     }

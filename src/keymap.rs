@@ -296,7 +296,8 @@ impl EditState {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
                     if self.num_args == -1 {
                         self.num_args *= digit.to_digit(10).unwrap() as i16;
-                    } else {
+                    } else if self.num_args.abs() < 1000 {
+                        // shouldn't ever need more than 4 digits
                         self.num_args = self.num_args
                             .saturating_mul(10)
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
@@ -404,9 +405,12 @@ impl EditState {
             let key = try!(rdr.next_key());
             match key {
                 KeyPress::Char(digit @ '0'...'9') => {
-                    self.num_args = self.num_args
-                        .saturating_mul(10)
-                        .saturating_add(digit.to_digit(10).unwrap() as i16);
+                    if self.num_args.abs() < 1000 {
+                        // shouldn't ever need more than 4 digits
+                        self.num_args = self.num_args
+                            .saturating_mul(10)
+                            .saturating_add(digit.to_digit(10).unwrap() as i16);
+                    }
                 }
                 _ => return Ok(key),
             };

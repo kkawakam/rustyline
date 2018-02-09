@@ -110,6 +110,7 @@ impl LineBuffer {
     pub fn pos(&self) -> usize {
         self.pos
     }
+    /// Set cursor position (byte position)
     pub fn set_pos(&mut self, pos: usize) {
         assert!(pos <= self.buf.len());
         self.pos = pos;
@@ -152,6 +153,8 @@ impl LineBuffer {
         }
     }
 
+    /// Returns the position of the character just after the current cursor
+    /// position.
     pub fn next_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == self.buf.len() {
             return None;

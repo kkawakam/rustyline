@@ -80,7 +80,7 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
-            keyseq_timeout: 500,
+            keyseq_timeout: -1,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
         }
@@ -178,6 +178,10 @@ impl Builder {
     /// Choose between Emacs or Vi mode.
     pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
         self.p.edit_mode = edit_mode;
+        match edit_mode {
+            EditMode::Emacs => self.p.keyseq_timeout = -1, // no timeout
+            EditMode::Vi => self.p.keyseq_timeout = 500,
+        };
         self
     }
 

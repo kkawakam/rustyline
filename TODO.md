@@ -1,6 +1,8 @@
 API
 - [ ] expose an API callable from C
 
+Async (#126)
+
 Bell
 - [ ] bell-style
 
@@ -10,7 +12,7 @@ Color
 - [ ] Syntax highlighting
 
 Completion
-- [ ] Quoted path ()
+- [ ] Quoted path
 - [ ] Windows escape/unescape space in path
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)
@@ -56,6 +58,8 @@ Undo
 - [ ] Merge consecutive Replace
 - [ ] Undo group
 - [ ] Undo all changes made to this line.
+- [ ] Kill+Insert (substitute/replace)
+- [ ] Repeated undo `Undo(RepeatCount)`
 
 Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)

@@ -1,6 +1,7 @@
 # RustyLine
 [![Build Status](https://travis-ci.org/gwenn/rustyline.svg?branch=master)](https://travis-ci.org/gwenn/rustyline)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/gwenn/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/gwenn/rustyline)
+[![dependency status](https://deps.rs/repo/github/gwenn/rustyline/status.svg)](https://deps.rs/repo/github/gwenn/rustyline)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 [![Docs](https://docs.rs/rustyline/badge.svg)](https://docs.rs/rustyline)
 

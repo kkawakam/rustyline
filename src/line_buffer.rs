@@ -407,7 +407,7 @@ impl LineBuffer {
         }
         let mut wp = 0;
         let mut gis = self.buf[pos..].grapheme_indices(true);
-        let mut gi = if at != At::Start {
+        let mut gi = if at == At::BeforeEnd {
             // TODO Validate
             gis.next()
         } else {
@@ -1088,6 +1088,11 @@ mod test {
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!(true, ok);
         assert_eq!(7, s.pos); // after 'c'
+
+        s.move_home();
+        let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
+        assert_eq!(true, ok);
+        assert_eq!(1, s.pos); // after 'a'
     }
 
     #[test]

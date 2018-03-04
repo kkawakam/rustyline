@@ -99,18 +99,18 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
-            out: out,
-            prompt: prompt,
-            prompt_size: prompt_size,
+            out,
+            prompt,
+            prompt_size,
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
             old_rows: 0,
-            history_index: history_index,
+            history_index,
             saved_line_for_history: LineBuffer::with_capacity(capacity),
             byte_buffer: [0; 4],
             edit_state: EditState::new(config, custom_bindings),
             changes: Rc::new(RefCell::new(Changeset::new())),
-            hinter: hinter,
+            hinter,
         }
     }
 
@@ -1169,11 +1169,11 @@ impl<H: Helper> Editor<H> {
     pub fn with_config(config: Config) -> Editor<H> {
         let term = Terminal::new();
         Editor {
-            term: term,
+            term,
             history: History::with_config(config),
             helper: None,
             kill_ring: Rc::new(RefCell::new(KillRing::new(60))),
-            config: config,
+            config,
             custom_bindings: Rc::new(RefCell::new(HashMap::new())),
         }
     }
@@ -1272,7 +1272,7 @@ impl<H: Helper> Editor<H> {
     pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<H> {
         Iter {
             editor: self,
-            prompt: prompt,
+            prompt,
         }
     }
 

@@ -298,7 +298,7 @@ impl PosixRenderer {
         let (cols, _) = get_win_size();
         PosixRenderer {
             out: io::stdout(),
-            cols: cols,
+            cols,
         }
     }
 }

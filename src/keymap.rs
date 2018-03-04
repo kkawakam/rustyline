@@ -257,7 +257,7 @@ impl EditState {
     pub fn new(config: &Config, custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>) -> EditState {
         EditState {
             mode: config.edit_mode(),
-            custom_bindings: custom_bindings,
+            custom_bindings,
             input_mode: InputMode::Insert,
             num_args: 0,
             last_cmd: Cmd::Noop,

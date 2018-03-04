@@ -133,8 +133,8 @@ impl Changeset {
         let mut text = String::new();
         text.push(c);
         Change::Insert {
-            idx: idx,
-            text: text,
+            idx,
+            text,
         }
     }
 
@@ -159,7 +159,7 @@ impl Changeset {
         debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
         self.redos.clear();
         self.undos.push(Change::Insert {
-            idx: idx,
+            idx,
             text: string.into(),
         });
     }

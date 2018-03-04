@@ -415,6 +415,7 @@ impl LineBuffer {
             None
         };
         'outer: for _ in 0..n {
+            wp = 0;
             gi = gis.next();
             'inner: loop {
                 match gi {
@@ -1098,6 +1099,10 @@ mod test {
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!(true, ok);
         assert_eq!(1, s.pos); // after 'a'
+
+        let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 2);
+        assert_eq!(true, ok);
+        assert_eq!(7, s.pos); // after 'c'
     }
 
     #[test]

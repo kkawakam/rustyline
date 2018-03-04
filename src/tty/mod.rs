@@ -65,7 +65,7 @@ pub trait Renderer {
     fn sigwinch(&self) -> bool;
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);
-    /// Get the number of rows in the current terminal.
+    /// Get the number of columns in the current terminal.
     fn get_columns(&self) -> usize;
     /// Get the number of rows in the current terminal.
     fn get_rows(&self) -> usize;

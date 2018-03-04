@@ -351,6 +351,7 @@ impl LineBuffer {
         let mut sow = 0;
         let mut gis = self.buf[..pos].grapheme_indices(true).rev();
         'outer: for _ in 0..n {
+            sow = 0;
             let mut gj = gis.next();
             'inner: loop {
                 match gj {
@@ -989,6 +990,10 @@ mod test {
         let ok = s.move_to_prev_word(Word::Emacs, 1);
         assert!(true, ok);
         assert_eq!(6, s.pos); // before 'c'
+
+        let ok = s.move_to_prev_word(Word::Emacs, 2);
+        assert!(true, ok);
+        assert_eq!(0, s.pos);
     }
 
     #[test]

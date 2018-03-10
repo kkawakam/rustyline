@@ -11,14 +11,13 @@ use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 use config::Config;
 use consts::{self, KeyPress};
 use Result;
 use error;
 use line_buffer::LineBuffer;
-use super::{Position, RawMode, RawReader, Renderer, Term};
+use super::{Position, RawMode, RawReader, Renderer, Term, truncate, width};
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -461,50 +460,6 @@ impl Renderer for PosixRenderer {
         let (_, rows) = get_win_size();
         rows
     }
-}
-
-fn width(s: &str, esc_seq: &mut u8) -> usize {
-    if *esc_seq == 1 {
-        if s == "[" {
-            // CSI
-            *esc_seq = 2;
-        } else {
-            // two-character sequence
-            *esc_seq = 0;
-        }
-        0
-    } else if *esc_seq == 2 {
-        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
-        } else if s == "m" {
-            // last
-            *esc_seq = 0;
-        } else {
-            // not supported
-            *esc_seq = 0;
-        }
-        0
-    } else if s == "\x1b" {
-        *esc_seq = 1;
-        0
-    } else if s == "\n" {
-        0
-    } else {
-        s.width()
-    }
-}
-
-fn truncate(text: &str, col: usize, max_col: usize) -> &str {
-    let mut col = col;
-    let mut esc_seq = 0;
-    let mut end = text.len();
-    for (i, s) in text.grapheme_indices(true) {
-        col += width(s, &mut esc_seq);
-        if col > max_col {
-            end = i;
-            break;
-        }
-    }
-    &text[..end]
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;

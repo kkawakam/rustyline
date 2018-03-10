@@ -13,7 +13,7 @@ use consts::{self, KeyPress};
 use error;
 use Result;
 use line_buffer::LineBuffer;
-use super::{Position, RawMode, RawReader, Renderer, Term};
+use super::{Position, RawMode, RawReader, Renderer, Term, truncate};
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;

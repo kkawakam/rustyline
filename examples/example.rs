@@ -22,7 +22,11 @@ struct Hints {}
 impl Hinter for Hints {
     fn hint(&self, line: &str, _pos: usize) -> Option<String> {
         if line == "hello" {
-            Some(" \x1b[1mWorld\x1b[m".to_owned())
+            if cfg!(target_os = "windows") {
+                Some(" World".to_owned())
+            } else {
+                Some(" \x1b[1mWorld\x1b[m".to_owned())
+            }
         } else {
             None
         }

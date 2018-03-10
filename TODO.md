@@ -29,7 +29,7 @@ Grapheme
 - [ ] grapheme & input auto-wrap are buggy
 
 Hints Callback
-- [ ] Not implemented on windows
+- [x] Not implemented on windows
 
 History
 - [ ] Move to the history line n

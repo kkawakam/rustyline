@@ -308,6 +308,10 @@ impl Renderer for ConsoleRenderer {
         ab.push_str(prompt);
         // display the input line
         ab.push_str(&line);
+        // display hint
+        if let Some(hint) = hint {
+            ab.push_str(truncate(&hint, end_pos.col, self.cols));
+        }
         try!(self.write_and_flush(ab.as_bytes()));
 
         // position the cursor

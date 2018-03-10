@@ -7,7 +7,7 @@ use config::Config;
 use config::EditMode;
 use consts::KeyPress;
 use tty::RawReader;
-use super::{Refresher, Result};
+use super::Result;
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -251,6 +251,14 @@ pub struct EditState {
     last_cmd: Cmd, // vi only
     consecutive_insert: bool,
     last_char_search: Option<CharSearch>, // vi only
+}
+
+pub trait Refresher {
+    /// Rewrite the currently edited line accordingly to the buffer content,
+    /// cursor position, and number of columns of the terminal.
+    fn refresh_line(&mut self) -> Result<()>;
+    /// Same as `refresh_line` but with a dynamic prompt.
+    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
 }
 
 impl EditState {

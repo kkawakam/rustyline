@@ -7,7 +7,7 @@ Bell
 - [ ] bell-style
 
 Color
-- [ ] ANSI Colors & Windows 10+
+- [x] ANSI Colors & Windows 10+
 - [ ] ANSI Colors & Windows <10
 - [ ] Syntax highlighting
 

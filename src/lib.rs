@@ -60,7 +60,7 @@ use hint::Hinter;
 use history::{Direction, History};
 use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use keymap::EditState;
+use keymap::{EditState, Refresher};
 use kill_ring::{KillRing, Mode};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 use undo::Changeset;
@@ -68,14 +68,6 @@ pub use consts::KeyPress;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
-
-pub trait Refresher {
-    /// Rewrite the currently edited line accordingly to the buffer content,
-    /// cursor position, and number of columns of the terminal.
-    fn refresh_line(&mut self) -> Result<()>;
-    /// Same as `refresh_line` but with a dynamic prompt.
-    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
-}
 
 /// Represent the state during line editing.
 /// Implement rendering.

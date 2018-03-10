@@ -215,16 +215,17 @@ $ bind -p
  - [liner](https://github.com/peterh/liner) (Go)
  - [readline](https://github.com/chzyer/readline) (Go)
 
-Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo |
---------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- |
-[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
-[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   |
-[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   |
-[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   |
-[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  |
-[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  |
-[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  |
-Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  |
+Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors |
+--------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------ |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  | ?      |
+[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux     |
+[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?      |
+[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   | ?      |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  | Ux     |
+[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  | Ux/Win |
+[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?      |
+[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  | Ux     |
 
 [Haskeline]: https://github.com/judah/haskeline
 [Linefeed]: https://github.com/murarth/linefeed
@@ -233,4 +234,5 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           |       
 [Liner]: https://github.com/MovingtoMars/liner
 [Prompt-toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [Rb-readline]: https://github.com/ConnorAtherton/rb-readline
+[Replxx]: https://github.com/AmokHuginnsson/replxx
 

@@ -298,7 +298,6 @@ impl Renderer for ConsoleRenderer {
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= current_row as i16;
         try!(self.set_console_cursor_position(info.dwCursorPosition));
-        let mut _count = 0;
         try!(self.clear(
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
             info.dwCursorPosition,

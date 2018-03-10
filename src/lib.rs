@@ -987,7 +987,7 @@ fn readline_edit<H: Helper>(
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.borrow_mut().yank() {
-                    try!(edit_yank(&mut s, &mut edit_state, text, anchor, n))
+                    try!(edit_yank(&mut s, &edit_state, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {

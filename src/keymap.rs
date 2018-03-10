@@ -7,7 +7,7 @@ use config::Config;
 use config::EditMode;
 use consts::KeyPress;
 use tty::RawReader;
-use super::{Result, Refresher};
+use super::{Refresher, Result};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -280,7 +280,12 @@ impl EditState {
     }
 
     // TODO dynamic prompt (arg: ?)
-    fn emacs_digit_argument<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, digit: char) -> Result<KeyPress> {
+    fn emacs_digit_argument<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut Refresher,
+        digit: char,
+    ) -> Result<KeyPress> {
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -307,8 +312,8 @@ impl EditState {
                 KeyPress::Char('-') | KeyPress::Meta('-') => {}
                 _ => {
                     try!(wrt.refresh_line());
-                    return Ok(key)
-                },
+                    return Ok(key);
+                }
             };
         }
     }
@@ -403,7 +408,12 @@ impl EditState {
         Ok(cmd)
     }
 
-    fn vi_arg_digit<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, digit: char) -> Result<KeyPress> {
+    fn vi_arg_digit<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut Refresher,
+        digit: char,
+    ) -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
             try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
@@ -419,8 +429,8 @@ impl EditState {
                 }
                 _ => {
                     try!(wrt.refresh_line());
-                    return Ok(key)
-                },
+                    return Ok(key);
+                }
             };
         }
     }

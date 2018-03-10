@@ -132,10 +132,7 @@ impl Changeset {
     fn insert_char(idx: usize, c: char) -> Change {
         let mut text = String::new();
         text.push(c);
-        Change::Insert {
-            idx,
-            text,
-        }
+        Change::Insert { idx, text }
     }
 
     pub fn insert(&mut self, idx: usize, c: char) {

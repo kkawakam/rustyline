@@ -189,7 +189,6 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
         let hint = self.hint();
         self.refresh(prompt, prompt_size, hint)
     }
-
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
@@ -268,7 +267,13 @@ fn edit_overwrite_char(s: &mut State, ch: char) -> Result<()> {
 }
 
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, edit_state: &EditState, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
+fn edit_yank(
+    s: &mut State,
+    edit_state: &EditState,
+    text: &str,
+    anchor: Anchor,
+    n: RepeatCount,
+) -> Result<()> {
     if let Anchor::After = anchor {
         s.line.move_forward(1);
     }
@@ -823,12 +828,7 @@ fn readline_edit<H: Helper>(
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring();
-    let mut s = State::new(
-        &mut stdout,
-        prompt,
-        editor.history.len(),
-        hinter,
-    );
+    let mut s = State::new(&mut stdout, prompt, editor.history.len(), hinter);
     let mut edit_state = EditState::new(&editor.config, Rc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -1412,7 +1412,13 @@ mod test {
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
-        let cmd = super::complete_line(&mut rdr, &mut s, &mut edit_state, &completer, &Config::default()).unwrap();
+        let cmd = super::complete_line(
+            &mut rdr,
+            &mut s,
+            &mut edit_state,
+            &completer,
+            &Config::default(),
+        ).unwrap();
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

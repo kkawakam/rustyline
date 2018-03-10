@@ -18,10 +18,6 @@ use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
 
-// To enable ANSI colors (Windows 10 only):
-// https://docs.microsoft.com/en-us/windows/console/setconsolemode
-// ENABLE_VIRTUAL_TERMINAL_PROCESSING
-
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
     if handle == handleapi::INVALID_HANDLE_VALUE {
@@ -69,8 +65,10 @@ pub type Mode = ConsoleMode;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConsoleMode {
-    original_mode: DWORD,
+    original_stdin_mode: DWORD,
     stdin_handle: HANDLE,
+    original_stdout_mode: DWORD,
+    stdout_handle: HANDLE,
 }
 
 impl RawMode for Mode {
@@ -78,7 +76,11 @@ impl RawMode for Mode {
     fn disable_raw_mode(&self) -> Result<()> {
         check!(consoleapi::SetConsoleMode(
             self.stdin_handle,
-            self.original_mode,
+            self.original_stdin_mode,
+        ));
+        check!(consoleapi::SetConsoleMode(
+            self.stdout_handle,
+            self.original_stdout_mode,
         ));
         Ok(())
     }
@@ -444,9 +446,9 @@ impl Term for Console {
                 "no stdio handle available for this process",
             ),));
         }
-        let original_mode = try!(get_console_mode(self.stdin_handle));
+        let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
-        let raw = original_mode
+        let raw = original_stdin_mode
             & !(wincon::ENABLE_LINE_INPUT | wincon::ENABLE_ECHO_INPUT
                 | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
@@ -455,9 +457,20 @@ impl Term for Console {
         let raw = raw | wincon::ENABLE_QUICK_EDIT_MODE;
         let raw = raw | wincon::ENABLE_WINDOW_INPUT;
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
+
+        let original_stdout_mode = try!(get_console_mode(self.stdout_handle));
+        // To enable ANSI colors (Windows 10 only):
+        // https://docs.microsoft.com/en-us/windows/console/setconsolemode
+        if console_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
+            let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            check!(consoleapi::SetConsoleMode(self.stdout_handle, raw));
+        }
+
         Ok(Mode {
-            original_mode: original_mode,
+            original_stdin_mode: original_stdin_mode,
             stdin_handle: self.stdin_handle,
+            original_stdout_mode: original_stdin_mode,
+            stdout_handle: self.stdout_handle,
         })
     }
 

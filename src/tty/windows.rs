@@ -461,7 +461,7 @@ impl Term for Console {
         let original_stdout_mode = try!(get_console_mode(self.stdout_handle));
         // To enable ANSI colors (Windows 10 only):
         // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-        if console_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
+        if original_stdout_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
             let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
             check!(consoleapi::SetConsoleMode(self.stdout_handle, raw));
         }

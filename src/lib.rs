@@ -69,6 +69,14 @@ pub use consts::KeyPress;
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
+pub trait Refresher {
+    /// Rewrite the currently edited line accordingly to the buffer content,
+    /// cursor position, and number of columns of the terminal.
+    fn refresh_line(&mut self) -> Result<()>;
+    /// Same as `refresh_line` but with a dynamic prompt.
+    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
+}
+
 /// Represent the state during line editing.
 /// Implement rendering.
 struct State<'out, 'prompt> {
@@ -82,7 +90,6 @@ struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
-    edit_state: EditState,
     changes: Rc<RefCell<Changeset>>,
     hinter: Option<&'out Hinter>,
 }
@@ -90,10 +97,8 @@ struct State<'out, 'prompt> {
 impl<'out, 'prompt> State<'out, 'prompt> {
     fn new(
         out: &'out mut Renderer,
-        config: &Config,
         prompt: &'prompt str,
         history_index: usize,
-        custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
         hinter: Option<&'out Hinter>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
@@ -108,15 +113,14 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             history_index,
             saved_line_for_history: LineBuffer::with_capacity(capacity),
             byte_buffer: [0; 4],
-            edit_state: EditState::new(config, custom_bindings),
             changes: Rc::new(RefCell::new(Changeset::new())),
             hinter,
         }
     }
 
-    fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+    fn next_cmd<R: RawReader>(&mut self, edit_state: &mut EditState, rdr: &mut R) -> Result<Cmd> {
         loop {
-            let rc = self.edit_state.next_cmd(rdr);
+            let rc = edit_state.next_cmd(rdr, self);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 try!(self.refresh_line());
@@ -149,20 +153,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    /// Rewrite the currently edited line accordingly to the buffer content,
-    /// cursor position, and number of columns of the terminal.
-    fn refresh_line(&mut self) -> Result<()> {
-        let prompt_size = self.prompt_size;
-        let hint = self.hint();
-        self.refresh(self.prompt, prompt_size, hint)
-    }
-
-    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.out.calculate_position(prompt, Position::default());
-        let hint = self.hint();
-        self.refresh(prompt, prompt_size, hint)
-    }
-
     fn refresh(&mut self, prompt: &str, prompt_size: Position, hint: Option<String>) -> Result<()> {
         let (cursor, end_pos) = try!(self.out.refresh_line(
             prompt,
@@ -185,6 +175,21 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             None
         }
     }
+}
+
+impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
+    fn refresh_line(&mut self) -> Result<()> {
+        let prompt_size = self.prompt_size;
+        let hint = self.hint();
+        self.refresh(self.prompt, prompt_size, hint)
+    }
+
+    fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
+        let prompt_size = self.out.calculate_position(prompt, Position::default());
+        let hint = self.hint();
+        self.refresh(prompt, prompt_size, hint)
+    }
+
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
@@ -263,12 +268,12 @@ fn edit_overwrite_char(s: &mut State, ch: char) -> Result<()> {
 }
 
 // Yank/paste `text` at current position.
-fn edit_yank(s: &mut State, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
+fn edit_yank(s: &mut State, edit_state: &EditState, text: &str, anchor: Anchor, n: RepeatCount) -> Result<()> {
     if let Anchor::After = anchor {
         s.line.move_forward(1);
     }
     if s.line.yank(text, n).is_some() {
-        if !s.edit_state.is_emacs_mode() {
+        if !edit_state.is_emacs_mode() {
             s.line.move_backward(1);
         }
         s.refresh_line()
@@ -543,6 +548,7 @@ fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
 fn complete_line<R: RawReader, C: Completer>(
     rdr: &mut R,
     s: &mut State,
+    edit_state: &mut EditState,
     completer: &C,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -570,7 +576,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 try!(s.refresh_line());
             }
 
-            cmd = try!(s.next_cmd(rdr));
+            cmd = try!(s.next_cmd(edit_state, rdr));
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -608,7 +614,7 @@ fn complete_line<R: RawReader, C: Completer>(
             }
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = try!(s.next_cmd(rdr));
+        let mut cmd = try!(s.next_cmd(edit_state, rdr));
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -627,7 +633,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = try!(s.next_cmd(rdr));
+                cmd = try!(s.next_cmd(edit_state, rdr));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
@@ -637,7 +643,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, &candidates)
+            page_completions(rdr, s, edit_state, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -650,6 +656,7 @@ fn complete_line<R: RawReader, C: Completer>(
 fn page_completions<R: RawReader>(
     rdr: &mut R,
     s: &mut State,
+    edit_state: &mut EditState,
     candidates: &[String],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -682,7 +689,7 @@ fn page_completions<R: RawReader>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
             {
-                cmd = try!(s.next_cmd(rdr));
+                cmd = try!(s.next_cmd(edit_state, rdr));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
@@ -722,6 +729,7 @@ fn page_completions<R: RawReader>(
 fn reverse_incremental_search<R: RawReader>(
     rdr: &mut R,
     s: &mut State,
+    edit_state: &mut EditState,
     history: &History,
 ) -> Result<Option<Cmd>> {
     if history.is_empty() {
@@ -747,7 +755,7 @@ fn reverse_incremental_search<R: RawReader>(
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        cmd = try!(s.next_cmd(rdr));
+        cmd = try!(s.next_cmd(edit_state, rdr));
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -817,12 +825,11 @@ fn readline_edit<H: Helper>(
     editor.reset_kill_ring();
     let mut s = State::new(
         &mut stdout,
-        &editor.config,
         prompt,
         editor.history.len(),
-        Rc::clone(&editor.custom_bindings),
         hinter,
     );
+    let mut edit_state = EditState::new(&editor.config, Rc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
     s.line.set_change_listener(s.changes.clone());
@@ -837,7 +844,7 @@ fn readline_edit<H: Helper>(
     let mut rdr = try!(editor.term.create_reader(&editor.config));
 
     loop {
-        let rc = s.next_cmd(&mut rdr);
+        let rc = s.next_cmd(&mut edit_state, &mut rdr);
         let mut cmd = try!(rc);
 
         if cmd.should_reset_kill_ring() {
@@ -849,6 +856,7 @@ fn readline_edit<H: Helper>(
             let next = try!(complete_line(
                 &mut rdr,
                 &mut s,
+                &mut edit_state,
                 completer.unwrap(),
                 &editor.config,
             ));
@@ -863,7 +871,7 @@ fn readline_edit<H: Helper>(
             try!(edit_insert(&mut s, c, n));
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            try!(edit_yank(&mut s, &text, Anchor::Before, n));
+            try!(edit_yank(&mut s, &edit_state, &text, Anchor::Before, n));
             continue;
         }
 
@@ -872,6 +880,7 @@ fn readline_edit<H: Helper>(
             let next = try!(reverse_incremental_search(
                 &mut rdr,
                 &mut s,
+                &mut edit_state,
                 &editor.history,
             ));
             if next.is_some() {
@@ -904,7 +913,7 @@ fn readline_edit<H: Helper>(
             Cmd::Overwrite(c) => {
                 try!(edit_overwrite_char(&mut s, c));
             }
-            Cmd::EndOfFile => if !s.edit_state.is_emacs_mode() && !s.line.is_empty() {
+            Cmd::EndOfFile => if !edit_state.is_emacs_mode() && !s.line.is_empty() {
                 try!(edit_move_end(&mut s));
                 break;
             } else if s.line.is_empty() {
@@ -978,7 +987,7 @@ fn readline_edit<H: Helper>(
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.borrow_mut().yank() {
-                    try!(edit_yank(&mut s, text, anchor, n))
+                    try!(edit_yank(&mut s, &mut edit_state, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {
@@ -1328,7 +1337,6 @@ mod test {
     use undo::Changeset;
 
     fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> State<'out, 'static> {
-        let config = Config::default();
         State {
             out: out,
             prompt: "",
@@ -1339,7 +1347,6 @@ mod test {
             history_index: 0,
             saved_line_for_history: LineBuffer::with_capacity(100),
             byte_buffer: [0; 4],
-            edit_state: EditState::new(&config, Rc::new(RefCell::new(HashMap::new()))),
             changes: Rc::new(RefCell::new(Changeset::new())),
             hinter: None,
         }
@@ -1400,10 +1407,12 @@ mod test {
     fn complete_line() {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3);
+        let config = Config::default();
+        let mut edit_state = EditState::new(&config, Rc::new(RefCell::new(HashMap::new())));
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
-        let cmd = super::complete_line(&mut rdr, &mut s, &completer, &Config::default()).unwrap();
+        let cmd = super::complete_line(&mut rdr, &mut s, &mut edit_state, &completer, &Config::default()).unwrap();
         assert_eq!(Some(Cmd::AcceptLine), cmd);
         assert_eq!("rust", s.line.as_str());
         assert_eq!(4, s.line.pos());

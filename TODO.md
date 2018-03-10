@@ -51,7 +51,7 @@ Movement
 - [ ] Move to the corresponding opening/closing bracket
 
 Repeat
-- [ ] dynamic prompt (arg: ?)
+- [x] dynamic prompt (arg: ?)
 - [ ] transpose chars
 
 Undo

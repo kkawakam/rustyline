@@ -7,7 +7,7 @@ use config::Config;
 use config::EditMode;
 use consts::KeyPress;
 use tty::RawReader;
-use super::Result;
+use super::{Result, Refresher};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -271,16 +271,16 @@ impl EditState {
     }
 
     /// Parse user input into one command
-    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
         match self.mode {
-            EditMode::Emacs => self.emacs(rdr),
+            EditMode::Emacs => self.emacs(rdr, wrt),
             EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr),
-            EditMode::Vi => self.vi_command(rdr),
+            EditMode::Vi => self.vi_command(rdr, wrt),
         }
     }
 
     // TODO dynamic prompt (arg: ?)
-    fn emacs_digit_argument<R: RawReader>(&mut self, rdr: &mut R, digit: char) -> Result<KeyPress> {
+    fn emacs_digit_argument<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, digit: char) -> Result<KeyPress> {
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -291,6 +291,7 @@ impl EditState {
             _ => unreachable!(),
         }
         loop {
+            try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
             let key = try!(rdr.next_key());
             match key {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
@@ -304,17 +305,20 @@ impl EditState {
                     }
                 }
                 KeyPress::Char('-') | KeyPress::Meta('-') => {}
-                _ => return Ok(key),
+                _ => {
+                    try!(wrt.refresh_line());
+                    return Ok(key)
+                },
             };
         }
     }
 
-    fn emacs<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+    fn emacs<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
         let mut key = try!(rdr.next_key());
         if let KeyPress::Meta(digit @ '-') = key {
-            key = try!(self.emacs_digit_argument(rdr, digit));
+            key = try!(self.emacs_digit_argument(rdr, wrt, digit));
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
-            key = try!(self.emacs_digit_argument(rdr, digit));
+            key = try!(self.emacs_digit_argument(rdr, wrt, digit));
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
@@ -399,9 +403,10 @@ impl EditState {
         Ok(cmd)
     }
 
-    fn vi_arg_digit<R: RawReader>(&mut self, rdr: &mut R, digit: char) -> Result<KeyPress> {
+    fn vi_arg_digit<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, digit: char) -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
+            try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
             let key = try!(rdr.next_key());
             match key {
                 KeyPress::Char(digit @ '0'...'9') => {
@@ -412,15 +417,18 @@ impl EditState {
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }
                 }
-                _ => return Ok(key),
+                _ => {
+                    try!(wrt.refresh_line());
+                    return Ok(key)
+                },
             };
         }
     }
 
-    fn vi_command<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
         let mut key = try!(rdr.next_key());
         if let KeyPress::Char(digit @ '1'...'9') = key {
-            key = try!(self.vi_arg_digit(rdr, digit));
+            key = try!(self.vi_arg_digit(rdr, wrt, digit));
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
@@ -463,7 +471,7 @@ impl EditState {
             KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             KeyPress::Char('c') => {
                 self.input_mode = InputMode::Insert;
-                match try!(self.vi_cmd_motion(rdr, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
@@ -473,7 +481,7 @@ impl EditState {
                 Cmd::Kill(Movement::EndOfLine)
             }
             KeyPress::Char('d') => {
-                match try!(self.vi_cmd_motion(rdr, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
@@ -546,7 +554,7 @@ impl EditState {
             KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete: TODO move backward if eol
             KeyPress::Char('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
             KeyPress::Char('y') => {
-                match try!(self.vi_cmd_motion(rdr, key, n)) {
+                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::ViYankTo(mvt),
                     None => Cmd::Unknown,
                 }
@@ -622,6 +630,7 @@ impl EditState {
     fn vi_cmd_motion<R: RawReader>(
         &mut self,
         rdr: &mut R,
+        wrt: &mut Refresher,
         key: KeyPress,
         n: RepeatCount,
     ) -> Result<Option<Movement>> {
@@ -632,7 +641,7 @@ impl EditState {
         let mut n = n;
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
-            mvt = try!(self.vi_arg_digit(rdr, digit));
+            mvt = try!(self.vi_arg_digit(rdr, wrt, digit));
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {

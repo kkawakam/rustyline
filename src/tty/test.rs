@@ -9,7 +9,7 @@ use config::Config;
 use consts::KeyPress;
 use error::ReadlineError;
 use line_buffer::LineBuffer;
-use super::{Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 
 pub type Mode = ();
 
@@ -55,12 +55,15 @@ impl Renderer for Sink {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
-        _hint: Option<String>,
+        hint: Option<String>,
         _: usize,
         _: usize,
     ) -> Result<(Position, Position)> {
         try!(self.write_all(prompt.as_bytes()));
         try!(self.write_all(line.as_bytes()));
+        if let Some(hint) = hint {
+            try!(self.write_all(truncate(&hint, 0, 80).as_bytes()));
+        }
         Ok((prompt_size, prompt_size))
     }
 

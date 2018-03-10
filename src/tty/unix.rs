@@ -17,7 +17,7 @@ use consts::{self, KeyPress};
 use Result;
 use error;
 use line_buffer::LineBuffer;
-use super::{Position, RawMode, RawReader, Renderer, Term, truncate, width};
+use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;

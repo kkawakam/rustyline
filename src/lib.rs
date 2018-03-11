@@ -198,347 +198,351 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-/// Insert the character `ch` at cursor current position.
-fn edit_insert(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
-    if let Some(push) = s.line.insert(ch, n) {
-        if push {
-            let prompt_size = s.prompt_size;
-            let hint = s.hint();
-            if n == 1 && s.cursor.col + ch.width().unwrap_or(0) < s.out.get_columns()
-                && hint.is_none()
-            {
-                // Avoid a full update of the line in the trivial case.
-                let cursor = s.out
-                    .calculate_position(&s.line[..s.line.pos()], s.prompt_size);
-                s.cursor = cursor;
-                let bits = ch.encode_utf8(&mut s.byte_buffer);
-                let bits = bits.as_bytes();
-                s.out.write_and_flush(bits)
+impl<'out, 'prompt> State<'out, 'prompt> {
+    /// Insert the character `ch` at cursor current position.
+    fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
+        if let Some(push) = self.line.insert(ch, n) {
+            if push {
+                let prompt_size = self.prompt_size;
+                let hint = self.hint();
+                if n == 1 && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
+                    && hint.is_none()
+                {
+                    // Avoid a full update of the line in the trivial case.
+                    let cursor = self.out
+                        .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+                    self.cursor = cursor;
+                    let bits = ch.encode_utf8(&mut self.byte_buffer);
+                    let bits = bits.as_bytes();
+                    self.out.write_and_flush(bits)
+                } else {
+                    self.refresh(self.prompt, prompt_size, hint)
+                }
             } else {
-                s.refresh(s.prompt, prompt_size, hint)
+                self.refresh_line()
             }
         } else {
-            s.refresh_line()
+            Ok(())
         }
-    } else {
-        Ok(())
     }
-}
 
-/// Replace a single (or n) character(s) under the cursor (Vi mode)
-fn edit_replace_char(s: &mut State, ch: char, n: RepeatCount) -> Result<()> {
-    s.changes.borrow_mut().begin();
-    let succeed = if let Some(chars) = s.line.delete(n) {
-        let count = chars.graphemes(true).count();
-        s.line.insert(ch, count);
-        s.line.move_backward(1);
-        true
-    } else {
-        false
-    };
-    s.changes.borrow_mut().end();
-    if succeed {
-        s.refresh_line()
-    } else {
-        Ok(())
-    }
-}
-
-/// Overwrite the character under the cursor (Vi mode)
-fn edit_overwrite_char(s: &mut State, ch: char) -> Result<()> {
-    if let Some(end) = s.line.next_pos(1) {
-        {
-            let text = ch.encode_utf8(&mut s.byte_buffer);
-            let start = s.line.pos();
-            s.line.replace(start..end, text);
+    /// Replace a single (or n) character(s) under the cursor (Vi mode)
+    fn edit_replace_char(&mut self, ch: char, n: RepeatCount) -> Result<()> {
+        self.changes.borrow_mut().begin();
+        let succeed = if let Some(chars) = self.line.delete(n) {
+            let count = chars.graphemes(true).count();
+            self.line.insert(ch, count);
+            self.line.move_backward(1);
+            true
+        } else {
+            false
+        };
+        self.changes.borrow_mut().end();
+        if succeed {
+            self.refresh_line()
+        } else {
+            Ok(())
         }
-        s.refresh_line()
-    } else {
-        Ok(())
     }
-}
 
-// Yank/paste `text` at current position.
-fn edit_yank(
-    s: &mut State,
-    edit_state: &EditState,
-    text: &str,
-    anchor: Anchor,
-    n: RepeatCount,
-) -> Result<()> {
-    if let Anchor::After = anchor {
-        s.line.move_forward(1);
-    }
-    if s.line.yank(text, n).is_some() {
-        if !edit_state.is_emacs_mode() {
-            s.line.move_backward(1);
+    /// Overwrite the character under the cursor (Vi mode)
+    fn edit_overwrite_char(&mut self, ch: char) -> Result<()> {
+        if let Some(end) = self.line.next_pos(1) {
+            {
+                let text = ch.encode_utf8(&mut self.byte_buffer);
+                let start = self.line.pos();
+                self.line.replace(start..end, text);
+            }
+            self.refresh_line()
+        } else {
+            Ok(())
         }
-        s.refresh_line()
-    } else {
-        Ok(())
     }
-}
 
-// Delete previously yanked text and yank/paste `text` at current position.
-fn edit_yank_pop(s: &mut State, yank_size: usize, text: &str) -> Result<()> {
-    s.changes.borrow_mut().begin();
-    let result = if s.line.yank_pop(yank_size, text).is_some() {
-        s.refresh_line()
-    } else {
-        Ok(())
-    };
-    s.changes.borrow_mut().end();
-    result
-}
-
-/// Move cursor on the left.
-fn edit_move_backward(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.move_backward(n) {
-        s.move_cursor()
-    } else {
-        Ok(())
+    // Yank/paste `text` at current position.
+    fn edit_yank(
+        &mut self,
+        edit_state: &EditState,
+        text: &str,
+        anchor: Anchor,
+        n: RepeatCount,
+    ) -> Result<()> {
+        if let Anchor::After = anchor {
+            self.line.move_forward(1);
+        }
+        if self.line.yank(text, n).is_some() {
+            if !edit_state.is_emacs_mode() {
+                self.line.move_backward(1);
+            }
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Move cursor on the right.
-fn edit_move_forward(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.move_forward(n) {
-        s.move_cursor()
-    } else {
-        Ok(())
+    // Delete previously yanked text and yank/paste `text` at current position.
+    fn edit_yank_pop(&mut self, yank_size: usize, text: &str) -> Result<()> {
+        self.changes.borrow_mut().begin();
+        let result = if self.line.yank_pop(yank_size, text).is_some() {
+            self.refresh_line()
+        } else {
+            Ok(())
+        };
+        self.changes.borrow_mut().end();
+        result
     }
-}
 
-/// Move cursor to the start of the line.
-fn edit_move_home(s: &mut State) -> Result<()> {
-    if s.line.move_home() {
-        s.move_cursor()
-    } else {
-        Ok(())
+    /// Move cursor on the left.
+    fn edit_move_backward(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.move_backward(n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Move cursor to the end of the line.
-fn edit_move_end(s: &mut State) -> Result<()> {
-    if s.line.move_end() {
-        s.move_cursor()
-    } else {
-        Ok(())
+    /// Move cursor on the right.
+    fn edit_move_forward(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.move_forward(n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Delete the character at the right of the cursor without altering the cursor
-/// position. Basically this is what happens with the "Delete" keyboard key.
-fn edit_delete(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.delete(n).is_some() {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Move cursor to the start of the line.
+    fn edit_move_home(&mut self) -> Result<()> {
+        if self.line.move_home() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Backspace implementation.
-fn edit_backspace(s: &mut State, n: RepeatCount) -> Result<()> {
-    if s.line.backspace(n) {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Move cursor to the end of the line.
+    fn edit_move_end(&mut self) -> Result<()> {
+        if self.line.move_end() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Kill the text from point to the end of the line.
-fn edit_kill_line(s: &mut State) -> Result<()> {
-    if s.line.kill_line() {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Delete the character at the right of the cursor without altering the cursor
+    /// position. Basically this is what happens with the "Delete" keyboard key.
+    fn edit_delete(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.delete(n).is_some() {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Kill backward from point to the beginning of the line.
-fn edit_discard_line(s: &mut State) -> Result<()> {
-    if s.line.discard_line() {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Backspace implementation.
+    fn edit_backspace(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.backspace(n) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Exchange the char before cursor with the character at cursor.
-fn edit_transpose_chars(s: &mut State) -> Result<()> {
-    s.changes.borrow_mut().begin();
-    let succeed = s.line.transpose_chars();
-    s.changes.borrow_mut().end();
-    if succeed {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Kill the text from point to the end of the line.
+    fn edit_kill_line(&mut self) -> Result<()> {
+        if self.line.kill_line() {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_move_to_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
-    if s.line.move_to_prev_word(word_def, n) {
-        s.move_cursor()
-    } else {
-        Ok(())
+    /// Kill backward from point to the beginning of the line.
+    fn edit_discard_line(&mut self) -> Result<()> {
+        if self.line.discard_line() {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Delete the previous word, maintaining the cursor at the start of the
-/// current word.
-fn edit_delete_prev_word(s: &mut State, word_def: Word, n: RepeatCount) -> Result<()> {
-    if s.line.delete_prev_word(word_def, n) {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Exchange the char before cursor with the character at cursor.
+    fn edit_transpose_chars(&mut self) -> Result<()> {
+        self.changes.borrow_mut().begin();
+        let succeed = self.line.transpose_chars();
+        self.changes.borrow_mut().end();
+        if succeed {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_move_to_next_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
-    if s.line.move_to_next_word(at, word_def, n) {
-        s.move_cursor()
-    } else {
-        Ok(())
+    fn edit_move_to_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Result<()> {
+        if self.line.move_to_prev_word(word_def, n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_move_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
-    if s.line.move_to(cs, n) {
-        s.move_cursor()
-    } else {
-        Ok(())
+    /// Delete the previous word, maintaining the cursor at the start of the
+    /// current word.
+    fn edit_delete_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Result<()> {
+        if self.line.delete_prev_word(word_def, n) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Kill from the cursor to the end of the current word, or, if between words,
-/// to the end of the next word.
-fn edit_delete_word(s: &mut State, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
-    if s.line.delete_word(at, word_def, n) {
-        s.refresh_line()
-    } else {
-        Ok(())
+    fn edit_move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
+        if self.line.move_to_next_word(at, word_def, n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_delete_to(s: &mut State, cs: CharSearch, n: RepeatCount) -> Result<()> {
-    if s.line.delete_to(cs, n) {
-        s.refresh_line()
-    } else {
-        Ok(())
+    fn edit_move_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
+        if self.line.move_to(cs, n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_word(s: &mut State, a: WordAction) -> Result<()> {
-    s.changes.borrow_mut().begin();
-    let succeed = s.line.edit_word(a);
-    s.changes.borrow_mut().end();
-    if succeed {
-        s.refresh_line()
-    } else {
-        Ok(())
+    /// Kill from the cursor to the end of the current word, or, if between words,
+    /// to the end of the next word.
+    fn edit_delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
+        if self.line.delete_word(at, word_def, n) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-fn edit_transpose_words(s: &mut State, n: RepeatCount) -> Result<()> {
-    s.changes.borrow_mut().begin();
-    let succeed = s.line.transpose_words(n);
-    s.changes.borrow_mut().end();
-    if succeed {
-        s.refresh_line()
-    } else {
-        Ok(())
+    fn edit_delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
+        if self.line.delete_to(cs, n) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-}
 
-/// Substitute the currently edited line with the next or previous history
-/// entry.
-fn edit_history_next(s: &mut State, history: &History, prev: bool) -> Result<()> {
-    if history.is_empty() {
-        return Ok(());
+    fn edit_word(&mut self, a: WordAction) -> Result<()> {
+        self.changes.borrow_mut().begin();
+        let succeed = self.line.edit_word(a);
+        self.changes.borrow_mut().end();
+        if succeed {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
     }
-    if s.history_index == history.len() {
+
+    fn edit_transpose_words(&mut self, n: RepeatCount) -> Result<()> {
+        self.changes.borrow_mut().begin();
+        let succeed = self.line.transpose_words(n);
+        self.changes.borrow_mut().end();
+        if succeed {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Substitute the currently edited line with the next or previous history
+    /// entry.
+    fn edit_history_next(&mut self, history: &History, prev: bool) -> Result<()> {
+        if history.is_empty() {
+            return Ok(());
+        }
+        if self.history_index == history.len() {
+            if prev {
+                // Save the current edited line before overwriting it
+                self.backup();
+            } else {
+                return Ok(());
+            }
+        } else if self.history_index == 0 && prev {
+            return Ok(());
+        }
         if prev {
-            // Save the current edited line before overwriting it
-            s.backup();
+            self.history_index -= 1;
         } else {
+            self.history_index += 1;
+        }
+        if self.history_index < history.len() {
+            let buf = history.get(self.history_index).unwrap();
+            self.changes.borrow_mut().begin();
+            self.line.update(buf, buf.len());
+            self.changes.borrow_mut().end();
+        } else {
+            // Restore current edited line
+            self.restore();
+        }
+        self.refresh_line()
+    }
+
+    // Non-incremental, anchored search
+    fn edit_history_search(&mut self, history: &History, dir: Direction) -> Result<()> {
+        if history.is_empty() {
+            return self.out.beep();
+        }
+        if self.history_index == history.len() && dir == Direction::Forward {
+            return self.out.beep();
+        } else if self.history_index == 0 && dir == Direction::Reverse {
+            return self.out.beep();
+        }
+        if dir == Direction::Reverse {
+            self.history_index -= 1;
+        } else {
+            self.history_index += 1;
+        }
+        if let Some(history_index) = history.starts_with(
+            &self.line.as_str()[..self.line.pos()],
+            self.history_index,
+            dir,
+        ) {
+            self.history_index = history_index;
+            let buf = history.get(history_index).unwrap();
+            self.changes.borrow_mut().begin();
+            self.line.update(buf, buf.len());
+            self.changes.borrow_mut().end();
+            self.refresh_line()
+        } else {
+            self.out.beep()
+        }
+    }
+
+    /// Substitute the currently edited line with the first/last history entry.
+    fn edit_history(&mut self, history: &History, first: bool) -> Result<()> {
+        if history.is_empty() {
             return Ok(());
         }
-    } else if s.history_index == 0 && prev {
-        return Ok(());
-    }
-    if prev {
-        s.history_index -= 1;
-    } else {
-        s.history_index += 1;
-    }
-    if s.history_index < history.len() {
-        let buf = history.get(s.history_index).unwrap();
-        s.changes.borrow_mut().begin();
-        s.line.update(buf, buf.len());
-        s.changes.borrow_mut().end();
-    } else {
-        // Restore current edited line
-        s.restore();
-    }
-    s.refresh_line()
-}
-
-// Non-incremental, anchored search
-fn edit_history_search(s: &mut State, history: &History, dir: Direction) -> Result<()> {
-    if history.is_empty() {
-        return s.out.beep();
-    }
-    if s.history_index == history.len() && dir == Direction::Forward {
-        return s.out.beep();
-    } else if s.history_index == 0 && dir == Direction::Reverse {
-        return s.out.beep();
-    }
-    if dir == Direction::Reverse {
-        s.history_index -= 1;
-    } else {
-        s.history_index += 1;
-    }
-    if let Some(history_index) =
-        history.starts_with(&s.line.as_str()[..s.line.pos()], s.history_index, dir)
-    {
-        s.history_index = history_index;
-        let buf = history.get(history_index).unwrap();
-        s.changes.borrow_mut().begin();
-        s.line.update(buf, buf.len());
-        s.changes.borrow_mut().end();
-        s.refresh_line()
-    } else {
-        s.out.beep()
-    }
-}
-
-/// Substitute the currently edited line with the first/last history entry.
-fn edit_history(s: &mut State, history: &History, first: bool) -> Result<()> {
-    if history.is_empty() {
-        return Ok(());
-    }
-    if s.history_index == history.len() {
+        if self.history_index == history.len() {
+            if first {
+                // Save the current edited line before overwriting it
+                self.backup();
+            } else {
+                return Ok(());
+            }
+        } else if self.history_index == 0 && first {
+            return Ok(());
+        }
         if first {
-            // Save the current edited line before overwriting it
-            s.backup();
+            self.history_index = 0;
+            let buf = history.get(self.history_index).unwrap();
+            self.changes.borrow_mut().begin();
+            self.line.update(buf, buf.len());
+            self.changes.borrow_mut().end();
         } else {
-            return Ok(());
+            self.history_index = history.len();
+            // Restore current edited line
+            self.restore();
         }
-    } else if s.history_index == 0 && first {
-        return Ok(());
+        self.refresh_line()
     }
-    if first {
-        s.history_index = 0;
-        let buf = history.get(s.history_index).unwrap();
-        s.changes.borrow_mut().begin();
-        s.line.update(buf, buf.len());
-        s.changes.borrow_mut().end();
-    } else {
-        s.history_index = history.len();
-        // Restore current edited line
-        s.restore();
-    }
-    s.refresh_line()
 }
 
 /// Completes the line/word
@@ -618,7 +622,7 @@ fn complete_line<R: RawReader, C: Completer>(
         }
         // move cursor to EOL to avoid overwriting the command line
         let save_pos = s.line.pos();
-        try!(edit_move_end(s));
+        try!(s.edit_move_end());
         s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
@@ -860,10 +864,10 @@ fn readline_edit<H: Helper>(
         }
 
         if let Cmd::SelfInsert(n, c) = cmd {
-            try!(edit_insert(&mut s, c, n));
+            try!(s.edit_insert(c, n));
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            try!(edit_yank(&mut s, &edit_state, &text, Anchor::Before, n));
+            try!(s.edit_yank(&edit_state, &text, Anchor::Before, n));
             continue;
         }
 
@@ -885,56 +889,56 @@ fn readline_edit<H: Helper>(
         match cmd {
             Cmd::Move(Movement::BeginningOfLine) => {
                 // Move to the beginning of line.
-                try!(edit_move_home(&mut s))
+                try!(s.edit_move_home())
             }
             Cmd::Move(Movement::ViFirstPrint) => {
-                try!(edit_move_home(&mut s));
-                try!(edit_move_to_next_word(&mut s, At::Start, Word::Big, 1))
+                try!(s.edit_move_home());
+                try!(s.edit_move_to_next_word(At::Start, Word::Big, 1))
             }
             Cmd::Move(Movement::BackwardChar(n)) => {
                 // Move back a character.
-                try!(edit_move_backward(&mut s, n))
+                try!(s.edit_move_backward(n))
             }
             Cmd::Kill(Movement::ForwardChar(n)) => {
                 // Delete (forward) one character at point.
-                try!(edit_delete(&mut s, n))
+                try!(s.edit_delete(n))
             }
             Cmd::Replace(n, c) => {
-                try!(edit_replace_char(&mut s, c, n));
+                try!(s.edit_replace_char(c, n));
             }
             Cmd::Overwrite(c) => {
-                try!(edit_overwrite_char(&mut s, c));
+                try!(s.edit_overwrite_char(c));
             }
             Cmd::EndOfFile => if !edit_state.is_emacs_mode() && !s.line.is_empty() {
-                try!(edit_move_end(&mut s));
+                try!(s.edit_move_end());
                 break;
             } else if s.line.is_empty() {
                 return Err(error::ReadlineError::Eof);
             } else {
-                try!(edit_delete(&mut s, 1))
+                try!(s.edit_delete(1))
             },
             Cmd::Move(Movement::EndOfLine) => {
                 // Move to the end of line.
-                try!(edit_move_end(&mut s))
+                try!(s.edit_move_end())
             }
             Cmd::Move(Movement::ForwardChar(n)) => {
                 // Move forward a character.
-                try!(edit_move_forward(&mut s, n))
+                try!(s.edit_move_forward(n))
             }
             Cmd::Kill(Movement::BackwardChar(n)) => {
                 // Delete one character backward.
-                try!(edit_backspace(&mut s, n))
+                try!(s.edit_backspace(n))
             }
             Cmd::Kill(Movement::EndOfLine) => {
                 // Kill the text from point to the end of the line.
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_kill_line(&mut s));
+                try!(s.edit_kill_line());
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Kill(Movement::WholeLine) => {
-                try!(edit_move_home(&mut s));
+                try!(s.edit_move_home());
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_kill_line(&mut s));
+                try!(s.edit_kill_line());
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::ClearScreen => {
@@ -944,42 +948,38 @@ fn readline_edit<H: Helper>(
             }
             Cmd::NextHistory => {
                 // Fetch the next command from the history list.
-                try!(edit_history_next(&mut s, &editor.history, false))
+                try!(s.edit_history_next(&editor.history, false))
             }
             Cmd::PreviousHistory => {
                 // Fetch the previous command from the history list.
-                try!(edit_history_next(&mut s, &editor.history, true))
+                try!(s.edit_history_next(&editor.history, true))
             }
-            Cmd::HistorySearchBackward => try!(edit_history_search(
-                &mut s,
-                &editor.history,
-                Direction::Reverse,
-            )),
-            Cmd::HistorySearchForward => try!(edit_history_search(
-                &mut s,
-                &editor.history,
-                Direction::Forward,
-            )),
+            Cmd::HistorySearchBackward => {
+                try!(s.edit_history_search(&editor.history, Direction::Reverse,))
+            }
+            Cmd::HistorySearchForward => {
+                try!(s.edit_history_search(&editor.history, Direction::Forward,))
+            }
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
-                try!(edit_transpose_chars(&mut s))
+                try!(s.edit_transpose_chars())
             }
             Cmd::Kill(Movement::BeginningOfLine) => {
                 // Kill backward from point to the beginning of the line.
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_discard_line(&mut s));
+                try!(s.edit_discard_line());
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
                 let c = try!(rdr.next_char());
-                try!(edit_insert(&mut s, c, 1)) // FIXME
+                try!(s.edit_insert(c, 1)) // FIXME
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.borrow_mut().yank() {
-                    try!(edit_yank(&mut s, &edit_state, text, anchor, n))
+                    try!(s.edit_yank(&edit_state, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {
@@ -988,7 +988,7 @@ fn readline_edit<H: Helper>(
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 // Accept the line regardless of where the cursor is.
-                try!(edit_move_end(&mut s));
+                try!(s.edit_move_end());
                 if s.hinter.is_some() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
@@ -1000,57 +1000,57 @@ fn readline_edit<H: Helper>(
             Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
                 // kill one word backward (until start of word)
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_delete_prev_word(&mut s, word_def, n));
+                try!(s.edit_delete_prev_word(word_def, n));
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
-                try!(edit_history(&mut s, &editor.history, true))
+                try!(s.edit_history(&editor.history, true))
             }
             Cmd::EndOfHistory => {
                 // move to last entry in history
-                try!(edit_history(&mut s, &editor.history, false))
+                try!(s.edit_history(&editor.history, false))
             }
             Cmd::Move(Movement::BackwardWord(n, word_def)) => {
                 // move backwards one word
-                try!(edit_move_to_prev_word(&mut s, word_def, n))
+                try!(s.edit_move_to_prev_word(word_def, n))
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
-                try!(edit_word(&mut s, WordAction::CAPITALIZE))
+                try!(s.edit_word(WordAction::CAPITALIZE))
             }
             Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
                 // kill one word forward (until start/end of word)
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_delete_word(&mut s, at, word_def, n));
+                try!(s.edit_delete_word(at, word_def, n));
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
-                try!(edit_move_to_next_word(&mut s, at, word_def, n))
+                try!(s.edit_move_to_next_word(at, word_def, n))
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
-                try!(edit_word(&mut s, WordAction::LOWERCASE))
+                try!(s.edit_word(WordAction::LOWERCASE))
             }
             Cmd::TransposeWords(n) => {
                 // transpose words
-                try!(edit_transpose_words(&mut s, n))
+                try!(s.edit_transpose_words(n))
             }
             Cmd::UpcaseWord => {
                 // uppercase word after point
-                try!(edit_word(&mut s, WordAction::UPPERCASE))
+                try!(s.edit_word(WordAction::UPPERCASE))
             }
             Cmd::YankPop => {
                 // yank-pop
                 if let Some((yank_size, text)) = editor.kill_ring.borrow_mut().yank_pop() {
-                    try!(edit_yank_pop(&mut s, yank_size, text))
+                    try!(s.edit_yank_pop(yank_size, text))
                 }
             }
-            Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(edit_move_to(&mut s, cs, n)),
+            Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(s.edit_move_to(cs, n)),
             Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
                 editor.kill_ring.borrow_mut().start_killing();
-                try!(edit_delete_to(&mut s, cs, n));
+                try!(s.edit_delete_to(cs, n));
                 editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::Undo => {
@@ -1361,28 +1361,28 @@ mod test {
         s.history_index = history.len();
 
         for _ in 0..2 {
-            super::edit_history_next(&mut s, &history, false).unwrap();
+            s.edit_history_next(&history, false).unwrap();
             assert_eq!(line, s.line.as_str());
         }
 
-        super::edit_history_next(&mut s, &history, true).unwrap();
+        s.edit_history_next(&history, true).unwrap();
         assert_eq!(line, s.saved_line_for_history.as_str());
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.line.as_str());
 
         for _ in 0..2 {
-            super::edit_history_next(&mut s, &history, true).unwrap();
+            s.edit_history_next(&history, true).unwrap();
             assert_eq!(line, s.saved_line_for_history.as_str());
             assert_eq!(0, s.history_index);
             assert_eq!("line0", s.line.as_str());
         }
 
-        super::edit_history_next(&mut s, &history, false).unwrap();
+        s.edit_history_next(&history, false).unwrap();
         assert_eq!(line, s.saved_line_for_history.as_str());
         assert_eq!(1, s.history_index);
         assert_eq!("line1", s.line.as_str());
 
-        super::edit_history_next(&mut s, &history, false).unwrap();
+        s.edit_history_next(&history, false).unwrap();
         // assert_eq!(line, s.saved_line_for_history);
         assert_eq!(2, s.history_index);
         assert_eq!(line, s.line.as_str());

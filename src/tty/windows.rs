@@ -95,10 +95,7 @@ pub struct ConsoleRawReader {
 impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(ConsoleRawReader {
-            handle: handle,
-            buf: None,
-        })
+        Ok(ConsoleRawReader { handle, buf: None })
     }
 }
 
@@ -236,8 +233,8 @@ impl ConsoleRenderer {
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
             out: io::stdout(),
-            handle: handle,
-            cols: cols,
+            handle,
+            cols,
         }
     }
 
@@ -419,9 +416,9 @@ impl Term for Console {
 
         let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
         Console {
-            stdin_isatty: stdin_isatty,
+            stdin_isatty,
             stdin_handle: stdin_handle.unwrap_or(ptr::null_mut()),
-            stdout_handle: stdout_handle,
+            stdout_handle,
         }
     }
 
@@ -467,9 +464,9 @@ impl Term for Console {
         }
 
         Ok(Mode {
-            original_stdin_mode: original_stdin_mode,
+            original_stdin_mode,
             stdin_handle: self.stdin_handle,
-            original_stdout_mode: original_stdin_mode,
+            original_stdout_mode,
             stdout_handle: self.stdout_handle,
         })
     }

@@ -498,7 +498,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 #[cfg(test)]
 pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> State<'out, 'static> {
     State {
-        out: out,
+        out,
         prompt: "",
         prompt_size: Position::default(),
         line: LineBuffer::init(line, pos, None),

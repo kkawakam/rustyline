@@ -5,7 +5,6 @@ use std::iter;
 use std::ops::{Deref, Index, Range};
 use std::rc::Rc;
 use std::string::Drain;
-use std_unicode::str::UnicodeStr;
 use unicode_segmentation::UnicodeSegmentation;
 use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 

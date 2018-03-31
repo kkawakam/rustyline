@@ -4,12 +4,12 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 use Result;
 use config::Config;
 use consts::KeyPress;
 use error::ReadlineError;
 use line_buffer::LineBuffer;
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 
 pub type Mode = ();
 

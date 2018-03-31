@@ -5,15 +5,15 @@ use std::sync::atomic;
 
 use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, WORD};
-use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 use winapi::um::winnt::{CHAR, HANDLE};
+use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
+use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use Result;
 use config::Config;
 use consts::{self, KeyPress};
 use error;
-use Result;
 use line_buffer::LineBuffer;
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -33,15 +33,13 @@ fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
 
 #[macro_export]
 macro_rules! check {
-    ($funcall:expr) => {
-        {
+    ($funcall:expr) => {{
         let rc = unsafe { $funcall };
         if rc == 0 {
             try!(Err(io::Error::last_os_error()));
         }
         rc
-        }
-    };
+    }};
 }
 
 fn get_win_size(handle: HANDLE) -> (usize, usize) {

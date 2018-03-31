@@ -1,4 +1,5 @@
 //! Line buffer with current cursor position
+use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 use std::cell::RefCell;
 use std::fmt;
 use std::iter;
@@ -6,7 +7,6 @@ use std::ops::{Deref, Index, Range};
 use std::rc::Rc;
 use std::string::Drain;
 use unicode_segmentation::UnicodeSegmentation;
-use keymap::{At, CharSearch, Movement, RepeatCount, Word};
 
 /// Maximum buffer size for the line read
 pub static MAX_LINE: usize = 4096;
@@ -788,10 +788,10 @@ fn is_other_char(grapheme: &str) -> bool {
 
 #[cfg(test)]
 mod test {
+    use super::{ChangeListener, DeleteListener, Direction, LineBuffer, WordAction, MAX_LINE};
+    use keymap::{At, CharSearch, Word};
     use std::cell::RefCell;
     use std::rc::Rc;
-    use keymap::{At, CharSearch, Word};
-    use super::{ChangeListener, DeleteListener, Direction, LineBuffer, WordAction, MAX_LINE};
 
     struct Listener {
         deleted_str: Option<String>,

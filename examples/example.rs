@@ -4,8 +4,8 @@ extern crate rustyline;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
-use rustyline::hint::Hinter;
 use rustyline::error::ReadlineError;
+use rustyline::hint::Hinter;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
 
 // On unix platforms you can use ANSI escape sequences

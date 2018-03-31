@@ -12,12 +12,12 @@ use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 
+use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
+use Result;
 use config::Config;
 use consts::{self, KeyPress};
-use Result;
 use error;
 use line_buffer::LineBuffer;
-use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -535,8 +535,9 @@ impl Term for PosixTerminal {
         // we don't want raw output, it turns newlines into straight linefeeds
         // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST); // disable all output
         // processing
-        raw.control_flags |= ControlFlags::CS8; // character-size mark (8 bits)
-                                                // disable echoing, canonical mode, extended input processing and signals
+        // character-size mark (8 bits)
+        raw.control_flags |= ControlFlags::CS8;
+        // disable echoing, canonical mode, extended input processing and signals
         raw.local_flags &=
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
         raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
@@ -565,8 +566,8 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(all(unix, test))]
 mod test {
-    use std::io::{self, Stdout};
     use super::{Position, Renderer};
+    use std::io::{self, Stdout};
 
     #[test]
     fn prompt_with_ansi_escape_codes() {

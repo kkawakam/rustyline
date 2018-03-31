@@ -31,6 +31,7 @@ extern crate unicode_width;
 extern crate winapi;
 
 pub mod completion;
+pub mod config;
 mod consts;
 mod edit;
 pub mod error;
@@ -39,7 +40,6 @@ pub mod history;
 mod keymap;
 mod kill_ring;
 pub mod line_buffer;
-pub mod config;
 mod undo;
 
 mod tty;
@@ -49,22 +49,22 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
-use std::result;
 use std::rc::Rc;
+use std::result;
 use unicode_width::UnicodeWidthStr;
 
 use tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 use completion::{longest_common_prefix, Completer};
+pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
+pub use consts::KeyPress;
 use edit::State;
 use hint::Hinter;
 use history::{Direction, History};
-use line_buffer::WordAction;
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use keymap::{EditState, Refresher};
 use kill_ring::{KillRing, Mode};
-pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
-pub use consts::KeyPress;
+use line_buffer::WordAction;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -716,8 +716,9 @@ impl<H: Helper> Editor<H> {
     /// that it pre-populates the input area.
     ///
     /// The text that resides in the input area is given as a 2-tuple.
-    /// The string on the left of the tuple is what will appear to the left of the cursor
-    /// and the string on the right is what will appear to the right of the cursor.
+    /// The string on the left of the tuple is what will appear to the left of
+    /// the cursor and the string on the right is what will appear to the
+    /// right of the cursor.
     pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
         self.readline_with(prompt, Some(initial))
     }
@@ -843,12 +844,12 @@ mod test {
     use std::collections::HashMap;
     use std::rc::Rc;
 
+    use super::{Editor, Result};
     use completion::Completer;
     use config::Config;
     use consts::KeyPress;
     use edit::init_state;
     use keymap::{Cmd, EditState};
-    use super::{Editor, Result};
 
     fn init_editor(keys: &[KeyPress]) -> Editor<()> {
         let mut editor = Editor::<()>::new();

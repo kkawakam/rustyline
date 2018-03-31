@@ -3,11 +3,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use super::Result;
 use config::Config;
 use config::EditMode;
 use consts::KeyPress;
 use tty::RawReader;
-use super::Result;
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;

@@ -6,12 +6,12 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
+use super::Result;
 use hint::Hinter;
 use history::{Direction, History};
-use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use keymap::{Anchor, At, CharSearch, Cmd, RepeatCount, Word};
 use keymap::{EditState, Refresher};
-use super::Result;
+use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use tty::{Position, RawReader, Renderer};
 use undo::Changeset;
 
@@ -278,8 +278,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    /// Delete the character at the right of the cursor without altering the cursor
-    /// position. Basically this is what happens with the "Delete" keyboard key.
+    /// Delete the character at the right of the cursor without altering the
+    /// cursor position. Basically this is what happens with the "Delete"
+    /// keyboard key.
     pub fn edit_delete(&mut self, n: RepeatCount) -> Result<()> {
         if self.line.delete(n).is_some() {
             self.refresh_line()
@@ -361,8 +362,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    /// Kill from the cursor to the end of the current word, or, if between words,
-    /// to the end of the next word.
+    /// Kill from the cursor to the end of the current word, or, if between
+    /// words, to the end of the next word.
     pub fn edit_delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
         if self.line.delete_word(at, word_def, n) {
             self.refresh_line()
@@ -514,8 +515,8 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
 
 #[cfg(test)]
 mod test {
-    use history::History;
     use super::init_state;
+    use history::History;
 
     #[test]
     fn edit_history_next() {

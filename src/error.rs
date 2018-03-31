@@ -1,11 +1,11 @@
 //! Contains error type for handling I/O and Errno errors
-#[cfg(windows)]
-use std::char;
-use std::io;
-use std::error;
-use std::fmt;
 #[cfg(unix)]
 use nix;
+#[cfg(windows)]
+use std::char;
+use std::error;
+use std::fmt;
+use std::io;
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library

@@ -1,13 +1,13 @@
 //! History API
 
+#[cfg(unix)]
+use libc;
 use std::collections::VecDeque;
 use std::collections::vec_deque;
 use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
-#[cfg(unix)]
-use libc;
 
 use super::Result;
 use config::{Config, HistoryDuplicates};
@@ -269,9 +269,9 @@ fn fix_perm(file: &File) {
 #[cfg(test)]
 mod tests {
     extern crate tempdir;
-    use std::path::Path;
-    use config::Config;
     use super::{Direction, History};
+    use config::Config;
+    use std::path::Path;
 
     fn init() -> History {
         let mut history = History::new();

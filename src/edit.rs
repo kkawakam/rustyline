@@ -60,9 +60,10 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         &mut self,
         edit_state: &mut EditState,
         rdr: &mut R,
+        single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
-            let rc = edit_state.next_cmd(rdr, self);
+            let rc = edit_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 try!(self.refresh_line());

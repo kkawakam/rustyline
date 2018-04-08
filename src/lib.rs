@@ -101,7 +101,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 try!(s.refresh_line());
             }
 
-            cmd = try!(s.next_cmd(edit_state, rdr));
+            cmd = try!(s.next_cmd(edit_state, rdr, true));
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -139,7 +139,7 @@ fn complete_line<R: RawReader, C: Completer>(
             }
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = try!(s.next_cmd(edit_state, rdr));
+        let mut cmd = try!(s.next_cmd(edit_state, rdr, true));
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -158,7 +158,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = try!(s.next_cmd(edit_state, rdr));
+                cmd = try!(s.next_cmd(edit_state, rdr, false));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
@@ -214,7 +214,7 @@ fn page_completions<R: RawReader>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
             {
-                cmd = try!(s.next_cmd(edit_state, rdr));
+                cmd = try!(s.next_cmd(edit_state, rdr, false));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
@@ -280,7 +280,7 @@ fn reverse_incremental_search<R: RawReader>(
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        cmd = try!(s.next_cmd(edit_state, rdr));
+        cmd = try!(s.next_cmd(edit_state, rdr, true));
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -364,7 +364,7 @@ fn readline_edit<H: Helper>(
     let mut rdr = try!(editor.term.create_reader(&editor.config));
 
     loop {
-        let rc = s.next_cmd(&mut edit_state, &mut rdr);
+        let rc = s.next_cmd(&mut edit_state, &mut rdr, false);
         let mut cmd = try!(rc);
 
         if cmd.should_reset_kill_ring() {

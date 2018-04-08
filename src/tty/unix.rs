@@ -248,6 +248,8 @@ impl PosixRawReader {
                     KeyPress::UnknownEscSeq
                 }
             })
+        } else if seq1 == '\x1b' { // ESC ESC
+            Ok(KeyPress::Esc)
         } else {
             // TODO ESC-R (r): Undo all changes made to this line.
             Ok(KeyPress::Meta(seq1))
@@ -256,13 +258,18 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
-    fn next_key(&mut self) -> Result<KeyPress> {
+    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
+            let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
+                0
+            } else {
+                self.timeout_ms
+            };
             let mut fds = [poll::PollFd::new(STDIN_FILENO, EventFlags::POLLIN)];
-            match poll::poll(&mut fds, self.timeout_ms) {
+            match poll::poll(&mut fds, timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }

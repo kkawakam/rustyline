@@ -17,7 +17,7 @@ pub trait RawMode: Sized {
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
     /// Blocking read of key pressed.
-    fn next_key(&mut self) -> Result<KeyPress>;
+    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress>;
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;

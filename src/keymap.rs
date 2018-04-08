@@ -279,9 +279,11 @@ impl EditState {
     }
 
     /// Parse user input into one command
-    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
+    /// `single_esc_abort` is used in emacs mode on unix platform when a single esc key is expected
+    /// to abort current action.
+    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, single_esc_abort: bool) -> Result<Cmd> {
         match self.mode {
-            EditMode::Emacs => self.emacs(rdr, wrt),
+            EditMode::Emacs => self.emacs(rdr, wrt, single_esc_abort),
             EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr),
             EditMode::Vi => self.vi_command(rdr, wrt),
         }
@@ -305,7 +307,7 @@ impl EditState {
         }
         loop {
             try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
-            let key = try!(rdr.next_key());
+            let key = try!(rdr.next_key(true));
             match key {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
                     if self.num_args == -1 {
@@ -326,8 +328,8 @@ impl EditState {
         }
     }
 
-    fn emacs<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key());
+    fn emacs<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, single_esc_abort: bool) -> Result<Cmd> {
+        let mut key = try!(rdr.next_key(single_esc_abort));
         if let KeyPress::Meta(digit @ '-') = key {
             key = try!(self.emacs_digit_argument(rdr, wrt, digit));
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
@@ -376,9 +378,9 @@ impl EditState {
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('X') => {
-                let snd_key = try!(rdr.next_key());
+                let snd_key = try!(rdr.next_key(true));
                 match snd_key {
-                    KeyPress::Ctrl('G') => Cmd::Abort,
+                    KeyPress::Ctrl('G') | KeyPress::Esc => Cmd::Abort,
                     KeyPress::Ctrl('U') => Cmd::Undo,
                     _ => Cmd::Unknown,
                 }
@@ -425,7 +427,7 @@ impl EditState {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
             try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
-            let key = try!(rdr.next_key());
+            let key = try!(rdr.next_key(false));
             match key {
                 KeyPress::Char(digit @ '0'...'9') => {
                     if self.num_args.abs() < 1000 {
@@ -444,7 +446,7 @@ impl EditState {
     }
 
     fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key());
+        let mut key = try!(rdr.next_key(false));
         if let KeyPress::Char(digit @ '1'...'9') = key {
             key = try!(self.vi_arg_digit(rdr, wrt, digit));
         }
@@ -543,7 +545,7 @@ impl EditState {
             KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
             KeyPress::Char('r') => {
                 // vi-replace-char:
-                let ch = try!(rdr.next_key());
+                let ch = try!(rdr.next_key(false));
                 match ch {
                     KeyPress::Char(c) => Cmd::Replace(n, c),
                     KeyPress::Esc => Cmd::Noop,
@@ -610,7 +612,7 @@ impl EditState {
     }
 
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
-        let key = try!(rdr.next_key());
+        let key = try!(rdr.next_key(false));
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
@@ -652,7 +654,7 @@ impl EditState {
         key: KeyPress,
         n: RepeatCount,
     ) -> Result<Option<Movement>> {
-        let mut mvt = try!(rdr.next_key());
+        let mut mvt = try!(rdr.next_key(false));
         if mvt == key {
             return Ok(Some(Movement::WholeLine));
         }
@@ -714,7 +716,7 @@ impl EditState {
         rdr: &mut R,
         cmd: char,
     ) -> Result<Option<CharSearch>> {
-        let ch = try!(rdr.next_key());
+        let ch = try!(rdr.next_key(false));
         Ok(match ch {
             KeyPress::Char(ch) => {
                 let cs = match cmd {

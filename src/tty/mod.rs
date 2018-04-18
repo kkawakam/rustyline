@@ -3,10 +3,10 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use Result;
 use config::Config;
 use consts::KeyPress;
 use line_buffer::LineBuffer;
+use Result;
 
 /// Terminal state
 pub trait RawMode: Sized {

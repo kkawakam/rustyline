@@ -13,11 +13,11 @@ use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use Result;
 use config::Config;
 use consts::{self, KeyPress};
 use error;
 use line_buffer::LineBuffer;
+use Result;
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -248,7 +248,8 @@ impl PosixRawReader {
                     KeyPress::UnknownEscSeq
                 }
             })
-        } else if seq1 == '\x1b' { // ESC ESC
+        } else if seq1 == '\x1b' {
+            // ESC ESC
             Ok(KeyPress::Esc)
         } else {
             // TODO ESC-R (r): Undo all changes made to this line.

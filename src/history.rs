@@ -2,8 +2,8 @@
 
 #[cfg(unix)]
 use libc;
-use std::collections::VecDeque;
 use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;

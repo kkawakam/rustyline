@@ -279,9 +279,14 @@ impl EditState {
     }
 
     /// Parse user input into one command
-    /// `single_esc_abort` is used in emacs mode on unix platform when a single esc key is expected
-    /// to abort current action.
-    pub fn next_cmd<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, single_esc_abort: bool) -> Result<Cmd> {
+    /// `single_esc_abort` is used in emacs mode on unix platform when a single
+    /// esc key is expected to abort current action.
+    pub fn next_cmd<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut Refresher,
+        single_esc_abort: bool,
+    ) -> Result<Cmd> {
         match self.mode {
             EditMode::Emacs => self.emacs(rdr, wrt, single_esc_abort),
             EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr),
@@ -328,7 +333,12 @@ impl EditState {
         }
     }
 
-    fn emacs<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher, single_esc_abort: bool) -> Result<Cmd> {
+    fn emacs<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut Refresher,
+        single_esc_abort: bool,
+    ) -> Result<Cmd> {
         let mut key = try!(rdr.next_key(single_esc_abort));
         if let KeyPress::Meta(digit @ '-') = key {
             key = try!(self.emacs_digit_argument(rdr, wrt, digit));

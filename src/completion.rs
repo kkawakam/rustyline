@@ -70,14 +70,14 @@ pub struct FilenameCompleter {
 
 #[cfg(unix)]
 static DEFAULT_BREAK_CHARS: [char; 18] = [
-    ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0'
+    ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
 ];
 #[cfg(unix)]
 static ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
 static DEFAULT_BREAK_CHARS: [char; 17] = [
-    ' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0'
+    ' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
 ];
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;

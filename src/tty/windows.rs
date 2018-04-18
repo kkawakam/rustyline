@@ -9,11 +9,11 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use Result;
 use config::Config;
 use consts::{self, KeyPress};
 use error;
 use line_buffer::LineBuffer;
+use Result;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;

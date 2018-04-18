@@ -1,5 +1,4 @@
 wrap_comments = true
 format_strings = true
-reorder_imported_names = true
 write_mode = "Overwrite"
 error_on_unformatted = false

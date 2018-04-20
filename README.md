@@ -8,7 +8,7 @@
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
 **Supported Platforms**
-* Unix
+* Unix (tested on FreeBSD, Linux and macOS)
 * Windows
    * cmd.exe
    * Powershell

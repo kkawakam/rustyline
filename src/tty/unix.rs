@@ -30,7 +30,7 @@ fn get_win_size() -> (usize, usize) {
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ, &mut size) {
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }

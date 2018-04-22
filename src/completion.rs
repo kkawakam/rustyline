@@ -68,6 +68,7 @@ pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
 }
 
+// rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
 static DEFAULT_BREAK_CHARS: [char; 18] = [
     ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',

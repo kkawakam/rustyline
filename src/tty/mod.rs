@@ -116,8 +116,8 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
 /// Terminal contract
 pub trait Term {
-    type Reader: RawReader;
-    type Writer: Renderer;
+    type Reader: RawReader; // rl_instream
+    type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
 
     fn new() -> Self;

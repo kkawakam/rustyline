@@ -5,7 +5,7 @@ use std::default::Default;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
     /// Maximum number of entries in History.
-    max_history_size: usize,
+    max_history_size: usize, // history_max_entries
     history_duplicates: HistoryDuplicates,
     history_ignore_space: bool,
     completion_type: CompletionType,

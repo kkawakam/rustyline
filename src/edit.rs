@@ -19,7 +19,7 @@ use undo::Changeset;
 /// Implement rendering.
 pub struct State<'out, 'prompt> {
     pub out: &'out mut Renderer,
-    prompt: &'prompt str,  // Prompt to display
+    prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
     cursor: Position,      /* Cursor position (relative to the start of the prompt

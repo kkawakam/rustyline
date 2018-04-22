@@ -47,8 +47,8 @@ pub trait ChangeListener: DeleteListener {
 ///
 /// The methods do text manipulations or/and cursor movements.
 pub struct LineBuffer {
-    buf: String, // Edited line buffer
-    pos: usize,  // Current cursor position (byte position)
+    buf: String, // Edited line buffer (rl_line_buffer)
+    pos: usize,  // Current cursor position (byte position) (rl_point)
     dl: Option<Rc<RefCell<DeleteListener>>>,
     cl: Option<Rc<RefCell<ChangeListener>>>,
 }

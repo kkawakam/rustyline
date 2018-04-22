@@ -8,8 +8,9 @@ Bell
 
 Color
 - [x] ANSI Colors & Windows 10+
-- [ ] ANSI Colors & Windows <10
+- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)
 - [ ] Syntax highlighting
+- [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 
 Completion
 - [ ] Quoted path
@@ -67,4 +68,4 @@ Unix
 Windows
 - [ ] is_atty is not working with cygwin/msys
 - [ ] UTF-16 surrogate pair
-- [ ] handle ansi escape code
+- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)

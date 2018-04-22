@@ -151,9 +151,12 @@ impl Changeset {
         self.undos.push(last_change);
     }
 
-    pub fn insert_str<S: Into<String> + Debug>(&mut self, idx: usize, string: S) {
+    pub fn insert_str<S: AsRef<str> + Into<String> + Debug>(&mut self, idx: usize, string: S) {
         debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
         self.redos.clear();
+        if string.as_ref().is_empty() {
+            return;
+        }
         self.undos.push(Change::Insert {
             idx,
             text: string.into(),
@@ -163,6 +166,9 @@ impl Changeset {
     pub fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
         debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
         self.redos.clear();
+        if string.as_ref().is_empty() {
+            return;
+        }
 
         if !Self::single_char(string.as_ref())
             || !self.undos
@@ -246,10 +252,10 @@ impl Changeset {
                     }
                     _ => {
                         change.undo(line);
-                        self.redos.push(change);
                         undone = true;
                     }
                 };
+                self.redos.push(change);
             } else {
                 break;
             }
@@ -280,10 +286,10 @@ impl Changeset {
                     }
                     _ => {
                         change.redo(line);
-                        self.undos.push(change);
                         redone = true;
                     }
                 };
+                self.undos.push(change);
             } else {
                 break;
             }

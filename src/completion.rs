@@ -66,6 +66,7 @@ box_completer! { Box Rc Arc }
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
+    double_quotes_special_chars: BTreeSet<char>,
 }
 
 // rl_basic_word_break_characters, rl_completer_word_break_characters
@@ -83,10 +84,15 @@ static DEFAULT_BREAK_CHARS: [char; 17] = [
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;
 
+// In double quotes, not all break_chars need to be escaped
+// https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+static DOUBLE_QUOTES_SPECIAL_CHARS: [char; 4] = ['"', '$', '\\', '`'];
+
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
         FilenameCompleter {
             break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect(),
+            double_quotes_special_chars: DOUBLE_QUOTES_SPECIAL_CHARS.iter().cloned().collect(),
         }
     }
 }
@@ -99,9 +105,25 @@ impl Default for FilenameCompleter {
 
 impl Completer for FilenameCompleter {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
-        let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
-        let path = unescape(path, ESCAPE_CHAR);
-        let matches = try!(filename_complete(&path, ESCAPE_CHAR, &self.break_chars));
+        let (start, path, esc_char, break_chars) =
+            if let Some((idx, double_quote)) = find_unclosed_quote(&line[..pos]) {
+                let start = idx + 1;
+                if double_quote {
+                    (
+                        start,
+                        unescape(&line[start..pos], ESCAPE_CHAR),
+                        ESCAPE_CHAR,
+                        &self.double_quotes_special_chars,
+                    )
+                } else {
+                    (start, Borrowed(&line[start..pos]), None, &self.break_chars)
+                }
+            } else {
+                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
+                let path = unescape(path, ESCAPE_CHAR);
+                (start, path, ESCAPE_CHAR, &self.break_chars)
+            };
+        let matches = try!(filename_complete(&path, esc_char, break_chars));
         Ok((start, matches))
     }
 }
@@ -271,6 +293,61 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
     Some(&candidates[0][0..longest_common_prefix])
 }
 
+#[derive(PartialEq)]
+enum ScanMode {
+    DoubleQuote,
+    Escape,
+    EscapeInDoubleQuote,
+    Normal,
+    SingleQuote,
+}
+
+/// try to find an unclosed single/double quote in `s`.
+/// Return `None` if no unclosed quote is found.
+/// Return the unclosed quote position and if it is a double quote.
+fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
+    let char_indices = s.char_indices();
+    let mut mode = ScanMode::Normal;
+    let mut quote_index = 0;
+    for (index, char) in char_indices {
+        match mode {
+            ScanMode::DoubleQuote => {
+                if char == '"' {
+                    mode = ScanMode::Normal;
+                } else if char == '\\' {
+                    mode = ScanMode::EscapeInDoubleQuote;
+                }
+            }
+            ScanMode::Escape => {
+                mode = ScanMode::Normal;
+            }
+            ScanMode::EscapeInDoubleQuote => {
+                mode = ScanMode::DoubleQuote;
+            }
+            ScanMode::Normal => {
+                if char == '"' {
+                    mode = ScanMode::DoubleQuote;
+                    quote_index = index;
+                } else if char == '\\' && cfg!(not(windows)) {
+                    mode = ScanMode::Escape;
+                } else if char == '\'' && cfg!(not(windows)) {
+                    mode = ScanMode::SingleQuote;
+                    quote_index = index;
+                }
+            }
+            ScanMode::SingleQuote => {
+                if char == '\'' {
+                    mode = ScanMode::Normal;
+                } // no escape in single quotes
+            }
+        };
+    }
+    if ScanMode::DoubleQuote == mode || ScanMode::SingleQuote == mode {
+        return Some((quote_index, ScanMode::DoubleQuote == mode));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -346,5 +423,18 @@ mod tests {
         let candidates = vec![String::from("fée"), String::from("fête")];
         let lcp = super::longest_common_prefix(&candidates);
         assert_eq!(Some("f"), lcp);
+    }
+
+    #[test]
+    pub fn find_unclosed_quote() {
+        assert_eq!(None, super::find_unclosed_quote("ls /etc"));
+        assert_eq!(
+            Some((3, true)),
+            super::find_unclosed_quote("ls \"User Information")
+        );
+        assert_eq!(
+            None,
+            super::find_unclosed_quote("ls \"/User Information\" /etc")
+        );
     }
 }

@@ -13,7 +13,7 @@ Color
 - [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 
 Completion
-- [ ] Quoted path
+- [X] Quoted path
 - [ ] Windows escape/unescape space in path
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)

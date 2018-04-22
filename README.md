@@ -211,21 +211,17 @@ $ bind -p
 
 ## Similar projects
 
- - [copperline](https://github.com/srijs/rust-copperline) (Rust)
- - [liner](https://github.com/peterh/liner) (Go)
- - [readline](https://github.com/chzyer/readline) (Go)
-
-Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors |
---------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------ |
-[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  | ?      |
-[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux     |
-[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?      |
-[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           |            | Emacs/conf    | Yes       | No   | ?      |
-[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  | Ux     |
-[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/conf | Yes       | Yes  | Ux/Win |
-[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?      |
-[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win |
-Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           |            | Emacs/Vi/bind | Yes       | Yes  | Ux     |
+Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     |
+--------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          |
+[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         |
+[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          |
+[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  | Ux         |
+[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | Ux/Win     |
+[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?          |
+[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ |
 
 [Haskeline]: https://github.com/judah/haskeline
 [Linefeed]: https://github.com/murarth/linefeed

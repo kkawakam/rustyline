@@ -130,6 +130,8 @@ impl History {
             try!(wtr.write_all(entry.as_bytes()));
             try!(wtr.write_all(b"\n"));
         }
+        // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
+        try!(wtr.flush());
         Ok(())
     }
 

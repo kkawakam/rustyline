@@ -61,7 +61,7 @@ use edit::State;
 use hint::Hinter;
 use history::{Direction, History};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use keymap::{EditState, Refresher};
+use keymap::{InputState, Refresher};
 use kill_ring::{KillRing, Mode};
 use line_buffer::WordAction;
 
@@ -72,7 +72,7 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 fn complete_line<R: RawReader, C: Completer>(
     rdr: &mut R,
     s: &mut State,
-    edit_state: &mut EditState,
+    input_state: &mut InputState,
     completer: &C,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -100,7 +100,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 try!(s.refresh_line());
             }
 
-            cmd = try!(s.next_cmd(edit_state, rdr, true));
+            cmd = try!(s.next_cmd(input_state, rdr, true));
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -138,7 +138,7 @@ fn complete_line<R: RawReader, C: Completer>(
             }
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = try!(s.next_cmd(edit_state, rdr, true));
+        let mut cmd = try!(s.next_cmd(input_state, rdr, true));
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -157,7 +157,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = try!(s.next_cmd(edit_state, rdr, false));
+                cmd = try!(s.next_cmd(input_state, rdr, false));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
@@ -167,7 +167,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, edit_state, &candidates)
+            page_completions(rdr, s, input_state, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -180,7 +180,7 @@ fn complete_line<R: RawReader, C: Completer>(
 fn page_completions<R: RawReader>(
     rdr: &mut R,
     s: &mut State,
-    edit_state: &mut EditState,
+    input_state: &mut InputState,
     candidates: &[String],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -213,7 +213,7 @@ fn page_completions<R: RawReader>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
             {
-                cmd = try!(s.next_cmd(edit_state, rdr, false));
+                cmd = try!(s.next_cmd(input_state, rdr, false));
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
@@ -253,7 +253,7 @@ fn page_completions<R: RawReader>(
 fn reverse_incremental_search<R: RawReader>(
     rdr: &mut R,
     s: &mut State,
-    edit_state: &mut EditState,
+    input_state: &mut InputState,
     history: &History,
 ) -> Result<Option<Cmd>> {
     if history.is_empty() {
@@ -279,7 +279,7 @@ fn reverse_incremental_search<R: RawReader>(
         };
         try!(s.refresh_prompt_and_line(&prompt));
 
-        cmd = try!(s.next_cmd(edit_state, rdr, true));
+        cmd = try!(s.next_cmd(input_state, rdr, true));
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -348,7 +348,7 @@ fn readline_edit<H: Helper>(
 
     editor.reset_kill_ring();
     let mut s = State::new(&mut stdout, prompt, editor.history.len(), hinter);
-    let mut edit_state = EditState::new(&editor.config, Rc::clone(&editor.custom_bindings));
+    let mut input_state = InputState::new(&editor.config, Rc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
     s.line.set_change_listener(s.changes.clone());
@@ -363,7 +363,7 @@ fn readline_edit<H: Helper>(
     let mut rdr = try!(editor.term.create_reader(&editor.config));
 
     loop {
-        let rc = s.next_cmd(&mut edit_state, &mut rdr, false);
+        let rc = s.next_cmd(&mut input_state, &mut rdr, false);
         let mut cmd = try!(rc);
 
         if cmd.should_reset_kill_ring() {
@@ -375,7 +375,7 @@ fn readline_edit<H: Helper>(
             let next = try!(complete_line(
                 &mut rdr,
                 &mut s,
-                &mut edit_state,
+                &mut input_state,
                 completer.unwrap(),
                 &editor.config,
             ));
@@ -390,7 +390,7 @@ fn readline_edit<H: Helper>(
             try!(s.edit_insert(c, n));
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            try!(s.edit_yank(&edit_state, &text, Anchor::Before, n));
+            try!(s.edit_yank(&input_state, &text, Anchor::Before, n));
             continue;
         }
 
@@ -399,7 +399,7 @@ fn readline_edit<H: Helper>(
             let next = try!(reverse_incremental_search(
                 &mut rdr,
                 &mut s,
-                &mut edit_state,
+                &mut input_state,
                 &editor.history,
             ));
             if next.is_some() {
@@ -432,7 +432,7 @@ fn readline_edit<H: Helper>(
             Cmd::Overwrite(c) => {
                 try!(s.edit_overwrite_char(c));
             }
-            Cmd::EndOfFile => if !edit_state.is_emacs_mode() && !s.line.is_empty() {
+            Cmd::EndOfFile => if !input_state.is_emacs_mode() && !s.line.is_empty() {
                 try!(s.edit_move_end());
                 break;
             } else if s.line.is_empty() {
@@ -502,7 +502,7 @@ fn readline_edit<H: Helper>(
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 if let Some(text) = editor.kill_ring.borrow_mut().yank() {
-                    try!(s.edit_yank(&edit_state, text, anchor, n))
+                    try!(s.edit_yank(&input_state, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {
@@ -848,7 +848,7 @@ mod test {
     use config::Config;
     use consts::KeyPress;
     use edit::init_state;
-    use keymap::{Cmd, EditState};
+    use keymap::{Cmd, InputState};
 
     fn init_editor(keys: &[KeyPress]) -> Editor<()> {
         let mut editor = Editor::<()>::new();
@@ -868,14 +868,14 @@ mod test {
         let mut out = ::std::io::sink();
         let mut s = init_state(&mut out, "rus", 3);
         let config = Config::default();
-        let mut edit_state = EditState::new(&config, Rc::new(RefCell::new(HashMap::new())));
+        let mut input_state = InputState::new(&config, Rc::new(RefCell::new(HashMap::new())));
         let keys = &[KeyPress::Enter];
         let mut rdr = keys.iter();
         let completer = SimpleCompleter;
         let cmd = super::complete_line(
             &mut rdr,
             &mut s,
-            &mut edit_state,
+            &mut input_state,
             &completer,
             &Config::default(),
         ).unwrap();

@@ -242,7 +242,7 @@ enum InputMode {
 }
 
 /// Tranform key(s) to commands based on current input mode
-pub struct EditState {
+pub struct InputState {
     mode: EditMode,
     custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
     input_mode: InputMode, // vi only ?
@@ -261,9 +261,12 @@ pub trait Refresher {
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
 }
 
-impl EditState {
-    pub fn new(config: &Config, custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>) -> EditState {
-        EditState {
+impl InputState {
+    pub fn new(
+        config: &Config,
+        custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+    ) -> InputState {
+        InputState {
             mode: config.edit_mode(),
             custom_bindings,
             input_mode: InputMode::Insert,

@@ -10,7 +10,7 @@ use super::Result;
 use hint::Hinter;
 use history::{Direction, History};
 use keymap::{Anchor, At, CharSearch, Cmd, RepeatCount, Word};
-use keymap::{EditState, Refresher};
+use keymap::{InputState, Refresher};
 use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use tty::{Position, RawReader, Renderer};
 use undo::Changeset;
@@ -28,7 +28,7 @@ pub struct State<'out, 'prompt> {
     history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
-    pub changes: Rc<RefCell<Changeset>>,
+    pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out Hinter>,
 }
 
@@ -58,12 +58,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     pub fn next_cmd<R: RawReader>(
         &mut self,
-        edit_state: &mut EditState,
+        input_state: &mut InputState,
         rdr: &mut R,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
-            let rc = edit_state.next_cmd(rdr, self, single_esc_abort);
+            let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 try!(self.refresh_line());
@@ -213,7 +213,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     // Yank/paste `text` at current position.
     pub fn edit_yank(
         &mut self,
-        edit_state: &EditState,
+        input_state: &InputState,
         text: &str,
         anchor: Anchor,
         n: RepeatCount,
@@ -222,7 +222,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             self.line.move_forward(1);
         }
         if self.line.yank(text, n).is_some() {
-            if !edit_state.is_emacs_mode() {
+            if !input_state.is_emacs_mode() {
                 self.line.move_backward(1);
             }
             self.refresh_line()

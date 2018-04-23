@@ -1,4 +1,4 @@
-//! Kill Ring
+//! Kill Ring management
 use line_buffer::{DeleteListener, Direction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

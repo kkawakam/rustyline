@@ -70,7 +70,7 @@ pub enum Cmd {
     /// transpose-words
     TransposeWords(RepeatCount),
     /// undo
-    Undo,
+    Undo(RepeatCount),
     Unknown,
     /// upcase-word
     UpcaseWord,
@@ -259,6 +259,12 @@ pub trait Refresher {
     fn refresh_line(&mut self) -> Result<()>;
     /// Same as `refresh_line` but with a dynamic prompt.
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
+    /// Vi only, switch to insert mode.
+    fn doing_insert(&mut self);
+    /// Vi only, start replacing text.
+    fn doing_replace(&mut self);
+    /// Vi only, switch to command mode.
+    fn done_inserting(&mut self);
 }
 
 impl InputState {
@@ -292,7 +298,7 @@ impl InputState {
     ) -> Result<Cmd> {
         match self.mode {
             EditMode::Emacs => self.emacs(rdr, wrt, single_esc_abort),
-            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr),
+            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt),
             EditMode::Vi => self.vi_command(rdr, wrt),
         }
     }
@@ -394,7 +400,7 @@ impl InputState {
                 let snd_key = try!(rdr.next_key(true));
                 match snd_key {
                     KeyPress::Ctrl('G') | KeyPress::Esc => Cmd::Abort,
-                    KeyPress::Ctrl('U') => Cmd::Undo,
+                    KeyPress::Ctrl('U') => Cmd::Undo(n),
                     _ => Cmd::Unknown,
                 }
             }
@@ -480,7 +486,7 @@ impl InputState {
         let cmd = match key {
             KeyPress::Char('$') |
             KeyPress::End => Cmd::Move(Movement::EndOfLine),
-            KeyPress::Char('.') => { // vi-redo
+            KeyPress::Char('.') => { // vi-redo (repeat last command)
                 if no_num_args {
                     self.last_cmd.redo(None)
                 } else {
@@ -493,17 +499,20 @@ impl InputState {
             KeyPress::Char('a') => {
                 // vi-append-mode
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Move(Movement::ForwardChar(n))
             }
             KeyPress::Char('A') => {
                 // vi-append-eol
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Move(Movement::EndOfLine)
             }
             KeyPress::Char('b') => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), // vi-prev-word
             KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             KeyPress::Char('c') => {
                 self.input_mode = InputMode::Insert;
+                wrt.doing_replace();
                 match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
@@ -511,6 +520,7 @@ impl InputState {
             }
             KeyPress::Char('C') => {
                 self.input_mode = InputMode::Insert;
+                wrt.doing_replace();
                 Cmd::Kill(Movement::EndOfLine)
             }
             KeyPress::Char('d') => {
@@ -526,11 +536,13 @@ impl InputState {
             KeyPress::Char('i') => {
                 // vi-insertion-mode
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Noop
             }
             KeyPress::Char('I') => {
                 // vi-insert-beg
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Move(Movement::BeginningOfLine)
             }
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
@@ -568,19 +580,22 @@ impl InputState {
             KeyPress::Char('R') => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
+                wrt.doing_replace();
                 Cmd::Noop
             }
             KeyPress::Char('s') => {
                 // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
+                wrt.doing_replace();
                 Cmd::Kill(Movement::ForwardChar(n))
             }
             KeyPress::Char('S') => {
                 // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
+                wrt.doing_replace();
                 Cmd::Kill(Movement::WholeLine)
             }
-            KeyPress::Char('u') => Cmd::Undo,
+            KeyPress::Char('u') => Cmd::Undo(n),
             // KeyPress::Char('U') => Cmd::???, // revert-line
             KeyPress::Char('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), // vi-next-word
             KeyPress::Char('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), // vi-next-word
@@ -624,7 +639,7 @@ impl InputState {
         Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R) -> Result<Cmd> {
+    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
         let key = try!(rdr.next_key(false));
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             debug!(target: "rustyline", "Custom command: {:?}", cmd);
@@ -645,6 +660,7 @@ impl InputState {
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;
+                wrt.done_inserting();
                 Cmd::Move(Movement::BackwardChar(1))
             }
             _ => self.common(key, 1, true),
@@ -804,7 +820,7 @@ impl InputState {
                 }
             }
             KeyPress::Ctrl('Z') => Cmd::Suspend,
-            KeyPress::Ctrl('_') => Cmd::Undo,
+            KeyPress::Ctrl('_') => Cmd::Undo(n),
             KeyPress::UnknownEscSeq => Cmd::Noop,
             _ => Cmd::Unknown,
         }

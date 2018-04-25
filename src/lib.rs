@@ -576,9 +576,9 @@ fn readline_edit<H: Helper>(
                 try!(s.edit_delete_to(cs, n));
                 editor.kill_ring.borrow_mut().stop_killing();
             }
-            Cmd::Undo => {
+            Cmd::Undo(n) => {
                 s.line.remove_change_listener();
-                if s.changes.borrow_mut().undo(&mut s.line) {
+                if s.changes.borrow_mut().undo(&mut s.line, n) {
                     try!(s.refresh_line());
                 }
                 s.line.set_change_listener(s.changes.clone());

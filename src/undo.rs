@@ -1,6 +1,7 @@
 //! Undo API
 use std::fmt::Debug;
 
+use keymap::RepeatCount;
 use line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -97,6 +98,7 @@ impl Change {
 }
 
 pub struct Changeset {
+    undo_group_level: u32,
     undos: Vec<Change>, // undoable changes
     redos: Vec<Change>, // undone changes, redoable
 }
@@ -104,6 +106,7 @@ pub struct Changeset {
 impl Changeset {
     pub fn new() -> Changeset {
         Changeset {
+            undo_group_level: 0,
             undos: Vec::new(),
             redos: Vec::new(),
         }
@@ -114,17 +117,21 @@ impl Changeset {
         self.redos.clear();
         let mark = self.undos.len();
         self.undos.push(Change::Begin);
+        self.undo_group_level += 1;
         mark
     }
 
     pub fn end(&mut self) {
         debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();
-        if let Some(&Change::Begin) = self.undos.last() {
-            // emtpy Begin..End
-            self.undos.pop();
-        } else {
-            self.undos.push(Change::End);
+        while self.undo_group_level > 0 {
+            self.undo_group_level -= 1;
+            if let Some(&Change::Begin) = self.undos.last() {
+                // emtpy Begin..End
+                self.undos.pop();
+            } else {
+                self.undos.push(Change::End);
+            }
         }
     }
 
@@ -237,8 +244,9 @@ impl Changeset {
         self.undos.push(last_change);
     }
 
-    pub fn undo(&mut self, line: &mut LineBuffer) -> bool {
+    pub fn undo(&mut self, line: &mut LineBuffer, n: RepeatCount) -> bool {
         debug!(target: "rustyline", "Changeset::undo");
+        let mut count = 0;
         let mut waiting_for_begin = 0;
         let mut undone = false;
         loop {
@@ -260,7 +268,10 @@ impl Changeset {
                 break;
             }
             if waiting_for_begin <= 0 {
-                break;
+                count += 1;
+                if count >= n {
+                    break;
+                }
             }
         }
         undone
@@ -353,7 +364,7 @@ mod tests {
 
         cs.insert_str(5, ", world!");
 
-        cs.undo(&mut buf);
+        cs.undo(&mut buf, 1);
         assert_eq!(0, cs.undos.len());
         assert_eq!(1, cs.redos.len());
         assert_eq!(buf.as_str(), "Hello");
@@ -373,7 +384,7 @@ mod tests {
 
         cs.delete(5, ", world!");
 
-        cs.undo(&mut buf);
+        cs.undo(&mut buf, 1);
         assert_eq!(buf.as_str(), "Hello, world!");
 
         cs.redo(&mut buf);
@@ -390,7 +401,7 @@ mod tests {
         cs.delete(1, "l");
         assert_eq!(1, cs.undos.len());
 
-        cs.undo(&mut buf);
+        cs.undo(&mut buf, 1);
         assert_eq!(buf.as_str(), "Hello");
     }
 
@@ -404,7 +415,7 @@ mod tests {
         cs.delete(1, "e");
         assert_eq!(1, cs.undos.len());
 
-        cs.undo(&mut buf);
+        cs.undo(&mut buf, 1);
         assert_eq!(buf.as_str(), "Hello");
     }
 
@@ -419,7 +430,7 @@ mod tests {
         assert_eq!(buf.as_str(), "Hi, world!");
         cs.replace(1, "ello", "i");
 
-        cs.undo(&mut buf);
+        cs.undo(&mut buf, 1);
         assert_eq!(buf.as_str(), "Hello, world!");
 
         cs.redo(&mut buf);

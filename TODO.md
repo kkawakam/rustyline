@@ -57,10 +57,10 @@ Repeat
 
 Undo
 - [ ] Merge consecutive Replace
-- [ ] Undo group
+- [X] Undo group
 - [ ] Undo all changes made to this line.
-- [ ] Kill+Insert (substitute/replace)
-- [ ] Repeated undo `Undo(RepeatCount)`
+- [X] Kill+Insert (substitute/replace)
+- [X] Repeated undo `Undo(RepeatCount)`
 
 Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)

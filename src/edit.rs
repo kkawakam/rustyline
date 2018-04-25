@@ -132,6 +132,15 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
         let hint = self.hint();
         self.refresh(prompt, prompt_size, hint)
     }
+    fn doing_insert(&mut self) {
+        self.changes.borrow_mut().begin();
+    }
+    fn doing_replace(&mut self) {
+        self.changes.borrow_mut().begin();
+    }
+    fn done_inserting(&mut self) {
+        self.changes.borrow_mut().end();
+    }
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {

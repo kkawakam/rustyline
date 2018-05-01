@@ -1,6 +1,6 @@
 //! Unix specific definitions
 use std;
-use std::io::{self, Chars, Read, Stdout, Write};
+use std::io::{self, Read, Stdout, Write};
 use std::sync;
 use std::sync::atomic;
 
@@ -96,16 +96,17 @@ impl Read for StdinRaw {
 
 /// Console input reader
 pub struct PosixRawReader {
-    chars: Chars<StdinRaw>,
+    stdin: StdinRaw,
     timeout_ms: i32,
+    buf: [u8; 4],
 }
 
 impl PosixRawReader {
     fn new(config: &Config) -> Result<PosixRawReader> {
-        let stdin = StdinRaw {};
         Ok(PosixRawReader {
-            chars: stdin.chars(),
+            stdin: StdinRaw{},
             timeout_ms: config.keyseq_timeout(),
+            buf: [0; 4],
         })
     }
 
@@ -258,6 +259,26 @@ impl PosixRawReader {
     }
 }
 
+// https://tools.ietf.org/html/rfc3629
+static UTF8_CHAR_WIDTH: [u8; 256] = [
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x1F
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x3F
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x5F
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x7F
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 0x9F
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 0xBF
+0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // 0xDF
+3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, // 0xEF
+4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, // 0xFF
+];
+
 impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
@@ -287,9 +308,22 @@ impl RawReader for PosixRawReader {
     }
 
     fn next_char(&mut self) -> Result<char> {
-        match self.chars.next() {
-            Some(c) => Ok(try!(c)),
-            None => Err(error::ReadlineError::Eof),
+        let n = try!(self.stdin.read(&mut self.buf[..1]));
+        if n == 0 {
+            return Err(error::ReadlineError::Eof);
+        }
+        let first = self.buf[0];
+        if first >= 128 {
+            let width = UTF8_CHAR_WIDTH[first as usize] as usize;
+            if width == 0 {
+                try!(std::str::from_utf8(&self.buf[..1]));
+                unreachable!()
+            }
+            try!(self.stdin.read_exact(&mut self.buf[1..width]));
+            let s = try!(std::str::from_utf8(&self.buf[..width]));
+            Ok(s.chars().next().unwrap())
+        } else {
+            return Ok(first as char);
         }
     }
 }

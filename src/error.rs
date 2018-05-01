@@ -6,6 +6,7 @@ use std::char;
 use std::error;
 use std::fmt;
 use std::io;
+use std::str;
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
@@ -19,7 +20,7 @@ pub enum ReadlineError {
     Interrupted,
     /// Chars Error
     #[cfg(unix)]
-    Char(io::CharsError),
+    Char(str::Utf8Error),
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
@@ -79,8 +80,8 @@ impl From<nix::Error> for ReadlineError {
 }
 
 #[cfg(unix)]
-impl From<io::CharsError> for ReadlineError {
-    fn from(err: io::CharsError) -> ReadlineError {
+impl From<str::Utf8Error> for ReadlineError {
+    fn from(err: str::Utf8Error) -> ReadlineError {
         ReadlineError::Char(err)
     }
 }

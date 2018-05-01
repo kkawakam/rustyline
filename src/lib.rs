@@ -15,7 +15,6 @@
 //!     Err(_) => println!("No input"),
 //! }
 //! ```
-#![feature(io)]
 #![allow(unknown_lints)]
 
 extern crate libc;

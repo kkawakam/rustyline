@@ -17,12 +17,6 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 * Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
 * Mintty (Cygwin/Mingw) is not supported
 
-## Build
-This project uses Cargo and Rust nightly
-```bash
-cargo build --release
-```
-
 ## Example
 ```rust
 extern crate rustyline;

@@ -573,7 +573,7 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .filter(|&(_, ch)| ch.is_alphanumeric())
+            .filter(|&(_, ch)| ch.chars().all(|c| c.is_alphanumeric()))
             .map(|(i, _)| i)
             .next()
             .map(|i| i + self.pos)
@@ -774,16 +774,16 @@ fn is_end_of_word(word_def: Word, grapheme: &str, next: &str) -> bool {
 
 fn is_word_char(word_def: Word, grapheme: &str) -> bool {
     match word_def {
-        Word::Emacs => grapheme.is_alphanumeric(),
+        Word::Emacs => grapheme.chars().all(|c| c.is_alphanumeric()),
         Word::Vi => is_vi_word_char(grapheme),
-        Word::Big => !grapheme.is_whitespace(),
+        Word::Big => !grapheme.chars().any(|c| c.is_whitespace()),
     }
 }
 fn is_vi_word_char(grapheme: &str) -> bool {
-    grapheme.is_alphanumeric() || grapheme == "_"
+    grapheme.chars().all(|c| c.is_alphanumeric()) || grapheme == "_"
 }
 fn is_other_char(grapheme: &str) -> bool {
-    !(grapheme.is_whitespace() || is_vi_word_char(grapheme))
+    !(grapheme.chars().any(|c| c.is_whitespace()) || is_vi_word_char(grapheme))
 }
 
 #[cfg(test)]

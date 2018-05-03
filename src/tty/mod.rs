@@ -55,10 +55,17 @@ pub use self::windows::*;
 
 // If on Unix platform import Unix TTY module
 // and re-export into mod.rs scope
-#[cfg(all(unix, not(test)))]
+#[cfg(all(unix, not(any(test, target_os = "fuchsia"))))]
 mod unix;
-#[cfg(all(unix, not(test)))]
+#[cfg(all(unix, not(any(test, target_os = "fuchsia"))))]
 pub use self::unix::*;
+
+// If on a Fuchsia platform import Fuchsia TTY module
+// and re-export into mod.rs scope
+#[cfg(target_os = "fuchsia")]
+mod fuchsia;
+#[cfg(target_os = "fuchsia")]
+pub use self::fuchsia::*;
 
 #[cfg(test)]
 mod test;

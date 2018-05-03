@@ -22,12 +22,16 @@ extern crate encode_unicode;
 extern crate log;
 extern crate unicode_segmentation;
 extern crate unicode_width;
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 extern crate nix;
 #[cfg(windows)]
 extern crate winapi;
 #[cfg(windows)]
 extern crate kernel32;
+#[cfg(target_os = "fuchsia")]
+extern crate fuchsia_zircon as zx;
+#[cfg(target_os = "fuchsia")]
+extern crate fuchsia_device;
 
 pub mod completion;
 mod consts;
@@ -1089,7 +1093,7 @@ fn readline_edit<C: Completer>(prompt: &str,
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);
             }
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             Cmd::Suspend => {
                 try!(original_mode.disable_raw_mode());
                 try!(tty::suspend());

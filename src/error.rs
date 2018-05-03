@@ -4,7 +4,7 @@ use std::char;
 use std::io;
 use std::error;
 use std::fmt;
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 use nix;
 
 #[cfg(unix)]
@@ -24,7 +24,7 @@ pub enum ReadlineError {
     #[cfg(unix)]
     Char(char_iter::CharsError),
     /// Unix Error from syscall
-    #[cfg(unix)]
+    #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
     Errno(nix::Error),
     #[cfg(windows)]
     WindowResize,
@@ -40,7 +40,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.fmt(f),
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
@@ -58,7 +58,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.description(),
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             ReadlineError::Errno(ref err) => err.errno().desc(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
@@ -74,7 +74,7 @@ impl From<io::Error> for ReadlineError {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> ReadlineError {
         ReadlineError::Errno(err)

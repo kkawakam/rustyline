@@ -30,7 +30,7 @@ fn get_win_size() -> (usize, usize) {
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) { // .into() for FreeBSD
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }
@@ -323,7 +323,7 @@ impl RawReader for PosixRawReader {
             let s = try!(std::str::from_utf8(&self.buf[..width]));
             Ok(s.chars().next().unwrap())
         } else {
-            return Ok(first as char);
+            Ok(first as char)
         }
     }
 }

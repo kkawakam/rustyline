@@ -12,6 +12,7 @@ use unicode_segmentation::UnicodeSegmentation;
 pub static MAX_LINE: usize = 4096;
 
 /// Word's case change
+#[derive(Clone, Copy)]
 pub enum WordAction {
     CAPITALIZE,
     LOWERCASE,

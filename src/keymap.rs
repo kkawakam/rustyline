@@ -166,7 +166,7 @@ pub enum Anchor {
 }
 
 /// Vi character search
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CharSearch {
     Forward(char),
     // until
@@ -222,8 +222,8 @@ impl Movement {
             Movement::ForwardWord(previous, at, word) => {
                 Movement::ForwardWord(repeat_count(previous, new), at, word)
             }
-            Movement::ViCharSearch(previous, ref char_search) => {
-                Movement::ViCharSearch(repeat_count(previous, new), char_search.clone())
+            Movement::ViCharSearch(previous, char_search) => {
+                Movement::ViCharSearch(repeat_count(previous, new), char_search)
             }
             Movement::BackwardChar(previous) => Movement::BackwardChar(repeat_count(previous, new)),
             Movement::ForwardChar(previous) => Movement::ForwardChar(repeat_count(previous, new)),
@@ -555,7 +555,7 @@ impl InputState {
             }
             KeyPress::Char(';') => {
                 match self.last_char_search {
-                    Some(ref cs) => Cmd::Move(Movement::ViCharSearch(n, cs.clone())),
+                    Some(cs) => Cmd::Move(Movement::ViCharSearch(n, cs)),
                     None => Cmd::Noop,
                 }
             }
@@ -709,7 +709,7 @@ impl InputState {
                 }
             }
             KeyPress::Char(';') => match self.last_char_search {
-                Some(ref cs) => Some(Movement::ViCharSearch(n, cs.clone())),
+                Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                 None => None,
             },
             KeyPress::Char(',') => match self.last_char_search {
@@ -755,7 +755,7 @@ impl InputState {
                     'T' => CharSearch::BackwardAfter(ch),
                     _ => unreachable!(),
                 };
-                self.last_char_search = Some(cs.clone());
+                self.last_char_search = Some(cs);
                 Some(cs)
             }
             _ => None,

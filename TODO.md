@@ -67,5 +67,5 @@ Unix
 
 Windows
 - [ ] is_atty is not working with cygwin/msys
-- [ ] UTF-16 surrogate pair
+- [X] UTF-16 surrogate pair
 - [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)

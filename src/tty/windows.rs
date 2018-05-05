@@ -87,13 +87,13 @@ impl RawMode for Mode {
 /// Console input reader
 pub struct ConsoleRawReader {
     handle: HANDLE,
-    buf: Option<u16>,
+    buf: [u16; 2],
 }
 
 impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(ConsoleRawReader { handle, buf: None })
+        Ok(ConsoleRawReader { handle, buf: [0; 2] })
     }
 }
 
@@ -105,6 +105,7 @@ impl RawReader for ConsoleRawReader {
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
+        let mut surrogate = false;
         loop {
             // TODO GetNumberOfConsoleInputEvents
             check!(consoleapi::ReadConsoleInputW(
@@ -192,9 +193,19 @@ impl RawReader for ConsoleRawReader {
             } else if utf16 == 27 {
                 return Ok(KeyPress::Esc);
             } else {
-                // TODO How to support surrogate pair ?
-                self.buf = Some(utf16);
-                let orc = decode_utf16(self).next();
+                if utf16 >= 0xD800 && utf16 < 0xDC00 {
+                    surrogate = true;
+                    self.buf[0] = utf16;
+                    continue;
+                }
+                let buf = if surrogate {
+                    self.buf[1] = utf16;
+                    &self.buf[..]
+                } else {
+                    self.buf[0] = utf16;
+                    &self.buf[..1]
+                };
+                let orc = decode_utf16(buf.iter().cloned()).next();
                 if orc.is_none() {
                     return Err(error::ReadlineError::Eof);
                 }
@@ -206,16 +217,6 @@ impl RawReader for ConsoleRawReader {
                 }
             }
         }
-    }
-}
-
-impl Iterator for ConsoleRawReader {
-    type Item = u16;
-
-    fn next(&mut self) -> Option<u16> {
-        let buf = self.buf;
-        self.buf = None;
-        buf
     }
 }
 

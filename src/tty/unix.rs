@@ -84,7 +84,7 @@ impl Read for StdinRaw {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != io::ErrorKind::Interrupted {
+                if error.kind() != io::ErrorKind::Interrupted || SIGWINCH.load(atomic::Ordering::Relaxed) {
                     return Err(error);
                 }
             } else {

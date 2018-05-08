@@ -51,6 +51,9 @@ Mouse
 Movement
 - [ ] Move to the corresponding opening/closing bracket
 
+Redo
+- [ ] redo substitue
+
 Repeat
 - [x] dynamic prompt (arg: ?)
 - [ ] transpose chars
@@ -66,6 +69,6 @@ Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)
 
 Windows
-- [ ] is_atty is not working with cygwin/msys
+- [ ] is_atty is not working with cygwin/msys (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
 - [X] UTF-16 surrogate pair
 - [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)

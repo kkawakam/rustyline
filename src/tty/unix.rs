@@ -30,7 +30,8 @@ fn get_win_size() -> (usize, usize) {
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) { // .into() for FreeBSD
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
+            // .into() for FreeBSD
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }
@@ -84,7 +85,9 @@ impl Read for StdinRaw {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != io::ErrorKind::Interrupted || SIGWINCH.load(atomic::Ordering::Relaxed) {
+                if error.kind() != io::ErrorKind::Interrupted
+                    || SIGWINCH.load(atomic::Ordering::Relaxed)
+                {
                     return Err(error);
                 }
             } else {
@@ -104,7 +107,7 @@ pub struct PosixRawReader {
 impl PosixRawReader {
     fn new(config: &Config) -> Result<PosixRawReader> {
         Ok(PosixRawReader {
-            stdin: StdinRaw{},
+            stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 4],
         })
@@ -572,8 +575,11 @@ impl Term for PosixTerminal {
         let mut raw = original_mode.clone();
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
-        raw.input_flags &= !(InputFlags::BRKINT | InputFlags::ICRNL | InputFlags::INPCK
-            | InputFlags::ISTRIP | InputFlags::IXON);
+        raw.input_flags &= !(InputFlags::BRKINT
+            | InputFlags::ICRNL
+            | InputFlags::INPCK
+            | InputFlags::ISTRIP
+            | InputFlags::IXON);
         // we don't want raw output, it turns newlines into straight linefeeds
         // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST); // disable all output
         // processing

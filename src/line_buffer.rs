@@ -282,7 +282,8 @@ impl LineBuffer {
         match self.next_pos(n) {
             Some(pos) => {
                 let start = self.pos;
-                let chars = self.drain(start..pos, Direction::Forward)
+                let chars = self
+                    .drain(start..pos, Direction::Forward)
                     .collect::<String>();
                 Some(chars)
             }
@@ -586,7 +587,8 @@ impl LineBuffer {
                 if start == end {
                     return false;
                 }
-                let word = self.drain(start..end, Direction::default())
+                let word = self
+                    .drain(start..end, Direction::default())
                     .collect::<String>();
                 let result = match a {
                     WordAction::CAPITALIZE => {
@@ -622,7 +624,8 @@ impl LineBuffer {
 
         let w1 = self.buf[w1_beg..w1_end].to_owned();
 
-        let w2 = self.drain(w2_beg..w2_end, Direction::default())
+        let w2 = self
+            .drain(w2_beg..w2_end, Direction::default())
             .collect::<String>();
         self.insert_str(w2_beg, &w1);
 

@@ -150,7 +150,8 @@ fn complete_line<R: RawReader, C: Completer>(
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             try!(s.out.write_and_flush(msg.as_bytes()));
             s.old_rows += 1;
-            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y')
+            while cmd != Cmd::SelfInsert(1, 'y')
+                && cmd != Cmd::SelfInsert(1, 'Y')
                 && cmd != Cmd::SelfInsert(1, 'n')
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
@@ -202,7 +203,8 @@ fn page_completions<R: RawReader>(
         if row == pause_row {
             try!(s.out.write_and_flush(b"\n--More--"));
             let mut cmd = Cmd::Noop;
-            while cmd != Cmd::SelfInsert(1, 'y') && cmd != Cmd::SelfInsert(1, 'Y')
+            while cmd != Cmd::SelfInsert(1, 'y')
+                && cmd != Cmd::SelfInsert(1, 'Y')
                 && cmd != Cmd::SelfInsert(1, 'n')
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::SelfInsert(1, 'q')
@@ -476,10 +478,10 @@ fn readline_edit<H: Helper>(
                 try!(s.edit_history_next(&editor.history, true))
             }
             Cmd::HistorySearchBackward => {
-                try!(s.edit_history_search(&editor.history, Direction::Reverse,))
+                try!(s.edit_history_search(&editor.history, Direction::Reverse))
             }
             Cmd::HistorySearchForward => {
-                try!(s.edit_history_search(&editor.history, Direction::Forward,))
+                try!(s.edit_history_search(&editor.history, Direction::Forward))
             }
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.

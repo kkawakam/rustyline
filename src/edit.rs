@@ -86,7 +86,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     pub fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
-        let cursor = self.out
+        let cursor = self
+            .out
             .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
         if self.cursor == cursor {
             return Ok(());
@@ -165,11 +166,13 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             if push {
                 let prompt_size = self.prompt_size;
                 let hint = self.hint();
-                if n == 1 && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
+                if n == 1
+                    && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
                     && hint.is_none()
                 {
                     // Avoid a full update of the line in the trivial case.
-                    let cursor = self.out
+                    let cursor = self
+                        .out
                         .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
                     self.cursor = cursor;
                     let bits = ch.encode_utf8(&mut self.byte_buffer);

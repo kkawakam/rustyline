@@ -276,7 +276,8 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
         for (i, c1) in candidates.iter().enumerate().take(candidates.len() - 1) {
             let b1 = c1.as_bytes();
             let b2 = candidates[i + 1].as_bytes();
-            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix
+            if b1.len() <= longest_common_prefix
+                || b2.len() <= longest_common_prefix
                 || b1[longest_common_prefix] != b2[longest_common_prefix]
             {
                 break 'o;

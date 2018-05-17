@@ -328,7 +328,8 @@ impl InputState {
                         self.num_args *= digit.to_digit(10).unwrap() as i16;
                     } else if self.num_args.abs() < 1000 {
                         // shouldn't ever need more than 4 digits
-                        self.num_args = self.num_args
+                        self.num_args = self
+                            .num_args
                             .saturating_mul(10)
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }
@@ -451,7 +452,8 @@ impl InputState {
                 KeyPress::Char(digit @ '0'...'9') => {
                     if self.num_args.abs() < 1000 {
                         // shouldn't ever need more than 4 digits
-                        self.num_args = self.num_args
+                        self.num_args = self
+                            .num_args
                             .saturating_mul(10)
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }

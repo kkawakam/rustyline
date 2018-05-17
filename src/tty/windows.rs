@@ -93,15 +93,19 @@ pub struct ConsoleRawReader {
 impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(ConsoleRawReader { handle, buf: [0; 2] })
+        Ok(ConsoleRawReader {
+            handle,
+            buf: [0; 2],
+        })
     }
 }
 
 impl RawReader for ConsoleRawReader {
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
-        use winapi::um::wincon::{LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED,
-                                 RIGHT_CTRL_PRESSED};
+        use winapi::um::wincon::{
+            LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
+        };
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
@@ -445,7 +449,8 @@ impl Term for Console {
         let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
         let raw = original_stdin_mode
-            & !(wincon::ENABLE_LINE_INPUT | wincon::ENABLE_ECHO_INPUT
+            & !(wincon::ENABLE_LINE_INPUT
+                | wincon::ENABLE_ECHO_INPUT
                 | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         let raw = raw | wincon::ENABLE_EXTENDED_FLAGS;

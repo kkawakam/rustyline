@@ -453,9 +453,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         if history.is_empty() {
             return self.out.beep();
         }
-        if self.history_index == history.len() && dir == Direction::Forward {
-            return self.out.beep();
-        } else if self.history_index == 0 && dir == Direction::Reverse {
+        if self.history_index == history.len() && dir == Direction::Forward
+            || self.history_index == 0 && dir == Direction::Reverse
+        {
             return self.out.beep();
         }
         if dir == Direction::Reverse {

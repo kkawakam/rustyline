@@ -310,12 +310,29 @@ impl Changeset {
         }
         redone
     }
+
+    pub fn last_insert(&self) -> Option<String> {
+        for change in self.undos.iter().rev() {
+            match change {
+                Change::Insert { ref text, .. } => return Some(text.clone()),
+                Change::End => {
+                    continue;
+                }
+                _ => {
+                    return None;
+                }
+            }
+        }
+        None
+    }
 }
 
 impl DeleteListener for Changeset {
+    fn start_killing(&mut self) {}
     fn delete(&mut self, idx: usize, string: &str, _: Direction) {
         self.delete(idx, string);
     }
+    fn stop_killing(&mut self) {}
 }
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
@@ -435,5 +452,16 @@ mod tests {
 
         cs.redo(&mut buf);
         assert_eq!(buf.as_str(), "Hi, world!");
+    }
+
+    #[test]
+    fn test_last_insert() {
+        let mut cs = Changeset::new();
+        cs.begin();
+        cs.delete(0, "Hello");
+        cs.insert_str(0, "Bye");
+        cs.end();
+        let insert = cs.last_insert();
+        assert_eq!(Some("Bye".to_owned()), insert);
     }
 }

@@ -422,12 +422,12 @@ fn readline_edit<H: Helper>(
                 // Move back a character.
                 try!(s.edit_move_backward(n))
             }
-            Cmd::Kill(Movement::ForwardChar(n)) => {
-                // Delete (forward) one character at point.
-                try!(s.edit_delete(n))
-            }
-            Cmd::Replace(n, c) => {
-                try!(s.edit_replace_char(c, n));
+            Cmd::ReplaceChar(n, c) => try!(s.edit_replace_char(c, n)),
+            Cmd::Replace(mvt, text) => {
+                try!(s.edit_kill(&mvt));
+                if let Some(text) = text {
+                    try!(s.edit_insert_text(&text))
+                }
             }
             Cmd::Overwrite(c) => {
                 try!(s.edit_overwrite_char(c));
@@ -447,22 +447,6 @@ fn readline_edit<H: Helper>(
             Cmd::Move(Movement::ForwardChar(n)) => {
                 // Move forward a character.
                 try!(s.edit_move_forward(n))
-            }
-            Cmd::Kill(Movement::BackwardChar(n)) => {
-                // Delete one character backward.
-                try!(s.edit_backspace(n))
-            }
-            Cmd::Kill(Movement::EndOfLine) => {
-                // Kill the text from point to the end of the line.
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_kill_line());
-                editor.kill_ring.borrow_mut().stop_killing();
-            }
-            Cmd::Kill(Movement::WholeLine) => {
-                try!(s.edit_move_home());
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_kill_line());
-                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
@@ -487,12 +471,6 @@ fn readline_edit<H: Helper>(
                 // Exchange the char before cursor with the character at cursor.
                 try!(s.edit_transpose_chars())
             }
-            Cmd::Kill(Movement::BeginningOfLine) => {
-                // Kill backward from point to the beginning of the line.
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_discard_line());
-                editor.kill_ring.borrow_mut().stop_killing();
-            }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
@@ -505,7 +483,7 @@ fn readline_edit<H: Helper>(
                     try!(s.edit_yank(&input_state, text, anchor, n))
                 }
             }
-            Cmd::ViYankTo(mvt) => if let Some(text) = s.line.copy(mvt) {
+            Cmd::ViYankTo(ref mvt) => if let Some(text) = s.line.copy(mvt) {
                 editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
             },
             // TODO CTRL-_ // undo
@@ -519,12 +497,6 @@ fn readline_edit<H: Helper>(
                     try!(s.refresh_line());
                 }
                 break;
-            }
-            Cmd::Kill(Movement::BackwardWord(n, word_def)) => {
-                // kill one word backward (until start of word)
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_delete_prev_word(word_def, n));
-                editor.kill_ring.borrow_mut().stop_killing();
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -542,11 +514,8 @@ fn readline_edit<H: Helper>(
                 // capitalize word after point
                 try!(s.edit_word(WordAction::CAPITALIZE))
             }
-            Cmd::Kill(Movement::ForwardWord(n, at, word_def)) => {
-                // kill one word forward (until start/end of word)
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_delete_word(at, word_def, n));
-                editor.kill_ring.borrow_mut().stop_killing();
+            Cmd::Kill(ref mvt) => {
+                try!(s.edit_kill(mvt));
             }
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
@@ -571,11 +540,6 @@ fn readline_edit<H: Helper>(
                 }
             }
             Cmd::Move(Movement::ViCharSearch(n, cs)) => try!(s.edit_move_to(cs, n)),
-            Cmd::Kill(Movement::ViCharSearch(n, cs)) => {
-                editor.kill_ring.borrow_mut().start_killing();
-                try!(s.edit_delete_to(cs, n));
-                editor.kill_ring.borrow_mut().stop_killing();
-            }
             Cmd::Undo(n) => {
                 s.line.remove_change_listener();
                 if s.changes.borrow_mut().undo(&mut s.line, n) {

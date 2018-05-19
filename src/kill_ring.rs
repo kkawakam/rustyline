@@ -34,13 +34,6 @@ impl KillRing {
         }
     }
 
-    pub fn start_killing(&mut self) {
-        self.killing = true;
-    }
-    pub fn stop_killing(&mut self) {
-        self.killing = false;
-    }
-
     /// Reset `last_action` state.
     pub fn reset(&mut self) {
         self.last_action = Action::Other;
@@ -113,6 +106,9 @@ impl KillRing {
 }
 
 impl DeleteListener for KillRing {
+    fn start_killing(&mut self) {
+        self.killing = true;
+    }
     fn delete(&mut self, _: usize, string: &str, dir: Direction) {
         if !self.killing {
             return;
@@ -122,6 +118,9 @@ impl DeleteListener for KillRing {
             Direction::Backward => Mode::Prepend,
         };
         self.kill(string, mode);
+    }
+    fn stop_killing(&mut self) {
+        self.killing = false;
     }
 }
 

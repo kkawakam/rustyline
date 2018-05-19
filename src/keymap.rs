@@ -43,7 +43,7 @@ pub enum Cmd {
     Interrupt,
     /// backward-delete-char, backward-kill-line, backward-kill-word
     /// delete-char, kill-line, kill-word, unix-line-discard, unix-word-rubout,
-    /// vi-change-to, vi-delete, vi-delete-to, vi-rubout, vi-subst
+    /// vi-delete, vi-delete-to, vi-rubout
     Kill(Movement),
     /// backward-char, backward-word, beginning-of-line, end-of-line,
     /// forward-char, forward-word, vi-char-search, vi-end-word, vi-next-word,
@@ -59,7 +59,9 @@ pub enum Cmd {
     /// quoted-insert
     QuotedInsert,
     /// vi-change-char
-    Replace(RepeatCount, char),
+    ReplaceChar(RepeatCount, char),
+    /// vi-change-to, vi-substitute
+    Replace(Movement, Option<String>),
     /// reverse-search-history
     ReverseSearchHistory,
     /// self-insert
@@ -88,6 +90,7 @@ impl Cmd {
             Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
             Cmd::ClearScreen
             | Cmd::Kill(_)
+            | Cmd::Replace(_, _)
             | Cmd::Noop
             | Cmd::Suspend
             | Cmd::Yank(_, _)
@@ -100,6 +103,7 @@ impl Cmd {
         match *self {
             Cmd::Insert(_, _)
             | Cmd::Kill(_)
+            | Cmd::ReplaceChar(_, _)
             | Cmd::Replace(_, _)
             | Cmd::SelfInsert(_, _)
             | Cmd::ViYankTo(_)
@@ -115,15 +119,30 @@ impl Cmd {
         }
     }
 
-    fn redo(&self, new: Option<RepeatCount>) -> Cmd {
+    // Replay this command with a possible different `RepeatCount`.
+    fn redo(&self, new: Option<RepeatCount>, wrt: &Refresher) -> Cmd {
         match *self {
             Cmd::Insert(previous, ref text) => {
                 Cmd::Insert(repeat_count(previous, new), text.clone())
             }
             Cmd::Kill(ref mvt) => Cmd::Kill(mvt.redo(new)),
             Cmd::Move(ref mvt) => Cmd::Move(mvt.redo(new)),
-            Cmd::Replace(previous, c) => Cmd::Replace(repeat_count(previous, new), c),
-            Cmd::SelfInsert(previous, c) => Cmd::SelfInsert(repeat_count(previous, new), c),
+            Cmd::ReplaceChar(previous, c) => Cmd::ReplaceChar(repeat_count(previous, new), c),
+            Cmd::Replace(ref mvt, ref text) => {
+                if text.is_none() {
+                    Cmd::Replace(mvt.redo(new), wrt.last_insert())
+                } else {
+                    Cmd::Replace(mvt.redo(new), text.clone())
+                }
+            }
+            Cmd::SelfInsert(previous, c) => {
+                // consecutive char inserts are repeatable not only the last one...
+                if let Some(text) = wrt.last_insert() {
+                    Cmd::Insert(repeat_count(previous, new), text)
+                } else {
+                    Cmd::SelfInsert(repeat_count(previous, new), c)
+                }
+            }
             // Cmd::TransposeChars => Cmd::TransposeChars,
             Cmd::ViYankTo(ref mvt) => Cmd::ViYankTo(mvt.redo(new)),
             Cmd::Yank(previous, anchor) => Cmd::Yank(repeat_count(previous, new), anchor),
@@ -210,6 +229,7 @@ pub enum Movement {
 }
 
 impl Movement {
+    // Replay this movement with a possible different `RepeatCount`.
     fn redo(&self, new: Option<RepeatCount>) -> Movement {
         match *self {
             Movement::WholeLine => Movement::WholeLine,
@@ -248,8 +268,7 @@ pub struct InputState {
     input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
-    last_cmd: Cmd, // vi only
-    consecutive_insert: bool,
+    last_cmd: Cmd,                        // vi only
     last_char_search: Option<CharSearch>, // vi only
 }
 
@@ -261,10 +280,10 @@ pub trait Refresher {
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
     /// Vi only, switch to insert mode.
     fn doing_insert(&mut self);
-    /// Vi only, start replacing text.
-    fn doing_replace(&mut self);
     /// Vi only, switch to command mode.
     fn done_inserting(&mut self);
+    /// Vi only, last text inserted.
+    fn last_insert(&self) -> Option<String>;
 }
 
 impl InputState {
@@ -278,7 +297,6 @@ impl InputState {
             input_mode: InputMode::Insert,
             num_args: 0,
             last_cmd: Cmd::Noop,
-            consecutive_insert: false,
             last_char_search: None,
         }
     }
@@ -359,7 +377,7 @@ impl InputState {
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
-                cmd.redo(Some(n))
+                cmd.redo(Some(n), wrt)
             } else {
                 cmd.clone()
             });
@@ -477,9 +495,9 @@ impl InputState {
             debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
                 if no_num_args {
-                    cmd.redo(None)
+                    cmd.redo(None, wrt)
                 } else {
-                    cmd.redo(Some(n))
+                    cmd.redo(Some(n), wrt)
                 }
             } else {
                 cmd.clone()
@@ -490,9 +508,9 @@ impl InputState {
             KeyPress::End => Cmd::Move(Movement::EndOfLine),
             KeyPress::Char('.') => { // vi-redo (repeat last command)
                 if no_num_args {
-                    self.last_cmd.redo(None)
+                    self.last_cmd.redo(None, wrt)
                 } else {
-                    self.last_cmd.redo(Some(n))
+                    self.last_cmd.redo(Some(n), wrt)
                 }
             },
             // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing bracket
@@ -514,16 +532,14 @@ impl InputState {
             KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             KeyPress::Char('c') => {
                 self.input_mode = InputMode::Insert;
-                wrt.doing_replace();
                 match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
-                    Some(mvt) => Cmd::Kill(mvt),
+                    Some(mvt) => Cmd::Replace(mvt, None),
                     None => Cmd::Unknown,
                 }
             }
             KeyPress::Char('C') => {
                 self.input_mode = InputMode::Insert;
-                wrt.doing_replace();
-                Cmd::Kill(Movement::EndOfLine)
+                Cmd::Replace(Movement::EndOfLine, None)
             }
             KeyPress::Char('d') => {
                 match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
@@ -574,7 +590,7 @@ impl InputState {
                 // vi-replace-char:
                 let ch = try!(rdr.next_key(false));
                 match ch {
-                    KeyPress::Char(c) => Cmd::Replace(n, c),
+                    KeyPress::Char(c) => Cmd::ReplaceChar(n, c),
                     KeyPress::Esc => Cmd::Noop,
                     _ => Cmd::Unknown,
                 }
@@ -582,20 +598,17 @@ impl InputState {
             KeyPress::Char('R') => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
-                wrt.doing_replace();
-                Cmd::Noop
+                Cmd::Noop // FIXME no redo possible
             }
             KeyPress::Char('s') => {
                 // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
-                wrt.doing_replace();
-                Cmd::Kill(Movement::ForwardChar(n))
+                Cmd::Replace(Movement::ForwardChar(n), None)
             }
             KeyPress::Char('S') => {
                 // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
-                wrt.doing_replace();
-                Cmd::Kill(Movement::WholeLine)
+                Cmd::Replace(Movement::WholeLine, None)
             }
             KeyPress::Char('u') => Cmd::Undo(n),
             // KeyPress::Char('U') => Cmd::???, // revert-line
@@ -636,7 +649,7 @@ impl InputState {
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
         if cmd.is_repeatable_change() {
-            self.update_last_cmd(cmd.clone());
+            self.last_cmd = cmd.clone();
         }
         Ok(cmd)
     }
@@ -646,7 +659,7 @@ impl InputState {
         if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
             debug!(target: "rustyline", "Custom command: {:?}", cmd);
             return Ok(if cmd.is_repeatable() {
-                cmd.redo(None)
+                cmd.redo(None, wrt)
             } else {
                 cmd.clone()
             });
@@ -669,12 +682,12 @@ impl InputState {
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
-            self.update_last_cmd(cmd.clone());
+            if let (Cmd::Replace(_, _), Cmd::SelfInsert(_, _)) = (&self.last_cmd, &cmd) {
+                // replacing...
+            } else {
+                self.last_cmd = cmd.clone();
+            }
         }
-        self.consecutive_insert = match cmd {
-            Cmd::SelfInsert(_, _) => true,
-            _ => false,
-        };
         Ok(cmd)
     }
 
@@ -856,28 +869,6 @@ impl InputState {
             unreachable!()
         } else {
             num_args.abs() as RepeatCount
-        }
-    }
-
-    fn update_last_cmd(&mut self, new: Cmd) {
-        // consecutive char inserts are repeatable not only the last one...
-        if !self.consecutive_insert {
-            self.last_cmd = new;
-        } else if let Cmd::SelfInsert(_, c) = new {
-            match self.last_cmd {
-                Cmd::SelfInsert(_, pc) => {
-                    let mut text = String::new();
-                    text.push(pc);
-                    text.push(c);
-                    self.last_cmd = Cmd::Insert(1, text);
-                }
-                Cmd::Insert(_, ref mut text) => {
-                    text.push(c);
-                }
-                _ => self.last_cmd = new,
-            }
-        } else {
-            self.last_cmd = new;
         }
     }
 }

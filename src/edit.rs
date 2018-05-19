@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthChar;
 use super::Result;
 use hint::Hinter;
 use history::{Direction, History};
-use keymap::{Anchor, At, CharSearch, Cmd, RepeatCount, Word};
+use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use keymap::{InputState, Refresher};
 use line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use tty::{Position, RawReader, Renderer};
@@ -68,6 +68,9 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                 self.out.update_size();
                 try!(self.refresh_line());
                 continue;
+            }
+            if let Ok(Cmd::Replace(_, _)) = rc {
+                self.changes.borrow_mut().begin();
             }
             return rc;
         }
@@ -136,11 +139,11 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     fn doing_insert(&mut self) {
         self.changes.borrow_mut().begin();
     }
-    fn doing_replace(&mut self) {
-        self.changes.borrow_mut().begin();
-    }
     fn done_inserting(&mut self) {
         self.changes.borrow_mut().end();
+    }
+    fn last_insert(&self) -> Option<String> {
+        self.changes.borrow().last_insert()
     }
 }
 
@@ -291,38 +294,26 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    /// Delete the character at the right of the cursor without altering the
-    /// cursor position. Basically this is what happens with the "Delete"
-    /// keyboard key.
+    pub fn edit_kill(&mut self, mvt: &Movement) -> Result<()> {
+        if self.line.kill(mvt) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn edit_insert_text(&mut self, text: &str) -> Result<()> {
+        if !text.is_empty() {
+            let cursor = self.line.pos();
+            self.line.insert_str(cursor, text);
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn edit_delete(&mut self, n: RepeatCount) -> Result<()> {
         if self.line.delete(n).is_some() {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Backspace implementation.
-    pub fn edit_backspace(&mut self, n: RepeatCount) -> Result<()> {
-        if self.line.backspace(n) {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Kill the text from point to the end of the line.
-    pub fn edit_kill_line(&mut self) -> Result<()> {
-        if self.line.kill_line() {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Kill backward from point to the beginning of the line.
-    pub fn edit_discard_line(&mut self) -> Result<()> {
-        if self.line.discard_line() {
             self.refresh_line()
         } else {
             Ok(())
@@ -349,16 +340,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
     }
 
-    /// Delete the previous word, maintaining the cursor at the start of the
-    /// current word.
-    pub fn edit_delete_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Result<()> {
-        if self.line.delete_prev_word(word_def, n) {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
     pub fn edit_move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
         if self.line.move_to_next_word(at, word_def, n) {
             self.move_cursor()
@@ -370,24 +351,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     pub fn edit_move_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
         if self.line.move_to(cs, n) {
             self.move_cursor()
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Kill from the cursor to the end of the current word, or, if between
-    /// words, to the end of the next word.
-    pub fn edit_delete_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
-        if self.line.delete_word(at, word_def, n) {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn edit_delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
-        if self.line.delete_to(cs, n) {
-            self.refresh_line()
         } else {
             Ok(())
         }

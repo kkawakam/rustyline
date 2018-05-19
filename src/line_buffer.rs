@@ -34,7 +34,9 @@ impl Default for Direction {
 
 /// Listener to be notified when some text is deleted.
 pub trait DeleteListener {
+    fn start_killing(&mut self);
     fn delete(&mut self, idx: usize, string: &str, dir: Direction);
+    fn stop_killing(&mut self);
 }
 
 /// Listener to be notified when the line is modified.
@@ -275,8 +277,8 @@ impl LineBuffer {
     }
 
     /// Delete the character at the right of the cursor without altering the
-    /// cursor
-    /// position. Basically this is what happens with the "Delete" keyboard key.
+    /// cursor position. Basically this is what happens with the "Delete"
+    /// keyboard key.
     /// Return the number of characters deleted.
     pub fn delete(&mut self, n: RepeatCount) -> Option<String> {
         match self.next_pos(n) {
@@ -689,11 +691,11 @@ impl LineBuffer {
 
     /// Return the content between current cursor position and `mvt` position.
     /// Return `None` when the buffer is empty or when the movement fails.
-    pub fn copy(&self, mvt: Movement) -> Option<String> {
+    pub fn copy(&self, mvt: &Movement) -> Option<String> {
         if self.is_empty() {
             return None;
         }
-        match mvt {
+        match *mvt {
             Movement::WholeLine => Some(self.buf.clone()),
             Movement::BeginningOfLine => if self.pos == 0 {
                 None
@@ -757,6 +759,59 @@ impl LineBuffer {
             },
         }
     }
+
+    pub fn kill(&mut self, mvt: &Movement) -> bool {
+        let notify = match *mvt {
+            Movement::ForwardChar(_) => false,
+            Movement::BackwardChar(_) => false,
+            _ => true,
+        };
+        if notify {
+            if let Some(dl) = self.dl.as_ref() {
+                dl.borrow_mut().start_killing()
+            }
+        }
+        let killed = match *mvt {
+            Movement::ForwardChar(n) => {
+                // Delete (forward) `n` characters at point.
+                self.delete(n).is_some()
+            }
+            Movement::BackwardChar(n) => {
+                // Delete `n` characters backward.
+                self.backspace(n)
+            }
+            Movement::EndOfLine => {
+                // Kill the text from point to the end of the line.
+                self.kill_line()
+            }
+            Movement::WholeLine => {
+                self.move_home();
+                self.kill_line()
+            }
+            Movement::BeginningOfLine => {
+                // Kill backward from point to the beginning of the line.
+                self.discard_line()
+            }
+            Movement::BackwardWord(n, word_def) => {
+                // kill `n` words backward (until start of word)
+                self.delete_prev_word(word_def, n)
+            }
+            Movement::ForwardWord(n, at, word_def) => {
+                // kill `n` words forward (until start/end of word)
+                self.delete_word(at, word_def, n)
+            }
+            Movement::ViCharSearch(n, cs) => self.delete_to(cs, n),
+            Movement::ViFirstPrint => {
+                false // TODO
+            }
+        };
+        if notify {
+            if let Some(dl) = self.dl.as_ref() {
+                dl.borrow_mut().stop_killing()
+            }
+        }
+        killed
+    }
 }
 
 impl Deref for LineBuffer {
@@ -814,9 +869,11 @@ mod test {
     }
 
     impl DeleteListener for Listener {
+        fn start_killing(&mut self) {}
         fn delete(&mut self, _: usize, string: &str, _: Direction) {
             self.deleted_str = Some(string.to_owned());
         }
+        fn stop_killing(&mut self) {}
     }
     impl ChangeListener for Listener {
         fn insert_char(&mut self, _: usize, _: char) {}

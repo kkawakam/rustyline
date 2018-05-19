@@ -52,7 +52,7 @@ Movement
 - [ ] Move to the corresponding opening/closing bracket
 
 Redo
-- [ ] redo substitue
+- [X] redo substitue
 
 Repeat
 - [x] dynamic prompt (arg: ?)

@@ -263,6 +263,7 @@ impl PosixRawReader {
 }
 
 // https://tools.ietf.org/html/rfc3629
+#[cfg_attr(rustfmt, rustfmt_skip)]
 static UTF8_CHAR_WIDTH: [u8; 256] = [
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x1F

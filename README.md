@@ -27,14 +27,14 @@ use rustyline::Editor;
 fn main() {
     // `()` can be used when no completer is required
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history("history.txt") {
+    if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                rl.add_history_entry(&line);
+                rl.add_history_entry(line.as_ref());
                 println!("Line: {}", line);
             },
             Err(ReadlineError::Interrupted) => {
@@ -73,7 +73,7 @@ rustyline = "1.0.0"
  - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
  - Multi line mode (line wrapping)
  - Word commands
- - Hints (WIP: only on unix)
+ - Hints
 
 ## Actions
 
@@ -94,7 +94,6 @@ Ctrl-T       | Transpose previous character with current character
 Ctrl-U       | Delete from start of line to cursor
 Ctrl-V       | Insert any special character without perfoming its associated action (#65)
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
-Ctrl-X Ctrl-U | Undo
 Ctrl-Y       | Paste from Yank buffer
 Ctrl-Z       | Suspend (unix only)
 Ctrl-_       | Undo
@@ -113,6 +112,7 @@ Ctrl-K       | Delete from cursor to end of line
 Ctrl-L       | Clear screen
 Ctrl-N, Down | Next match from history
 Ctrl-P, Up   | Previous match from history
+Ctrl-X Ctrl-U | Undo
 Ctrl-Y       | Paste from Yank buffer (Meta-Y to paste next yank instead)
 Meta-<       | Move to first entry in history
 Meta->       | Move to last entry in history
@@ -205,17 +205,17 @@ $ bind -p
 
 ## Similar projects
 
-Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     |
---------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     |
-[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          |
-[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         |
-[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          |
-[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          |
-[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi      | No        | Yes  | Ux         |
-[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | Ux/Win     |
-[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?          |
-[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     |
-Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ |
+Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
+--------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          | ?                 |
+[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
+[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
+[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi/prog | No        | Yes  | Ux         | History based     |
+[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
+[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?          | No                |
+[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
 
 [Haskeline]: https://github.com/judah/haskeline
 [Linefeed]: https://github.com/murarth/linefeed

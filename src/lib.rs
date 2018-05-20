@@ -606,6 +606,9 @@ fn readline_direct() -> Result<String> {
     }
 }
 
+/// Syntax specific helper.
+///
+/// TODO Tokenizer/parser used for both completion, suggestion, highlighting
 pub trait Helper {
     type Completer: Completer;
     type Hinter: Hinter;

@@ -58,6 +58,10 @@ Repeat
 - [x] dynamic prompt (arg: ?)
 - [ ] transpose chars
 
+Syntax
+- [ ] syntax specific tokenizer/parser
+- [ ] highlighting
+
 Undo
 - [ ] Merge consecutive Replace
 - [X] Undo group

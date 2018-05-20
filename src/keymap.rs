@@ -813,9 +813,9 @@ impl InputState {
             KeyPress::Ctrl('T') => Cmd::TransposeChars,
             KeyPress::Ctrl('U') => {
                 if positive {
-                Cmd::Kill(Movement::BeginningOfLine)
+                    Cmd::Kill(Movement::BeginningOfLine)
                 } else {
-                Cmd::Kill(Movement::EndOfLine)
+                    Cmd::Kill(Movement::EndOfLine)
                 }
             },
             KeyPress::Ctrl('Q') | // most terminals override Ctrl+Q to resume execution

@@ -493,10 +493,11 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
 mod test {
     use super::init_state;
     use history::History;
+    use tty::Sink;
 
     #[test]
     fn edit_history_next() {
-        let mut out = ::std::io::sink();
+        let mut out = Sink::new();
         let line = "current edited line";
         let mut s = init_state(&mut out, line, 6);
         let mut history = History::new();

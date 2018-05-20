@@ -1,6 +1,7 @@
 //! Tests specific definitions
-use std::io::{self, Sink, Write};
+use std::cell::Cell;
 use std::iter::IntoIterator;
+use std::rc::Rc;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
@@ -41,40 +42,60 @@ impl RawReader for IntoIter<KeyPress> {
     }
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
-        unimplemented!();
+        match self.next() {
+            Some(KeyPress::Char(c)) => Ok(c),
+            None => Err(ReadlineError::Eof),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+pub struct Sink {
+    cursor: Rc<Cell<usize>>, // cursor position before last command
+    last: usize,
+}
+
+impl Sink {
+    pub fn new() -> Sink {
+        Sink {
+            cursor: Rc::new(Cell::new(0)),
+            last: 0,
+        }
     }
 }
 
 impl Renderer for Sink {
-    fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
+    fn move_cursor(&mut self, _: Position, new: Position) -> Result<()> {
+        self.cursor.replace(self.last);
+        self.last = new.col;
         Ok(())
     }
 
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        _: &str,
         prompt_size: Position,
         line: &LineBuffer,
         hint: Option<String>,
         _: usize,
         _: usize,
     ) -> Result<(Position, Position)> {
-        try!(self.write_all(prompt.as_bytes()));
-        try!(self.write_all(line.as_bytes()));
+        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+        self.last = cursor.col;
         if let Some(hint) = hint {
-            try!(self.write_all(truncate(&hint, 0, 80).as_bytes()));
+            truncate(&hint, 0, 80);
         }
-        Ok((prompt_size, prompt_size))
+        let end = self.calculate_position(&line, prompt_size);
+        Ok((cursor, end))
     }
 
-    /// Characters with 2 column width are correctly handled (not splitted).
-    fn calculate_position(&self, _: &str, orig: Position) -> Position {
-        orig
+    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        let mut pos = orig;
+        pos.col += s.len();
+        pos
     }
 
-    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
-        try!(self.write_all(buf));
-        try!(self.flush());
+    fn write_and_flush(&mut self, _: &[u8]) -> Result<()> {
         Ok(())
     }
 
@@ -82,12 +103,10 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         Ok(())
     }
 
-    /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
         false
     }
@@ -105,6 +124,7 @@ pub type Terminal = DummyTerminal;
 #[derive(Clone, Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
+    pub cursor: Rc<Cell<usize>>, // cursor position before last command
 }
 
 impl Term for DummyTerminal {
@@ -113,18 +133,18 @@ impl Term for DummyTerminal {
     type Mode = Mode;
 
     fn new() -> DummyTerminal {
-        DummyTerminal { keys: Vec::new() }
+        DummyTerminal {
+            keys: Vec::new(),
+            cursor: Rc::new(Cell::new(0)),
+        }
     }
 
     // Init checks:
 
-    /// Check if current terminal can provide a rich line-editing user
-    /// interface.
     fn is_unsupported(&self) -> bool {
         false
     }
 
-    /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool {
         true
     }
@@ -135,13 +155,15 @@ impl Term for DummyTerminal {
         Ok(())
     }
 
-    /// Create a RAW reader
     fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyPress>> {
         Ok(self.keys.clone().into_iter())
     }
 
     fn create_writer(&self) -> Sink {
-        io::sink()
+        Sink {
+            cursor: self.cursor.clone(),
+            last: 0,
+        }
     }
 }
 

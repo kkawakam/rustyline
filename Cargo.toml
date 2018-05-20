@@ -28,3 +28,4 @@ winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", 
 
 [dev-dependencies]
 tempdir = "0.3"
+assert_matches = "1.2"

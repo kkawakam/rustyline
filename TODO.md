@@ -18,6 +18,7 @@ Completion
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)
 - [ ] display versus replacement
+- [ ] composite/alternate completer (if the current completer returns nothing, try the next one)
 
 Config
 - [ ] Maximum buffer size for the line read

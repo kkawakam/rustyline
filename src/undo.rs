@@ -314,7 +314,8 @@ impl Changeset {
     pub fn last_insert(&self) -> Option<String> {
         for change in self.undos.iter().rev() {
             match change {
-                Change::Insert { ref text, .. } => return Some(text.clone()),
+                Change::Insert { ref text, .. } => return Some(text.to_owned()),
+                Change::Replace { ref new, .. } => return Some(new.to_owned()),
                 Change::End => {
                     continue;
                 }

@@ -130,7 +130,17 @@ impl Cmd {
             Cmd::ReplaceChar(previous, c) => Cmd::ReplaceChar(repeat_count(previous, new), c),
             Cmd::Replace(ref mvt, ref text) => {
                 if text.is_none() {
-                    Cmd::Replace(mvt.redo(new), wrt.last_insert())
+                    let last_insert = wrt.last_insert();
+                    if let Movement::ForwardChar(0) = mvt {
+                        Cmd::Replace(
+                            Movement::ForwardChar(
+                                last_insert.as_ref().map_or(0, |text| text.len()),
+                            ),
+                            last_insert,
+                        )
+                    } else {
+                        Cmd::Replace(mvt.redo(new), last_insert)
+                    }
                 } else {
                     Cmd::Replace(mvt.redo(new), text.clone())
                 }
@@ -598,7 +608,7 @@ impl InputState {
             KeyPress::Char('R') => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
-                Cmd::Noop // FIXME no redo possible
+                Cmd::Replace(Movement::ForwardChar(0), None)
             }
             KeyPress::Char('s') => {
                 // vi-substitute-char:
@@ -684,6 +694,8 @@ impl InputState {
         if cmd.is_repeatable_change() {
             if let (Cmd::Replace(_, _), Cmd::SelfInsert(_, _)) = (&self.last_cmd, &cmd) {
                 // replacing...
+            } else if let (Cmd::SelfInsert(_, _), Cmd::SelfInsert(_, _)) = (&self.last_cmd, &cmd) {
+                // inserting...
             } else {
                 self.last_cmd = cmd.clone();
             }

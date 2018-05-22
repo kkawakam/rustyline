@@ -59,7 +59,7 @@ fn assert_line_with_initial(initial: (&str, &str), keys: &[KeyPress], expected_l
 fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected_cursor: usize) {
     let mut editor = init_editor(keys);
     editor.readline_with_initial("", initial).unwrap();
-    assert_eq!(expected_cursor, editor.term.cursor.get());
+    assert_eq!(expected_cursor, editor.term.cursor);
 }
 
 #[test]

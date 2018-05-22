@@ -22,7 +22,7 @@ pub struct State<'out, 'prompt> {
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
-    cursor: Position,      /* Cursor position (relative to the start of the prompt
+    pub cursor: Position,  /* Cursor position (relative to the start of the prompt
                             * for `row`) */
     pub old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
     history_index: usize, // The history index we are currently editing

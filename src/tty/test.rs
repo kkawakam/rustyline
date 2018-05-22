@@ -1,7 +1,5 @@
 //! Tests specific definitions
-use std::cell::Cell;
 use std::iter::IntoIterator;
-use std::rc::Rc;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
@@ -50,24 +48,16 @@ impl RawReader for IntoIter<KeyPress> {
     }
 }
 
-pub struct Sink {
-    cursor: Rc<Cell<usize>>, // cursor position before last command
-    last: usize,
-}
+pub struct Sink {}
 
 impl Sink {
     pub fn new() -> Sink {
-        Sink {
-            cursor: Rc::new(Cell::new(0)),
-            last: 0,
-        }
+        Sink {}
     }
 }
 
 impl Renderer for Sink {
-    fn move_cursor(&mut self, _: Position, new: Position) -> Result<()> {
-        self.cursor.replace(self.last);
-        self.last = new.col;
+    fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
         Ok(())
     }
 
@@ -81,7 +71,6 @@ impl Renderer for Sink {
         _: usize,
     ) -> Result<(Position, Position)> {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
-        self.last = cursor.col;
         if let Some(hint) = hint {
             truncate(&hint, 0, 80);
         }
@@ -124,7 +113,7 @@ pub type Terminal = DummyTerminal;
 #[derive(Clone, Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
-    pub cursor: Rc<Cell<usize>>, // cursor position before last command
+    pub cursor: usize, // cursor position before last command
 }
 
 impl Term for DummyTerminal {
@@ -135,7 +124,7 @@ impl Term for DummyTerminal {
     fn new() -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
-            cursor: Rc::new(Cell::new(0)),
+            cursor: 0,
         }
     }
 
@@ -160,10 +149,7 @@ impl Term for DummyTerminal {
     }
 
     fn create_writer(&self) -> Sink {
-        Sink {
-            cursor: self.cursor.clone(),
-            last: 0,
-        }
+        Sink {}
     }
 }
 

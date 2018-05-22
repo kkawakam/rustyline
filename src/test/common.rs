@@ -11,7 +11,7 @@ fn home_key() {
 #[test]
 fn end_key() {
     assert_cursor(("", ""), &[KeyPress::End, KeyPress::Enter], 0);
-    //assert_cursor(("H", "i"), &[KeyPress::End, KeyPress::Enter], 2); FIXME
+    assert_cursor(("H", "i"), &[KeyPress::End, KeyPress::Enter], 2);
 }
 
 #[test]

@@ -488,6 +488,10 @@ fn readline_edit<H: Helper>(
             },
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
+                #[cfg(test)]
+                {
+                    editor.term.cursor = s.cursor.col;
+                }
                 // Accept the line regardless of where the cursor is.
                 try!(s.edit_move_end());
                 if s.hinter.is_some() {

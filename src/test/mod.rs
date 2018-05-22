@@ -56,10 +56,11 @@ fn assert_line_with_initial(initial: (&str, &str), keys: &[KeyPress], expected_l
     let actual_line = editor.readline_with_initial(">>", initial).unwrap();
     assert_eq!(expected_line, actual_line);
 }
-fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected_cursor: usize) {
+fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected: (&str, &str)) {
     let mut editor = init_editor(keys);
-    editor.readline_with_initial("", initial).unwrap();
-    assert_eq!(expected_cursor, editor.term.cursor);
+    let actual_line = editor.readline_with_initial("", initial).unwrap();
+    assert_eq!(expected.0.to_owned() + expected.1, actual_line);
+    assert_eq!(expected.0.len(), editor.term.cursor);
 }
 
 #[test]

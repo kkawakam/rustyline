@@ -77,11 +77,6 @@ fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
 }
 
 #[test]
-fn meta_backspace_key() {
-    assert_line(&[KeyPress::Meta('\x08'), KeyPress::Enter], "");
-}
-
-#[test]
 fn unknown_esc_key() {
     assert_line(&[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
 }

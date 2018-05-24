@@ -211,3 +211,12 @@ fn meta_y() {
         ("world", " !"),
     );
 }
+
+#[test]
+fn meta_backspace() {
+    assert_cursor(
+        ("Hello, wor", "ld!"),
+        &[KeyPress::Meta('\x08'), KeyPress::Enter],
+        ("Hello, ", "ld!"),
+    );
+}

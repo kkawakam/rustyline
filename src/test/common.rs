@@ -141,7 +141,7 @@ fn ctrl_y() {
 }
 
 #[test]
-fn undo() {
+fn ctrl__() {
     assert_cursor(
         ("Hello, ", "world"),
         &[KeyPress::Ctrl('W'), KeyPress::Ctrl('_'), KeyPress::Enter],

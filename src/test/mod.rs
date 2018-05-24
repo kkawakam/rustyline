@@ -11,6 +11,7 @@ use keymap::{Cmd, InputState};
 use tty::Sink;
 
 mod common;
+mod emacs;
 mod history;
 
 fn init_editor(keys: &[KeyPress]) -> Editor<()> {
@@ -62,6 +63,17 @@ fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected: (&str, &str
     let actual_line = editor.readline_with_initial("", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
     assert_eq!(expected.0.len(), editor.term.cursor);
+}
+
+fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
+    let mut editor = init_editor(keys);
+    for entry in entries {
+        editor.history.add(*entry);
+    }
+    let actual_line = editor.readline("").unwrap();
+    assert_eq!(expected.0.to_owned() + expected.1, actual_line);
+    // FIXME
+    //assert_eq!(expected.0.len(), editor.term.cursor);
 }
 
 #[test]

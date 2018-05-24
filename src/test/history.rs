@@ -1,17 +1,6 @@
 //! History related commands tests
-use super::init_editor;
+use super::assert_history;
 use consts::KeyPress;
-
-fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
-    let mut editor = init_editor(keys);
-    for entry in entries {
-        editor.history.add(*entry);
-    }
-    let actual_line = editor.readline("").unwrap();
-    assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    // FIXME
-    //assert_eq!(expected.0.len(), editor.term.cursor);
-}
 
 #[test]
 fn down_key() {

@@ -27,6 +27,21 @@ fn ctrl_b() {
         &[KeyPress::Ctrl('B'), KeyPress::Enter],
         ("H", "i"),
     );
+    assert_cursor(
+        ("Hi", ""),
+        &[KeyPress::Meta('2'), KeyPress::Ctrl('B'), KeyPress::Enter],
+        ("", "Hi"),
+    );
+    assert_cursor(
+        ("", "Hi"),
+        &[
+            KeyPress::Meta('-'),
+            KeyPress::Meta('2'),
+            KeyPress::Ctrl('B'),
+            KeyPress::Enter,
+        ],
+        ("Hi", ""),
+    );
 }
 
 #[test]
@@ -36,6 +51,21 @@ fn ctrl_f() {
         &[KeyPress::Ctrl('F'), KeyPress::Enter],
         ("H", "i"),
     );
+    assert_cursor(
+        ("", "Hi"),
+        &[KeyPress::Meta('2'), KeyPress::Ctrl('F'), KeyPress::Enter],
+        ("Hi", ""),
+    );
+    assert_cursor(
+        ("Hi", ""),
+        &[
+            KeyPress::Meta('-'),
+            KeyPress::Meta('2'),
+            KeyPress::Ctrl('F'),
+            KeyPress::Enter,
+        ],
+        ("", "Hi"),
+    );
 }
 
 #[test]
@@ -44,6 +74,21 @@ fn ctrl_h() {
         ("Hi", ""),
         &[KeyPress::Ctrl('H'), KeyPress::Enter],
         ("H", ""),
+    );
+    assert_cursor(
+        ("Hi", ""),
+        &[KeyPress::Meta('2'), KeyPress::Ctrl('H'), KeyPress::Enter],
+        ("", ""),
+    );
+    assert_cursor(
+        ("", "Hi"),
+        &[
+            KeyPress::Meta('-'),
+            KeyPress::Meta('2'),
+            KeyPress::Ctrl('H'),
+            KeyPress::Enter,
+        ],
+        ("", ""),
     );
 }
 
@@ -105,6 +150,16 @@ fn ctrl_p() {
 }
 
 #[test]
+fn ctrl_t() {
+    /* FIXME
+    assert_cursor(
+        ("ab", "cd"),
+        &[KeyPress::Meta('2'), KeyPress::Ctrl('T'), KeyPress::Enter],
+        ("acdb", ""),
+    );*/
+}
+
+#[test]
 fn ctrl_x_ctrl_u() {
     assert_cursor(
         ("Hello, ", "world"),
@@ -125,6 +180,16 @@ fn meta_b() {
         &[KeyPress::Meta('B'), KeyPress::Enter],
         ("Hello, ", "world!"),
     );
+    assert_cursor(
+        ("Hello, world!", ""),
+        &[KeyPress::Meta('2'), KeyPress::Meta('B'), KeyPress::Enter],
+        ("", "Hello, world!"),
+    );
+    assert_cursor(
+        ("", "Hello, world!"),
+        &[KeyPress::Meta('-'), KeyPress::Meta('B'), KeyPress::Enter],
+        ("Hello", ", world!"),
+    );
 }
 
 #[test]
@@ -133,6 +198,16 @@ fn meta_f() {
         ("", "Hello, world!"),
         &[KeyPress::Meta('F'), KeyPress::Enter],
         ("Hello", ", world!"),
+    );
+    assert_cursor(
+        ("", "Hello, world!"),
+        &[KeyPress::Meta('2'), KeyPress::Meta('F'), KeyPress::Enter],
+        ("Hello, world", "!"),
+    );
+    assert_cursor(
+        ("Hello, world!", ""),
+        &[KeyPress::Meta('-'), KeyPress::Meta('F'), KeyPress::Enter],
+        ("Hello, ", "world!"),
     );
 }
 
@@ -148,6 +223,12 @@ fn meta_c() {
         &[KeyPress::Meta('C'), KeyPress::Enter],
         ("Hi", ""),
     );
+    /* FIXME
+    assert_cursor(
+        ("", "hi test"),
+        &[KeyPress::Meta('2'), KeyPress::Meta('C'), KeyPress::Enter],
+        ("Hi Test", ""),
+    );*/
 }
 
 #[test]
@@ -162,6 +243,12 @@ fn meta_l() {
         &[KeyPress::Meta('L'), KeyPress::Enter],
         ("hi", ""),
     );
+    /* FIXME
+    assert_cursor(
+        ("", "HI TEST"),
+        &[KeyPress::Meta('2'), KeyPress::Meta('L'), KeyPress::Enter],
+        ("hi test", ""),
+    );*/
 }
 
 #[test]
@@ -176,6 +263,12 @@ fn meta_u() {
         &[KeyPress::Meta('U'), KeyPress::Enter],
         ("HI", ""),
     );
+    /* FIXME
+    assert_cursor(
+        ("", "hi test"),
+        &[KeyPress::Meta('2'), KeyPress::Meta('U'), KeyPress::Enter],
+        ("HI TEST", ""),
+    );*/
 }
 
 #[test]
@@ -184,6 +277,11 @@ fn meta_d() {
         ("Hello", ", world!"),
         &[KeyPress::Meta('D'), KeyPress::Enter],
         ("Hello", "!"),
+    );
+    assert_cursor(
+        ("Hello", ", world!"),
+        &[KeyPress::Meta('2'), KeyPress::Meta('D'), KeyPress::Enter],
+        ("Hello", ""),
     );
 }
 
@@ -194,6 +292,12 @@ fn meta_t() {
         &[KeyPress::Meta('T'), KeyPress::Enter],
         ("world, Hello", "!"),
     );
+    /* FIXME
+    assert_cursor(
+        ("One Two", " Three Four"),
+        &[KeyPress::Meta('T'), KeyPress::Enter],
+        ("One Four Three Two", ""),
+    );*/
 }
 
 #[test]
@@ -218,5 +322,14 @@ fn meta_backspace() {
         ("Hello, wor", "ld!"),
         &[KeyPress::Meta('\x08'), KeyPress::Enter],
         ("Hello, ", "ld!"),
+    );
+}
+
+#[test]
+fn meta_digit() {
+    assert_cursor(
+        ("", ""),
+        &[KeyPress::Meta('3'), KeyPress::Char('h'), KeyPress::Enter],
+        ("hhh", ""),
     );
 }

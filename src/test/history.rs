@@ -15,7 +15,16 @@ fn down_key() {
         &[
             KeyPress::Char('a'),
             KeyPress::Up,
-            KeyPress::Down,
+            KeyPress::Down, // restore original line
+            KeyPress::Enter,
+        ],
+        ("a", ""),
+    );
+    assert_history(
+        &["line1"],
+        &[
+            KeyPress::Char('a'),
+            KeyPress::Down, // noop
             KeyPress::Enter,
         ],
         ("a", ""),
@@ -76,8 +85,19 @@ fn ctrl_r() {
         &[
             KeyPress::Ctrl('R'),
             KeyPress::Char('r'),
-            KeyPress::Char('z'), // no match
+            KeyPress::Ctrl('R'),
             KeyPress::Right, // just to assert cursor pos
+            KeyPress::Enter,
+        ],
+        ("r", "ustc"),
+    );
+    assert_history(
+        &["rustc", "cargo"],
+        &[
+            KeyPress::Ctrl('R'),
+            KeyPress::Char('r'),
+            KeyPress::Char('z'), // no match
+            KeyPress::Right,     // just to assert cursor pos
             KeyPress::Enter,
         ],
         ("car", "go"),
@@ -92,6 +112,22 @@ fn ctrl_r() {
             KeyPress::Enter,
         ],
         ("a", ""),
+    );
+}
+
+#[test]
+fn ctrl_s() {
+    assert_history(
+        &["rustc", "cargo"],
+        &[
+            KeyPress::Ctrl('R'),
+            KeyPress::Char('r'),
+            KeyPress::Ctrl('R'),
+            KeyPress::Ctrl('S'),
+            KeyPress::Right, // just to assert cursor pos
+            KeyPress::Enter,
+        ],
+        ("car", "go"),
     );
 }
 
@@ -118,7 +154,7 @@ fn meta_gt() {
         &[
             KeyPress::Char('a'),
             KeyPress::Meta('<'),
-            KeyPress::Meta('>'),
+            KeyPress::Meta('>'), // restore original line
             KeyPress::Enter,
         ],
         ("a", ""),

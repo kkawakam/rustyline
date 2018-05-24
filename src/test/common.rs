@@ -97,14 +97,14 @@ fn ctrl_t() {
 #[test]
 fn ctrl_u() {
     assert_cursor(
-        ("a", "b"),
+        ("start of line ", "end"),
         &[KeyPress::Ctrl('U'), KeyPress::Enter],
-        ("", "b"),
+        ("", "end"),
     );
     assert_cursor(
-        ("", "a"),
+        ("", "end"),
         &[KeyPress::Ctrl('U'), KeyPress::Enter],
-        ("", "a"),
+        ("", "end"),
     );
 }
 

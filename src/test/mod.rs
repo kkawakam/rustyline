@@ -72,8 +72,7 @@ fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
     }
     let actual_line = editor.readline("").unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    // FIXME
-    //assert_eq!(expected.0.len(), editor.term.cursor);
+    assert_eq!(expected.0.len(), editor.term.cursor);
 }
 
 #[test]

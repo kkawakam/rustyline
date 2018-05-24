@@ -42,13 +42,23 @@ fn ctrl_r() {
     );
     assert_history(
         &["rustc", "cargo"],
-        &[KeyPress::Ctrl('R'), KeyPress::Char('o'), KeyPress::Enter],
+        &[
+            KeyPress::Ctrl('R'),
+            KeyPress::Char('o'),
+            KeyPress::Right, // just to assert cursor pos
+            KeyPress::Enter,
+        ],
         ("cargo", ""),
     );
     assert_history(
         &["rustc", "cargo"],
-        &[KeyPress::Ctrl('R'), KeyPress::Char('u'), KeyPress::Enter],
-        ("rus", "tc"),
+        &[
+            KeyPress::Ctrl('R'),
+            KeyPress::Char('u'),
+            KeyPress::Right, // just to assert cursor pos
+            KeyPress::Enter,
+        ],
+        ("ru", "stc"),
     );
     assert_history(
         &["rustc", "cargo"],
@@ -56,9 +66,10 @@ fn ctrl_r() {
             KeyPress::Ctrl('R'),
             KeyPress::Char('r'),
             KeyPress::Char('u'),
+            KeyPress::Right, // just to assert cursor pos
             KeyPress::Enter,
         ],
-        ("rustc", ""),
+        ("r", "ustc"),
     );
     assert_history(
         &["rustc", "cargo"],
@@ -66,9 +77,10 @@ fn ctrl_r() {
             KeyPress::Ctrl('R'),
             KeyPress::Char('r'),
             KeyPress::Char('z'), // no match
+            KeyPress::Right, // just to assert cursor pos
             KeyPress::Enter,
         ],
-        ("cargo", ""),
+        ("car", "go"),
     );
     assert_history(
         &["rustc", "cargo"],

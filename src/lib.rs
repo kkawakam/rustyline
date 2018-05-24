@@ -313,6 +313,10 @@ fn reverse_incremental_search<R: RawReader>(
                     s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
                 }
+                Cmd::Move(_) => {
+                    try!(s.refresh_line()); // restore prompt
+                    break;
+                }
                 _ => break,
             }
         }

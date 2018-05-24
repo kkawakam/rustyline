@@ -11,6 +11,7 @@ use keymap::{Cmd, InputState};
 use tty::Sink;
 
 mod common;
+mod history;
 
 fn init_editor(keys: &[KeyPress]) -> Editor<()> {
     let mut editor = Editor::<()>::new();
@@ -64,28 +65,8 @@ fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected: (&str, &str
 }
 
 #[test]
-fn down_key() {
-    assert_line(&[KeyPress::Down, KeyPress::Enter], "");
-}
-
-#[test]
 fn meta_backspace_key() {
     assert_line(&[KeyPress::Meta('\x08'), KeyPress::Enter], "");
-}
-
-#[test]
-fn page_down_key() {
-    assert_line(&[KeyPress::PageDown, KeyPress::Enter], "");
-}
-
-#[test]
-fn page_up_key() {
-    assert_line(&[KeyPress::PageUp, KeyPress::Enter], "");
-}
-
-#[test]
-fn up_key() {
-    assert_line(&[KeyPress::Up, KeyPress::Enter], "");
 }
 
 #[test]

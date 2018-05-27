@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use super::{Editor, Result};
 use completion::Completer;
-use config::Config;
+use config::{Config, EditMode};
 use consts::KeyPress;
 use edit::init_state;
 use keymap::{Cmd, InputState};
@@ -13,9 +13,12 @@ use tty::Sink;
 mod common;
 mod emacs;
 mod history;
+mod vi_cmd;
+mod vi_insert;
 
-fn init_editor(keys: &[KeyPress]) -> Editor<()> {
-    let mut editor = Editor::<()>::new();
+fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
+    let config = Config::builder().edit_mode(mode).build();
+    let mut editor = Editor::<()>::with_config(config);
     editor.term.keys.extend(keys.iter().cloned());
     editor
 }
@@ -48,25 +51,43 @@ fn complete_line() {
     assert_eq!(4, s.line.pos());
 }
 
-fn assert_line(keys: &[KeyPress], expected_line: &str) {
-    let mut editor = init_editor(keys);
+// `keys`: keys to press
+// `expected_line`: line after enter key
+fn assert_line(mode: EditMode, keys: &[KeyPress], expected_line: &str) {
+    let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline(">>").unwrap();
     assert_eq!(expected_line, actual_line);
 }
-fn assert_line_with_initial(initial: (&str, &str), keys: &[KeyPress], expected_line: &str) {
-    let mut editor = init_editor(keys);
+
+// `initial`: line status before `keys` pressed: strings before and after cursor
+// `keys`: keys to press
+// `expected_line`: line after enter key
+fn assert_line_with_initial(
+    mode: EditMode,
+    initial: (&str, &str),
+    keys: &[KeyPress],
+    expected_line: &str,
+) {
+    let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline_with_initial(">>", initial).unwrap();
     assert_eq!(expected_line, actual_line);
 }
-fn assert_cursor(initial: (&str, &str), keys: &[KeyPress], expected: (&str, &str)) {
-    let mut editor = init_editor(keys);
+
+// `initial`: line status before `keys` pressed: strings before and after cursor
+// `keys`: keys to press
+// `expected`: line status before enter key: strings before and after cursor
+fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyPress], expected: (&str, &str)) {
+    let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline_with_initial("", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
     assert_eq!(expected.0.len(), editor.term.cursor);
 }
 
-fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
-    let mut editor = init_editor(keys);
+// `entries`: history entries before `keys` pressed
+// `keys`: keys to press
+// `expected`: line status before enter key: strings before and after cursor
+fn assert_history(mode: EditMode, entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
+    let mut editor = init_editor(mode, keys);
     for entry in entries {
         editor.history.add(*entry);
     }
@@ -77,5 +98,7 @@ fn assert_history(entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
 
 #[test]
 fn unknown_esc_key() {
-    assert_line(&[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
+    for mode in &[EditMode::Emacs, EditMode::Vi] {
+        assert_line(*mode, &[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
+    }
 }

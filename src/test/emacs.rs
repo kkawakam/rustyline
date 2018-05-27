@@ -1,10 +1,12 @@
 //! Emacs specific key bindings
 use super::{assert_cursor, assert_history};
+use config::EditMode;
 use consts::KeyPress;
 
 #[test]
 fn ctrl_a() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Ctrl('A'), KeyPress::Enter],
         ("", "Hi"),
@@ -14,6 +16,7 @@ fn ctrl_a() {
 #[test]
 fn ctrl_e() {
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[KeyPress::Ctrl('E'), KeyPress::Enter],
         ("Hi", ""),
@@ -23,16 +26,19 @@ fn ctrl_e() {
 #[test]
 fn ctrl_b() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Ctrl('B'), KeyPress::Enter],
         ("H", "i"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Meta('2'), KeyPress::Ctrl('B'), KeyPress::Enter],
         ("", "Hi"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[
             KeyPress::Meta('-'),
@@ -47,16 +53,19 @@ fn ctrl_b() {
 #[test]
 fn ctrl_f() {
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[KeyPress::Ctrl('F'), KeyPress::Enter],
         ("H", "i"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[KeyPress::Meta('2'), KeyPress::Ctrl('F'), KeyPress::Enter],
         ("Hi", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[
             KeyPress::Meta('-'),
@@ -71,16 +80,19 @@ fn ctrl_f() {
 #[test]
 fn ctrl_h() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Ctrl('H'), KeyPress::Enter],
         ("H", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Meta('2'), KeyPress::Ctrl('H'), KeyPress::Enter],
         ("", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[
             KeyPress::Meta('-'),
@@ -94,13 +106,20 @@ fn ctrl_h() {
 
 #[test]
 fn backspace() {
-    assert_cursor(("", ""), &[KeyPress::Backspace, KeyPress::Enter], ("", ""));
     assert_cursor(
+        EditMode::Emacs,
+        ("", ""),
+        &[KeyPress::Backspace, KeyPress::Enter],
+        ("", ""),
+    );
+    assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Backspace, KeyPress::Enter],
         ("H", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[KeyPress::Backspace, KeyPress::Enter],
         ("", "Hi"),
@@ -110,16 +129,19 @@ fn backspace() {
 #[test]
 fn ctrl_k() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Ctrl('K'), KeyPress::Enter],
         ("Hi", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hi"),
         &[KeyPress::Ctrl('K'), KeyPress::Enter],
         ("", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("B", "ye"),
         &[KeyPress::Ctrl('K'), KeyPress::Enter],
         ("B", ""),
@@ -129,6 +151,7 @@ fn ctrl_k() {
 #[test]
 fn ctrl_n() {
     assert_history(
+        EditMode::Emacs,
         &["line1", "line2"],
         &[
             KeyPress::Ctrl('P'),
@@ -143,6 +166,7 @@ fn ctrl_n() {
 #[test]
 fn ctrl_p() {
     assert_history(
+        EditMode::Emacs,
         &["line1"],
         &[KeyPress::Ctrl('P'), KeyPress::Enter],
         ("line1", ""),
@@ -162,6 +186,7 @@ fn ctrl_t() {
 #[test]
 fn ctrl_x_ctrl_u() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, ", "world"),
         &[
             KeyPress::Ctrl('W'),
@@ -176,16 +201,19 @@ fn ctrl_x_ctrl_u() {
 #[test]
 fn meta_b() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, world!", ""),
         &[KeyPress::Meta('B'), KeyPress::Enter],
         ("Hello, ", "world!"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, world!", ""),
         &[KeyPress::Meta('2'), KeyPress::Meta('B'), KeyPress::Enter],
         ("", "Hello, world!"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hello, world!"),
         &[KeyPress::Meta('-'), KeyPress::Meta('B'), KeyPress::Enter],
         ("Hello", ", world!"),
@@ -195,16 +223,19 @@ fn meta_b() {
 #[test]
 fn meta_f() {
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hello, world!"),
         &[KeyPress::Meta('F'), KeyPress::Enter],
         ("Hello", ", world!"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "Hello, world!"),
         &[KeyPress::Meta('2'), KeyPress::Meta('F'), KeyPress::Enter],
         ("Hello, world", "!"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, world!", ""),
         &[KeyPress::Meta('-'), KeyPress::Meta('F'), KeyPress::Enter],
         ("Hello, ", "world!"),
@@ -214,11 +245,13 @@ fn meta_f() {
 #[test]
 fn meta_c() {
     assert_cursor(
+        EditMode::Emacs,
         ("hi", ""),
         &[KeyPress::Meta('C'), KeyPress::Enter],
         ("hi", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "hi"),
         &[KeyPress::Meta('C'), KeyPress::Enter],
         ("Hi", ""),
@@ -234,11 +267,13 @@ fn meta_c() {
 #[test]
 fn meta_l() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hi", ""),
         &[KeyPress::Meta('L'), KeyPress::Enter],
         ("Hi", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "HI"),
         &[KeyPress::Meta('L'), KeyPress::Enter],
         ("hi", ""),
@@ -254,11 +289,13 @@ fn meta_l() {
 #[test]
 fn meta_u() {
     assert_cursor(
+        EditMode::Emacs,
         ("hi", ""),
         &[KeyPress::Meta('U'), KeyPress::Enter],
         ("hi", ""),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("", "hi"),
         &[KeyPress::Meta('U'), KeyPress::Enter],
         ("HI", ""),
@@ -274,11 +311,13 @@ fn meta_u() {
 #[test]
 fn meta_d() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello", ", world!"),
         &[KeyPress::Meta('D'), KeyPress::Enter],
         ("Hello", "!"),
     );
     assert_cursor(
+        EditMode::Emacs,
         ("Hello", ", world!"),
         &[KeyPress::Meta('2'), KeyPress::Meta('D'), KeyPress::Enter],
         ("Hello", ""),
@@ -288,6 +327,7 @@ fn meta_d() {
 #[test]
 fn meta_t() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello", ", world!"),
         &[KeyPress::Meta('T'), KeyPress::Enter],
         ("world, Hello", "!"),
@@ -303,6 +343,7 @@ fn meta_t() {
 #[test]
 fn meta_y() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, world", "!"),
         &[
             KeyPress::Ctrl('W'),
@@ -319,6 +360,7 @@ fn meta_y() {
 #[test]
 fn meta_backspace() {
     assert_cursor(
+        EditMode::Emacs,
         ("Hello, wor", "ld!"),
         &[KeyPress::Meta('\x08'), KeyPress::Enter],
         ("Hello, ", "ld!"),
@@ -328,6 +370,7 @@ fn meta_backspace() {
 #[test]
 fn meta_digit() {
     assert_cursor(
+        EditMode::Emacs,
         ("", ""),
         &[KeyPress::Meta('3'), KeyPress::Char('h'), KeyPress::Enter],
         ("hhh", ""),

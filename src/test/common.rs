@@ -19,6 +19,15 @@ fn home_key() {
             &[KeyPress::Home, KeyPress::Enter],
             ("", "Hi"),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("Hi", ""),
+                &[KeyPress::Esc, KeyPress::Home, KeyPress::Enter],
+                ("", "Hi"),
+            );
+        }
     }
 }
 
@@ -38,6 +47,15 @@ fn end_key() {
             &[KeyPress::End, KeyPress::Enter],
             ("Hi", ""),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", "Hi"),
+                &[KeyPress::Esc, KeyPress::End, KeyPress::Enter],
+                ("Hi", ""),
+            );
+        }
     }
 }
 
@@ -62,6 +80,15 @@ fn left_key() {
             &[KeyPress::Left, KeyPress::Enter],
             ("", "Hi"),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("Bye", ""),
+                &[KeyPress::Esc, KeyPress::Left, KeyPress::Enter],
+                ("B", "ye"),
+            );
+        }
     }
 }
 
@@ -92,6 +119,15 @@ fn right_key() {
             &[KeyPress::Right, KeyPress::Enter],
             ("Hi", ""),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", "Hi"),
+                &[KeyPress::Esc, KeyPress::Right, KeyPress::Enter],
+                ("H", "i"),
+            );
+        }
     }
 }
 
@@ -103,6 +139,18 @@ fn enter_key() {
         assert_line_with_initial(*mode, ("Hi", ""), &[KeyPress::Enter], "Hi");
         assert_line_with_initial(*mode, ("", "Hi"), &[KeyPress::Enter], "Hi");
         assert_line_with_initial(*mode, ("H", "i"), &[KeyPress::Enter], "Hi");
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_line(*mode, &[KeyPress::Esc, KeyPress::Enter], "");
+            assert_line(
+                *mode,
+                &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Enter],
+                "a",
+            );
+            assert_line_with_initial(*mode, ("Hi", ""), &[KeyPress::Esc, KeyPress::Enter], "Hi");
+            assert_line_with_initial(*mode, ("", "Hi"), &[KeyPress::Esc, KeyPress::Enter], "Hi");
+            assert_line_with_initial(*mode, ("H", "i"), &[KeyPress::Esc, KeyPress::Enter], "Hi");
+        }
     }
 }
 
@@ -111,6 +159,15 @@ fn newline_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         assert_line(*mode, &[KeyPress::Ctrl('J')], "");
         assert_line(*mode, &[KeyPress::Char('a'), KeyPress::Ctrl('J')], "a");
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_line(*mode, &[KeyPress::Esc, KeyPress::Ctrl('J')], "");
+            assert_line(
+                *mode,
+                &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Ctrl('J')],
+                "a",
+            );
+        }
     }
 }
 
@@ -131,6 +188,11 @@ fn eof_key() {
         &[KeyPress::Char('a'), KeyPress::Ctrl('D')],
         "a",
     );
+    assert_line(
+        EditMode::Vi,
+        &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Ctrl('D')],
+        "a",
+    );
     assert_line_with_initial(
         EditMode::Emacs,
         ("", "Hi"),
@@ -138,6 +200,12 @@ fn eof_key() {
         "i",
     );
     assert_line_with_initial(EditMode::Vi, ("", "Hi"), &[KeyPress::Ctrl('D')], "Hi");
+    assert_line_with_initial(
+        EditMode::Vi,
+        ("", "Hi"),
+        &[KeyPress::Esc, KeyPress::Ctrl('D')],
+        "Hi",
+    );
 }
 
 #[test]
@@ -150,6 +218,12 @@ fn interrupt_key() {
         let mut editor = init_editor(*mode, &[KeyPress::Ctrl('C')]);
         let err = editor.readline_with_initial(">>", ("Hi", ""));
         assert_matches!(err, Err(ReadlineError::Interrupted));
+        if *mode == EditMode::Vi {
+            // vi command mode
+            let mut editor = init_editor(*mode, &[KeyPress::Esc, KeyPress::Ctrl('C')]);
+            let err = editor.readline_with_initial(">>", ("Hi", ""));
+            assert_matches!(err, Err(ReadlineError::Interrupted));
+        }
     }
 }
 
@@ -168,6 +242,15 @@ fn delete_key() {
             &[KeyPress::Delete, KeyPress::Enter],
             ("", ""),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", "a"),
+                &[KeyPress::Esc, KeyPress::Delete, KeyPress::Enter],
+                ("", ""),
+            );
+        }
     }
 }
 
@@ -186,6 +269,15 @@ fn ctrl_t() {
             &[KeyPress::Ctrl('T'), KeyPress::Enter],
             ("acb", "d"),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("ab", ""),
+                &[KeyPress::Esc, KeyPress::Ctrl('T'), KeyPress::Enter],
+                ("ba", ""),
+            );
+        }
     }
 }
 
@@ -204,6 +296,15 @@ fn ctrl_u() {
             &[KeyPress::Ctrl('U'), KeyPress::Enter],
             ("", "end"),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("start of line ", "end"),
+                &[KeyPress::Esc, KeyPress::Ctrl('U'), KeyPress::Enter],
+                ("", " end"),
+            );
+        }
     }
 }
 
@@ -216,6 +317,20 @@ fn ctrl_v() {
             &[KeyPress::Ctrl('V'), KeyPress::Char('\t'), KeyPress::Enter],
             ("\t", ""),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", ""),
+                &[
+                    KeyPress::Esc,
+                    KeyPress::Ctrl('V'),
+                    KeyPress::Char('\t'),
+                    KeyPress::Enter,
+                ],
+                ("\t", ""),
+            );
+        }
     }
 }
 
@@ -234,6 +349,15 @@ fn ctrl_w() {
             &[KeyPress::Ctrl('W'), KeyPress::Enter],
             ("Hello, ", ""),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("Hello, world.", ""),
+                &[KeyPress::Esc, KeyPress::Ctrl('W'), KeyPress::Enter],
+                ("Hello, ", "."),
+            );
+        }
     }
 }
 
@@ -258,5 +382,19 @@ fn ctrl__() {
             &[KeyPress::Ctrl('W'), KeyPress::Ctrl('_'), KeyPress::Enter],
             ("Hello, ", "world"),
         );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("Hello, ", "world"),
+                &[
+                    KeyPress::Esc,
+                    KeyPress::Ctrl('W'),
+                    KeyPress::Ctrl('_'),
+                    KeyPress::Enter,
+                ],
+                ("Hello,", " world"),
+            );
+        }
     }
 }

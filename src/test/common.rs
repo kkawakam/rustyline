@@ -308,6 +308,7 @@ fn ctrl_u() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn ctrl_v() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {

@@ -1,7 +1,6 @@
 //! Bindings from keys to command for Emacs and Vi modes
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use super::Result;
 use config::Config;
@@ -274,7 +273,7 @@ enum InputMode {
 /// Tranform key(s) to commands based on current input mode
 pub struct InputState {
     mode: EditMode,
-    custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+    custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
     input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
@@ -299,7 +298,7 @@ pub trait Refresher {
 impl InputState {
     pub fn new(
         config: &Config,
-        custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+        custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
     ) -> InputState {
         InputState {
             mode: config.edit_mode(),
@@ -384,13 +383,16 @@ impl InputState {
             key = try!(self.emacs_digit_argument(rdr, wrt, digit));
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
-        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
-            debug!(target: "rustyline", "Custom command: {:?}", cmd);
-            return Ok(if cmd.is_repeatable() {
-                cmd.redo(Some(n), wrt)
-            } else {
-                cmd.clone()
-            });
+        {
+            let bindings = self.custom_bindings.read().unwrap();
+            if let Some(cmd) = bindings.get(&key) {
+                debug!(target: "rustyline", "Custom command: {:?}", cmd);
+                return Ok(if cmd.is_repeatable() {
+                    cmd.redo(Some(n), wrt)
+                } else {
+                    cmd.clone()
+                });
+            }
         }
         let cmd = match key {
             KeyPress::Char(c) => if positive {
@@ -501,17 +503,20 @@ impl InputState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
-        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
-            debug!(target: "rustyline", "Custom command: {:?}", cmd);
-            return Ok(if cmd.is_repeatable() {
-                if no_num_args {
-                    cmd.redo(None, wrt)
+        {
+            let bindings = self.custom_bindings.read().unwrap();
+            if let Some(cmd) = bindings.get(&key) {
+                debug!(target: "rustyline", "Custom command: {:?}", cmd);
+                return Ok(if cmd.is_repeatable() {
+                    if no_num_args {
+                        cmd.redo(None, wrt)
+                    } else {
+                        cmd.redo(Some(n), wrt)
+                    }
                 } else {
-                    cmd.redo(Some(n), wrt)
-                }
-            } else {
-                cmd.clone()
-            });
+                    cmd.clone()
+                });
+            }
         }
         let cmd = match key {
             KeyPress::Char('$') |
@@ -666,13 +671,16 @@ impl InputState {
 
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
         let key = try!(rdr.next_key(false));
-        if let Some(cmd) = self.custom_bindings.borrow().get(&key) {
-            debug!(target: "rustyline", "Custom command: {:?}", cmd);
-            return Ok(if cmd.is_repeatable() {
-                cmd.redo(None, wrt)
-            } else {
-                cmd.clone()
-            });
+        {
+            let bindings = self.custom_bindings.read().unwrap();
+            if let Some(cmd) = bindings.get(&key) {
+                debug!(target: "rustyline", "Custom command: {:?}", cmd);
+                return Ok(if cmd.is_repeatable() {
+                    cmd.redo(None, wrt)
+                } else {
+                    cmd.clone()
+                });
+            }
         }
         let cmd = match key {
             KeyPress::Char(c) => if self.input_mode == InputMode::Replace {

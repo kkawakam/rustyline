@@ -1,6 +1,5 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use super::{Editor, Result};
 use completion::Completer;
@@ -35,7 +34,7 @@ fn complete_line() {
     let mut out = Sink::new();
     let mut s = init_state(&mut out, "rus", 3);
     let config = Config::default();
-    let mut input_state = InputState::new(&config, Rc::new(RefCell::new(HashMap::new())));
+    let mut input_state = InputState::new(&config, Arc::new(RwLock::new(HashMap::new())));
     let keys = &[KeyPress::Enter];
     let mut rdr = keys.iter();
     let completer = SimpleCompleter;

@@ -41,13 +41,12 @@ mod undo;
 
 mod tty;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
-use std::rc::Rc;
 use std::result;
+use std::sync::{Arc, Mutex, RwLock};
 use unicode_width::UnicodeWidthStr;
 
 use tty::{RawMode, RawReader, Renderer, Term, Terminal};
@@ -350,9 +349,9 @@ fn readline_edit<H: Helper>(
 
     let mut stdout = editor.term.create_writer();
 
-    editor.reset_kill_ring();
+    editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let mut s = State::new(&mut stdout, prompt, editor.history.len(), hinter);
-    let mut input_state = InputState::new(&editor.config, Rc::clone(&editor.custom_bindings));
+    let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
     s.line.set_change_listener(s.changes.clone());
@@ -483,12 +482,14 @@ fn readline_edit<H: Helper>(
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
-                if let Some(text) = editor.kill_ring.borrow_mut().yank() {
+                let mut kill_ring = editor.kill_ring.lock().unwrap();
+                if let Some(text) = kill_ring.yank() {
                     try!(s.edit_yank(&input_state, text, anchor, n))
                 }
             }
             Cmd::ViYankTo(ref mvt) => if let Some(text) = s.line.copy(mvt) {
-                editor.kill_ring.borrow_mut().kill(&text, Mode::Append)
+                let mut kill_ring = editor.kill_ring.lock().unwrap();
+                kill_ring.kill(&text, Mode::Append)
             },
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
@@ -543,7 +544,8 @@ fn readline_edit<H: Helper>(
             }
             Cmd::YankPop => {
                 // yank-pop
-                if let Some((yank_size, text)) = editor.kill_ring.borrow_mut().yank_pop() {
+                let mut kill_ring = editor.kill_ring.lock().unwrap();
+                if let Some((yank_size, text)) = kill_ring.yank_pop() {
                     try!(s.edit_yank_pop(yank_size, text))
                 }
             }
@@ -653,9 +655,9 @@ pub struct Editor<H: Helper> {
     term: Terminal,
     history: History,
     helper: Option<H>,
-    kill_ring: Rc<RefCell<KillRing>>,
+    kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Rc<RefCell<HashMap<KeyPress, Cmd>>>,
+    custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
 impl<H: Helper> Editor<H> {
@@ -671,9 +673,9 @@ impl<H: Helper> Editor<H> {
             term,
             history: History::with_config(config),
             helper: None,
-            kill_ring: Rc::new(RefCell::new(KillRing::new(60))),
+            kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: Rc::new(RefCell::new(HashMap::new())),
+            custom_bindings: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -746,13 +748,20 @@ impl<H: Helper> Editor<H> {
         self.helper = helper;
     }
 
+    #[deprecated(since = "2.0.0", note = "Use set_helper instead")]
+    pub fn set_completer(&mut self, completer: Option<H>) {
+        self.helper = completer;
+    }
+
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
-        self.custom_bindings.borrow_mut().insert(key_seq, cmd)
+        let mut bindings = self.custom_bindings.write().unwrap();
+        bindings.insert(key_seq, cmd)
     }
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
-        self.custom_bindings.borrow_mut().remove(&key_seq)
+        let mut bindings = self.custom_bindings.write().unwrap();
+        bindings.remove(&key_seq)
     }
 
     /// ```
@@ -777,7 +786,8 @@ impl<H: Helper> Editor<H> {
     }
 
     fn reset_kill_ring(&self) {
-        self.kill_ring.borrow_mut().reset();
+        let mut kill_ring = self.kill_ring.lock().unwrap();
+        kill_ring.reset();
     }
 }
 

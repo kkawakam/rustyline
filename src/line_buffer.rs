@@ -6,6 +6,7 @@ use std::iter;
 use std::ops::{Deref, Index, Range};
 use std::rc::Rc;
 use std::string::Drain;
+use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Maximum buffer size for the line read
@@ -52,7 +53,7 @@ pub trait ChangeListener: DeleteListener {
 pub struct LineBuffer {
     buf: String, // Edited line buffer (rl_line_buffer)
     pos: usize,  // Current cursor position (byte position) (rl_point)
-    dl: Option<Rc<RefCell<DeleteListener>>>,
+    dl: Option<Arc<Mutex<DeleteListener>>>,
     cl: Option<Rc<RefCell<ChangeListener>>>,
 }
 
@@ -85,7 +86,7 @@ impl LineBuffer {
         lb
     }
 
-    pub fn set_delete_listener(&mut self, dl: Rc<RefCell<DeleteListener>>) {
+    pub fn set_delete_listener(&mut self, dl: Arc<Mutex<DeleteListener>>) {
         self.dl = Some(dl);
     }
     pub fn remove_delete_listener(&mut self) {
@@ -678,7 +679,8 @@ impl LineBuffer {
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
         for dl in &self.dl {
-            if let Ok(mut dl) = dl.try_borrow_mut() {
+            let mut lock = dl.try_lock();
+            if let Ok(mut dl) = lock {
                 dl.delete(range.start, &self.buf[range.start..range.end], dir);
             }
         }
@@ -768,7 +770,8 @@ impl LineBuffer {
         };
         if notify {
             if let Some(dl) = self.dl.as_ref() {
-                dl.borrow_mut().start_killing()
+                let mut dl = dl.lock().unwrap();
+                dl.start_killing()
             }
         }
         let killed = match *mvt {
@@ -807,7 +810,8 @@ impl LineBuffer {
         };
         if notify {
             if let Some(dl) = self.dl.as_ref() {
-                dl.borrow_mut().stop_killing()
+                let mut dl = dl.lock().unwrap();
+                dl.stop_killing()
             }
         }
         killed

@@ -5,7 +5,7 @@ use config::Config;
 use consts::KeyPress;
 
 /// Terminal state
-pub trait RawMode: Copy + Sized {
+pub trait RawMode: Sized {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()>;
 }

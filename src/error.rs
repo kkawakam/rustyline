@@ -4,6 +4,7 @@ use std::char;
 use std::io;
 use std::error;
 use std::fmt;
+use std::error::Error;
 #[cfg(unix)]
 use nix;
 
@@ -41,7 +42,7 @@ impl fmt::Display for ReadlineError {
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.fmt(f),
             #[cfg(unix)]
-            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
+            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.description()),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
             #[cfg(windows)]
@@ -59,7 +60,7 @@ impl error::Error for ReadlineError {
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.description(),
             #[cfg(unix)]
-            ReadlineError::Errno(ref err) => err.errno().desc(),
+            ReadlineError::Errno(ref err) => err.description(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
             #[cfg(windows)]

@@ -1111,7 +1111,7 @@ struct Guard(tty::Mode);
 #[allow(unused_must_use)]
 impl Drop for Guard {
     fn drop(&mut self) {
-        let Guard(mode) = *self;
+        let Guard(ref mode) = *self;
         mode.disable_raw_mode();
     }
 }
@@ -1120,7 +1120,7 @@ impl Drop for Guard {
 /// method and disable raw mode
 fn readline_raw<C: Completer>(prompt: &str, editor: &mut Editor<C>) -> Result<String> {
     let original_mode = try!(editor.term.enable_raw_mode());
-    let guard = Guard(original_mode);
+    let guard = Guard(original_mode.clone());
     let user_input = readline_edit(prompt, editor, original_mode);
     drop(guard); // try!(disable_raw_mode(original_mode));
     println!("");

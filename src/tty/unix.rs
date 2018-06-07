@@ -62,7 +62,7 @@ pub type Mode = termios::Termios;
 impl RawMode for Mode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, self));
+        try!(termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSADRAIN, self));
         Ok(())
     }
 }
@@ -195,7 +195,7 @@ impl RawReader for PosixRawReader {
         let mut key = consts::char_to_key_press(c);
         if key == KeyPress::Esc {
             let mut fds =
-                [poll::PollFd::new(STDIN_FILENO, poll::POLLIN, poll::EventFlags::empty())];
+                [poll::PollFd::new(STDIN_FILENO, poll::EventFlags::POLLIN)];
             match poll::poll(&mut fds, self.timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
@@ -292,24 +292,23 @@ impl Term for PosixTerminal {
 
     fn enable_raw_mode(&self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
-                                IXON, /* OPOST, */ VMIN, VTIME};
+        use nix::sys::termios::{InputFlags, ControlFlags, LocalFlags,/* OPOST, */ SpecialCharacterIndices};
         if !self.stdin_isatty {
             try!(Err(nix::Error::from_errno(ENOTTY)));
         }
         let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
-        let mut raw = original_mode;
+        let mut raw = original_mode.clone();
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
-        raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        raw.input_flags &= !(InputFlags::BRKINT | InputFlags::ICRNL | InputFlags::INPCK | InputFlags::ISTRIP | InputFlags::IXON);
         // we don't want raw output, it turns newlines into straight linefeeds
         // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
-        raw.c_cflag |= CS8; // character-size mark (8 bits)
+        raw.control_flags |= ControlFlags::CS8; // character-size mark (8 bits)
         // disable echoing, canonical mode, extended input processing and signals
-        raw.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
-        raw.c_cc[VMIN] = 1; // One character-at-a-time input
-        raw.c_cc[VTIME] = 0; // with blocking read
-        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
+        raw.local_flags &= !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
+        raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
+        raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
+        try!(termios::tcsetattr(STDIN_FILENO, termios::SetArg::TCSADRAIN, &raw));
         Ok(original_mode)
     }
 

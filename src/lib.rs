@@ -753,7 +753,7 @@ impl<H: Helper> Editor<H> {
         self.helper.as_mut()
     }
 
-    /// Return an imutable reference to the helper.
+    /// Return an immutable reference to the helper.
     pub fn get_helper_const(&self) -> Option<&H> {
         self.helper.as_ref()
     }

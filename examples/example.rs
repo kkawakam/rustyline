@@ -1,12 +1,12 @@
 extern crate log;
 extern crate rustyline;
 
-use std::io::{self, Write};
-use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
+use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
-use rustyline::{Cmd, Config, CompletionType, Editor, EditMode, KeyPress};
+use rustyline::hint::Hinter;
+use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -17,6 +17,22 @@ static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 #[cfg(windows)]
 static PROMPT: &'static str = ">> ";
 
+struct Hints {}
+
+impl Hinter for Hints {
+    fn hint(&self, line: &str, _pos: usize) -> Option<String> {
+        if line == "hello" {
+            if cfg!(target_os = "windows") {
+                Some(" World".to_owned())
+            } else {
+                Some(" \x1b[1mWorld\x1b[m".to_owned())
+            }
+        } else {
+            None
+        }
+    }
+}
+
 fn main() {
     init_logger().is_ok();
     let config = Config::builder()
@@ -26,7 +42,7 @@ fn main() {
         .build();
     let c = FilenameCompleter::new();
     let mut rl = Editor::with_config(config);
-    rl.set_completer(Some(c));
+    rl.set_helper(Some((c, Hints {})));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {
@@ -56,23 +72,25 @@ fn main() {
     rl.save_history("history.txt").unwrap();
 }
 
+static LOGGER: Logger = Logger;
 struct Logger;
 
 impl log::Log for Logger {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= LogLevel::Debug
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Debug
     }
 
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            writeln!(io::stderr(), "{} - {}", record.level(), record.args()).unwrap();
+            eprintln!("{} - {}", record.level(), record.args());
         }
     }
+
+    fn flush(&self) {}
 }
 
 fn init_logger() -> Result<(), SetLoggerError> {
-    log::set_logger(|max_log_level| {
-                        max_log_level.set(LogLevelFilter::Info);
-                        Box::new(Logger)
-                    })
+    try!(log::set_logger(&LOGGER));
+    log::set_max_level(LevelFilter::Info);
+    Ok(())
 }

@@ -8,14 +8,17 @@ use super::Result;
 use line_buffer::LineBuffer;
 
 // TODO: let the implementers choose/find word boudaries ???
-// (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion ("select t.na| from tbl as t")
-// TOOD: make &self &mut self ???
+// (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
+// ("select t.na| from tbl as t")
+// TODO: make &self &mut self ???
 
 /// To be called for tab-completion.
 pub trait Completer {
     /// Takes the currently edited `line` with the cursor `pos`ition and
-    /// returns the start position and the completion candidates for the partial word to be completed.
-    /// "ls /usr/loc" => Ok((3, vec!["/usr/local/"]))
+    /// returns the start position and the completion candidates for the
+    /// partial word to be completed.
+    ///
+    /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -26,7 +29,7 @@ pub trait Completer {
 
 impl Completer for () {
     fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
-        Ok((0, Vec::new()))
+        Ok((0, Vec::with_capacity(0)))
     }
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
         unreachable!()
@@ -63,23 +66,34 @@ box_completer! { Box Rc Arc }
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
     break_chars: BTreeSet<char>,
+    double_quotes_special_chars: BTreeSet<char>,
 }
 
+// rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
-static DEFAULT_BREAK_CHARS: [char; 18] = [' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>',
-                                          '<', '=', ';', '|', '&', '{', '(', '\0'];
+static DEFAULT_BREAK_CHARS: [char; 18] = [
+    ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
+];
 #[cfg(unix)]
 static ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
-static DEFAULT_BREAK_CHARS: [char; 17] = [' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<',
-                                          '=', ';', '|', '&', '{', '(', '\0'];
+static DEFAULT_BREAK_CHARS: [char; 17] = [
+    ' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
+];
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;
 
+// In double quotes, not all break_chars need to be escaped
+// https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+static DOUBLE_QUOTES_SPECIAL_CHARS: [char; 4] = ['"', '$', '\\', '`'];
+
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
-        FilenameCompleter { break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect() }
+        FilenameCompleter {
+            break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect(),
+            double_quotes_special_chars: DOUBLE_QUOTES_SPECIAL_CHARS.iter().cloned().collect(),
+        }
     }
 }
 
@@ -91,9 +105,25 @@ impl Default for FilenameCompleter {
 
 impl Completer for FilenameCompleter {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
-        let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
-        let path = unescape(path, ESCAPE_CHAR);
-        let matches = try!(filename_complete(&path, ESCAPE_CHAR, &self.break_chars));
+        let (start, path, esc_char, break_chars) =
+            if let Some((idx, double_quote)) = find_unclosed_quote(&line[..pos]) {
+                let start = idx + 1;
+                if double_quote {
+                    (
+                        start,
+                        unescape(&line[start..pos], ESCAPE_CHAR),
+                        ESCAPE_CHAR,
+                        &self.double_quotes_special_chars,
+                    )
+                } else {
+                    (start, Borrowed(&line[start..pos]), None, &self.break_chars)
+                }
+            } else {
+                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
+                let path = unescape(path, ESCAPE_CHAR);
+                (start, path, ESCAPE_CHAR, &self.break_chars)
+            };
+        let matches = try!(filename_complete(&path, esc_char, break_chars));
         Ok((start, matches))
     }
 }
@@ -124,16 +154,13 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
 
 /// Escape any `break_chars` in `input` string with `esc_char`.
 /// For example, '/User Information' becomes '/User\ Information'
-/// when space is a breaking char and '\' the escape char.
+/// when space is a breaking char and '\\' the escape char.
 pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char>) -> String {
     if esc_char.is_none() {
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input
-        .chars()
-        .filter(|c| break_chars.contains(c))
-        .count();
+    let n = input.chars().filter(|c| break_chars.contains(c)).count();
     if n == 0 {
         return input;
     }
@@ -148,10 +175,11 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
     result
 }
 
-fn filename_complete(path: &str,
-                     esc_char: Option<char>,
-                     break_chars: &BTreeSet<char>)
-                     -> Result<Vec<String>> {
+fn filename_complete(
+    path: &str,
+    esc_char: Option<char>,
+    break_chars: &BTreeSet<char>,
+) -> Result<Vec<String>> {
     use std::env::{current_dir, home_dir};
 
     let sep = path::MAIN_SEPARATOR;
@@ -202,11 +230,12 @@ fn filename_complete(path: &str,
 /// try to find backward the start of a word.
 /// Return (0, `line[..pos]`) if no break char has been found.
 /// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
-pub fn extract_word<'l>(line: &'l str,
-                        pos: usize,
-                        esc_char: Option<char>,
-                        break_chars: &BTreeSet<char>)
-                        -> (usize, &'l str) {
+pub fn extract_word<'l>(
+    line: &'l str,
+    pos: usize,
+    esc_char: Option<char>,
+    break_chars: &BTreeSet<char>,
+) -> (usize, &'l str) {
     let line = &line[..pos];
     if line.is_empty() {
         return (0, line);
@@ -247,8 +276,10 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
         for (i, c1) in candidates.iter().enumerate().take(candidates.len() - 1) {
             let b1 = c1.as_bytes();
             let b2 = candidates[i + 1].as_bytes();
-            if b1.len() <= longest_common_prefix || b2.len() <= longest_common_prefix ||
-               b1[longest_common_prefix] != b2[longest_common_prefix] {
+            if b1.len() <= longest_common_prefix
+                || b2.len() <= longest_common_prefix
+                || b1[longest_common_prefix] != b2[longest_common_prefix]
+            {
                 break 'o;
             }
         }
@@ -263,6 +294,61 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
     Some(&candidates[0][0..longest_common_prefix])
 }
 
+#[derive(PartialEq)]
+enum ScanMode {
+    DoubleQuote,
+    Escape,
+    EscapeInDoubleQuote,
+    Normal,
+    SingleQuote,
+}
+
+/// try to find an unclosed single/double quote in `s`.
+/// Return `None` if no unclosed quote is found.
+/// Return the unclosed quote position and if it is a double quote.
+fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
+    let char_indices = s.char_indices();
+    let mut mode = ScanMode::Normal;
+    let mut quote_index = 0;
+    for (index, char) in char_indices {
+        match mode {
+            ScanMode::DoubleQuote => {
+                if char == '"' {
+                    mode = ScanMode::Normal;
+                } else if char == '\\' {
+                    mode = ScanMode::EscapeInDoubleQuote;
+                }
+            }
+            ScanMode::Escape => {
+                mode = ScanMode::Normal;
+            }
+            ScanMode::EscapeInDoubleQuote => {
+                mode = ScanMode::DoubleQuote;
+            }
+            ScanMode::Normal => {
+                if char == '"' {
+                    mode = ScanMode::DoubleQuote;
+                    quote_index = index;
+                } else if char == '\\' && cfg!(not(windows)) {
+                    mode = ScanMode::Escape;
+                } else if char == '\'' && cfg!(not(windows)) {
+                    mode = ScanMode::SingleQuote;
+                    quote_index = index;
+                }
+            }
+            ScanMode::SingleQuote => {
+                if char == '\'' {
+                    mode = ScanMode::Normal;
+                } // no escape in single quotes
+            }
+        };
+    }
+    if ScanMode::DoubleQuote == mode || ScanMode::SingleQuote == mode {
+        return Some((quote_index, ScanMode::DoubleQuote == mode));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -271,11 +357,15 @@ mod tests {
     pub fn extract_word() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
         let line = "ls '/usr/local/b";
-        assert_eq!((4, "/usr/local/b"),
-                   super::extract_word(line, line.len(), Some('\\'), &break_chars));
+        assert_eq!(
+            (4, "/usr/local/b"),
+            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+        );
         let line = "ls /User\\ Information";
-        assert_eq!((3, "/User\\ Information"),
-                   super::extract_word(line, line.len(), Some('\\'), &break_chars));
+        assert_eq!(
+            (3, "/User\\ Information"),
+            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+        );
     }
 
     #[test]
@@ -292,8 +382,10 @@ mod tests {
     pub fn escape() {
         let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
         let input = String::from("/usr/local/b");
-        assert_eq!(input.clone(),
-                   super::escape(input, Some('\\'), &break_chars));
+        assert_eq!(
+            input.clone(),
+            super::escape(input, Some('\\'), &break_chars)
+        );
         let input = String::from("/User Information");
         let result = String::from("/User\\ Information");
         assert_eq!(result, super::escape(input, Some('\\'), &break_chars));
@@ -332,5 +424,18 @@ mod tests {
         let candidates = vec![String::from("fée"), String::from("fête")];
         let lcp = super::longest_common_prefix(&candidates);
         assert_eq!(Some("f"), lcp);
+    }
+
+    #[test]
+    pub fn find_unclosed_quote() {
+        assert_eq!(None, super::find_unclosed_quote("ls /etc"));
+        assert_eq!(
+            Some((3, true)),
+            super::find_unclosed_quote("ls \"User Information")
+        );
+        assert_eq!(
+            None,
+            super::find_unclosed_quote("ls \"/User Information\" /etc")
+        );
     }
 }

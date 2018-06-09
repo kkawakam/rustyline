@@ -1,17 +1,18 @@
 //! History API
 
-use std::collections::VecDeque;
+#[cfg(unix)]
+use libc;
 use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
-#[cfg(unix)]
-use libc;
 
 use super::Result;
 use config::{Config, HistoryDuplicates};
 
+/// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Forward,
@@ -55,12 +56,14 @@ impl History {
         if self.max_len == 0 {
             return false;
         }
-        if line.as_ref().is_empty() ||
-           (self.ignore_space &&
-            line.as_ref()
-                .chars()
-                .next()
-                .map_or(true, |c| c.is_whitespace())) {
+        if line.as_ref().is_empty()
+            || (self.ignore_space
+                && line
+                    .as_ref()
+                    .chars()
+                    .next()
+                    .map_or(true, |c| c.is_whitespace()))
+        {
             return false;
         }
         if self.ignore_dups {
@@ -77,19 +80,22 @@ impl History {
         true
     }
 
-    /// Returns the number of entries in the history.
+    /// Return the number of entries in the history.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
-    /// Returns true if the history has no entry.
+    /// Return true if the history has no entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Set the maximum length for the history. This function can be called even
     /// if there is already some history, the function will make sure to retain
-    /// just the latest `len` elements if the new history length value is smaller
-    /// than the amount of items already inside the history.
+    /// just the latest `len` elements if the new history length value is
+    /// smaller than the amount of items already inside the history.
+    ///
+    /// Like [stifle_history](http://cnswww.cns.cwru.
+    /// edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
         if len == 0 {
@@ -105,6 +111,10 @@ impl History {
     }
 
     /// Save the history in the specified file.
+    // TODO append_history
+    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
+    // TODO history_truncate_file
+    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
@@ -121,13 +131,15 @@ impl History {
             try!(wtr.write_all(entry.as_bytes()));
             try!(wtr.write_all(b"\n"));
         }
+        // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
+        try!(wtr.flush());
         Ok(())
     }
 
     /// Load the history from the specified file.
     ///
-    /// # Failure
-    /// Will return `Err` if path does not already exist.
+    /// # Errors
+    /// Will return `Err` if path does not already exist or could not be read.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
@@ -144,29 +156,36 @@ impl History {
         self.entries.clear()
     }
 
-    /// Search history (start position inclusive [0, len-1])
-    /// Return the absolute index of the nearest history entry that matches `term`.
-    /// Return None if no entry contains `term` between [start, len -1] for forward search
+    /// Search history (start position inclusive [0, len-1]).
+    ///
+    /// Return the absolute index of the nearest history entry that matches
+    /// `term`.
+    ///
+    /// Return None if no entry contains `term` between [start, len -1] for
+    /// forward search
     /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
         let test = |entry: &String| entry.contains(term);
         self.search_match(term, start, dir, test)
     }
 
+    /// Anchored search
     pub fn starts_with(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
         let test = |entry: &String| entry.starts_with(term);
         self.search_match(term, start, dir, test)
     }
 
     fn search_match<F>(&self, term: &str, start: usize, dir: Direction, test: F) -> Option<usize>
-        where F: Fn(&String) -> bool
+    where
+        F: Fn(&String) -> bool,
     {
         if term.is_empty() || start >= self.len() {
             return None;
         }
         match dir {
             Direction::Reverse => {
-                let index = self.entries
+                let index = self
+                    .entries
                     .iter()
                     .rev()
                     .skip(self.entries.len() - 1 - start)
@@ -254,9 +273,9 @@ fn fix_perm(file: &File) {
 #[cfg(test)]
 mod tests {
     extern crate tempdir;
-    use std::path::Path;
     use super::{Direction, History};
     use config::Config;
+    use std::path::Path;
 
     fn init() -> History {
         let mut history = History::new();
@@ -289,7 +308,7 @@ mod tests {
         let mut history = init();
         history.set_max_len(1);
         assert_eq!(1, history.entries.len());
-        assert_eq!(Some(&"line3".to_string()), history.last());
+        assert_eq!(Some(&"line3".to_owned()), history.last());
     }
 
     #[test]

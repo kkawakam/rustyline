@@ -1,14 +1,12 @@
 //! Contains error type for handling I/O and Errno errors
-#[cfg(windows)]
-use std::char;
-use std::io;
-use std::error;
-use std::fmt;
 #[cfg(unix)]
 use nix;
-
-#[cfg(unix)]
-use char_iter;
+#[cfg(windows)]
+use std::char;
+use std::error;
+use std::fmt;
+use std::io;
+use std::str;
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
@@ -22,7 +20,7 @@ pub enum ReadlineError {
     Interrupted,
     /// Chars Error
     #[cfg(unix)]
-    Char(char_iter::CharsError),
+    Char(str::Utf8Error),
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
@@ -41,7 +39,7 @@ impl fmt::Display for ReadlineError {
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.fmt(f),
             #[cfg(unix)]
-            ReadlineError::Errno(ref err) => write!(f, "Errno: {}", err.errno().desc()),
+            ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
             #[cfg(windows)]
@@ -59,7 +57,7 @@ impl error::Error for ReadlineError {
             #[cfg(unix)]
             ReadlineError::Char(ref err) => err.description(),
             #[cfg(unix)]
-            ReadlineError::Errno(ref err) => err.errno().desc(),
+            ReadlineError::Errno(ref err) => err.description(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
             #[cfg(windows)]
@@ -82,8 +80,8 @@ impl From<nix::Error> for ReadlineError {
 }
 
 #[cfg(unix)]
-impl From<char_iter::CharsError> for ReadlineError {
-    fn from(err: char_iter::CharsError) -> ReadlineError {
+impl From<str::Utf8Error> for ReadlineError {
+    fn from(err: str::Utf8Error) -> ReadlineError {
         ReadlineError::Char(err)
     }
 }

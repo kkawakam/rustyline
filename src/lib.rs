@@ -748,6 +748,16 @@ impl<H: Helper> Editor<H> {
         self.helper = helper;
     }
 
+    /// Return a mutable reference to the helper.
+    pub fn get_helper(&mut self) -> Option<&mut H> {
+        self.helper.as_mut()
+    }
+
+    /// Return an imutable reference to the helper.
+    pub fn get_helper_const(&self) -> Option<&H> {
+        self.helper.as_ref()
+    }
+
     #[deprecated(since = "2.0.0", note = "Use set_helper instead")]
     pub fn set_completer(&mut self, completer: Option<H>) {
         self.helper = completer;

@@ -13,6 +13,7 @@ categories = ["command-line-interface"]
 [badges]
 travis-ci = { repository = "kkawakam/rustyline" }
 appveyor = { repository = "kkawakam/rustyline" }
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 libc = "0.2"

@@ -69,8 +69,8 @@ rustyline = "1.0.0"
  - Unicode (UTF-8) (linenoise supports only ASCII)
  - Word completion (linenoise supports only line completion)
  - Filename completion
- - History search ([Searching for Commands in the History](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8))
- - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
+ - History search ([Searching for Commands in the History](http://tiswww.case.edu/php/chet/readline/readline.html#SEC8))
+ - Kill ring ([Killing Commands](http://tiswww.case.edu/php/chet/readline/readline.html#IDX3))
  - Multi line mode (line wrapping)
  - Word commands
  - Hints

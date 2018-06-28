@@ -476,9 +476,9 @@ impl LineBuffer {
         }
     }
 
-    fn search_char_pos(&self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
+    fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
-        let search_result = match *cs {
+        let search_result = match cs {
             CharSearch::Backward(c) | CharSearch::BackwardAfter(c) => self.buf[..self.pos]
                 .char_indices()
                 .rev()
@@ -505,7 +505,7 @@ impl LineBuffer {
             }
         };
         if let Some(pos) = search_result {
-            Some(match *cs {
+            Some(match cs {
                 CharSearch::Backward(_) => pos,
                 CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
@@ -526,7 +526,7 @@ impl LineBuffer {
     /// Move cursor to the matching character position.
     /// Return `true` when the search succeeds.
     pub fn move_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
-        if let Some(pos) = self.search_char_pos(&cs, n) {
+        if let Some(pos) = self.search_char_pos(cs, n) {
             self.pos = pos;
             true
         } else {
@@ -548,8 +548,8 @@ impl LineBuffer {
 
     pub fn delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
         let search_result = match cs {
-            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c), n),
-            _ => self.search_char_pos(&cs, n),
+            CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
+            _ => self.search_char_pos(cs, n),
         };
         if let Some(pos) = search_result {
             match cs {
@@ -733,10 +733,8 @@ impl LineBuffer {
             }
             Movement::ViCharSearch(n, cs) => {
                 let search_result = match cs {
-                    CharSearch::ForwardBefore(c) => {
-                        self.search_char_pos(&CharSearch::Forward(c), n)
-                    }
-                    _ => self.search_char_pos(&cs, n),
+                    CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
+                    _ => self.search_char_pos(cs, n),
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {

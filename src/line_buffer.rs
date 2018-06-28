@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Maximum buffer size for the line read
-pub static MAX_LINE: usize = 4096;
+pub(crate) static MAX_LINE: usize = 4096;
 
 /// Word's case change
 #[derive(Clone, Copy)]
@@ -22,7 +22,7 @@ pub enum WordAction {
 
 /// Delete (kill) direction
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
+pub(crate) enum Direction {
     Forward,
     Backward,
 }
@@ -34,14 +34,14 @@ impl Default for Direction {
 }
 
 /// Listener to be notified when some text is deleted.
-pub trait DeleteListener {
+pub(crate) trait DeleteListener {
     fn start_killing(&mut self);
     fn delete(&mut self, idx: usize, string: &str, dir: Direction);
     fn stop_killing(&mut self);
 }
 
 /// Listener to be notified when the line is modified.
-pub trait ChangeListener: DeleteListener {
+pub(crate) trait ChangeListener: DeleteListener {
     fn insert_char(&mut self, idx: usize, c: char);
     fn insert_str(&mut self, idx: usize, string: &str);
     fn replace(&mut self, idx: usize, old: &str, new: &str);
@@ -78,7 +78,11 @@ impl LineBuffer {
     }
 
     #[cfg(test)]
-    pub fn init(line: &str, pos: usize, cl: Option<Rc<RefCell<ChangeListener>>>) -> LineBuffer {
+    pub(crate) fn init(
+        line: &str,
+        pos: usize,
+        cl: Option<Rc<RefCell<ChangeListener>>>,
+    ) -> LineBuffer {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
@@ -86,16 +90,13 @@ impl LineBuffer {
         lb
     }
 
-    pub fn set_delete_listener(&mut self, dl: Arc<Mutex<DeleteListener>>) {
+    pub(crate) fn set_delete_listener(&mut self, dl: Arc<Mutex<DeleteListener>>) {
         self.dl = Some(dl);
     }
-    pub fn remove_delete_listener(&mut self) {
-        self.dl = None;
-    }
-    pub fn set_change_listener(&mut self, dl: Rc<RefCell<ChangeListener>>) {
+    pub(crate) fn set_change_listener(&mut self, dl: Rc<RefCell<ChangeListener>>) {
         self.cl = Some(dl);
     }
-    pub fn remove_change_listener(&mut self) {
+    pub(crate) fn remove_change_listener(&mut self) {
         self.cl = None;
     }
 
@@ -475,9 +476,9 @@ impl LineBuffer {
         }
     }
 
-    fn search_char_pos(&self, cs: &CharSearch, n: RepeatCount) -> Option<usize> {
+    fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
-        let search_result = match *cs {
+        let search_result = match cs {
             CharSearch::Backward(c) | CharSearch::BackwardAfter(c) => self.buf[..self.pos]
                 .char_indices()
                 .rev()
@@ -504,7 +505,7 @@ impl LineBuffer {
             }
         };
         if let Some(pos) = search_result {
-            Some(match *cs {
+            Some(match cs {
                 CharSearch::Backward(_) => pos,
                 CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
@@ -525,7 +526,7 @@ impl LineBuffer {
     /// Move cursor to the matching character position.
     /// Return `true` when the search succeeds.
     pub fn move_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
-        if let Some(pos) = self.search_char_pos(&cs, n) {
+        if let Some(pos) = self.search_char_pos(cs, n) {
             self.pos = pos;
             true
         } else {
@@ -547,8 +548,8 @@ impl LineBuffer {
 
     pub fn delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
         let search_result = match cs {
-            CharSearch::ForwardBefore(c) => self.search_char_pos(&CharSearch::Forward(c), n),
-            _ => self.search_char_pos(&cs, n),
+            CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
+            _ => self.search_char_pos(cs, n),
         };
         if let Some(pos) = search_result {
             match cs {
@@ -732,10 +733,8 @@ impl LineBuffer {
             }
             Movement::ViCharSearch(n, cs) => {
                 let search_result = match cs {
-                    CharSearch::ForwardBefore(c) => {
-                        self.search_char_pos(&CharSearch::Forward(c), n)
-                    }
-                    _ => self.search_char_pos(&cs, n),
+                    CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
+                    _ => self.search_char_pos(cs, n),
                 };
                 if let Some(pos) = search_result {
                     Some(match cs {

@@ -180,7 +180,8 @@ fn filename_complete(
     esc_char: Option<char>,
     break_chars: &BTreeSet<char>,
 ) -> Result<Vec<String>> {
-    use std::env::{current_dir, home_dir};
+    use dirs::home_dir;
+    use std::env::current_dir;
 
     let sep = path::MAIN_SEPARATOR;
     let (dir_name, file_name) = match path.rfind(sep) {

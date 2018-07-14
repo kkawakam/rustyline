@@ -17,6 +17,7 @@
 //! ```
 #![allow(unknown_lints)]
 
+extern crate dirs;
 extern crate libc;
 #[macro_use]
 extern crate log;

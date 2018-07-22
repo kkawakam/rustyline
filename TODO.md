@@ -8,7 +8,7 @@ Bell
 
 Color
 - [x] ANSI Colors & Windows 10+
-- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)
+- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
 - [ ] Syntax highlighting
 - [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 
@@ -76,4 +76,4 @@ Unix
 Windows
 - [ ] is_atty is not working with cygwin/msys (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
 - [X] UTF-16 surrogate pair
-- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)
+- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)

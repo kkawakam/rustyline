@@ -123,17 +123,18 @@ fn complete_line<R: RawReader, C: Completer>(
         }
         Ok(Some(cmd))
     } else if CompletionType::List == config.completion_type() {
-        // beep if ambiguous
-        if candidates.len() > 1 {
-            try!(s.out.beep());
-        }
         if let Some(lcp) = longest_common_prefix(&candidates) {
-            // if we can extend the item, extend it and return to main loop
+            // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start {
                 completer.update(&mut s.line, start, lcp);
                 try!(s.refresh_line());
-                return Ok(None);
             }
+        }
+        // beep if ambiguous
+        if candidates.len() > 1 {
+            try!(s.out.beep());
+        } else {
+            return Ok(None);
         }
         // we can't complete any further, wait for second tab
         let mut cmd = try!(s.next_cmd(input_state, rdr, true));

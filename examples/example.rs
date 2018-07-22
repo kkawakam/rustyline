@@ -3,10 +3,10 @@ extern crate rustyline;
 
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
-use rustyline::completion::FilenameCompleter;
+use rustyline::completion::{Completer, FilenameCompleter};
 use rustyline::error::ReadlineError;
 use rustyline::hint::Hinter;
-use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
 
 // On unix platforms you can use ANSI escape sequences
 #[cfg(unix)]
@@ -17,9 +17,15 @@ static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 #[cfg(windows)]
 static PROMPT: &'static str = ">> ";
 
-struct Hints {}
+struct MyHelper(FilenameCompleter);
 
-impl Hinter for Hints {
+impl Completer for MyHelper {
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>), ReadlineError> {
+        self.0.complete(line, pos)
+    }
+}
+
+impl Hinter for MyHelper {
     fn hint(&self, line: &str, _pos: usize) -> Option<String> {
         if line == "hello" {
             if cfg!(target_os = "windows") {
@@ -33,6 +39,9 @@ impl Hinter for Hints {
     }
 }
 
+impl Helper for MyHelper {
+}
+
 fn main() {
     init_logger().is_ok();
     let config = Config::builder()
@@ -40,9 +49,9 @@ fn main() {
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
         .build();
-    let c = FilenameCompleter::new();
+    let h = MyHelper(FilenameCompleter::new());
     let mut rl = Editor::with_config(config);
-    rl.set_helper(Some((c, Hints {})));
+    rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

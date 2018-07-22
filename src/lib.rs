@@ -42,6 +42,7 @@ mod undo;
 
 mod tty;
 
+use std::borrow::Cow::{self, Borrowed};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
@@ -346,8 +347,8 @@ fn readline_edit<H: Helper>(
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
 ) -> Result<String> {
-    let completer = editor.helper.as_ref().map(|h| h.completer());
-    let hinter = editor.helper.as_ref().map(|h| h.hinter() as &Hinter);
+    let completer = editor.helper.as_ref();
+    let hinter = editor.helper.as_ref().map(|h| h as &Hinter);
 
     let mut stdout = editor.term.create_writer();
 
@@ -620,37 +621,18 @@ fn readline_direct() -> Result<String> {
 
 /// Syntax specific helper.
 ///
-/// TODO Tokenizer/parser used for both completion, suggestion, highlighting
-pub trait Helper {
-    type Completer: Completer;
-    type Hinter: Hinter;
-
-    fn completer(&self) -> &Self::Completer;
-    fn hinter(&self) -> &Self::Hinter;
-}
-
-impl<C: Completer, H: Hinter> Helper for (C, H) {
-    type Completer = C;
-    type Hinter = H;
-
-    fn completer(&self) -> &C {
-        &self.0
-    }
-    fn hinter(&self) -> &H {
-        &self.1
+/// TODO Tokenizer/parser used for both completion, suggestion, highlighting.
+/// (parse current line once)
+pub trait Helper where Self: Completer, Self: Hinter {
+    /// Decorate `line` with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
+    /// Rustyline will try to handle escape sequence for ansi color on windows when not supported natively (windows <10).
+    /// TODO to be used
+    fn highligh(line: &str) -> Cow<str> {
+        Borrowed(line)
     }
 }
-impl<C: Completer> Helper for C {
-    type Completer = C;
-    type Hinter = ();
 
-    fn completer(&self) -> &C {
-        self
-    }
-    fn hinter(&self) -> &() {
-        &()
-    }
-}
+impl Helper for () {}
 
 /// Line editor
 pub struct Editor<H: Helper> {

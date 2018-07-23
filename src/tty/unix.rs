@@ -13,7 +13,7 @@ use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use config::Config;
+use config::{ColorMode, Config};
 use consts::{self, KeyPress};
 use error;
 use line_buffer::LineBuffer;
@@ -533,6 +533,8 @@ pub type Terminal = PosixTerminal;
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
+    stdout_isatty: bool,
+    color_mode: ColorMode,
 }
 
 impl Term for PosixTerminal {
@@ -540,12 +542,14 @@ impl Term for PosixTerminal {
     type Writer = PosixRenderer;
     type Mode = Mode;
 
-    fn new() -> PosixTerminal {
+    fn new(color_mode: ColorMode) -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
+            stdout_isatty: is_a_tty(STDOUT_FILENO),
+            color_mode,
         };
-        if !term.unsupported && term.stdin_isatty && is_a_tty(STDOUT_FILENO) {
+        if !term.unsupported && term.stdin_isatty && term.stdout_isatty {
             install_sigwinch_handler();
         }
         term
@@ -564,9 +568,18 @@ impl Term for PosixTerminal {
         self.stdin_isatty
     }
 
+    /// Check if output supports colors.
+    fn colors_enabled(&self) -> bool {
+        match self.color_mode {
+            ColorMode::Enabled => self.stdout_isatty,
+            ColorMode::Forced => true,
+            ColorMode::Disabled => false,
+        }
+    }
+
     // Interactive loop:
 
-    fn enable_raw_mode(&self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Mode> {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {

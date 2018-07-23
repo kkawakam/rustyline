@@ -20,6 +20,8 @@ pub struct Config {
     /// If true, each nonblank line returned by `readline` will be
     /// automatically added to the history.
     auto_add_history: bool,
+    /// if colors should be enabled.
+    color_mode: ColorMode,
 }
 
 impl Config {
@@ -70,6 +72,13 @@ impl Config {
     pub fn auto_add_history(&self) -> bool {
         self.auto_add_history
     }
+
+    /// Tell if colors should be enabled.
+    ///
+    /// By default, they are except if stdout is not a tty.
+    pub fn color_mode(&self) -> ColorMode {
+        self.color_mode
+    }
 }
 
 impl Default for Config {
@@ -83,6 +92,7 @@ impl Default for Config {
             keyseq_timeout: -1,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
+            color_mode: ColorMode::Enabled,
         }
     }
 }
@@ -109,6 +119,14 @@ pub enum CompletionType {
 pub enum EditMode {
     Emacs,
     Vi,
+}
+
+/// Colorization mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorMode {
+    Enabled,
+    Forced,
+    Disabled,
 }
 
 /// Configuration builder
@@ -190,6 +208,14 @@ impl Builder {
     /// By default, they are not.
     pub fn auto_add_history(mut self, yes: bool) -> Builder {
         self.p.auto_add_history = yes;
+        self
+    }
+
+    /// Forces colorization on or off.
+    ///
+    /// By default, colorization is on except if stdout is not a tty.
+    pub fn colors_enabled(mut self, color_mode: ColorMode) -> Builder {
+        self.p.color_mode = color_mode;
         self
     }
 

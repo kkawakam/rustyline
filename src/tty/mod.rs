@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use config::Config;
+use config::{ColorMode, Config};
 use consts::KeyPress;
 use line_buffer::LineBuffer;
 use Result;
@@ -120,14 +120,16 @@ pub trait Term {
     type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
 
-    fn new() -> Self;
+    fn new(color_mode: ColorMode) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool;
+    /// Check if output supports colors.
+    fn colors_enabled(&self) -> bool;
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&self) -> Result<Self::Mode>;
+    fn enable_raw_mode(&mut self) -> Result<Self::Mode>;
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer

@@ -656,7 +656,7 @@ impl<H: Helper> Editor<H> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Editor<H> {
-        let term = Terminal::new();
+        let term = Terminal::new(config.color_mode());
         Editor {
             term,
             history: History::with_config(config),

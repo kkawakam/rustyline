@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::Config;
+use config::{ColorMode, Config};
 use consts::KeyPress;
 use error::ReadlineError;
 use line_buffer::LineBuffer;
@@ -121,7 +121,7 @@ impl Term for DummyTerminal {
     type Writer = Sink;
     type Mode = Mode;
 
-    fn new() -> DummyTerminal {
+    fn new(_color_mode: ColorMode) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
@@ -138,9 +138,13 @@ impl Term for DummyTerminal {
         true
     }
 
+    fn colors_enabled(&self) -> bool {
+        false
+    }
+
     // Interactive loop:
 
-    fn enable_raw_mode(&self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Mode> {
         Ok(())
     }
 

@@ -489,7 +489,7 @@ impl Term for Console {
             if original_stdout_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
                 let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    consoleapi::SetConsoleMode(self.stdout_handle, raw) != 0;
+                    unsafe { consoleapi::SetConsoleMode(self.stdout_handle, raw) != 0 };
             }
             Some(original_stdout_mode)
         } else {

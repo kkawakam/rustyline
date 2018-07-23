@@ -36,8 +36,8 @@ impl History {
         History {
             entries: VecDeque::new(),
             max_len: config.max_history_size(),
-            ignore_space: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
-            ignore_dups: config.history_ignore_space(),
+            ignore_space: config.history_ignore_space(),
+            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
         }
     }
 

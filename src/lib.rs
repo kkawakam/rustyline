@@ -623,10 +623,14 @@ fn readline_direct() -> Result<String> {
 ///
 /// TODO Tokenizer/parser used for both completion, suggestion, highlighting.
 /// (parse current line once)
-pub trait Helper where Self: Completer, Self: Hinter {
+pub trait Helper
+where
+    Self: Completer,
+    Self: Hinter,
+{
     /// Decorate `line` with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-    /// Rustyline will try to handle escape sequence for ansi color on windows when not supported natively (windows <10).
-    /// TODO to be used
+    /// Rustyline will try to handle escape sequence for ansi color on windows
+    /// when not supported natively (windows <10). TODO to be used
     fn highligh(line: &str) -> Cow<str> {
         Borrowed(line)
     }

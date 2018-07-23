@@ -39,8 +39,7 @@ impl Hinter for MyHelper {
     }
 }
 
-impl Helper for MyHelper {
-}
+impl Helper for MyHelper {}
 
 fn main() {
     init_logger().is_ok();

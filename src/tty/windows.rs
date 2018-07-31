@@ -136,11 +136,11 @@ impl RawReader for ConsoleRawReader {
             // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
             // read one character at a time)
 
-            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED |
-            // RIGHT_ALT_PRESSED) != 0;
+            let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
+                == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
-            let meta = alt;
+            let meta = alt && !alt_gr;
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {

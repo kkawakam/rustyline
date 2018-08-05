@@ -12,14 +12,47 @@ use line_buffer::LineBuffer;
 // ("select t.na| from tbl as t")
 // TODO: make &self &mut self ???
 
+/// A completion candidate.
+pub trait Candidate {
+    /// Text to display when listing alternatives.
+    fn display(&self) -> &str;
+    /// Text to insert in line.
+    fn replacement(&self) -> &str;
+}
+
+impl Candidate for String {
+    fn display(&self) -> &str {
+        self.as_str()
+    }
+    fn replacement(&self) -> &str {
+        self.as_str()
+    }
+}
+
+pub struct Pair {
+    pub display: String,
+    pub replacement: String,
+}
+
+impl Candidate for Pair {
+    fn display(&self) -> &str {
+        self.display.as_str()
+    }
+    fn replacement(&self) -> &str {
+        self.replacement.as_str()
+    }
+}
+
 /// To be called for tab-completion.
 pub trait Completer {
+    type Candidate: Candidate;
+
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the start position and the completion candidates for the
     /// partial word to be completed.
     ///
     /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)>;
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)>;
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
@@ -28,6 +61,8 @@ pub trait Completer {
 }
 
 impl Completer for () {
+    type Candidate = String;
+
     fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
         Ok((0, Vec::with_capacity(0)))
     }
@@ -37,7 +72,9 @@ impl Completer for () {
 }
 
 impl<'c, C: ?Sized + Completer> Completer for &'c C {
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+    type Candidate = C::Candidate;
+
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)> {
         (**self).complete(line, pos)
     }
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -48,7 +85,9 @@ macro_rules! box_completer {
     ($($id: ident)*) => {
         $(
             impl<C: ?Sized + Completer> Completer for $id<C> {
-                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+                type Candidate = C::Candidate;
+
+                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)> {
                     (**self).complete(line, pos)
                 }
                 fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -104,7 +143,9 @@ impl Default for FilenameCompleter {
 }
 
 impl Completer for FilenameCompleter {
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>)> {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars) =
             if let Some((idx, double_quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
@@ -179,7 +220,7 @@ fn filename_complete(
     path: &str,
     esc_char: Option<char>,
     break_chars: &BTreeSet<char>,
-) -> Result<Vec<String>> {
+) -> Result<Vec<Pair>> {
     use dirs::home_dir;
     use std::env::current_dir;
 
@@ -211,7 +252,7 @@ fn filename_complete(
         dir_path.to_path_buf()
     };
 
-    let mut entries: Vec<String> = Vec::new();
+    let mut entries: Vec<Pair> = Vec::new();
     for entry in try!(dir.read_dir()) {
         let entry = try!(entry);
         if let Some(s) = entry.file_name().to_str() {
@@ -220,7 +261,10 @@ fn filename_complete(
                 if try!(fs::metadata(entry.path())).is_dir() {
                     path.push(sep);
                 }
-                entries.push(escape(path, esc_char, break_chars));
+                entries.push(Pair {
+                    display: String::from(s),
+                    replacement: escape(path, esc_char, break_chars),
+                });
             }
         }
     }
@@ -266,17 +310,17 @@ pub fn extract_word<'l>(
     }
 }
 
-pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
+pub fn longest_common_prefix<C: Candidate>(candidates: &[C]) -> Option<&str> {
     if candidates.is_empty() {
         return None;
     } else if candidates.len() == 1 {
-        return Some(&candidates[0]);
+        return Some(&candidates[0].replacement());
     }
     let mut longest_common_prefix = 0;
     'o: loop {
         for (i, c1) in candidates.iter().enumerate().take(candidates.len() - 1) {
-            let b1 = c1.as_bytes();
-            let b2 = candidates[i + 1].as_bytes();
+            let b1 = c1.replacement().as_bytes();
+            let b2 = candidates[i + 1].replacement().as_bytes();
             if b1.len() <= longest_common_prefix
                 || b2.len() <= longest_common_prefix
                 || b1[longest_common_prefix] != b2[longest_common_prefix]
@@ -286,13 +330,14 @@ pub fn longest_common_prefix(candidates: &[String]) -> Option<&str> {
         }
         longest_common_prefix += 1;
     }
-    while !candidates[0].is_char_boundary(longest_common_prefix) {
+    let candidate = candidates[0].replacement();
+    while !candidate.is_char_boundary(longest_common_prefix) {
         longest_common_prefix -= 1;
     }
     if longest_common_prefix == 0 {
         return None;
     }
-    Some(&candidates[0][0..longest_common_prefix])
+    Some(&candidate[0..longest_common_prefix])
 }
 
 #[derive(PartialEq)]

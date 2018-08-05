@@ -24,6 +24,8 @@ fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
 
 struct SimpleCompleter;
 impl Completer for SimpleCompleter {
+    type Candidate = String;
+
     fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
         Ok((0, vec![line.to_owned() + "t"]))
     }

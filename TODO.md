@@ -17,7 +17,7 @@ Completion
 - [ ] Windows escape/unescape space in path
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)
-- [ ] display versus replacement
+- [X] display versus replacement
 - [ ] composite/alternate completer (if the current completer returns nothing, try the next one)
 
 Config

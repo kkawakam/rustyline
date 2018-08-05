@@ -3,7 +3,7 @@ extern crate rustyline;
 
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
-use rustyline::completion::{Completer, FilenameCompleter};
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::hint::Hinter;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
@@ -20,7 +20,9 @@ static PROMPT: &'static str = ">> ";
 struct MyHelper(FilenameCompleter);
 
 impl Completer for MyHelper {
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<String>), ReadlineError> {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>), ReadlineError> {
         self.0.complete(line, pos)
     }
 }

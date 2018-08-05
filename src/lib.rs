@@ -53,7 +53,7 @@ use unicode_width::UnicodeWidthStr;
 
 use tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
-use completion::{longest_common_prefix, Completer};
+use completion::{longest_common_prefix, Candidate, Completer};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 pub use consts::KeyPress;
 use edit::State;
@@ -91,7 +91,7 @@ fn complete_line<R: RawReader, C: Completer>(
         loop {
             // Show completion or original buffer
             if i < candidates.len() {
-                completer.update(&mut s.line, start, &candidates[i]);
+                completer.update(&mut s.line, start, candidates[i].replacement());
                 try!(s.refresh_line());
             } else {
                 // Restore current edited line
@@ -178,11 +178,11 @@ fn complete_line<R: RawReader, C: Completer>(
     }
 }
 
-fn page_completions<R: RawReader>(
+fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State,
     input_state: &mut InputState,
-    candidates: &[String],
+    candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
 
@@ -192,7 +192,7 @@ fn page_completions<R: RawReader>(
         cols,
         candidates
             .into_iter()
-            .map(|s| s.as_str().width())
+            .map(|s| s.display().width())
             .max()
             .unwrap()
             + min_col_pad,
@@ -235,9 +235,9 @@ fn page_completions<R: RawReader>(
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
             if i < candidates.len() {
-                let candidate = &candidates[i];
+                let candidate = &candidates[i].display();
                 ab.push_str(candidate);
-                let width = candidate.as_str().width();
+                let width = candidate.width();
                 if ((col + 1) * num_rows) + row < candidates.len() {
                     for _ in width..max_width {
                         ab.push(' ');

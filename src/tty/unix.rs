@@ -113,145 +113,17 @@ impl PosixRawReader {
         })
     }
 
+    /// Handle ESC <seq1> sequences
     fn escape_sequence(&mut self) -> Result<KeyPress> {
-        // Read the next two bytes representing the escape sequence.
+        // Read the next byte representing the escape sequence.
         let seq1 = try!(self.next_char());
         if seq1 == '[' {
             // ESC [ sequences. (CSI)
-            let seq2 = try!(self.next_char());
-            if seq2.is_digit(10) {
-                // Extended escape, read additional byte.
-                let seq3 = try!(self.next_char());
-                if seq3 == '~' {
-                    Ok(match seq2 {
-                        '1' | '7' => KeyPress::Home, // tmux, xrvt
-                        '2' => KeyPress::Insert,
-                        '3' => KeyPress::Delete,    // kdch1
-                        '4' | '8' => KeyPress::End, // tmux, xrvt
-                        '5' => KeyPress::PageUp,    // kpp
-                        '6' => KeyPress::PageDown,  // knp
-                        _ => {
-                            debug!(target: "rustyline",
-                            "unsupported esc sequence: ESC [ {} ~", seq2);
-                            KeyPress::UnknownEscSeq
-                        }
-                    })
-                } else if seq3.is_digit(10) {
-                    let seq4 = try!(self.next_char());
-                    if seq4 == '~' {
-                        Ok(match (seq2, seq3) {
-                            ('1', '1') => KeyPress::F(1),  // rxvt-unicode
-                            ('1', '2') => KeyPress::F(2),  // rxvt-unicode
-                            ('1', '3') => KeyPress::F(3),  // rxvt-unicode
-                            ('1', '4') => KeyPress::F(4),  // rxvt-unicode
-                            ('1', '5') => KeyPress::F(5),  // kf5
-                            ('1', '7') => KeyPress::F(6),  // kf6
-                            ('1', '8') => KeyPress::F(7),  // kf7
-                            ('1', '9') => KeyPress::F(8),  // kf8
-                            ('2', '0') => KeyPress::F(9),  // kf9
-                            ('2', '1') => KeyPress::F(10), // kf10
-                            ('2', '3') => KeyPress::F(11), // kf11
-                            ('2', '4') => KeyPress::F(12), // kf12
-                            _ => {
-                                debug!(target: "rustyline",
-                                "unsupported esc sequence: ESC [ {}{} ~", seq1, seq2);
-                                KeyPress::UnknownEscSeq
-                            }
-                        })
-                    } else if seq4 == ';' {
-                        let seq5 = try!(self.next_char());
-                        if seq5.is_digit(10) {
-                            let seq6 = try!(self.next_char()); // '~' expected
-                            debug!(target: "rustyline",
-                            "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
-                        } else {
-                            debug!(target: "rustyline",
-                            "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
-                        }
-                        Ok(KeyPress::UnknownEscSeq)
-                    } else {
-                        debug!(target: "rustyline",
-                        "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
-                        Ok(KeyPress::UnknownEscSeq)
-                    }
-                } else if seq3 == ';' {
-                    let seq4 = try!(self.next_char());
-                    if seq4.is_digit(10) {
-                        let seq5 = try!(self.next_char());
-                        if seq2 == '1' {
-                            Ok(match (seq4, seq5) {
-                                ('5', 'A') => KeyPress::ControlUp,
-                                ('5', 'B') => KeyPress::ControlDown,
-                                ('5', 'C') => KeyPress::ControlRight,
-                                ('5', 'D') => KeyPress::ControlLeft,
-                                ('2', 'A') => KeyPress::ShiftUp,
-                                ('2', 'B') => KeyPress::ShiftDown,
-                                ('2', 'C') => KeyPress::ShiftRight,
-                                ('2', 'D') => KeyPress::ShiftLeft,
-                                _ => {
-                                    debug!(target: "rustyline",
-                                    "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
-                                    KeyPress::UnknownEscSeq
-                                }
-                            })
-                        } else {
-                            debug!(target: "rustyline",
-                            "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
-                            Ok(KeyPress::UnknownEscSeq)
-                        }
-                    } else {
-                        debug!(target: "rustyline",
-                        "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
-                        Ok(KeyPress::UnknownEscSeq)
-                    }
-                } else {
-                    Ok(match (seq2, seq3) {
-                        ('5', 'A') => KeyPress::ControlUp,
-                        ('5', 'B') => KeyPress::ControlDown,
-                        ('5', 'C') => KeyPress::ControlRight,
-                        ('5', 'D') => KeyPress::ControlLeft,
-                        _ => {
-                            debug!(target: "rustyline",
-                            "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
-                            KeyPress::UnknownEscSeq
-                        }
-                    })
-                }
-            } else {
-                // ANSI
-                Ok(match seq2 {
-                    'A' => KeyPress::Up,    // kcuu1
-                    'B' => KeyPress::Down,  // kcud1
-                    'C' => KeyPress::Right, // kcuf1
-                    'D' => KeyPress::Left,  // kcub1
-                    'F' => KeyPress::End,
-                    'H' => KeyPress::Home, // khome
-                    _ => {
-                        debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                        KeyPress::UnknownEscSeq
-                    }
-                })
-            }
+            self.escape_csi()
         } else if seq1 == 'O' {
             // xterm
             // ESC O sequences. (SS3)
-            let seq2 = try!(self.next_char());
-            Ok(match seq2 {
-                'A' => KeyPress::Up,    // kcuu1
-                'B' => KeyPress::Down,  // kcud1
-                'C' => KeyPress::Right, // kcuf1
-                'D' => KeyPress::Left,  // kcub1
-                'F' => KeyPress::End,   // kend
-                'H' => KeyPress::Home,  // khome
-                'P' => KeyPress::F(1),  // kf1
-                'Q' => KeyPress::F(2),  // kf2
-                'R' => KeyPress::F(3),  // kf3
-                'S' => KeyPress::F(4),  // kf4
-                _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
-                    KeyPress::UnknownEscSeq
-                }
-            })
+            self.escape_o()
         } else if seq1 == '\x1b' {
             // ESC ESC
             Ok(KeyPress::Esc)
@@ -259,6 +131,162 @@ impl PosixRawReader {
             // TODO ESC-R (r): Undo all changes made to this line.
             Ok(KeyPress::Meta(seq1))
         }
+    }
+
+    /// Handle ESC [ <seq2> escape sequences
+    fn escape_csi(&mut self) -> Result<KeyPress> {
+        let seq2 = try!(self.next_char());
+        if seq2.is_digit(10) {
+            match seq2 {
+                '0' | '9' => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
+                    Ok(KeyPress::UnknownEscSeq)
+                }
+                _ => {
+                    // Extended escape, read additional byte.
+                    self.extended_escape(seq2)
+                }
+            }
+        } else {
+            // ANSI
+            Ok(match seq2 {
+                'A' => KeyPress::Up,    // kcuu1
+                'B' => KeyPress::Down,  // kcud1
+                'C' => KeyPress::Right, // kcuf1
+                'D' => KeyPress::Left,  // kcub1
+                'F' => KeyPress::End,
+                'H' => KeyPress::Home, // khome
+                _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
+                    KeyPress::UnknownEscSeq
+                }
+            })
+        }
+    }
+
+    /// Handle ESC [ <seq2:digit> escape sequences
+    fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
+        let seq3 = try!(self.next_char());
+        if seq3 == '~' {
+            Ok(match seq2 {
+                '1' | '7' => KeyPress::Home, // tmux, xrvt
+                '2' => KeyPress::Insert,
+                '3' => KeyPress::Delete,    // kdch1
+                '4' | '8' => KeyPress::End, // tmux, xrvt
+                '5' => KeyPress::PageUp,    // kpp
+                '6' => KeyPress::PageDown,  // knp
+                _ => {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {} ~", seq2);
+                    KeyPress::UnknownEscSeq
+                }
+            })
+        } else if seq3.is_digit(10) {
+            let seq4 = try!(self.next_char());
+            if seq4 == '~' {
+                Ok(match (seq2, seq3) {
+                    ('1', '1') => KeyPress::F(1),  // rxvt-unicode
+                    ('1', '2') => KeyPress::F(2),  // rxvt-unicode
+                    ('1', '3') => KeyPress::F(3),  // rxvt-unicode
+                    ('1', '4') => KeyPress::F(4),  // rxvt-unicode
+                    ('1', '5') => KeyPress::F(5),  // kf5
+                    ('1', '7') => KeyPress::F(6),  // kf6
+                    ('1', '8') => KeyPress::F(7),  // kf7
+                    ('1', '9') => KeyPress::F(8),  // kf8
+                    ('2', '0') => KeyPress::F(9),  // kf9
+                    ('2', '1') => KeyPress::F(10), // kf10
+                    ('2', '3') => KeyPress::F(11), // kf11
+                    ('2', '4') => KeyPress::F(12), // kf12
+                    _ => {
+                        debug!(target: "rustyline",
+                               "unsupported esc sequence: ESC [ {}{} ~", seq2, seq3);
+                        KeyPress::UnknownEscSeq
+                    }
+                })
+            } else if seq4 == ';' {
+                let seq5 = try!(self.next_char());
+                if seq5.is_digit(10) {
+                    let seq6 = try!(self.next_char()); // '~' expected
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                } else {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
+                }
+                Ok(KeyPress::UnknownEscSeq)
+            } else {
+                debug!(target: "rustyline",
+                       "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
+                Ok(KeyPress::UnknownEscSeq)
+            }
+        } else if seq3 == ';' {
+            let seq4 = try!(self.next_char());
+            if seq4.is_digit(10) {
+                let seq5 = try!(self.next_char());
+                if seq2 == '1' {
+                    Ok(match (seq4, seq5) {
+                        ('5', 'A') => KeyPress::ControlUp,
+                        ('5', 'B') => KeyPress::ControlDown,
+                        ('5', 'C') => KeyPress::ControlRight,
+                        ('5', 'D') => KeyPress::ControlLeft,
+                        ('2', 'A') => KeyPress::ShiftUp,
+                        ('2', 'B') => KeyPress::ShiftDown,
+                        ('2', 'C') => KeyPress::ShiftRight,
+                        ('2', 'D') => KeyPress::ShiftLeft,
+                        _ => {
+                            debug!(target: "rustyline",
+                                   "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                            KeyPress::UnknownEscSeq
+                        }
+                    })
+                } else {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                    Ok(KeyPress::UnknownEscSeq)
+                }
+            } else {
+                debug!(target: "rustyline",
+                       "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
+                Ok(KeyPress::UnknownEscSeq)
+            }
+        } else {
+            Ok(match (seq2, seq3) {
+                ('5', 'A') => KeyPress::ControlUp,
+                ('5', 'B') => KeyPress::ControlDown,
+                ('5', 'C') => KeyPress::ControlRight,
+                ('5', 'D') => KeyPress::ControlLeft,
+                _ => {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
+                    KeyPress::UnknownEscSeq
+                }
+            })
+        }
+    }
+
+    /// Handle ESC O <seq2> escape sequences
+    fn escape_o(&mut self) -> Result<KeyPress> {
+        let seq2 = try!(self.next_char());
+        Ok(match seq2 {
+            'A' => KeyPress::Up,    // kcuu1
+            'B' => KeyPress::Down,  // kcud1
+            'C' => KeyPress::Right, // kcuf1
+            'D' => KeyPress::Left,  // kcub1
+            'F' => KeyPress::End,   // kend
+            'H' => KeyPress::Home,  // khome
+            'P' => KeyPress::F(1),  // kf1
+            'Q' => KeyPress::F(2),  // kf2
+            'R' => KeyPress::F(3),  // kf3
+            'S' => KeyPress::F(4),  // kf4
+            'a' => KeyPress::ControlUp,
+            'b' => KeyPress::ControlDown,
+            'c' => KeyPress::ControlRight,
+            'd' => KeyPress::ControlLeft,
+            _ => {
+                debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
+                KeyPress::UnknownEscSeq
+            }
+        })
     }
 }
 

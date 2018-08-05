@@ -510,12 +510,11 @@ impl LineBuffer {
                 CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
                 CharSearch::ForwardBefore(_) => {
-                    shift + pos
-                        - self.buf[..shift + pos]
-                            .chars()
-                            .next_back()
-                            .unwrap()
-                            .len_utf8()
+                    shift + pos - self.buf[..shift + pos]
+                        .chars()
+                        .next_back()
+                        .unwrap()
+                        .len_utf8()
                 }
             })
         } else {

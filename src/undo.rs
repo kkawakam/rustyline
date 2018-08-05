@@ -177,11 +177,10 @@ impl Changeset {
             return;
         }
 
-        if !Self::single_char(string.as_ref())
-            || !self
-                .undos
-                .last()
-                .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
+        if !Self::single_char(string.as_ref()) || !self
+            .undos
+            .last()
+            .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
         {
             self.undos.push(Change::Delete {
                 idx: indx,

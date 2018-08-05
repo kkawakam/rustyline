@@ -194,7 +194,8 @@ fn page_completions<R: RawReader>(
             .into_iter()
             .map(|s| s.as_str().width())
             .max()
-            .unwrap() + min_col_pad,
+            .unwrap()
+            + min_col_pad,
     );
     let num_cols = cols / max_width;
 

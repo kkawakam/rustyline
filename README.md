@@ -207,6 +207,7 @@ $ bind -p
 
 Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
 --------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
+[Go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes   | Yes               |
 [Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          | ?                 |
 [Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
 [Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
@@ -217,6 +218,7 @@ Library            | Lang    | OS     | Term  | Unicode | History       | Comple
 [Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
 Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
 
+[Go-prompt]: https://github.com/c-bata/go-prompt
 [Haskeline]: https://github.com/judah/haskeline
 [Linefeed]: https://github.com/murarth/linefeed
 [Linenoise]: https://github.com/antirez/linenoise

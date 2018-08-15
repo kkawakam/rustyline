@@ -32,6 +32,7 @@ impl History {
     pub fn new() -> History {
         Self::with_config(Config::default())
     }
+
     pub fn with_config(config: Config) -> History {
         History {
             entries: VecDeque::new(),
@@ -83,6 +84,7 @@ impl History {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
     /// Return true if the history has no entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -213,8 +215,8 @@ impl Index<usize> for History {
 }
 
 impl<'a> IntoIterator for &'a History {
-    type Item = &'a String;
     type IntoIter = Iter<'a>;
+    type Item = &'a String;
 
     fn into_iter(self) -> Iter<'a> {
         self.iter()

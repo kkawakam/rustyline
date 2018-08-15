@@ -528,6 +528,7 @@ impl Renderer for PosixRenderer {
     fn get_columns(&self) -> usize {
         self.cols
     }
+
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
@@ -566,9 +567,9 @@ pub struct PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type Mode = Mode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
-    type Mode = Mode;
 
     fn new(color_mode: ColorMode) -> PosixTerminal {
         let term = PosixTerminal {

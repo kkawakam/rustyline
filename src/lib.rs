@@ -677,6 +677,7 @@ impl<H: Helper> Editor<H> {
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         self.readline_with(prompt, None)
     }
+
     /// This function behaves in the exact same manner as `readline`, except
     /// that it pre-populates the input area.
     ///
@@ -710,22 +711,27 @@ impl<H: Helper> Editor<H> {
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)
     }
+
     /// Save the history in the specified file.
     pub fn save_history<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         self.history.save(path)
     }
+
     /// Add a new entry in the history.
     pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         self.history.add(line)
     }
+
     /// Clear history.
     pub fn clear_history(&mut self) {
         self.history.clear()
     }
+
     /// Return a mutable reference to the history object.
     pub fn get_history(&mut self) -> &mut History {
         &mut self.history
     }
+
     /// Return an immutable reference to the history object.
     pub fn get_history_const(&self) -> &History {
         &self.history
@@ -747,6 +753,7 @@ impl<H: Helper> Editor<H> {
         let mut bindings = self.custom_bindings.write().unwrap();
         bindings.insert(key_seq, cmd)
     }
+
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
         let mut bindings = self.custom_bindings.write().unwrap();

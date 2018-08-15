@@ -77,6 +77,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         (**self).move_cursor(old, new)
     }
+
     fn refresh_line(
         &mut self,
         prompt: &str,
@@ -88,27 +89,35 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     ) -> Result<(Position, Position)> {
         (**self).refresh_line(prompt, prompt_size, line, hint, current_row, old_rows)
     }
+
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         (**self).calculate_position(s, orig)
     }
+
     fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
         (**self).write_and_flush(buf)
     }
+
     fn beep(&mut self) -> Result<()> {
         (**self).beep()
     }
+
     fn clear_screen(&mut self) -> Result<()> {
         (**self).clear_screen()
     }
+
     fn sigwinch(&self) -> bool {
         (**self).sigwinch()
     }
+
     fn update_size(&mut self) {
         (**self).update_size()
     }
+
     fn get_columns(&self) -> usize {
         (**self).get_columns()
     }
+
     fn get_rows(&self) -> usize {
         (**self).get_rows()
     }

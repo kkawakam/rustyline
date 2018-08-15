@@ -24,6 +24,7 @@ impl Candidate for String {
     fn display(&self) -> &str {
         self.as_str()
     }
+
     fn replacement(&self) -> &str {
         self.as_str()
     }
@@ -38,6 +39,7 @@ impl Candidate for Pair {
     fn display(&self) -> &str {
         self.display.as_str()
     }
+
     fn replacement(&self) -> &str {
         self.replacement.as_str()
     }
@@ -66,6 +68,7 @@ impl Completer for () {
     fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
         Ok((0, Vec::with_capacity(0)))
     }
+
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
         unreachable!()
     }
@@ -77,6 +80,7 @@ impl<'c, C: ?Sized + Completer> Completer for &'c C {
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)> {
         (**self).complete(line, pos)
     }
+
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         (**self).update(line, start, elected)
     }

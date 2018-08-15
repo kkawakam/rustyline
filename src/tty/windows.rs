@@ -407,9 +407,9 @@ pub struct Console {
 impl Console {}
 
 impl Term for Console {
+    type Mode = Mode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
-    type Mode = Mode;
 
     fn new(color_mode: ColorMode) -> Console {
         use std::ptr;

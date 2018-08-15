@@ -25,6 +25,7 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         unimplemented!();
@@ -38,6 +39,7 @@ impl RawReader for IntoIter<KeyPress> {
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         match self.next() {
@@ -99,10 +101,13 @@ impl Renderer for Sink {
     fn sigwinch(&self) -> bool {
         false
     }
+
     fn update_size(&mut self) {}
+
     fn get_columns(&self) -> usize {
         80
     }
+
     fn get_rows(&self) -> usize {
         24
     }
@@ -117,9 +122,9 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type Mode = Mode;
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
-    type Mode = Mode;
 
     fn new(_color_mode: ColorMode) -> DummyTerminal {
         DummyTerminal {

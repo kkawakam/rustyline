@@ -80,6 +80,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         self.saved_line_for_history
             .update(self.line.as_str(), self.line.pos());
     }
+
     pub fn restore(&mut self) {
         self.line.update(
             self.saved_line_for_history.as_str(),
@@ -136,12 +137,15 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
         let hint = self.hint();
         self.refresh(prompt, prompt_size, hint)
     }
+
     fn doing_insert(&mut self) {
         self.changes.borrow_mut().begin();
     }
+
     fn done_inserting(&mut self) {
         self.changes.borrow_mut().end();
     }
+
     fn last_insert(&self) -> Option<String> {
         self.changes.borrow().last_insert()
     }

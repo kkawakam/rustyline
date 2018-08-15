@@ -111,6 +111,7 @@ impl Cmd {
             _ => false,
         }
     }
+
     fn is_repeatable(&self) -> bool {
         match *self {
             Cmd::Move(_) => true,

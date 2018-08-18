@@ -739,6 +739,11 @@ impl<H: Helper> Editor<H> {
         self.helper = helper;
     }
 
+    /// Return an immutable reference to the helper.
+    pub fn helper(&self) -> Option<&H> {
+        self.helper.as_ref()
+    }
+
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
         let mut bindings = self.custom_bindings.write().unwrap();

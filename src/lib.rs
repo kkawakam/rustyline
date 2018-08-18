@@ -724,12 +724,12 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Return a mutable reference to the history object.
-    pub fn get_history(&mut self) -> &mut History {
+    pub fn history_mut(&mut self) -> &mut History {
         &mut self.history
     }
 
     /// Return an immutable reference to the history object.
-    pub fn get_history_const(&self) -> &History {
+    pub fn history(&self) -> &History {
         &self.history
     }
 
@@ -737,11 +737,6 @@ impl<H: Helper> Editor<H> {
     /// or to show hints to the user at the right of the prompt.
     pub fn set_helper(&mut self, helper: Option<H>) {
         self.helper = helper;
-    }
-
-    #[deprecated(since = "2.0.0", note = "Use set_helper instead")]
-    pub fn set_completer(&mut self, completer: Option<H>) {
-        self.helper = completer;
     }
 
     /// Bind a sequence to a command.

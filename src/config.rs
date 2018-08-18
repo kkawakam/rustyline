@@ -214,7 +214,7 @@ impl Builder {
     /// Forces colorization on or off.
     ///
     /// By default, colorization is on except if stdout is not a tty.
-    pub fn colors_enabled(mut self, color_mode: ColorMode) -> Builder {
+    pub fn color_mode(mut self, color_mode: ColorMode) -> Builder {
         self.p.color_mode = color_mode;
         self
     }

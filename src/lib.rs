@@ -33,6 +33,7 @@ pub mod config;
 mod consts;
 mod edit;
 pub mod error;
+pub mod highlight;
 pub mod hint;
 pub mod history;
 mod keymap;
@@ -42,7 +43,6 @@ mod undo;
 
 mod tty;
 
-use std::borrow::Cow::{self, Borrowed};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
@@ -57,6 +57,7 @@ use completion::{longest_common_prefix, Candidate, Completer};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 pub use consts::KeyPress;
 use edit::State;
+use highlight::Highlighter;
 use hint::Hinter;
 use history::{Direction, History};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -628,13 +629,8 @@ pub trait Helper
 where
     Self: Completer,
     Self: Hinter,
+    Self: Highlighter,
 {
-    /// Decorate `line` with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-    /// Rustyline will try to handle escape sequence for ansi color on windows
-    /// when not supported natively (windows <10). TODO to be used
-    fn highligh(line: &str) -> Cow<str> {
-        Borrowed(line)
-    }
 }
 
 impl Helper for () {}

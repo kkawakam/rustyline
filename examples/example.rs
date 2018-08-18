@@ -5,6 +5,7 @@ use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
 
@@ -40,6 +41,8 @@ impl Hinter for MyHelper {
         }
     }
 }
+
+impl Highlighter for MyHelper {}
 
 impl Helper for MyHelper {}
 

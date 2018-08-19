@@ -25,6 +25,8 @@ extern crate log;
 extern crate nix;
 extern crate unicode_segmentation;
 extern crate unicode_width;
+#[cfg(unix)]
+extern crate utf8parse;
 #[cfg(windows)]
 extern crate winapi;
 

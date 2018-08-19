@@ -11,6 +11,7 @@ use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
+use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
@@ -101,7 +102,14 @@ impl Read for StdinRaw {
 pub struct PosixRawReader {
     stdin: StdinRaw,
     timeout_ms: i32,
-    buf: [u8; 4],
+    buf: [u8; 1],
+    parser: Parser,
+    receiver: Utf8,
+}
+
+struct Utf8 {
+    c: Option<char>,
+    valid: bool,
 }
 
 impl PosixRawReader {
@@ -109,7 +117,12 @@ impl PosixRawReader {
         Ok(PosixRawReader {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
-            buf: [0; 4],
+            buf: [0; 1],
+            parser: Parser::new(),
+            receiver: Utf8 {
+                c: None,
+                valid: true,
+            },
         })
     }
 
@@ -290,27 +303,6 @@ impl PosixRawReader {
     }
 }
 
-// https://tools.ietf.org/html/rfc3629
-#[cfg_attr(rustfmt, rustfmt_skip)]
-static UTF8_CHAR_WIDTH: [u8; 256] = [
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x1F
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x3F
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x5F
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x7F
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 0x9F
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 0xBF
-0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // 0xDF
-3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, // 0xEF
-4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, // 0xFF
-];
-
 impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
@@ -340,23 +332,33 @@ impl RawReader for PosixRawReader {
     }
 
     fn next_char(&mut self) -> Result<char> {
-        let n = try!(self.stdin.read(&mut self.buf[..1]));
-        if n == 0 {
-            return Err(error::ReadlineError::Eof);
-        }
-        let first = self.buf[0];
-        if first >= 128 {
-            let width = UTF8_CHAR_WIDTH[first as usize] as usize;
-            if width == 0 {
-                try!(std::str::from_utf8(&self.buf[..1]));
-                unreachable!()
+        loop {
+            let n = try!(self.stdin.read(&mut self.buf));
+            if n == 0 {
+                return Err(error::ReadlineError::Eof);
             }
-            try!(self.stdin.read_exact(&mut self.buf[1..width]));
-            let s = try!(std::str::from_utf8(&self.buf[..width]));
-            Ok(s.chars().next().unwrap())
-        } else {
-            Ok(first as char)
+            let b = self.buf[0];
+            self.parser.advance(&mut self.receiver, b);
+            if !self.receiver.valid {
+                return Err(error::ReadlineError::Utf8Error);
+            } else if self.receiver.c.is_some() {
+                return Ok(self.receiver.c.take().unwrap());
+            }
         }
+    }
+}
+
+impl Receiver for Utf8 {
+    /// Called whenever a codepoint is parsed successfully
+    fn codepoint(&mut self, c: char) {
+        self.c = Some(c);
+        self.valid = true;
+    }
+
+    /// Called when an invalid_sequence is detected
+    fn invalid_sequence(&mut self) {
+        self.c = None;
+        self.valid = false;
     }
 }
 

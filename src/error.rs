@@ -20,7 +20,7 @@ pub enum ReadlineError {
     Interrupted,
     /// Chars Error
     #[cfg(unix)]
-    Char(str::Utf8Error),
+    Utf8Error,
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
@@ -37,7 +37,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
-            ReadlineError::Char(ref err) => err.fmt(f),
+            ReadlineError::Utf8Error => write!(f, "invalid utf-8: corrupt contents"),
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
@@ -55,7 +55,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Eof => "EOF",
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(unix)]
-            ReadlineError::Char(ref err) => err.description(),
+            ReadlineError::Utf8Error => "invalid utf-8: corrupt contents",
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.description(),
             #[cfg(windows)]
@@ -76,13 +76,6 @@ impl From<io::Error> for ReadlineError {
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> ReadlineError {
         ReadlineError::Errno(err)
-    }
-}
-
-#[cfg(unix)]
-impl From<str::Utf8Error> for ReadlineError {
-    fn from(err: str::Utf8Error) -> ReadlineError {
-        ReadlineError::Char(err)
     }
 }
 

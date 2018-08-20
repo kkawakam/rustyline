@@ -24,8 +24,8 @@ pub enum Direction {
 pub struct History {
     entries: VecDeque<String>,
     max_len: usize,
-    ignore_space: bool,
-    ignore_dups: bool,
+    pub(crate) ignore_space: bool,
+    pub(crate) ignore_dups: bool,
 }
 
 impl History {

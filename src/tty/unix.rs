@@ -565,7 +565,7 @@ pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
     stdout_isatty: bool,
-    color_mode: ColorMode,
+    pub(crate) color_mode: ColorMode,
 }
 
 impl Term for PosixTerminal {

@@ -3,9 +3,9 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use std::fs;
 use std::path::{self, Path};
 
-use memchr::memchr;
 use super::Result;
 use line_buffer::LineBuffer;
+use memchr::memchr;
 
 // TODO: let the implementers choose/find word boudaries ???
 // (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
@@ -115,14 +115,16 @@ pub struct FilenameCompleter {
 // rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
 static DEFAULT_BREAK_CHARS: [u8; 18] = [
-    b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{', b'(', b'\0',
+    b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&',
+    b'{', b'(', b'\0',
 ];
 #[cfg(unix)]
 static ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
 static DEFAULT_BREAK_CHARS: [u8; 17] = [
-    b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{', b'(', b'\0',
+    b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{',
+    b'(', b'\0',
 ];
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;
@@ -205,7 +207,10 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &[u8]) -> Stri
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input.bytes().filter(|b| memchr(*b, break_chars).is_some()).count();
+    let n = input
+        .bytes()
+        .filter(|b| memchr(*b, break_chars).is_some())
+        .count();
     if n == 0 {
         return input;
     }
@@ -220,11 +225,7 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &[u8]) -> Stri
     result
 }
 
-fn filename_complete(
-    path: &str,
-    esc_char: Option<char>,
-    break_chars: &[u8],
-) -> Result<Vec<Pair>> {
+fn filename_complete(path: &str, esc_char: Option<char>, break_chars: &[u8]) -> Result<Vec<Pair>> {
     use dirs::home_dir;
     use std::env::current_dir;
 

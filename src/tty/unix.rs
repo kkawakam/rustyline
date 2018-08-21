@@ -31,8 +31,8 @@ fn get_win_size() -> (usize, usize) {
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
-            // .into() for FreeBSD
+        // https://github.com/rust-lang/libc/pull/704
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ as libc::c_ulong, &mut size) {
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }
@@ -487,7 +487,6 @@ impl Renderer for PosixRenderer {
 
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not splitted).
-    #[allow(if_same_then_else)]
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;

@@ -344,7 +344,6 @@ fn reverse_incremental_search<R: RawReader>(
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-#[allow(let_unit_value)]
 fn readline_edit<H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
@@ -580,6 +579,9 @@ fn readline_edit<H: Helper>(
                 // Ignore the character typed.
             }
         }
+    }
+    if cfg!(windows) {
+        let _ = original_mode; // silent warning
     }
     Ok(s.line.into_string())
 }

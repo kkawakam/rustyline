@@ -112,6 +112,8 @@ pub struct FilenameCompleter {
     double_quotes_special_chars: &'static [u8],
 }
 
+static DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
+
 // rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
 static DEFAULT_BREAK_CHARS: [u8; 18] = [
@@ -131,7 +133,17 @@ static ESCAPE_CHAR: Option<char> = None;
 
 // In double quotes, not all break_chars need to be escaped
 // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+#[cfg(unix)]
 static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
+#[cfg(windows)]
+static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Quote {
+    Double,
+    Single,
+    None,
+}
 
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
@@ -152,25 +164,32 @@ impl Completer for FilenameCompleter {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
-        let (start, path, esc_char, break_chars) =
+        let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, double_quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
                 if double_quote {
                     (
                         start,
-                        unescape(&line[start..pos], ESCAPE_CHAR),
-                        ESCAPE_CHAR,
+                        unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR),
+                        DOUBLE_QUOTES_ESCAPE_CHAR,
                         &self.double_quotes_special_chars,
+                        Quote::Double,
                     )
                 } else {
-                    (start, Borrowed(&line[start..pos]), None, &self.break_chars)
+                    (
+                        start,
+                        Borrowed(&line[start..pos]),
+                        None,
+                        &self.break_chars,
+                        Quote::Single,
+                    )
                 }
             } else {
                 let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
                 let path = unescape(path, ESCAPE_CHAR);
-                (start, path, ESCAPE_CHAR, &self.break_chars)
+                (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
-        let matches = try!(filename_complete(&path, esc_char, break_chars));
+        let matches = try!(filename_complete(&path, esc_char, break_chars, quote));
         Ok((start, matches))
     }
 }
@@ -202,18 +221,30 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
 /// Escape any `break_chars` in `input` string with `esc_char`.
 /// For example, '/User Information' becomes '/User\ Information'
 /// when space is a breaking char and '\\' the escape char.
-pub fn escape(input: String, esc_char: Option<char>, break_chars: &[u8]) -> String {
-    if esc_char.is_none() {
-        return input;
+pub fn escape(
+    mut input: String,
+    esc_char: Option<char>,
+    break_chars: &[u8],
+    quote: Quote,
+) -> String {
+    if quote == Quote::Single {
+        return input; // no escape in single quotes
     }
-    let esc_char = esc_char.unwrap();
     let n = input
         .bytes()
         .filter(|b| memchr(*b, break_chars).is_some())
         .count();
     if n == 0 {
+        return input; // no need to escape
+    }
+    if esc_char.is_none() {
+        if cfg!(windows) && quote == Quote::None {
+            input.insert(0, '"'); // force double quote
+            return input;
+        }
         return input;
     }
+    let esc_char = esc_char.unwrap();
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {
@@ -225,7 +256,12 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &[u8]) -> Stri
     result
 }
 
-fn filename_complete(path: &str, esc_char: Option<char>, break_chars: &[u8]) -> Result<Vec<Pair>> {
+fn filename_complete(
+    path: &str,
+    esc_char: Option<char>,
+    break_chars: &[u8],
+    quote: Quote,
+) -> Result<Vec<Pair>> {
     use dirs::home_dir;
     use std::env::current_dir;
 
@@ -269,7 +305,7 @@ fn filename_complete(path: &str, esc_char: Option<char>, break_chars: &[u8]) -> 
                     }
                     entries.push(Pair {
                         display: String::from(s),
-                        replacement: escape(path, esc_char, break_chars),
+                        replacement: escape(path, esc_char, break_chars, quote),
                     });
                 } // else ignore PermissionDenied
             }
@@ -435,11 +471,14 @@ mod tests {
         let input = String::from("/usr/local/b");
         assert_eq!(
             input.clone(),
-            super::escape(input, Some('\\'), &break_chars)
+            super::escape(input, Some('\\'), &break_chars, super::Quote::None)
         );
         let input = String::from("/User Information");
         let result = String::from("/User\\ Information");
-        assert_eq!(result, super::escape(input, Some('\\'), &break_chars));
+        assert_eq!(
+            result,
+            super::escape(input, Some('\\'), &break_chars, super::Quote::None)
+        );
     }
 
     #[test]

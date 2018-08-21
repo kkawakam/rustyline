@@ -1,9 +1,9 @@
 //! Completion API
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::{self, Path};
 
+use memchr::memchr;
 use super::Result;
 use line_buffer::LineBuffer;
 
@@ -108,34 +108,34 @@ box_completer! { Box Rc Arc }
 
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
-    break_chars: BTreeSet<char>,
-    double_quotes_special_chars: BTreeSet<char>,
+    break_chars: &'static [u8],
+    double_quotes_special_chars: &'static [u8],
 }
 
 // rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
-static DEFAULT_BREAK_CHARS: [char; 18] = [
-    ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
+static DEFAULT_BREAK_CHARS: [u8; 18] = [
+    b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{', b'(', b'\0',
 ];
 #[cfg(unix)]
 static ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
-static DEFAULT_BREAK_CHARS: [char; 17] = [
-    ' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0',
+static DEFAULT_BREAK_CHARS: [u8; 17] = [
+    b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{', b'(', b'\0',
 ];
 #[cfg(windows)]
 static ESCAPE_CHAR: Option<char> = None;
 
 // In double quotes, not all break_chars need to be escaped
 // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
-static DOUBLE_QUOTES_SPECIAL_CHARS: [char; 4] = ['"', '$', '\\', '`'];
+static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
 
 impl FilenameCompleter {
     pub fn new() -> FilenameCompleter {
         FilenameCompleter {
-            break_chars: DEFAULT_BREAK_CHARS.iter().cloned().collect(),
-            double_quotes_special_chars: DOUBLE_QUOTES_SPECIAL_CHARS.iter().cloned().collect(),
+            break_chars: &DEFAULT_BREAK_CHARS,
+            double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
         }
     }
 }
@@ -200,19 +200,19 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
 /// Escape any `break_chars` in `input` string with `esc_char`.
 /// For example, '/User Information' becomes '/User\ Information'
 /// when space is a breaking char and '\\' the escape char.
-pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char>) -> String {
+pub fn escape(input: String, esc_char: Option<char>, break_chars: &[u8]) -> String {
     if esc_char.is_none() {
         return input;
     }
     let esc_char = esc_char.unwrap();
-    let n = input.chars().filter(|c| break_chars.contains(c)).count();
+    let n = input.bytes().filter(|b| memchr(*b, break_chars).is_some()).count();
     if n == 0 {
         return input;
     }
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {
-        if break_chars.contains(&c) {
+        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
             result.push(esc_char);
         }
         result.push(c);
@@ -223,7 +223,7 @@ pub fn escape(input: String, esc_char: Option<char>, break_chars: &BTreeSet<char
 fn filename_complete(
     path: &str,
     esc_char: Option<char>,
-    break_chars: &BTreeSet<char>,
+    break_chars: &[u8],
 ) -> Result<Vec<Pair>> {
     use dirs::home_dir;
     use std::env::current_dir;
@@ -285,7 +285,7 @@ pub fn extract_word<'l>(
     line: &'l str,
     pos: usize,
     esc_char: Option<char>,
-    break_chars: &BTreeSet<char>,
+    break_chars: &[u8],
 ) -> (usize, &'l str) {
     let line = &line[..pos];
     if line.is_empty() {
@@ -302,7 +302,7 @@ pub fn extract_word<'l>(
                 break;
             }
         }
-        if break_chars.contains(&c) {
+        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
             start = Some(i + c.len_utf8());
             if esc_char.is_none() {
                 break;
@@ -403,11 +403,9 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     #[test]
     pub fn extract_word() {
-        let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
+        let break_chars: &[u8] = &super::DEFAULT_BREAK_CHARS;
         let line = "ls '/usr/local/b";
         assert_eq!(
             (4, "/usr/local/b"),
@@ -432,7 +430,7 @@ mod tests {
 
     #[test]
     pub fn escape() {
-        let break_chars: BTreeSet<char> = super::DEFAULT_BREAK_CHARS.iter().cloned().collect();
+        let break_chars: &[u8] = &super::DEFAULT_BREAK_CHARS;
         let input = String::from("/usr/local/b");
         assert_eq!(
             input.clone(),

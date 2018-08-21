@@ -21,6 +21,7 @@ extern crate dirs;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate memchr;
 #[cfg(unix)]
 extern crate nix;
 extern crate unicode_segmentation;

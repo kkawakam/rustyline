@@ -261,14 +261,16 @@ fn filename_complete(
         let entry = try!(entry);
         if let Some(s) = entry.file_name().to_str() {
             if s.starts_with(file_name) {
-                let mut path = String::from(dir_name) + s;
-                if try!(fs::metadata(entry.path())).is_dir() {
-                    path.push(sep);
-                }
-                entries.push(Pair {
-                    display: String::from(s),
-                    replacement: escape(path, esc_char, break_chars),
-                });
+                if let Ok(metadata) = fs::metadata(entry.path()) {
+                    let mut path = String::from(dir_name) + s;
+                    if metadata.is_dir() {
+                        path.push(sep);
+                    }
+                    entries.push(Pair {
+                        display: String::from(s),
+                        replacement: escape(path, esc_char, break_chars),
+                    });
+                } // else ignore PermissionDenied
             }
         }
     }

@@ -138,7 +138,7 @@ static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
 #[cfg(windows)]
 static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Quote {
     Double,
     Single,
@@ -165,15 +165,15 @@ impl Completer for FilenameCompleter {
 
     fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
-            if let Some((idx, double_quote)) = find_unclosed_quote(&line[..pos]) {
+            if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
-                if double_quote {
+                if quote == Quote::Double {
                     (
                         start,
                         unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR),
                         DOUBLE_QUOTES_ESCAPE_CHAR,
                         &self.double_quotes_special_chars,
-                        Quote::Double,
+                        quote,
                     )
                 } else {
                     (
@@ -181,7 +181,7 @@ impl Completer for FilenameCompleter {
                         Borrowed(&line[start..pos]),
                         None,
                         &self.break_chars,
-                        Quote::Single,
+                        quote,
                     )
                 }
             } else {
@@ -395,7 +395,7 @@ enum ScanMode {
 /// try to find an unclosed single/double quote in `s`.
 /// Return `None` if no unclosed quote is found.
 /// Return the unclosed quote position and if it is a double quote.
-fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
+fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
     let char_indices = s.char_indices();
     let mut mode = ScanMode::Normal;
     let mut quote_index = 0;
@@ -405,6 +405,7 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
                 if char == '"' {
                     mode = ScanMode::Normal;
                 } else if char == '\\' {
+                    // both windows and unix support escape in double quote
                     mode = ScanMode::EscapeInDoubleQuote;
                 }
             }
@@ -432,8 +433,10 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, bool)> {
             }
         };
     }
-    if ScanMode::DoubleQuote == mode || ScanMode::SingleQuote == mode {
-        return Some((quote_index, ScanMode::DoubleQuote == mode));
+    if ScanMode::DoubleQuote == mode || ScanMode::EscapeInDoubleQuote == mode {
+        return Some((quote_index, Quote::Double));
+    } else if ScanMode::SingleQuote == mode {
+        return Some((quote_index, Quote::Single));
     }
     None
 }
@@ -520,12 +523,16 @@ mod tests {
     pub fn find_unclosed_quote() {
         assert_eq!(None, super::find_unclosed_quote("ls /etc"));
         assert_eq!(
-            Some((3, true)),
+            Some((3, super::Quote::Double)),
             super::find_unclosed_quote("ls \"User Information")
         );
         assert_eq!(
             None,
             super::find_unclosed_quote("ls \"/User Information\" /etc")
         );
+        assert_eq!(
+            Some((0, super::Quote::Double)),
+            super::find_unclosed_quote("\"c:\\users\\All Users\\")
+        )
     }
 }

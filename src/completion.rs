@@ -136,7 +136,7 @@ static ESCAPE_CHAR: Option<char> = None;
 #[cfg(unix)]
 static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
 #[cfg(windows)]
-static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate
+static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Quote {
@@ -200,15 +200,20 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
         return Borrowed(input);
     }
     let esc_char = esc_char.unwrap();
-    let n = input.chars().filter(|&c| c == esc_char).count();
-    if n == 0 {
+    if !input.chars().any(|c| c == esc_char) {
         return Borrowed(input);
     }
-    let mut result = String::with_capacity(input.len() - n);
+    let mut result = String::with_capacity(input.len());
     let mut chars = input.chars();
     while let Some(ch) = chars.next() {
         if ch == esc_char {
             if let Some(ch) = chars.next() {
+                if cfg!(windows) && ch != '"' {
+                    // TODO Validate: only '"' ?
+                    result.push(esc_char);
+                }
+                result.push(ch);
+            } else if cfg!(windows) {
                 result.push(ch);
             }
         } else {
@@ -456,6 +461,13 @@ mod tests {
             (3, "/User\\ Information"),
             super::extract_word(line, line.len(), Some('\\'), &break_chars)
         );
+        if cfg!(windows) {
+            let line = "\"C:\\Users\\All Users";
+            assert_eq!(
+                (1, "C:\\Users\\All Users"),
+                super::extract_word(line, line.len(), None, &break_chars)
+            );
+        }
     }
 
     #[test]
@@ -463,9 +475,15 @@ mod tests {
         use std::borrow::Cow::{self, Borrowed, Owned};
         let input = "/usr/local/b";
         assert_eq!(Borrowed(input), super::unescape(input, Some('\\')));
-        let input = "/User\\ Information";
-        let result: Cow<str> = Owned(String::from("/User Information"));
-        assert_eq!(result, super::unescape(input, Some('\\')));
+        if cfg!(windows) {
+            let input = "c:\\users\\All Users\\";
+            let result: Cow<str> = Borrowed(input);
+            assert_eq!(result, super::unescape(input, Some('\\')));
+        } else {
+            let input = "/User\\ Information";
+            let result: Cow<str> = Owned(String::from("/User Information"));
+            assert_eq!(result, super::unescape(input, Some('\\')));
+        }
     }
 
     #[test]

@@ -461,13 +461,6 @@ mod tests {
             (3, "/User\\ Information"),
             super::extract_word(line, line.len(), Some('\\'), &break_chars)
         );
-        if cfg!(windows) {
-            let line = "\"C:\\Users\\All Users";
-            assert_eq!(
-                (1, "C:\\Users\\All Users"),
-                super::extract_word(line, line.len(), None, &break_chars)
-            );
-        }
     }
 
     #[test]

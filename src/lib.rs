@@ -17,13 +17,17 @@
 //! ```
 #![allow(unknown_lints)]
 
+extern crate dirs;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate memchr;
 #[cfg(unix)]
 extern crate nix;
 extern crate unicode_segmentation;
 extern crate unicode_width;
+#[cfg(unix)]
+extern crate utf8parse;
 #[cfg(windows)]
 extern crate winapi;
 
@@ -32,6 +36,7 @@ pub mod config;
 mod consts;
 mod edit;
 pub mod error;
+pub mod highlight;
 pub mod hint;
 pub mod history;
 mod keymap;
@@ -51,10 +56,11 @@ use unicode_width::UnicodeWidthStr;
 
 use tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
-use completion::{longest_common_prefix, Completer};
+use completion::{longest_common_prefix, Candidate, Completer};
 pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
 pub use consts::KeyPress;
 use edit::State;
+use highlight::Highlighter;
 use hint::Hinter;
 use history::{Direction, History};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -71,6 +77,7 @@ fn complete_line<R: RawReader, C: Completer>(
     s: &mut State,
     input_state: &mut InputState,
     completer: &C,
+    highlighter: Option<&Highlighter>,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -89,7 +96,14 @@ fn complete_line<R: RawReader, C: Completer>(
         loop {
             // Show completion or original buffer
             if i < candidates.len() {
-                completer.update(&mut s.line, start, &candidates[i]);
+                let candidate = candidates[i].replacement();
+                // TODO we can't highlight the line buffer directly
+                /*let candidate = if let Some(highlighter) = s.highlighter {
+                    highlighter.highlight_candidate(candidate, CompletionType::Circular)
+                } else {
+                    Borrowed(candidate)
+                };*/
+                completer.update(&mut s.line, start, candidate);
                 try!(s.refresh_line());
             } else {
                 // Restore current edited line
@@ -122,17 +136,18 @@ fn complete_line<R: RawReader, C: Completer>(
         }
         Ok(Some(cmd))
     } else if CompletionType::List == config.completion_type() {
-        // beep if ambiguous
-        if candidates.len() > 1 {
-            try!(s.out.beep());
-        }
         if let Some(lcp) = longest_common_prefix(&candidates) {
-            // if we can extend the item, extend it and return to main loop
+            // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start {
                 completer.update(&mut s.line, start, lcp);
                 try!(s.refresh_line());
-                return Ok(None);
             }
+        }
+        // beep if ambiguous
+        if candidates.len() > 1 {
+            try!(s.out.beep());
+        } else {
+            return Ok(None);
         }
         // we can't complete any further, wait for second tab
         let mut cmd = try!(s.next_cmd(input_state, rdr, true));
@@ -165,7 +180,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, input_state, &candidates)
+            page_completions(rdr, s, input_state, highlighter, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -175,11 +190,12 @@ fn complete_line<R: RawReader, C: Completer>(
     }
 }
 
-fn page_completions<R: RawReader>(
+fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State,
     input_state: &mut InputState,
-    candidates: &[String],
+    highlighter: Option<&Highlighter>,
+    candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
 
@@ -189,9 +205,10 @@ fn page_completions<R: RawReader>(
         cols,
         candidates
             .into_iter()
-            .map(|s| s.as_str().width())
+            .map(|s| s.display().width())
             .max()
-            .unwrap() + min_col_pad,
+            .unwrap()
+            + min_col_pad,
     );
     let num_cols = cols / max_width;
 
@@ -231,9 +248,13 @@ fn page_completions<R: RawReader>(
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
             if i < candidates.len() {
-                let candidate = &candidates[i];
-                ab.push_str(candidate);
-                let width = candidate.as_str().width();
+                let candidate = &candidates[i].display();
+                let width = candidate.width();
+                if let Some(highlighter) = highlighter {
+                    ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
+                } else {
+                    ab.push_str(candidate);
+                }
                 if ((col + 1) * num_rows) + row < candidates.len() {
                     for _ in width..max_width {
                         ab.push(' ');
@@ -337,20 +358,30 @@ fn reverse_incremental_search<R: RawReader>(
 /// Handles reading and editting the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-#[allow(let_unit_value)]
 fn readline_edit<H: Helper>(
     prompt: &str,
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
 ) -> Result<String> {
-    let completer = editor.helper.as_ref().map(|h| h.completer());
-    let hinter = editor.helper.as_ref().map(|h| h.hinter() as &Hinter);
+    let completer = editor.helper.as_ref();
+    let hinter = editor.helper.as_ref().map(|h| h as &Hinter);
+    let highlighter = if editor.term.colors_enabled() {
+        editor.helper.as_ref().map(|h| h as &Highlighter)
+    } else {
+        None
+    };
 
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let mut s = State::new(&mut stdout, prompt, editor.history.len(), hinter);
+    let mut s = State::new(
+        &mut stdout,
+        prompt,
+        editor.history.len(),
+        hinter,
+        highlighter,
+    );
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -380,6 +411,7 @@ fn readline_edit<H: Helper>(
                 &mut s,
                 &mut input_state,
                 completer.unwrap(),
+                highlighter,
                 &editor.config,
             ));
             if next.is_some() {
@@ -574,6 +606,9 @@ fn readline_edit<H: Helper>(
             }
         }
     }
+    if cfg!(windows) {
+        let _ = original_mode; // silent warning
+    }
     Ok(s.line.into_string())
 }
 
@@ -618,37 +653,17 @@ fn readline_direct() -> Result<String> {
 
 /// Syntax specific helper.
 ///
-/// TODO Tokenizer/parser used for both completion, suggestion, highlighting
-pub trait Helper {
-    type Completer: Completer;
-    type Hinter: Hinter;
-
-    fn completer(&self) -> &Self::Completer;
-    fn hinter(&self) -> &Self::Hinter;
+/// TODO Tokenizer/parser used for both completion, suggestion, highlighting.
+/// (parse current line once)
+pub trait Helper
+where
+    Self: Completer,
+    Self: Hinter,
+    Self: Highlighter,
+{
 }
 
-impl<C: Completer, H: Hinter> Helper for (C, H) {
-    type Completer = C;
-    type Hinter = H;
-
-    fn completer(&self) -> &C {
-        &self.0
-    }
-    fn hinter(&self) -> &H {
-        &self.1
-    }
-}
-impl<C: Completer> Helper for C {
-    type Completer = C;
-    type Hinter = ();
-
-    fn completer(&self) -> &C {
-        self
-    }
-    fn hinter(&self) -> &() {
-        &()
-    }
-}
+impl Helper for () {}
 
 /// Line editor
 pub struct Editor<H: Helper> {
@@ -660,6 +675,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
+#[allow(new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Editor<H> {
@@ -668,7 +684,7 @@ impl<H: Helper> Editor<H> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Editor<H> {
-        let term = Terminal::new();
+        let term = Terminal::new(config.color_mode());
         Editor {
             term,
             history: History::with_config(config),
@@ -688,6 +704,7 @@ impl<H: Helper> Editor<H> {
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
         self.readline_with(prompt, None)
     }
+
     /// This function behaves in the exact same manner as `readline`, except
     /// that it pre-populates the input area.
     ///
@@ -721,24 +738,29 @@ impl<H: Helper> Editor<H> {
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.load(path)
     }
+
     /// Save the history in the specified file.
     pub fn save_history<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
         self.history.save(path)
     }
+
     /// Add a new entry in the history.
     pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         self.history.add(line)
     }
+
     /// Clear history.
     pub fn clear_history(&mut self) {
         self.history.clear()
     }
+
     /// Return a mutable reference to the history object.
-    pub fn get_history(&mut self) -> &mut History {
+    pub fn history_mut(&mut self) -> &mut History {
         &mut self.history
     }
+
     /// Return an immutable reference to the history object.
-    pub fn get_history_const(&self) -> &History {
+    pub fn history(&self) -> &History {
         &self.history
     }
 
@@ -748,9 +770,9 @@ impl<H: Helper> Editor<H> {
         self.helper = helper;
     }
 
-    #[deprecated(since = "2.0.0", note = "Use set_helper instead")]
-    pub fn set_completer(&mut self, completer: Option<H>) {
-        self.helper = completer;
+    /// Return an immutable reference to the helper.
+    pub fn helper(&self) -> Option<&H> {
+        self.helper.as_ref()
     }
 
     /// Bind a sequence to a command.
@@ -758,6 +780,7 @@ impl<H: Helper> Editor<H> {
         let mut bindings = self.custom_bindings.write().unwrap();
         bindings.insert(key_seq, cmd)
     }
+
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
         let mut bindings = self.custom_bindings.write().unwrap();

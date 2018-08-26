@@ -32,12 +32,13 @@ impl History {
     pub fn new() -> History {
         Self::with_config(Config::default())
     }
+
     pub fn with_config(config: Config) -> History {
         History {
             entries: VecDeque::new(),
             max_len: config.max_history_size(),
-            ignore_space: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
-            ignore_dups: config.history_ignore_space(),
+            ignore_space: config.history_ignore_space(),
+            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
         }
     }
 
@@ -57,12 +58,11 @@ impl History {
             return false;
         }
         if line.as_ref().is_empty()
-            || (self.ignore_space
-                && line
-                    .as_ref()
-                    .chars()
-                    .next()
-                    .map_or(true, |c| c.is_whitespace()))
+            || (self.ignore_space && line
+                .as_ref()
+                .chars()
+                .next()
+                .map_or(true, |c| c.is_whitespace()))
         {
             return false;
         }
@@ -84,6 +84,7 @@ impl History {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
     /// Return true if the history has no entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -214,8 +215,8 @@ impl Index<usize> for History {
 }
 
 impl<'a> IntoIterator for &'a History {
-    type Item = &'a String;
     type IntoIter = Iter<'a>;
+    type Item = &'a String;
 
     fn into_iter(self) -> Iter<'a> {
         self.iter()

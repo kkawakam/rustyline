@@ -109,6 +109,7 @@ impl DeleteListener for KillRing {
     fn start_killing(&mut self) {
         self.killing = true;
     }
+
     fn delete(&mut self, _: usize, string: &str, dir: Direction) {
         if !self.killing {
             return;
@@ -119,6 +120,7 @@ impl DeleteListener for KillRing {
         };
         self.kill(string, mode);
     }
+
     fn stop_killing(&mut self) {
         self.killing = false;
     }

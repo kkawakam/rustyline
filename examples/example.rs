@@ -2,36 +2,49 @@ extern crate log;
 extern crate rustyline;
 
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
+use std::borrow::Cow::{self, Borrowed, Owned};
 
-use rustyline::completion::FilenameCompleter;
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
-use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
 
-// On unix platforms you can use ANSI escape sequences
-#[cfg(unix)]
-static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
+static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 
-// Windows consoles typically don't support ANSI escape sequences out
-// of the box
-#[cfg(windows)]
 static PROMPT: &'static str = ">> ";
 
-struct Hints {}
+struct MyHelper(FilenameCompleter);
 
-impl Hinter for Hints {
+impl Completer for MyHelper {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        self.0.complete(line, pos)
+    }
+}
+
+impl Hinter for MyHelper {
     fn hint(&self, line: &str, _pos: usize) -> Option<String> {
         if line == "hello" {
-            if cfg!(target_os = "windows") {
-                Some(" World".to_owned())
-            } else {
-                Some(" \x1b[1mWorld\x1b[m".to_owned())
-            }
+            Some(" World".to_owned())
         } else {
             None
         }
     }
 }
+
+impl Highlighter for MyHelper {
+    fn highlight_prompt<'p>(&self, _: &str) -> Cow<'static, str> {
+        Borrowed(COLORED_PROMPT)
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
+    }
+}
+
+impl Helper for MyHelper {}
 
 fn main() {
     init_logger().is_ok();
@@ -40,9 +53,9 @@ fn main() {
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
         .build();
-    let c = FilenameCompleter::new();
+    let h = MyHelper(FilenameCompleter::new());
     let mut rl = Editor::with_config(config);
-    rl.set_helper(Some((c, Hints {})));
+    rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

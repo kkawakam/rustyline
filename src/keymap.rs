@@ -111,6 +111,7 @@ impl Cmd {
             _ => false,
         }
     }
+
     fn is_repeatable(&self) -> bool {
         match *self {
             Cmd::Move(_) => true,
@@ -205,8 +206,8 @@ pub enum CharSearch {
 }
 
 impl CharSearch {
-    fn opposite(&self) -> CharSearch {
-        match *self {
+    fn opposite(self) -> CharSearch {
+        match self {
             CharSearch::Forward(c) => CharSearch::Backward(c),
             CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
             CharSearch::Backward(c) => CharSearch::Forward(c),

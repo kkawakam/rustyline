@@ -177,11 +177,10 @@ impl Changeset {
             return;
         }
 
-        if !Self::single_char(string.as_ref())
-            || !self
-                .undos
-                .last()
-                .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
+        if !Self::single_char(string.as_ref()) || !self
+            .undos
+            .last()
+            .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
         {
             self.undos.push(Change::Delete {
                 idx: indx,
@@ -330,18 +329,22 @@ impl Changeset {
 
 impl DeleteListener for Changeset {
     fn start_killing(&mut self) {}
+
     fn delete(&mut self, idx: usize, string: &str, _: Direction) {
         self.delete(idx, string);
     }
+
     fn stop_killing(&mut self) {}
 }
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
         self.insert(idx, c);
     }
+
     fn insert_str(&mut self, idx: usize, string: &str) {
         self.insert_str(idx, string);
     }
+
     fn replace(&mut self, idx: usize, old: &str, new: &str) {
         self.replace(idx, old, new);
     }

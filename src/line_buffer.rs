@@ -93,9 +93,11 @@ impl LineBuffer {
     pub(crate) fn set_delete_listener(&mut self, dl: Arc<Mutex<DeleteListener>>) {
         self.dl = Some(dl);
     }
+
     pub(crate) fn set_change_listener(&mut self, dl: Rc<RefCell<ChangeListener>>) {
         self.cl = Some(dl);
     }
+
     pub(crate) fn remove_change_listener(&mut self) {
         self.cl = None;
     }
@@ -114,6 +116,7 @@ impl LineBuffer {
     pub fn pos(&self) -> usize {
         self.pos
     }
+
     /// Set cursor position (byte position)
     pub fn set_pos(&mut self, pos: usize) {
         assert!(pos <= self.buf.len());
@@ -124,6 +127,7 @@ impl LineBuffer {
     pub fn len(&self) -> usize {
         self.buf.len()
     }
+
     /// Returns `true` if this buffer has a length of zero.
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
@@ -149,7 +153,7 @@ impl LineBuffer {
     }
 
     /// Returns the character at current cursor position.
-    fn grapheme_at_cursor(&self) -> Option<&str> {
+    pub(crate) fn grapheme_at_cursor(&self) -> Option<&str> {
         if self.pos == self.buf.len() {
             None
         } else {
@@ -169,6 +173,7 @@ impl LineBuffer {
             .last()
             .map(|(i, s)| i + self.pos + s.len())
     }
+
     /// Returns the position of the character just before the current cursor
     /// position.
     fn prev_pos(&self, n: RepeatCount) -> Option<usize> {
@@ -510,12 +515,11 @@ impl LineBuffer {
                 CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
                 CharSearch::Forward(_) => shift + pos,
                 CharSearch::ForwardBefore(_) => {
-                    shift + pos
-                        - self.buf[..shift + pos]
-                            .chars()
-                            .next_back()
-                            .unwrap()
-                            .len_utf8()
+                    shift + pos - self.buf[..shift + pos]
+                        .chars()
+                        .next_back()
+                        .unwrap()
+                        .len_utf8()
                 }
             })
         } else {
@@ -584,6 +588,7 @@ impl LineBuffer {
             .next()
             .map(|i| i + self.pos)
     }
+
     /// Alter the next word.
     pub fn edit_word(&mut self, a: WordAction) -> bool {
         if let Some(start) = self.skip_whitespace() {
@@ -873,14 +878,18 @@ mod test {
 
     impl DeleteListener for Listener {
         fn start_killing(&mut self) {}
+
         fn delete(&mut self, _: usize, string: &str, _: Direction) {
             self.deleted_str = Some(string.to_owned());
         }
+
         fn stop_killing(&mut self) {}
     }
     impl ChangeListener for Listener {
         fn insert_char(&mut self, _: usize, _: char) {}
+
         fn insert_str(&mut self, _: usize, _: &str) {}
+
         fn replace(&mut self, _: usize, _: &str, _: &str) {}
     }
 

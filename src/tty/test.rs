@@ -4,9 +4,10 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::Config;
+use config::{ColorMode, Config};
 use consts::KeyPress;
 use error::ReadlineError;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -25,6 +26,7 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         unimplemented!();
@@ -38,6 +40,7 @@ impl RawReader for IntoIter<KeyPress> {
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         match self.next() {
@@ -69,6 +72,7 @@ impl Renderer for Sink {
         hint: Option<String>,
         _: usize,
         _: usize,
+        _: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
         if let Some(hint) = hint {
@@ -99,10 +103,13 @@ impl Renderer for Sink {
     fn sigwinch(&self) -> bool {
         false
     }
+
     fn update_size(&mut self) {}
+
     fn get_columns(&self) -> usize {
         80
     }
+
     fn get_rows(&self) -> usize {
         24
     }
@@ -117,11 +124,11 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type Mode = Mode;
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
-    type Mode = Mode;
 
-    fn new() -> DummyTerminal {
+    fn new(_color_mode: ColorMode) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
@@ -138,9 +145,13 @@ impl Term for DummyTerminal {
         true
     }
 
+    fn colors_enabled(&self) -> bool {
+        false
+    }
+
     // Interactive loop:
 
-    fn enable_raw_mode(&self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Mode> {
         Ok(())
     }
 

@@ -7,8 +7,8 @@ Bell
 - [ ] bell-style
 
 Color
-- [x] ANSI Colors & Windows 10+
-- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)
+- [X] ANSI Colors & Windows 10+
+- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
 - [ ] Syntax highlighting
 - [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 
@@ -17,7 +17,7 @@ Completion
 - [ ] Windows escape/unescape space in path
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)
-- [ ] display versus replacement
+- [X] display versus replacement
 - [ ] composite/alternate completer (if the current completer returns nothing, try the next one)
 
 Config
@@ -31,7 +31,8 @@ Grapheme
 - [ ] grapheme & input auto-wrap are buggy
 
 Hints Callback
-- [x] Not implemented on windows
+- [X] Not implemented on windows
+- [ ] Do an implementation based on previous history
 
 History
 - [ ] Move to the history line n
@@ -42,9 +43,11 @@ each line input session.
 
 Input
 - [ ] Password input (#58)
-- [ ] quoted insert (#65)
+- [X] quoted insert (#65)
+- [ ] quoted TAB (`\t`) insert and width
 - [ ] Overwrite mode (em-toggle-overwrite, vi-replace-mode, rl_insert_mode)
 - [ ] Encoding
+- [ ] [Ctrl-][Alt-][Shift-]<Key> (#121)
 
 Mouse
 - [ ] Mouse support
@@ -53,10 +56,10 @@ Movement
 - [ ] Move to the corresponding opening/closing bracket
 
 Redo
-- [X] redo substitue
+- [X] redo substitute
 
 Repeat
-- [x] dynamic prompt (arg: ?)
+- [X] dynamic prompt (arg: ?)
 - [ ] transpose chars
 
 Syntax
@@ -72,8 +75,9 @@ Undo
 
 Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)
+- [ ] [ncurses](https://crates.io/crates/ncurses) alternative backend ?
 
 Windows
 - [ ] is_atty is not working with cygwin/msys (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
 - [X] UTF-16 surrogate pair
-- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?)
+- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)

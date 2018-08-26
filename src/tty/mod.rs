@@ -3,8 +3,9 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use config::Config;
+use config::{ColorMode, Config};
 use consts::KeyPress;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -42,6 +43,7 @@ pub trait Renderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)>;
 
     /// Calculate the number of columns and rows used to display `s` on a
@@ -77,6 +79,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         (**self).move_cursor(old, new)
     }
+
     fn refresh_line(
         &mut self,
         prompt: &str,
@@ -85,30 +88,47 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
-        (**self).refresh_line(prompt, prompt_size, line, hint, current_row, old_rows)
+        (**self).refresh_line(
+            prompt,
+            prompt_size,
+            line,
+            hint,
+            current_row,
+            old_rows,
+            highlighter,
+        )
     }
+
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         (**self).calculate_position(s, orig)
     }
+
     fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
         (**self).write_and_flush(buf)
     }
+
     fn beep(&mut self) -> Result<()> {
         (**self).beep()
     }
+
     fn clear_screen(&mut self) -> Result<()> {
         (**self).clear_screen()
     }
+
     fn sigwinch(&self) -> bool {
         (**self).sigwinch()
     }
+
     fn update_size(&mut self) {
         (**self).update_size()
     }
+
     fn get_columns(&self) -> usize {
         (**self).get_columns()
     }
+
     fn get_rows(&self) -> usize {
         (**self).get_rows()
     }
@@ -120,14 +140,16 @@ pub trait Term {
     type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
 
-    fn new() -> Self;
+    fn new(color_mode: ColorMode) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool;
+    /// Check if output supports colors.
+    fn colors_enabled(&self) -> bool;
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&self) -> Result<Self::Mode>;
+    fn enable_raw_mode(&mut self) -> Result<Self::Mode>;
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer

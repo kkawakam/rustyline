@@ -9,9 +9,10 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::Config;
+use config::{ColorMode, Config};
 use consts::{self, KeyPress};
 use error;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -65,7 +66,7 @@ pub type Mode = ConsoleMode;
 pub struct ConsoleMode {
     original_stdin_mode: DWORD,
     stdin_handle: HANDLE,
-    original_stdout_mode: DWORD,
+    original_stdout_mode: Option<DWORD>,
     stdout_handle: HANDLE,
 }
 
@@ -76,10 +77,12 @@ impl RawMode for Mode {
             self.stdin_handle,
             self.original_stdin_mode,
         ));
-        check!(consoleapi::SetConsoleMode(
-            self.stdout_handle,
-            self.original_stdout_mode,
-        ));
+        if let Some(original_stdout_mode) = self.original_stdout_mode {
+            check!(consoleapi::SetConsoleMode(
+                self.stdout_handle,
+                original_stdout_mode,
+            ));
+        }
         Ok(())
     }
 }
@@ -134,11 +137,11 @@ impl RawReader for ConsoleRawReader {
             // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
             // read one character at a time)
 
-            // let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED |
-            // RIGHT_ALT_PRESSED) != 0;
+            let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
+                == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
-            let meta = alt;
+            let meta = alt && !alt_gr;
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
@@ -190,8 +193,7 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_F11 => return Ok(KeyPress::F(11)),
                     winuser::VK_F12 => return Ok(KeyPress::F(12)),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
-                    // also
-                    // set.
+                    // also set.
                     _ => continue,
                 };
             } else if utf16 == 27 {
@@ -289,6 +291,7 @@ impl Renderer for ConsoleRenderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
@@ -305,14 +308,26 @@ impl Renderer for ConsoleRenderer {
             info.dwCursorPosition,
         ));
         let mut ab = String::new();
-        // display the prompt
-        // TODO handle ansi escape code (SetConsoleTextAttribute)
-        ab.push_str(prompt);
-        // display the input line
-        ab.push_str(&line);
+        if let Some(highlighter) = highlighter {
+            // TODO handle ansi escape code (SetConsoleTextAttribute)
+            // display the prompt
+            ab.push_str(&highlighter.highlight_prompt(prompt));
+            // display the input line
+            ab.push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // display the prompt
+            ab.push_str(prompt);
+            // display the input line
+            ab.push_str(line);
+        }
         // display hint
         if let Some(hint) = hint {
-            ab.push_str(truncate(&hint, end_pos.col, self.cols));
+            let truncate = truncate(&hint, end_pos.col, self.cols);
+            if let Some(highlighter) = highlighter {
+                ab.push_str(&highlighter.highlight_hint(truncate));
+            } else {
+                ab.push_str(truncate);
+            }
         }
         try!(self.write_and_flush(ab.as_bytes()));
 
@@ -396,17 +411,20 @@ pub type Terminal = Console;
 pub struct Console {
     stdin_isatty: bool,
     stdin_handle: HANDLE,
+    stdout_isatty: bool,
     stdout_handle: HANDLE,
+    color_mode: ColorMode,
+    ansi_colors_supported: bool,
 }
 
 impl Console {}
 
 impl Term for Console {
+    type Mode = Mode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
-    type Mode = Mode;
 
-    fn new() -> Console {
+    fn new(color_mode: ColorMode) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
@@ -416,12 +434,22 @@ impl Term for Console {
             }
             Err(_) => false,
         };
+        let stdout_handle = get_std_handle(STDOUT_FILENO);
+        let stdout_isatty = match stdout_handle {
+            Ok(handle) => {
+                // If this function doesn't fail then fd is a TTY
+                get_console_mode(handle).is_ok()
+            }
+            Err(_) => false,
+        };
 
-        let stdout_handle = get_std_handle(STDOUT_FILENO).unwrap_or(ptr::null_mut());
         Console {
             stdin_isatty,
             stdin_handle: stdin_handle.unwrap_or(ptr::null_mut()),
-            stdout_handle,
+            stdout_isatty,
+            stdout_handle: stdout_handle.unwrap_or(ptr::null_mut()),
+            color_mode,
+            ansi_colors_supported: false,
         }
     }
 
@@ -434,12 +462,21 @@ impl Term for Console {
         self.stdin_isatty
     }
 
+    fn colors_enabled(&self) -> bool {
+        // TODO ANSI Colors & Windows <10
+        match self.color_mode {
+            ColorMode::Enabled => self.stdout_isatty && self.ansi_colors_supported,
+            ColorMode::Forced => true,
+            ColorMode::Disabled => false,
+        }
+    }
+
     // pub fn install_sigwinch_handler(&mut self) {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Mode> {
         if !self.stdin_isatty {
             try!(Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -448,10 +485,9 @@ impl Term for Console {
         }
         let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
-        let raw = original_stdin_mode
-            & !(wincon::ENABLE_LINE_INPUT
-                | wincon::ENABLE_ECHO_INPUT
-                | wincon::ENABLE_PROCESSED_INPUT);
+        let raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
+            | wincon::ENABLE_ECHO_INPUT
+            | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         let raw = raw | wincon::ENABLE_EXTENDED_FLAGS;
         let raw = raw | wincon::ENABLE_INSERT_MODE;
@@ -459,13 +495,19 @@ impl Term for Console {
         let raw = raw | wincon::ENABLE_WINDOW_INPUT;
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
 
-        let original_stdout_mode = try!(get_console_mode(self.stdout_handle));
-        // To enable ANSI colors (Windows 10 only):
-        // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-        if original_stdout_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
-            let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-            check!(consoleapi::SetConsoleMode(self.stdout_handle, raw));
-        }
+        let original_stdout_mode = if self.stdout_isatty {
+            let original_stdout_mode = try!(get_console_mode(self.stdout_handle));
+            // To enable ANSI colors (Windows 10 only):
+            // https://docs.microsoft.com/en-us/windows/console/setconsolemode
+            if original_stdout_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
+                let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                self.ansi_colors_supported =
+                    unsafe { consoleapi::SetConsoleMode(self.stdout_handle, raw) != 0 };
+            }
+            Some(original_stdout_mode)
+        } else {
+            None
+        };
 
         Ok(Mode {
             original_stdin_mode,

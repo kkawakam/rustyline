@@ -413,7 +413,7 @@ pub struct Console {
     stdin_handle: HANDLE,
     stdout_isatty: bool,
     stdout_handle: HANDLE,
-    color_mode: ColorMode,
+    pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
 }
 

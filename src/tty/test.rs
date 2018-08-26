@@ -121,6 +121,7 @@ pub type Terminal = DummyTerminal;
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
     pub cursor: usize, // cursor position before last command
+    pub color_mode: ColorMode,
 }
 
 impl Term for DummyTerminal {
@@ -128,10 +129,11 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
 
-    fn new(_color_mode: ColorMode) -> DummyTerminal {
+    fn new(color_mode: ColorMode) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
+            color_mode: color_mode,
         }
     }
 

@@ -57,7 +57,7 @@ use unicode_width::UnicodeWidthStr;
 use tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 use completion::{longest_common_prefix, Candidate, Completer};
-pub use config::{CompletionType, Config, EditMode, HistoryDuplicates};
+pub use config::{ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 pub use consts::KeyPress;
 use edit::State;
 use highlight::Highlighter;
@@ -811,6 +811,32 @@ impl<H: Helper> Editor<H> {
     fn reset_kill_ring(&self) {
         let mut kill_ring = self.kill_ring.lock().unwrap();
         kill_ring.reset();
+    }
+}
+
+impl<H: Helper> config::Configurer for Editor<H> {
+    fn config_mut(&mut self) -> &mut Config {
+        &mut self.config
+    }
+
+    fn set_max_history_size(&mut self, max_size: usize) {
+        self.config_mut().set_max_history_size(max_size);
+        self.history.set_max_len(max_size);
+    }
+
+    fn set_history_ignore_dups(&mut self, yes: bool) {
+        self.config_mut().set_history_ignore_dups(yes);
+        self.history.ignore_dups = yes;
+    }
+
+    fn set_history_ignore_space(&mut self, yes: bool) {
+        self.config_mut().set_history_ignore_space(yes);
+        self.history.ignore_space = yes;
+    }
+
+    fn set_color_mode(&mut self, color_mode: ColorMode) {
+        self.config_mut().set_color_mode(color_mode);
+        self.term.color_mode = color_mode;
     }
 }
 

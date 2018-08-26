@@ -770,6 +770,11 @@ impl<H: Helper> Editor<H> {
         self.helper = helper;
     }
 
+    /// Return a mutable reference to the helper.
+    pub fn helper_mut(&mut self) -> Option<&mut H> {
+        self.helper.as_mut()
+    }
+
     /// Return an immutable reference to the helper.
     pub fn helper(&self) -> Option<&H> {
         self.helper.as_ref()

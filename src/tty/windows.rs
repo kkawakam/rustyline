@@ -313,7 +313,7 @@ impl Renderer for ConsoleRenderer {
             // display the prompt
             ab.push_str(&highlighter.highlight_prompt(prompt));
             // display the input line
-            ab.push_str(&highlighter.highlight(line, pos));
+            ab.push_str(&highlighter.highlight(line, line.pos()));
         } else {
             // display the prompt
             ab.push_str(prompt);

@@ -17,6 +17,7 @@ use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
 use consts::{self, KeyPress};
 use error;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -427,6 +428,7 @@ impl Renderer for PosixRenderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         use std::fmt::Write;
         let mut ab = String::new();
@@ -450,13 +452,25 @@ impl Renderer for PosixRenderer {
         // clear the line
         ab.push_str("\r\x1b[0K");
 
-        // display the prompt
-        ab.push_str(prompt);
-        // display the input line
-        ab.push_str(line);
+        if let Some(highlighter) = highlighter {
+            // display the prompt
+            ab.push_str(&highlighter.highlight_prompt(prompt));
+            // display the input line
+            ab.push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // display the prompt
+            ab.push_str(prompt);
+            // display the input line
+            ab.push_str(line);
+        }
         // display hint
         if let Some(hint) = hint {
-            ab.push_str(truncate(&hint, end_pos.col, self.cols));
+            let truncate = truncate(&hint, end_pos.col, self.cols);
+            if let Some(highlighter) = highlighter {
+                ab.push_str(&highlighter.highlight_hint(truncate));
+            } else {
+                ab.push_str(truncate);
+            }
         }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 {

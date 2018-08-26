@@ -5,6 +5,7 @@ use unicode_width::UnicodeWidthStr;
 
 use config::{ColorMode, Config};
 use consts::KeyPress;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -42,6 +43,7 @@ pub trait Renderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)>;
 
     /// Calculate the number of columns and rows used to display `s` on a
@@ -86,8 +88,17 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
-        (**self).refresh_line(prompt, prompt_size, line, hint, current_row, old_rows)
+        (**self).refresh_line(
+            prompt,
+            prompt_size,
+            line,
+            hint,
+            current_row,
+            old_rows,
+            highlighter,
+        )
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

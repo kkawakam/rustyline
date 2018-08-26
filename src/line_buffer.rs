@@ -153,7 +153,7 @@ impl LineBuffer {
     }
 
     /// Returns the character at current cursor position.
-    fn grapheme_at_cursor(&self) -> Option<&str> {
+    pub(crate) fn grapheme_at_cursor(&self) -> Option<&str> {
         if self.pos == self.buf.len() {
             None
         } else {

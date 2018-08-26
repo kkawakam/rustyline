@@ -7,6 +7,7 @@ use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
 use consts::KeyPress;
 use error::ReadlineError;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -71,6 +72,7 @@ impl Renderer for Sink {
         hint: Option<String>,
         _: usize,
         _: usize,
+        _: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
         if let Some(hint) = hint {

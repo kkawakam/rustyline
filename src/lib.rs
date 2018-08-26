@@ -77,6 +77,7 @@ fn complete_line<R: RawReader, C: Completer>(
     s: &mut State,
     input_state: &mut InputState,
     completer: &C,
+    highlighter: Option<&Highlighter>,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -95,7 +96,14 @@ fn complete_line<R: RawReader, C: Completer>(
         loop {
             // Show completion or original buffer
             if i < candidates.len() {
-                completer.update(&mut s.line, start, candidates[i].replacement());
+                let candidate = candidates[i].replacement();
+                // TODO we can't highlight the line buffer directly
+                /*let candidate = if let Some(highlighter) = s.highlighter {
+                    highlighter.highlight_candidate(candidate, CompletionType::Circular)
+                } else {
+                    Borrowed(candidate)
+                };*/
+                completer.update(&mut s.line, start, candidate);
                 try!(s.refresh_line());
             } else {
                 // Restore current edited line
@@ -172,7 +180,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, input_state, &candidates)
+            page_completions(rdr, s, input_state, highlighter, &candidates)
         } else {
             try!(s.refresh_line());
             Ok(None)
@@ -186,6 +194,7 @@ fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State,
     input_state: &mut InputState,
+    highlighter: Option<&Highlighter>,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -240,8 +249,12 @@ fn page_completions<R: RawReader, C: Candidate>(
             let i = (col * num_rows) + row;
             if i < candidates.len() {
                 let candidate = &candidates[i].display();
-                ab.push_str(candidate);
                 let width = candidate.width();
+                if let Some(highlighter) = highlighter {
+                    ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
+                } else {
+                    ab.push_str(candidate);
+                }
                 if ((col + 1) * num_rows) + row < candidates.len() {
                     for _ in width..max_width {
                         ab.push(' ');
@@ -353,11 +366,22 @@ fn readline_edit<H: Helper>(
 ) -> Result<String> {
     let completer = editor.helper.as_ref();
     let hinter = editor.helper.as_ref().map(|h| h as &Hinter);
+    let highlighter = if editor.term.colors_enabled() {
+        editor.helper.as_ref().map(|h| h as &Highlighter)
+    } else {
+        None
+    };
 
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let mut s = State::new(&mut stdout, prompt, editor.history.len(), hinter);
+    let mut s = State::new(
+        &mut stdout,
+        prompt,
+        editor.history.len(),
+        hinter,
+        highlighter,
+    );
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -387,6 +411,7 @@ fn readline_edit<H: Helper>(
                 &mut s,
                 &mut input_state,
                 completer.unwrap(),
+                highlighter,
                 &editor.config,
             ));
             if next.is_some() {
@@ -650,6 +675,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
+#[allow(new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Editor<H> {

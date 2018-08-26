@@ -7,6 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::Result;
+use highlight::Highlighter;
 use hint::Hinter;
 use history::{Direction, History};
 use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -30,6 +31,7 @@ pub struct State<'out, 'prompt> {
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out Hinter>,
+    pub highlighter: Option<&'out Highlighter>,
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -38,6 +40,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         prompt: &'prompt str,
         history_index: usize,
         hinter: Option<&'out Hinter>,
+        highlighter: Option<&'out Highlighter>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -53,6 +56,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
             hinter,
+            highlighter,
         }
     }
 
@@ -96,7 +100,16 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         if self.cursor == cursor {
             return Ok(());
         }
-        try!(self.out.move_cursor(self.cursor, cursor));
+        if self.highlighter.map_or(false, |h| {
+            self.line
+                .grapheme_at_cursor()
+                .map_or(false, |s| h.highlight_char(s))
+        }) {
+            let prompt_size = self.prompt_size;
+            try!(self.refresh(self.prompt, prompt_size, None));
+        } else {
+            try!(self.out.move_cursor(self.cursor, cursor));
+        }
         self.cursor = cursor;
         Ok(())
     }
@@ -109,6 +122,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             hint,
             self.cursor.row,
             self.old_rows,
+            self.highlighter,
         ));
 
         self.cursor = cursor;
@@ -175,7 +189,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                 let hint = self.hint();
                 if n == 1
                     && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
-                    && hint.is_none()
+                    && hint.is_none() // TODO refresh only current line
+                    && !self.highlighter.map_or(true, |h| h.highlight_char(ch.encode_utf8(&mut self.byte_buffer)))
                 {
                     // Avoid a full update of the line in the trivial case.
                     let cursor = self
@@ -490,6 +505,7 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
         byte_buffer: [0; 4],
         changes: Rc::new(RefCell::new(Changeset::new())),
         hinter: None,
+        highlighter: None,
     }
 }
 

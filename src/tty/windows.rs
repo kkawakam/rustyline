@@ -12,6 +12,7 @@ use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
 use consts::{self, KeyPress};
 use error;
+use highlight::Highlighter;
 use line_buffer::LineBuffer;
 use Result;
 
@@ -192,8 +193,7 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_F11 => return Ok(KeyPress::F(11)),
                     winuser::VK_F12 => return Ok(KeyPress::F(12)),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
-                    // also
-                    // set.
+                    // also set.
                     _ => continue,
                 };
             } else if utf16 == 27 {
@@ -291,6 +291,7 @@ impl Renderer for ConsoleRenderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
+        highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
@@ -307,14 +308,26 @@ impl Renderer for ConsoleRenderer {
             info.dwCursorPosition,
         ));
         let mut ab = String::new();
-        // display the prompt
-        // TODO handle ansi escape code (SetConsoleTextAttribute)
-        ab.push_str(prompt);
-        // display the input line
-        ab.push_str(&line);
+        if let Some(highlighter) = highlighter {
+            // TODO handle ansi escape code (SetConsoleTextAttribute)
+            // display the prompt
+            ab.push_str(&highlighter.highlight_prompt(prompt));
+            // display the input line
+            ab.push_str(&highlighter.highlight(line, pos));
+        } else {
+            // display the prompt
+            ab.push_str(prompt);
+            // display the input line
+            ab.push_str(line);
+        }
         // display hint
         if let Some(hint) = hint {
-            ab.push_str(truncate(&hint, end_pos.col, self.cols));
+            let truncate = truncate(&hint, end_pos.col, self.cols);
+            if let Some(highlighter) = highlighter {
+                ab.push_str(&highlighter.highlight_hint(truncate));
+            } else {
+                ab.push_str(truncate);
+            }
         }
         try!(self.write_and_flush(ab.as_bytes()));
 
@@ -450,8 +463,9 @@ impl Term for Console {
     }
 
     fn colors_enabled(&self) -> bool {
+        // TODO ANSI Colors & Windows <10
         match self.color_mode {
-            ColorMode::Enabled => self.stdout_isatty,
+            ColorMode::Enabled => self.stdout_isatty && self.ansi_colors_supported,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
         }

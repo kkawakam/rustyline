@@ -2,6 +2,7 @@ extern crate log;
 extern crate rustyline;
 
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
+use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
@@ -9,13 +10,8 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
 
-// On unix platforms you can use ANSI escape sequences
-#[cfg(unix)]
-static PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
+static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 
-// Windows consoles typically don't support ANSI escape sequences out
-// of the box
-#[cfg(windows)]
 static PROMPT: &'static str = ">> ";
 
 struct MyHelper(FilenameCompleter);
@@ -31,18 +27,22 @@ impl Completer for MyHelper {
 impl Hinter for MyHelper {
     fn hint(&self, line: &str, _pos: usize) -> Option<String> {
         if line == "hello" {
-            if cfg!(target_os = "windows") {
-                Some(" World".to_owned())
-            } else {
-                Some(" \x1b[1mWorld\x1b[m".to_owned())
-            }
+            Some(" World".to_owned())
         } else {
             None
         }
     }
 }
 
-impl Highlighter for MyHelper {}
+impl Highlighter for MyHelper {
+    fn highlight_prompt<'p>(&self, _: &str) -> Cow<'static, str> {
+        Borrowed(COLORED_PROMPT)
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
+    }
+}
 
 impl Helper for MyHelper {}
 

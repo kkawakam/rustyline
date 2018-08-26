@@ -1,3 +1,4 @@
-reorder_imports = false
-normalise_comments = false
-write_mode = "Overwrite"
+wrap_comments = true
+format_strings = true
+error_on_unformatted = false
+reorder_impl_items = true

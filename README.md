@@ -1,28 +1,21 @@
 # RustyLine
 [![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
-[![Build status](https://ci.appveyor.com/api/projects/status/ls7sty8nt25rdfkq/branch/master?svg=true)](https://ci.appveyor.com/project/kkawakam/rustyline/branch/master)
-[![Clippy Linting Result](https://clippy.bashy.io/github/kkawakam/rustyline/master/badge.svg)](https://clippy.bashy.io/github/kkawakam/rustyline/master/log)
+[![Build Status](https://ci.appveyor.com/api/projects/status/github/kkawakam/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/kkawakam/rustyline/branch/master)
+[![dependency status](https://deps.rs/repo/github/kkawakam/rustyline/status.svg)](https://deps.rs/repo/github/kkawakam/rustyline)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
+[![Docs](https://docs.rs/rustyline/badge.svg)](https://docs.rs/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
-[Documentation (Releases)](https://docs.rs/rustyline)
-
-[Documentation (Master)](https://kkawakam.github.io/rustyline/rustyline/)
-
 **Supported Platforms**
-* Linux
+* Unix (tested on FreeBSD, Linux and macOS)
 * Windows
    * cmd.exe
    * Powershell
 
-**Note**: Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
-
-## Build
-This project uses Cargo and Rust stable
-```bash
-cargo build --release
-```
+**Note**:
+* Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
+* Mintty (Cygwin/Mingw) is not supported
 
 ## Example
 ```rust
@@ -34,14 +27,14 @@ use rustyline::Editor;
 fn main() {
     // `()` can be used when no completer is required
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history("history.txt") {
+    if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                rl.add_history_entry(&line);
+                rl.add_history_entry(line.as_ref());
                 println!("Line: {}", line);
             },
             Err(ReadlineError::Interrupted) => {
@@ -76,10 +69,11 @@ rustyline = "1.0.0"
  - Unicode (UTF-8) (linenoise supports only ASCII)
  - Word completion (linenoise supports only line completion)
  - Filename completion
- - History search ([Searching for Commands in the History](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#SEC8))
- - Kill ring ([Killing Commands](http://cnswww.cns.cwru.edu/php/chet/readline/readline.html#IDX3))
- - Multi line mode
+ - History search ([Searching for Commands in the History](http://tiswww.case.edu/php/chet/readline/readline.html#SEC8))
+ - Kill ring ([Killing Commands](http://tiswww.case.edu/php/chet/readline/readline.html#IDX3))
+ - Multi line mode (line wrapping)
  - Word commands
+ - Hints
 
 ## Actions
 
@@ -102,6 +96,7 @@ Ctrl-V       | Insert any special character without perfoming its associated act
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
 Ctrl-Y       | Paste from Yank buffer
 Ctrl-Z       | Suspend (unix only)
+Ctrl-_       | Undo
 
 ### Emacs mode (default mode)
 
@@ -117,6 +112,7 @@ Ctrl-K       | Delete from cursor to end of line
 Ctrl-L       | Clear screen
 Ctrl-N, Down | Next match from history
 Ctrl-P, Up   | Previous match from history
+Ctrl-X Ctrl-U | Undo
 Ctrl-Y       | Paste from Yank buffer (Meta-Y to paste next yank instead)
 Meta-<       | Move to first entry in history
 Meta->       | Move to last entry in history
@@ -169,6 +165,7 @@ s            | Delete a single character under the cursor and enter input mode
 S            | Change current line (equivalent to 0c$)
 t<char>      | Move right to the next occurance of `char`, then one char backward
 T<char>      | Move left to the previous occurance of `char`, then one char forward
+u            | Undo
 w            | Move one word or token right
 W            | Move one non-blank word right
 x            | Delete a single character under the cursor
@@ -186,12 +183,6 @@ Esc          | Switch to command mode
 [Readline VI Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
 
 [Terminal codes (ANSI/VT100)](http://wiki.bash-hackers.org/scripting/terminalcodes)
-
-## ToDo
-
- - Undos
- - Read input with timeout to properly handle single ESC key
- - expose an API callable from C
 
 ## Wine
 
@@ -214,10 +205,26 @@ $ bind -p
 
 ## Similar projects
 
- - [copperline](https://github.com/srijs/rust-copperline) (Rust)
- - [linefeed](https://github.com/murarth/linefeed) (Rust)
- - [liner](https://github.com/MovingtoMars/liner) (Rust)
- - [linenoise-ng](https://github.com/arangodb/linenoise-ng) (C++)
- - [liner](https://github.com/peterh/liner) (Go)
- - [readline](https://github.com/chzyer/readline) (Go)
- - [haskeline](https://github.com/judah/haskeline) (Haskell)
+Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
+--------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
+[Go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes   | Yes               |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          | ?                 |
+[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
+[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
+[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi/prog | No        | Yes  | Ux         | History based     |
+[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
+[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?          | No                |
+[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
+
+[Go-prompt]: https://github.com/c-bata/go-prompt
+[Haskeline]: https://github.com/judah/haskeline
+[Linefeed]: https://github.com/murarth/linefeed
+[Linenoise]: https://github.com/antirez/linenoise
+[Linenoise-ng]: https://github.com/arangodb/linenoise-ng
+[Liner]: https://github.com/redox-os/liner
+[Prompt-toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
+[Rb-readline]: https://github.com/ConnorAtherton/rb-readline
+[Replxx]: https://github.com/AmokHuginnsson/replxx
+

@@ -1,4 +1,5 @@
-//! Kill Ring
+//! Kill Ring management
+use line_buffer::{DeleteListener, Direction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -19,6 +20,7 @@ pub struct KillRing {
     index: usize,
     // whether or not the last command was a kill or a yank
     last_action: Action,
+    killing: bool,
 }
 
 impl KillRing {
@@ -28,6 +30,7 @@ impl KillRing {
             slots: Vec::with_capacity(size),
             index: 0,
             last_action: Action::Other,
+            killing: false,
         }
     }
 
@@ -102,9 +105,30 @@ impl KillRing {
     }
 }
 
+impl DeleteListener for KillRing {
+    fn start_killing(&mut self) {
+        self.killing = true;
+    }
+
+    fn delete(&mut self, _: usize, string: &str, dir: Direction) {
+        if !self.killing {
+            return;
+        }
+        let mode = match dir {
+            Direction::Forward => Mode::Append,
+            Direction::Backward => Mode::Prepend,
+        };
+        self.kill(string, mode);
+    }
+
+    fn stop_killing(&mut self) {
+        self.killing = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Action, Mode, KillRing};
+    use super::{Action, KillRing, Mode};
 
     #[test]
     fn disabled() {
@@ -187,9 +211,9 @@ mod tests {
         kill_ring.reset();
         kill_ring.kill("word2", Mode::Append);
 
-        assert_eq!(Some(&"word2".to_string()), kill_ring.yank());
+        assert_eq!(Some(&"word2".to_owned()), kill_ring.yank());
         assert_eq!(Action::Yank(5), kill_ring.last_action);
-        assert_eq!(Some(&"word2".to_string()), kill_ring.yank());
+        assert_eq!(Some(&"word2".to_owned()), kill_ring.yank());
         assert_eq!(Action::Yank(5), kill_ring.last_action);
     }
 
@@ -202,8 +226,8 @@ mod tests {
 
         assert_eq!(None, kill_ring.yank_pop());
         kill_ring.yank();
-        assert_eq!(Some((9, &"word1".to_string())), kill_ring.yank_pop());
-        assert_eq!(Some((5, &"longword2".to_string())), kill_ring.yank_pop());
-        assert_eq!(Some((9, &"word1".to_string())), kill_ring.yank_pop());
+        assert_eq!(Some((9, &"word1".to_owned())), kill_ring.yank_pop());
+        assert_eq!(Some((5, &"longword2".to_owned())), kill_ring.yank_pop());
+        assert_eq!(Some((9, &"word1".to_owned())), kill_ring.yank_pop());
     }
 }

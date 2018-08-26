@@ -1,20 +1,27 @@
 //! Customize line editor
 use std::default::Default;
 
+/// User preferences
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
     /// Maximum number of entries in History.
-    max_history_size: usize,
+    max_history_size: usize, // history_max_entries
     history_duplicates: HistoryDuplicates,
     history_ignore_space: bool,
     completion_type: CompletionType,
     /// When listing completion alternatives, only display
     /// one screen of possibilities at a time.
     completion_prompt_limit: usize,
-    /// Duration (milliseconds) Rustyline will wait for a character when reading an ambiguous key sequence.
+    /// Duration (milliseconds) Rustyline will wait for a character when
+    /// reading an ambiguous key sequence.
     keyseq_timeout: i32,
-    // Emacs or Vi mode
+    /// Emacs or Vi mode
     edit_mode: EditMode,
+    /// If true, each nonblank line returned by `readline` will be
+    /// automatically added to the history.
+    auto_add_history: bool,
+    /// if colors should be enabled.
+    color_mode: ColorMode,
 }
 
 impl Config {
@@ -27,13 +34,17 @@ impl Config {
         self.max_history_size
     }
 
-    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// Tell if lines which match the previous history entry are saved or not
+    /// in the history list.
+    ///
     /// By default, they are ignored.
     pub fn history_duplicates(&self) -> HistoryDuplicates {
         self.history_duplicates
     }
 
-    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// Tell if lines which begin with a space character are saved or not in
+    /// the history list.
+    ///
     /// By default, they are saved.
     pub fn history_ignore_space(&self) -> bool {
         self.history_ignore_space
@@ -54,6 +65,20 @@ impl Config {
     pub fn edit_mode(&self) -> EditMode {
         self.edit_mode
     }
+
+    /// Tell if lines are automatically added to the history.
+    ///
+    /// By default, they are not.
+    pub fn auto_add_history(&self) -> bool {
+        self.auto_add_history
+    }
+
+    /// Tell if colors should be enabled.
+    ///
+    /// By default, they are except if stdout is not a tty.
+    pub fn color_mode(&self) -> ColorMode {
+        self.color_mode
+    }
 }
 
 impl Default for Config {
@@ -64,8 +89,10 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
-            keyseq_timeout: 500,
+            keyseq_timeout: -1,
             edit_mode: EditMode::Emacs,
+            auto_add_history: false,
+            color_mode: ColorMode::Enabled,
         }
     }
 }
@@ -73,6 +100,7 @@ impl Default for Config {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryDuplicates {
     AlwaysAdd,
+    /// a line will not be added to the history if it matches the previous entry
     IgnoreConsecutive,
 }
 
@@ -86,12 +114,22 @@ pub enum CompletionType {
     List,
 }
 
+/// Style of editing / Standard keymaps
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditMode {
     Emacs,
     Vi,
 }
 
+/// Colorization mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorMode {
+    Enabled,
+    Forced,
+    Disabled,
+}
+
+/// Configuration builder
 #[derive(Debug, Default)]
 pub struct Builder {
     p: Config,
@@ -99,7 +137,9 @@ pub struct Builder {
 
 impl Builder {
     pub fn new() -> Builder {
-        Builder { p: Config::default() }
+        Builder {
+            p: Config::default(),
+        }
     }
 
     /// Set the maximum length for the history.
@@ -108,7 +148,9 @@ impl Builder {
         self
     }
 
-    /// Tell if lines which match the previous history entry are saved or not in the history list.
+    /// Tell if lines which match the previous history entry are saved or not
+    /// in the history list.
+    ///
     /// By default, they are ignored.
     pub fn history_ignore_dups(mut self, yes: bool) -> Builder {
         self.p.history_duplicates = if yes {
@@ -119,7 +161,9 @@ impl Builder {
         self
     }
 
-    /// Tell if lines which begin with a space character are saved or not in the history list.
+    /// Tell if lines which begin with a space character are saved or not in
+    /// the history list.
+    ///
     /// By default, they are saved.
     pub fn history_ignore_space(mut self, yes: bool) -> Builder {
         self.p.history_ignore_space = yes;
@@ -132,16 +176,18 @@ impl Builder {
         self
     }
 
-    /// The number of possible completions that determines when the user is asked
-    /// whether the list of possibilities should be displayed.
+    /// The number of possible completions that determines when the user is
+    /// asked whether the list of possibilities should be displayed.
     pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Builder {
         self.p.completion_prompt_limit = completion_prompt_limit;
         self
     }
 
     /// Timeout for ambiguous key sequences in milliseconds.
-    /// Currently, it is used only to distinguish a single ESC from an ESC sequence.
-    /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another byte.
+    /// Currently, it is used only to distinguish a single ESC from an ESC
+    /// sequence.
+    /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another
+    /// byte.
     pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
         self.p.keyseq_timeout = keyseq_timeout_ms;
         self
@@ -150,6 +196,26 @@ impl Builder {
     /// Choose between Emacs or Vi mode.
     pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
         self.p.edit_mode = edit_mode;
+        match edit_mode {
+            EditMode::Emacs => self.p.keyseq_timeout = -1, // no timeout
+            EditMode::Vi => self.p.keyseq_timeout = 500,
+        };
+        self
+    }
+
+    /// Tell if lines are automatically added to the history.
+    ///
+    /// By default, they are not.
+    pub fn auto_add_history(mut self, yes: bool) -> Builder {
+        self.p.auto_add_history = yes;
+        self
+    }
+
+    /// Forces colorization on or off.
+    ///
+    /// By default, colorization is on except if stdout is not a tty.
+    pub fn color_mode(mut self, color_mode: ColorMode) -> Builder {
+        self.p.color_mode = color_mode;
         self
     }
 

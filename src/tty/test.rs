@@ -1,17 +1,15 @@
 //! Tests specific definitions
-use std::io::{self, Sink, Write};
 use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-#[cfg(windows)]
-use winapi;
-
-use config::Config;
+use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use config::{ColorMode, Config};
 use consts::KeyPress;
 use error::ReadlineError;
+use highlight::Highlighter;
+use line_buffer::LineBuffer;
 use Result;
-use super::{RawMode, RawReader, Term};
 
 pub type Mode = ();
 
@@ -22,12 +20,13 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
-    fn next_key(&mut self) -> Result<KeyPress> {
+    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(*key),
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         unimplemented!();
@@ -35,114 +34,133 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
 }
 
 impl RawReader for IntoIter<KeyPress> {
-    fn next_key(&mut self) -> Result<KeyPress> {
+    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(key),
             None => Err(ReadlineError::Eof),
         }
     }
+
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
-        unimplemented!();
+        match self.next() {
+            Some(KeyPress::Char(c)) => Ok(c),
+            None => Err(ReadlineError::Eof),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+pub struct Sink {}
+
+impl Sink {
+    pub fn new() -> Sink {
+        Sink {}
+    }
+}
+
+impl Renderer for Sink {
+    fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
+        Ok(())
+    }
+
+    fn refresh_line(
+        &mut self,
+        _: &str,
+        prompt_size: Position,
+        line: &LineBuffer,
+        hint: Option<String>,
+        _: usize,
+        _: usize,
+        _: Option<&Highlighter>,
+    ) -> Result<(Position, Position)> {
+        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+        if let Some(hint) = hint {
+            truncate(&hint, 0, 80);
+        }
+        let end = self.calculate_position(&line, prompt_size);
+        Ok((cursor, end))
+    }
+
+    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        let mut pos = orig;
+        pos.col += s.len();
+        pos
+    }
+
+    fn write_and_flush(&mut self, _: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn beep(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn clear_screen(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn sigwinch(&self) -> bool {
+        false
+    }
+
+    fn update_size(&mut self) {}
+
+    fn get_columns(&self) -> usize {
+        80
+    }
+
+    fn get_rows(&self) -> usize {
+        24
     }
 }
 
 pub type Terminal = DummyTerminal;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
-}
-
-impl DummyTerminal {
-    #[cfg(windows)]
-    pub fn get_console_screen_buffer_info(&self) -> Result<winapi::CONSOLE_SCREEN_BUFFER_INFO> {
-        let dw_size = winapi::COORD { X: 80, Y: 24 };
-        let dw_cursor_osition = winapi::COORD { X: 0, Y: 0 };
-        let sr_window = winapi::SMALL_RECT {
-            Left: 0,
-            Top: 0,
-            Right: 0,
-            Bottom: 0,
-        };
-        let info = winapi::CONSOLE_SCREEN_BUFFER_INFO {
-            dwSize: dw_size,
-            dwCursorPosition: dw_cursor_osition,
-            wAttributes: 0,
-            srWindow: sr_window,
-            dwMaximumWindowSize: dw_size,
-        };
-        Ok(info)
-    }
-
-    #[cfg(windows)]
-    pub fn set_console_cursor_position(&mut self, _: winapi::COORD) -> Result<()> {
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    pub fn fill_console_output_character(&mut self,
-                                         _: winapi::DWORD,
-                                         _: winapi::COORD)
-                                         -> Result<()> {
-        Ok(())
-    }
+    pub cursor: usize, // cursor position before last command
 }
 
 impl Term for DummyTerminal {
+    type Mode = Mode;
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
-    type Mode = Mode;
 
-    fn new() -> DummyTerminal {
-        DummyTerminal { keys: Vec::new() }
+    fn new(_color_mode: ColorMode) -> DummyTerminal {
+        DummyTerminal {
+            keys: Vec::new(),
+            cursor: 0,
+        }
     }
 
     // Init checks:
 
-    /// Check if current terminal can provide a rich line-editing user interface.
     fn is_unsupported(&self) -> bool {
         false
     }
 
-    /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool {
         true
     }
 
-    // Interactive loop:
-
-    /// Get the number of columns in the current terminal.
-    fn get_columns(&self) -> usize {
-        80
-    }
-
-    /// Get the number of rows in the current terminal.
-    fn get_rows(&self) -> usize {
-        24
-    }
-
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool {
+    fn colors_enabled(&self) -> bool {
         false
     }
 
-    fn enable_raw_mode(&self) -> Result<Mode> {
+    // Interactive loop:
+
+    fn enable_raw_mode(&mut self) -> Result<Mode> {
         Ok(())
     }
 
-    /// Create a RAW reader
     fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyPress>> {
         Ok(self.keys.clone().into_iter())
     }
 
     fn create_writer(&self) -> Sink {
-        io::sink()
-    }
-
-    /// Clear the screen. Used to handle ctrl+l
-    fn clear_screen(&mut self, _: &mut Write) -> Result<()> {
-        Ok(())
+        Sink {}
     }
 }
 

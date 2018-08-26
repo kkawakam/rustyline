@@ -1,16 +1,5 @@
+sudo: false
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
 script:
   - cargo build --verbose
   - cargo test --verbose
-  - cargo doc
-after_success: |
-  [ $TRAVIS_BRANCH = master ] &&
-  [ $TRAVIS_PULL_REQUEST = false ] &&
-  bash deploy-docs.sh
-env:
-  global:
-    secure: "XxaPXHiVplTwMaAytYC0VQR/nNnm7SJVzXiUuaVEjssHip0Uje/4f3vGqtJjnD70FfxwNWQKiSYOcbYjWPlsJeANRt4ZoCsRt5eLGUZ+wH79n1fOkp5EIpFT/isjCB51A4n8PRUvuWfQ2OtNNeGLL6akMxt19sHdXoiQkLOe338="

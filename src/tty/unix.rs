@@ -33,7 +33,8 @@ fn get_win_size() -> (usize, usize) {
     unsafe {
         let mut size: libc::winsize = zeroed();
         // https://github.com/rust-lang/libc/pull/704
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ as libc::c_ulong, &mut size) {
+        // FIXME: ".into()" used as a temporary fix for a libc bug
+        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }

@@ -26,6 +26,7 @@ pub trait Highlighter {
     }
     /// Takes the dynamic `prompt` and
     /// returns the highlighted version (with ANSI color).
+    #[deprecated(since="2.0.1", note="please use `highlight_prompt` instead")]
     fn highlight_dynamic_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
         Borrowed(prompt)
     }

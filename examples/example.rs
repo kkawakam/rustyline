@@ -35,8 +35,12 @@ impl Hinter for MyHelper {
 }
 
 impl Highlighter for MyHelper {
-    fn highlight_prompt<'p>(&self, _: &str) -> Cow<'static, str> {
-        Borrowed(COLORED_PROMPT)
+    fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
+        if prompt == PROMPT {
+            Borrowed(COLORED_PROMPT)
+        } else {
+            Borrowed(prompt)
+        }
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {

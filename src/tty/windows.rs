@@ -499,7 +499,7 @@ impl Term for Console {
         }
         let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
-        let raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
+        let mut raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
             | wincon::ENABLE_ECHO_INPUT
             | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes

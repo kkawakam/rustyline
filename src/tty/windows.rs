@@ -126,7 +126,7 @@ impl RawReader for ConsoleRawReader {
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
-                return Err(error::ReadlineError::WindowResize);
+                return Err(error::ReadlineError::WindowResize); // sigwinch + err => err ignored
             } else if rec.EventType != wincon::KEY_EVENT {
                 continue;
             }
@@ -503,10 +503,10 @@ impl Term for Console {
             | wincon::ENABLE_ECHO_INPUT
             | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
-        let raw = raw | wincon::ENABLE_EXTENDED_FLAGS;
-        let raw = raw | wincon::ENABLE_INSERT_MODE;
-        let raw = raw | wincon::ENABLE_QUICK_EDIT_MODE;
-        let raw = raw | wincon::ENABLE_WINDOW_INPUT;
+        raw |= wincon::ENABLE_EXTENDED_FLAGS;
+        raw |= wincon::ENABLE_INSERT_MODE;
+        raw |= wincon::ENABLE_QUICK_EDIT_MODE;
+        raw |= wincon::ENABLE_WINDOW_INPUT;
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
 
         let original_stdout_mode = if self.stdout_isatty {

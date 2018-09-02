@@ -34,7 +34,7 @@ pub struct Position {
 pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
-    /// Display prompt, line and cursor in terminal output
+    /// Display `prompt`, line and cursor in terminal output
     fn refresh_line(
         &mut self,
         prompt: &str,
@@ -47,8 +47,7 @@ pub trait Renderer {
     ) -> Result<(Position, Position)>;
 
     /// Calculate the number of columns and rows used to display `s` on a
-    /// `cols` width terminal
-    /// starting at `orig`.
+    /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
     fn write_and_flush(&mut self, buf: &[u8]) -> Result<()>;

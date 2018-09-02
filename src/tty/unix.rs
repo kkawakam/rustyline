@@ -369,6 +369,7 @@ impl Receiver for Utf8 {
 pub struct PosixRenderer {
     out: Stdout,
     cols: usize, // Number of columns in terminal
+    buffer: String,
 }
 
 impl PosixRenderer {
@@ -377,6 +378,7 @@ impl PosixRenderer {
         PosixRenderer {
             out: io::stdout(),
             cols,
+            buffer: String::with_capacity(1024),
         }
     }
 }
@@ -433,7 +435,7 @@ impl Renderer for PosixRenderer {
         highlighter: Option<&Highlighter>,
     ) -> Result<(Position, Position)> {
         use std::fmt::Write;
-        let mut ab = String::new();
+        self.buffer.clear();
 
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
@@ -445,53 +447,55 @@ impl Renderer for PosixRenderer {
         let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
         // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}B", cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
         }
         // clear old rows
         for _ in 0..old_rows {
-            ab.push_str("\r\x1b[0K\x1b[A");
+            self.buffer.push_str("\r\x1b[0K\x1b[A");
         }
         // clear the line
-        ab.push_str("\r\x1b[0K");
+        self.buffer.push_str("\r\x1b[0K");
 
         if let Some(highlighter) = highlighter {
             // display the prompt
-            ab.push_str(&highlighter.highlight_prompt(prompt));
+            self.buffer.push_str(&highlighter.highlight_prompt(prompt));
             // display the input line
-            ab.push_str(&highlighter.highlight(line, line.pos()));
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
         } else {
             // display the prompt
-            ab.push_str(prompt);
+            self.buffer.push_str(prompt);
             // display the input line
-            ab.push_str(line);
+            self.buffer.push_str(line);
         }
         // display hint
         if let Some(hint) = hint {
             let truncate = truncate(&hint, end_pos.col, self.cols);
             if let Some(highlighter) = highlighter {
-                ab.push_str(&highlighter.highlight_hint(truncate));
+                self.buffer.push_str(&highlighter.highlight_hint(truncate));
             } else {
-                ab.push_str(truncate);
+                self.buffer.push_str(truncate);
             }
         }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 {
-            ab.push_str("\n");
+            self.buffer.push_str("\n");
         }
         // position the cursor
         let cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if cursor_row_movement > 0 {
-            write!(ab, "\x1b[{}A", cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{}A", cursor_row_movement).unwrap();
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            write!(ab, "\r\x1b[{}C", cursor.col).unwrap();
+            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
         } else {
-            ab.push('\r');
+            self.buffer.push('\r');
         }
 
-        try!(self.write_and_flush(ab.as_bytes()));
+        try!(self.out.write_all(self.buffer.as_bytes()));
+        try!(self.out.flush());
         Ok((cursor, end_pos))
     }
 

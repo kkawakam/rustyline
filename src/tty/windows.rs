@@ -108,6 +108,7 @@ impl RawReader for ConsoleRawReader {
         use std::char::decode_utf16;
         use winapi::um::wincon::{
             LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
+            SHIFT_PRESSED,
         };
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
@@ -125,7 +126,7 @@ impl RawReader for ConsoleRawReader {
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
-                return Err(error::ReadlineError::WindowResize);
+                return Err(error::ReadlineError::WindowResize); // sigwinch + err => err ignored
             } else if rec.EventType != wincon::KEY_EVENT {
                 continue;
             }
@@ -142,6 +143,7 @@ impl RawReader for ConsoleRawReader {
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt && !alt_gr;
+            let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
@@ -149,6 +151,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_LEFT => {
                         return Ok(if ctrl {
                             KeyPress::ControlLeft
+                        } else if shift {
+                            KeyPress::ShiftLeft
                         } else {
                             KeyPress::Left
                         })
@@ -156,6 +160,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_RIGHT => {
                         return Ok(if ctrl {
                             KeyPress::ControlRight
+                        } else if shift {
+                            KeyPress::ShiftRight
                         } else {
                             KeyPress::Right
                         })
@@ -163,6 +169,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_UP => {
                         return Ok(if ctrl {
                             KeyPress::ControlUp
+                        } else if shift {
+                            KeyPress::ShiftUp
                         } else {
                             KeyPress::Up
                         })
@@ -170,6 +178,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_DOWN => {
                         return Ok(if ctrl {
                             KeyPress::ControlDown
+                        } else if shift {
+                            KeyPress::ShiftDown
                         } else {
                             KeyPress::Down
                         })
@@ -230,6 +240,7 @@ pub struct ConsoleRenderer {
     out: Stdout,
     handle: HANDLE,
     cols: usize, // Number of columns in terminal
+    buffer: String,
 }
 
 impl ConsoleRenderer {
@@ -240,6 +251,7 @@ impl ConsoleRenderer {
             out: io::stdout(),
             handle,
             cols,
+            buffer: String::with_capacity(1024),
         }
     }
 
@@ -307,29 +319,31 @@ impl Renderer for ConsoleRenderer {
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
             info.dwCursorPosition,
         ));
-        let mut ab = String::new();
+        self.buffer.clear();
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // display the prompt
-            ab.push_str(&highlighter.highlight_prompt(prompt));
+            self.buffer.push_str(&highlighter.highlight_prompt(prompt));
             // display the input line
-            ab.push_str(&highlighter.highlight(line, line.pos()));
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
         } else {
             // display the prompt
-            ab.push_str(prompt);
+            self.buffer.push_str(prompt);
             // display the input line
-            ab.push_str(line);
+            self.buffer.push_str(line);
         }
         // display hint
         if let Some(hint) = hint {
             let truncate = truncate(&hint, end_pos.col, self.cols);
             if let Some(highlighter) = highlighter {
-                ab.push_str(&highlighter.highlight_hint(truncate));
+                self.buffer.push_str(&highlighter.highlight_hint(truncate));
             } else {
-                ab.push_str(truncate);
+                self.buffer.push_str(truncate);
             }
         }
-        try!(self.write_and_flush(ab.as_bytes()));
+        try!(self.out.write_all(self.buffer.as_bytes()));
+        try!(self.out.flush());
 
         // position the cursor
         let mut info = try!(self.get_console_screen_buffer_info());
@@ -485,14 +499,14 @@ impl Term for Console {
         }
         let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
         // Disable these modes
-        let raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
+        let mut raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
             | wincon::ENABLE_ECHO_INPUT
             | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
-        let raw = raw | wincon::ENABLE_EXTENDED_FLAGS;
-        let raw = raw | wincon::ENABLE_INSERT_MODE;
-        let raw = raw | wincon::ENABLE_QUICK_EDIT_MODE;
-        let raw = raw | wincon::ENABLE_WINDOW_INPUT;
+        raw |= wincon::ENABLE_EXTENDED_FLAGS;
+        raw |= wincon::ENABLE_INSERT_MODE;
+        raw |= wincon::ENABLE_QUICK_EDIT_MODE;
+        raw |= wincon::ENABLE_WINDOW_INPUT;
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
 
         let original_stdout_mode = if self.stdout_isatty {

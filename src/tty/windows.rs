@@ -108,6 +108,7 @@ impl RawReader for ConsoleRawReader {
         use std::char::decode_utf16;
         use winapi::um::wincon::{
             LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
+            SHIFT_PRESSED,
         };
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
@@ -142,6 +143,7 @@ impl RawReader for ConsoleRawReader {
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt && !alt_gr;
+            let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
@@ -149,6 +151,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_LEFT => {
                         return Ok(if ctrl {
                             KeyPress::ControlLeft
+                        } else if shift {
+                            KeyPress::ShiftLeft
                         } else {
                             KeyPress::Left
                         })
@@ -156,6 +160,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_RIGHT => {
                         return Ok(if ctrl {
                             KeyPress::ControlRight
+                        } else if shift {
+                            KeyPress::ShiftRight
                         } else {
                             KeyPress::Right
                         })
@@ -163,6 +169,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_UP => {
                         return Ok(if ctrl {
                             KeyPress::ControlUp
+                        } else if shift {
+                            KeyPress::ShiftUp
                         } else {
                             KeyPress::Up
                         })
@@ -170,6 +178,8 @@ impl RawReader for ConsoleRawReader {
                     winuser::VK_DOWN => {
                         return Ok(if ctrl {
                             KeyPress::ControlDown
+                        } else if shift {
+                            KeyPress::ShiftDown
                         } else {
                             KeyPress::Down
                         })

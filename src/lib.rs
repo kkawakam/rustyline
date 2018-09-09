@@ -16,6 +16,7 @@
 //! }
 //! ```
 #![allow(unknown_lints)]
+// #![feature(tool_lints)] unstable feature
 
 extern crate dirs;
 extern crate libc;
@@ -675,7 +676,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-#[allow(new_without_default)]
+#[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Editor<H> {

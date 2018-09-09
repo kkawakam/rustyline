@@ -479,20 +479,17 @@ impl InputState {
         loop {
             try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
             let key = try!(rdr.next_key(false));
-            match key {
-                KeyPress::Char(digit @ '0'...'9') => {
-                    if self.num_args.abs() < 1000 {
-                        // shouldn't ever need more than 4 digits
-                        self.num_args = self
-                            .num_args
-                            .saturating_mul(10)
-                            .saturating_add(digit.to_digit(10).unwrap() as i16);
-                    }
+            if let KeyPress::Char(digit @ '0'...'9') = key {
+                if self.num_args.abs() < 1000 {
+                    // shouldn't ever need more than 4 digits
+                    self.num_args = self
+                        .num_args
+                        .saturating_mul(10)
+                        .saturating_add(digit.to_digit(10).unwrap() as i16);
                 }
-                _ => {
-                    try!(wrt.refresh_line());
-                    return Ok(key);
-                }
+            } else {
+                try!(wrt.refresh_line());
+                return Ok(key);
             };
         }
     }

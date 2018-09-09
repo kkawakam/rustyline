@@ -27,7 +27,7 @@ const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-#[allow(identity_conversion)]
+#[allow(clippy::identity_conversion)]
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -559,7 +559,7 @@ impl Renderer for PosixRenderer {
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {

@@ -322,13 +322,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     pub fn edit_insert_text(&mut self, text: &str) -> Result<()> {
-        if !text.is_empty() {
-            let cursor = self.line.pos();
-            self.line.insert_str(cursor, text);
-            self.refresh_line()
-        } else {
-            Ok(())
+        if text.is_empty() {
+            return Ok(());
         }
+        let cursor = self.line.pos();
+        self.line.insert_str(cursor, text);
+        self.refresh_line()
     }
 
     pub fn edit_delete(&mut self, n: RepeatCount) -> Result<()> {

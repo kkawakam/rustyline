@@ -32,6 +32,7 @@ pub struct State<'out, 'prompt> {
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out Hinter>,
     pub highlighter: Option<&'out Highlighter>,
+    no_hint: bool, // `false` if an hint has been displayed
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -57,6 +58,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             changes: Rc::new(RefCell::new(Changeset::new())),
             hinter,
             highlighter,
+            no_hint: true,
         }
     }
 
@@ -130,10 +132,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    fn hint(&self) -> Option<String> {
+    fn hint(&mut self) -> Option<String> {
         if let Some(hinter) = self.hinter {
+            self.no_hint = false;
             hinter.hint(self.line.as_str(), self.line.pos())
         } else {
+            self.no_hint = true;
             None
         }
     }
@@ -186,10 +190,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         if let Some(push) = self.line.insert(ch, n) {
             if push {
                 let prompt_size = self.prompt_size;
+                let no_previous_hint = self.no_hint;
                 let hint = self.hint();
                 if n == 1
                     && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
-                    && hint.is_none() // TODO refresh only current line
+                    && (hint.is_none() && no_previous_hint) // TODO refresh only current line
                     && !self.highlighter.map_or(true, |h| h.highlight_char(ch.encode_utf8(&mut self.byte_buffer)))
                 {
                     // Avoid a full update of the line in the trivial case.
@@ -505,6 +510,7 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
         changes: Rc::new(RefCell::new(Changeset::new())),
         hinter: None,
         highlighter: None,
+        no_hint: true,
     }
 }
 

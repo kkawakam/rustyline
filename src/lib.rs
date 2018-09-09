@@ -16,6 +16,8 @@
 //! }
 //! ```
 #![allow(unknown_lints)]
+// #![feature(non_exhaustive)]
+// #![feature(tool_lints)]
 
 extern crate dirs;
 extern crate libc;
@@ -33,13 +35,13 @@ extern crate winapi;
 
 pub mod completion;
 pub mod config;
-mod consts;
 mod edit;
 pub mod error;
 pub mod highlight;
 pub mod hint;
 pub mod history;
 mod keymap;
+mod keys;
 mod kill_ring;
 pub mod line_buffer;
 mod undo;
@@ -58,13 +60,13 @@ use tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 use completion::{longest_common_prefix, Candidate, Completer};
 pub use config::{ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
-pub use consts::KeyPress;
 use edit::State;
 use highlight::Highlighter;
 use hint::Hinter;
 use history::{Direction, History};
 pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use keymap::{InputState, Refresher};
+pub use keys::KeyPress;
 use kill_ring::{KillRing, Mode};
 use line_buffer::WordAction;
 
@@ -675,7 +677,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-#[allow(new_without_default)]
+//#[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Editor<H> {

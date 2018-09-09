@@ -15,9 +15,9 @@ use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
-use consts::{self, KeyPress};
 use error;
 use highlight::Highlighter;
+use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
 
@@ -27,7 +27,7 @@ const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-#[allow(identity_conversion)]
+//#[allow(clippy::identity_conversion)]
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -163,6 +163,20 @@ impl PosixRawReader {
                     self.extended_escape(seq2)
                 }
             }
+        } else if seq2 == '[' {
+            let seq3 = try!(self.next_char());
+            // Linux console
+            Ok(match seq3 {
+                'A' => KeyPress::F(1),
+                'B' => KeyPress::F(2),
+                'C' => KeyPress::F(3),
+                'D' => KeyPress::F(4),
+                'E' => KeyPress::F(5),
+                _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ [ {:?}", seq3);
+                    KeyPress::UnknownEscSeq
+                }
+            })
         } else {
             // ANSI
             Ok(match seq2 {
@@ -172,6 +186,7 @@ impl PosixRawReader {
                 'D' => KeyPress::Left,  // kcub1
                 'F' => KeyPress::End,
                 'H' => KeyPress::Home, // khome
+                'Z' => KeyPress::BackTab,
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
                     KeyPress::UnknownEscSeq
@@ -251,13 +266,13 @@ impl PosixRawReader {
                         ('2', 'D') => KeyPress::ShiftLeft,
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                                   "unsupported esc sequence: ESC [ 1 ; {} {:?}", seq4, seq5);
                             KeyPress::UnknownEscSeq
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                           "unsupported esc sequence: ESC [ {} ; {} {:?}", seq2, seq4, seq5);
                     Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
@@ -296,8 +311,8 @@ impl PosixRawReader {
             'S' => KeyPress::F(4),  // kf4
             'a' => KeyPress::ControlUp,
             'b' => KeyPress::ControlDown,
-            'c' => KeyPress::ControlRight,
-            'd' => KeyPress::ControlLeft,
+            'c' => KeyPress::ControlRight, // rxvt
+            'd' => KeyPress::ControlLeft,  // rxvt
             _ => {
                 debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
                 KeyPress::UnknownEscSeq
@@ -310,7 +325,7 @@ impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
-        let mut key = consts::char_to_key_press(c);
+        let mut key = keys::char_to_key_press(c);
         if key == KeyPress::Esc {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
@@ -559,7 +574,7 @@ impl Renderer for PosixRenderer {
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
@@ -645,8 +660,9 @@ impl Term for PosixTerminal {
             | InputFlags::ISTRIP
             | InputFlags::IXON);
         // we don't want raw output, it turns newlines into straight linefeeds
-        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST); // disable all output
-        // processing
+        // disable all output processing
+        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
+
         // character-size mark (8 bits)
         raw.control_flags |= ControlFlags::CS8;
         // disable echoing, canonical mode, extended input processing and signals

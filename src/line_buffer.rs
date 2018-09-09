@@ -364,25 +364,19 @@ impl LineBuffer {
             sow = 0;
             let mut gj = gis.next();
             'inner: loop {
-                match gj {
-                    Some((j, y)) => {
-                        let gi = gis.next();
-                        match gi {
-                            Some((_, x)) => {
-                                if is_start_of_word(word_def, x, y) {
-                                    sow = j;
-                                    break 'inner;
-                                }
-                                gj = gi;
-                            }
-                            None => {
-                                break 'outer;
-                            }
+                if let Some((j, y)) = gj {
+                    let gi = gis.next();
+                    if let Some((_, x)) = gi {
+                        if is_start_of_word(word_def, x, y) {
+                            sow = j;
+                            break 'inner;
                         }
-                    }
-                    None => {
+                        gj = gi;
+                    } else {
                         break 'outer;
                     }
+                } else {
+                    break 'outer;
                 }
             }
         }
@@ -428,32 +422,26 @@ impl LineBuffer {
             wp = 0;
             gi = gis.next();
             'inner: loop {
-                match gi {
-                    Some((i, x)) => {
-                        let gj = gis.next();
-                        match gj {
-                            Some((j, y)) => {
-                                if at == At::Start && is_start_of_word(word_def, x, y) {
-                                    wp = j;
-                                    break 'inner;
-                                } else if at != At::Start && is_end_of_word(word_def, x, y) {
-                                    if word_def == Word::Emacs || at == At::AfterEnd {
-                                        wp = j;
-                                    } else {
-                                        wp = i;
-                                    }
-                                    break 'inner;
-                                }
-                                gi = gj;
+                if let Some((i, x)) = gi {
+                    let gj = gis.next();
+                    if let Some((j, y)) = gj {
+                        if at == At::Start && is_start_of_word(word_def, x, y) {
+                            wp = j;
+                            break 'inner;
+                        } else if at != At::Start && is_end_of_word(word_def, x, y) {
+                            if word_def == Word::Emacs || at == At::AfterEnd {
+                                wp = j;
+                            } else {
+                                wp = i;
                             }
-                            None => {
-                                break 'outer;
-                            }
+                            break 'inner;
                         }
-                    }
-                    None => {
+                        gi = gj;
+                    } else {
                         break 'outer;
                     }
+                } else {
+                    break 'outer;
                 }
             }
         }

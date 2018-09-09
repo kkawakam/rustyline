@@ -1,7 +1,7 @@
 //! History related commands tests
 use super::assert_history;
 use config::EditMode;
-use consts::KeyPress;
+use keys::KeyPress;
 
 #[test]
 fn down_key() {

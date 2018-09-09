@@ -1,9 +1,11 @@
 //! Key constants
 
+/// #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyPress {
     UnknownEscSeq,
-    Backspace,
+    Backspace, // Ctrl('H')
+    BackTab,
     Char(char),
     ControlDown,
     ControlLeft,
@@ -14,7 +16,7 @@ pub enum KeyPress {
     Down,
     End,
     Enter, // Ctrl('M')
-    Esc,
+    Esc,   // Ctrl('[')
     F(u8),
     Home,
     Insert,
@@ -32,7 +34,7 @@ pub enum KeyPress {
     Up,
 }
 
-#[allow(match_same_arms)]
+//#[allow(clippy::match_same_arms)]
 pub fn char_to_key_press(c: char) -> KeyPress {
     if !c.is_control() {
         return KeyPress::Char(c);

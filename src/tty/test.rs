@@ -5,9 +5,9 @@ use std::vec::IntoIter;
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
-use consts::KeyPress;
 use error::ReadlineError;
 use highlight::Highlighter;
+use keys::KeyPress;
 use line_buffer::LineBuffer;
 use Result;
 

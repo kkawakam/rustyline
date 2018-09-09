@@ -15,9 +15,9 @@ use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
-use consts::{self, KeyPress};
 use error;
 use highlight::Highlighter;
+use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
 
@@ -310,7 +310,7 @@ impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = try!(self.next_char());
 
-        let mut key = consts::char_to_key_press(c);
+        let mut key = keys::char_to_key_press(c);
         if key == KeyPress::Esc {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
@@ -645,8 +645,9 @@ impl Term for PosixTerminal {
             | InputFlags::ISTRIP
             | InputFlags::IXON);
         // we don't want raw output, it turns newlines into straight linefeeds
-        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST); // disable all output
-        // processing
+        // disable all output processing
+        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
+
         // character-size mark (8 bits)
         raw.control_flags |= ControlFlags::CS8;
         // disable echoing, canonical mode, extended input processing and signals

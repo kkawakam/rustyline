@@ -1,7 +1,7 @@
 //! Vi command mode specific key bindings
 use super::{assert_cursor, assert_history};
 use config::EditMode;
-use consts::KeyPress;
+use keys::KeyPress;
 
 #[test]
 fn dollar() {

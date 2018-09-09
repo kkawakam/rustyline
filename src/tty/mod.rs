@@ -4,8 +4,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use config::{ColorMode, Config};
-use consts::KeyPress;
 use highlight::Highlighter;
+use keys::KeyPress;
 use line_buffer::LineBuffer;
 use Result;
 

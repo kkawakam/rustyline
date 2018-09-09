@@ -1,7 +1,7 @@
 //! Vi insert mode specific key bindings
 use super::assert_cursor;
 use config::EditMode;
-use consts::KeyPress;
+use keys::KeyPress;
 
 #[test]
 fn insert_mode_by_default() {

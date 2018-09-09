@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use super::Result;
 use config::Config;
 use config::EditMode;
-use consts::KeyPress;
+use keys::KeyPress;
 use tty::RawReader;
 
 /// The number of times one command should be repeated.

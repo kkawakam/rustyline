@@ -10,9 +10,9 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
 use config::{ColorMode, Config};
-use consts::{self, KeyPress};
 use error;
 use highlight::Highlighter;
+use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
 
@@ -229,7 +229,7 @@ impl RawReader for ConsoleRawReader {
                 if meta {
                     return Ok(KeyPress::Meta(c));
                 } else {
-                    return Ok(consts::char_to_key_press(c));
+                    return Ok(keys::char_to_key_press(c));
                 }
             }
         }

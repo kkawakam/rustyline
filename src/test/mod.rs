@@ -4,9 +4,9 @@ use std::sync::{Arc, RwLock};
 use super::{Editor, Result};
 use completion::Completer;
 use config::{Config, EditMode};
-use consts::KeyPress;
 use edit::init_state;
 use keymap::{Cmd, InputState};
+use keys::KeyPress;
 use tty::Sink;
 
 mod common;

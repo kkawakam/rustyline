@@ -12,6 +12,7 @@ use tty::RawReader;
 pub type RepeatCount = usize;
 
 /// Commands
+/// #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     /// abort

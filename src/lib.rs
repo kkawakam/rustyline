@@ -16,7 +16,8 @@
 //! }
 //! ```
 #![allow(unknown_lints)]
-// #![feature(tool_lints)] unstable feature
+// #![feature(non_exhaustive)]
+// #![feature(tool_lints)]
 
 extern crate dirs;
 extern crate libc;

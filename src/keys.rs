@@ -3,7 +3,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyPress {
     UnknownEscSeq,
-    Backspace,
+    Backspace, // Ctrl('H')
+    BackTab,
     Char(char),
     ControlDown,
     ControlLeft,
@@ -14,7 +15,7 @@ pub enum KeyPress {
     Down,
     End,
     Enter, // Ctrl('M')
-    Esc,
+    Esc,   // Ctrl('[')
     F(u8),
     Home,
     Insert,

@@ -163,6 +163,20 @@ impl PosixRawReader {
                     self.extended_escape(seq2)
                 }
             }
+        } else if seq2 == '[' {
+            let seq3 = try!(self.next_char());
+            // Linux console
+            Ok(match seq3 {
+                'A' => KeyPress::F(1),
+                'B' => KeyPress::F(2),
+                'C' => KeyPress::F(3),
+                'D' => KeyPress::F(4),
+                'E' => KeyPress::F(5),
+                _ => {
+                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ [ {:?}", seq3);
+                    KeyPress::UnknownEscSeq
+                }
+            })
         } else {
             // ANSI
             Ok(match seq2 {
@@ -172,6 +186,7 @@ impl PosixRawReader {
                 'D' => KeyPress::Left,  // kcub1
                 'F' => KeyPress::End,
                 'H' => KeyPress::Home, // khome
+                'Z' => KeyPress::BackTab,
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
                     KeyPress::UnknownEscSeq
@@ -251,13 +266,13 @@ impl PosixRawReader {
                         ('2', 'D') => KeyPress::ShiftLeft,
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                                   "unsupported esc sequence: ESC [ 1 ; {} {:?}", seq4, seq5);
                             KeyPress::UnknownEscSeq
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ; {} {}", seq2, seq4, seq5);
+                           "unsupported esc sequence: ESC [ {} ; {} {:?}", seq2, seq4, seq5);
                     Ok(KeyPress::UnknownEscSeq)
                 }
             } else {
@@ -296,8 +311,8 @@ impl PosixRawReader {
             'S' => KeyPress::F(4),  // kf4
             'a' => KeyPress::ControlUp,
             'b' => KeyPress::ControlDown,
-            'c' => KeyPress::ControlRight,
-            'd' => KeyPress::ControlLeft,
+            'c' => KeyPress::ControlRight, // rxvt
+            'd' => KeyPress::ControlLeft,  // rxvt
             _ => {
                 debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
                 KeyPress::UnknownEscSeq

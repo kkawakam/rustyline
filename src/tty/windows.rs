@@ -229,7 +229,13 @@ impl RawReader for ConsoleRawReader {
                 if meta {
                     return Ok(KeyPress::Meta(c));
                 } else {
-                    return Ok(keys::char_to_key_press(c));
+                    let mut key = keys::char_to_key_press(c);
+                    if key == KeyPress::Tab && shift {
+                        key = KeyPress::BackTab;
+                    } else if key == KeyPress::Char(' ') && ctrl {
+                        key = KeyPress::Ctrl(' ');
+                    }
+                    return Ok(key);
                 }
             }
         }

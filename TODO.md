@@ -9,7 +9,7 @@ Bell
 Color
 - [X] ANSI Colors & Windows 10+
 - [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
-- [ ] Syntax highlighting
+- [ ] Syntax highlighting (https://github.com/trishume/syntect/)
 - [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 
 Completion
@@ -76,6 +76,8 @@ Undo
 Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)
 - [ ] [ncurses](https://crates.io/crates/ncurses) alternative backend ?
+- [ ] [bracketed paste mode](https://cirw.in/blog/bracketed-paste)
+- [ ] async stdin (https://github.com/Rufflewind/tokio-file-unix)
 
 Windows
 - [ ] is_atty is not working with cygwin/msys (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)

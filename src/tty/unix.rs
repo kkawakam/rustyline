@@ -27,7 +27,7 @@ const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-#[allow(clippy::identity_conversion)]
+//#[allow(clippy::identity_conversion)]
 fn get_win_size() -> (usize, usize) {
     use std::mem::zeroed;
 

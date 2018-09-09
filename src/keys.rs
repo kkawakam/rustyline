@@ -34,7 +34,7 @@ pub enum KeyPress {
     Up,
 }
 
-#[allow(clippy::match_same_arms)]
+//#[allow(clippy::match_same_arms)]
 pub fn char_to_key_press(c: char) -> KeyPress {
     if !c.is_control() {
         return KeyPress::Char(c);

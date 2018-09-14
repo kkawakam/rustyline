@@ -299,20 +299,30 @@ fn filename_complete(
     };
 
     let mut entries: Vec<Pair> = Vec::new();
-    for entry in try!(dir.read_dir()) {
-        let entry = try!(entry);
-        if let Some(s) = entry.file_name().to_str() {
-            if s.starts_with(file_name) {
-                if let Ok(metadata) = fs::metadata(entry.path()) {
-                    let mut path = String::from(dir_name) + s;
-                    if metadata.is_dir() {
-                        path.push(sep);
+
+    // if dir doesn't exist, then don't offer any completions
+    if !dir.exists() {
+        return Ok(entries);
+    }
+
+    // if any of the below IO operations have errors, just ignore them
+    if let Ok(read_dir) = dir.read_dir() {
+        for entry in read_dir {
+            if let Ok(entry) = entry {
+                if let Some(s) = entry.file_name().to_str() {
+                    if s.starts_with(file_name) {
+                        if let Ok(metadata) = fs::metadata(entry.path()) {
+                            let mut path = String::from(dir_name) + s;
+                            if metadata.is_dir() {
+                                path.push(sep);
+                            }
+                            entries.push(Pair {
+                                display: String::from(s),
+                                replacement: escape(path, esc_char, break_chars, quote),
+                            });
+                        } // else ignore PermissionDenied
                     }
-                    entries.push(Pair {
-                        display: String::from(s),
-                        replacement: escape(path, esc_char, break_chars, quote),
-                    });
-                } // else ignore PermissionDenied
+                }
             }
         }
     }

@@ -640,7 +640,11 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // try!(disable_raw_mode(original_mode));
-    println!();
+    editor
+        .term
+        .create_writer()
+        .write_and_flush("\n".as_bytes())
+        .unwrap();
     user_input
 }
 
@@ -686,7 +690,7 @@ impl<H: Helper> Editor<H> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Editor<H> {
-        let term = Terminal::new(config.color_mode());
+        let term = Terminal::new(config.color_mode(), config.output_stream());
         Editor {
             term,
             history: History::with_config(config),
@@ -875,6 +879,61 @@ impl<'a, H: Helper> Iterator for Iter<'a, H> {
             Err(error::ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
+    }
+}
+
+enum StdStream {
+    Stdout(io::Stdout),
+    Stderr(io::Stderr),
+}
+impl StdStream {
+    fn from_stream_type(t: config::OutputStreamType) -> StdStream {
+        match t {
+            config::OutputStreamType::Stderr => StdStream::Stderr(io::stderr()),
+            config::OutputStreamType::Stdout => StdStream::Stdout(io::stdout()),
+        }
+    }
+}
+#[cfg(unix)]
+impl std::os::unix::io::AsRawFd for StdStream {
+    fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
+        match self {
+            StdStream::Stdout(e) => e.as_raw_fd(),
+            StdStream::Stderr(e) => e.as_raw_fd(),
+        }
+    }
+}
+impl io::Write for StdStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            StdStream::Stdout(ref mut e) => e.write(buf),
+            StdStream::Stderr(ref mut e) => e.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            StdStream::Stdout(ref mut e) => e.flush(),
+            StdStream::Stderr(ref mut e) => e.flush(),
+        }
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        match self {
+            StdStream::Stdout(ref mut e) => e.write_all(buf),
+            StdStream::Stderr(ref mut e) => e.write_all(buf),
+        }
+    }
+
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments) -> io::Result<()> {
+        match self {
+            StdStream::Stdout(ref mut e) => e.write_fmt(fmt),
+            StdStream::Stderr(ref mut e) => e.write_fmt(fmt),
+        }
+    }
+
+    fn by_ref(&mut self) -> &mut StdStream {
+        self
     }
 }
 

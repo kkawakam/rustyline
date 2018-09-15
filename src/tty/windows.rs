@@ -1,5 +1,5 @@
 //! Windows specific definitions
-use std::io::{self, Stdout, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
 
@@ -9,15 +9,18 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use config::OutputStreamType;
 use config::{ColorMode, Config};
 use error;
 use highlight::Highlighter;
 use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
+use StdStream;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
+const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
@@ -66,8 +69,8 @@ pub type Mode = ConsoleMode;
 pub struct ConsoleMode {
     original_stdin_mode: DWORD,
     stdin_handle: HANDLE,
-    original_stdout_mode: Option<DWORD>,
-    stdout_handle: HANDLE,
+    original_stdstream_mode: Option<DWORD>,
+    stdstream_handle: HANDLE,
 }
 
 impl RawMode for Mode {
@@ -77,10 +80,10 @@ impl RawMode for Mode {
             self.stdin_handle,
             self.original_stdin_mode,
         ));
-        if let Some(original_stdout_mode) = self.original_stdout_mode {
+        if let Some(original_stdstream_mode) = self.original_stdstream_mode {
             check!(consoleapi::SetConsoleMode(
-                self.stdout_handle,
-                original_stdout_mode,
+                self.stdstream_handle,
+                original_stdstream_mode,
             ));
         }
         Ok(())
@@ -94,8 +97,12 @@ pub struct ConsoleRawReader {
 }
 
 impl ConsoleRawReader {
-    pub fn new() -> Result<ConsoleRawReader> {
-        let handle = try!(get_std_handle(STDIN_FILENO));
+    pub fn new(stream: OutputStreamType) -> Result<ConsoleRawReader> {
+        let handle = try!(get_std_handle(if stream == OutputStreamType::Stdout {
+            STDIN_FILENO
+        } else {
+            STDERR_FILENO
+        }));
         Ok(ConsoleRawReader {
             handle,
             buf: [0; 2],
@@ -243,18 +250,18 @@ impl RawReader for ConsoleRawReader {
 }
 
 pub struct ConsoleRenderer {
-    out: Stdout,
+    out: StdStream,
     handle: HANDLE,
     cols: usize, // Number of columns in terminal
     buffer: String,
 }
 
 impl ConsoleRenderer {
-    fn new(handle: HANDLE) -> ConsoleRenderer {
+    fn new(handle: HANDLE, stream_type: OutputStreamType) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
-            out: io::stdout(),
+            out: StdStream::from_stream_type(stream_type),
             handle,
             cols,
             buffer: String::with_capacity(1024),
@@ -431,10 +438,11 @@ pub type Terminal = Console;
 pub struct Console {
     stdin_isatty: bool,
     stdin_handle: HANDLE,
-    stdout_isatty: bool,
-    stdout_handle: HANDLE,
+    stdstream_isatty: bool,
+    stdstream_handle: HANDLE,
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
+    stream_type: OutputStreamType,
 }
 
 impl Console {}
@@ -444,7 +452,7 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(color_mode: ColorMode) -> Console {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
@@ -454,8 +462,13 @@ impl Term for Console {
             }
             Err(_) => false,
         };
-        let stdout_handle = get_std_handle(STDOUT_FILENO);
-        let stdout_isatty = match stdout_handle {
+
+        let stdstream_handle = get_std_handle(if stream_type == OutputStreamType::Stdout {
+            STDOUT_FILENO
+        } else {
+            STDERR_FILENO
+        });
+        let stdstream_isatty = match stdstream_handle {
             Ok(handle) => {
                 // If this function doesn't fail then fd is a TTY
                 get_console_mode(handle).is_ok()
@@ -466,10 +479,11 @@ impl Term for Console {
         Console {
             stdin_isatty,
             stdin_handle: stdin_handle.unwrap_or(ptr::null_mut()),
-            stdout_isatty,
-            stdout_handle: stdout_handle.unwrap_or(ptr::null_mut()),
+            stdstream_isatty,
+            stdstream_handle: stdstream_handle.unwrap_or(ptr::null_mut()),
             color_mode,
             ansi_colors_supported: false,
+            stream_type,
         }
     }
 
@@ -485,7 +499,7 @@ impl Term for Console {
     fn colors_enabled(&self) -> bool {
         // TODO ANSI Colors & Windows <10
         match self.color_mode {
-            ColorMode::Enabled => self.stdout_isatty && self.ansi_colors_supported,
+            ColorMode::Enabled => self.stdstream_isatty && self.ansi_colors_supported,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
         }
@@ -515,16 +529,16 @@ impl Term for Console {
         raw |= wincon::ENABLE_WINDOW_INPUT;
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
 
-        let original_stdout_mode = if self.stdout_isatty {
-            let original_stdout_mode = try!(get_console_mode(self.stdout_handle));
+        let original_stdstream_mode = if self.stdstream_isatty {
+            let original_stdstream_mode = try!(get_console_mode(self.stdstream_handle));
             // To enable ANSI colors (Windows 10 only):
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-            if original_stdout_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
-                let raw = original_stdout_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            if original_stdstream_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
+                let raw = original_stdstream_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    unsafe { consoleapi::SetConsoleMode(self.stdout_handle, raw) != 0 };
+                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, raw) != 0 };
             }
-            Some(original_stdout_mode)
+            Some(original_stdstream_mode)
         } else {
             None
         };
@@ -532,16 +546,16 @@ impl Term for Console {
         Ok(Mode {
             original_stdin_mode,
             stdin_handle: self.stdin_handle,
-            original_stdout_mode,
-            stdout_handle: self.stdout_handle,
+            original_stdstream_mode,
+            stdstream_handle: self.stdstream_handle,
         })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::new()
+        ConsoleRawReader::new(self.stream_type)
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.stdout_handle)
+        ConsoleRenderer::new(self.stdstream_handle, self.stream_type)
     }
 }

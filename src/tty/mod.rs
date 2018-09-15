@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use config::{ColorMode, Config};
+use config::{ColorMode, Config, OutputStreamType};
 use highlight::Highlighter;
 use keys::KeyPress;
 use line_buffer::LineBuffer;
@@ -139,7 +139,7 @@ pub trait Term {
     type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
 
-    fn new(color_mode: ColorMode) -> Self;
+    fn new(color_mode: ColorMode, stream: OutputStreamType) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;

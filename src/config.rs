@@ -22,6 +22,8 @@ pub struct Config {
     auto_add_history: bool,
     /// if colors should be enabled.
     color_mode: ColorMode,
+    /// Whether to use stdout or stderr
+    output_stream: OutputStreamType,
 }
 
 impl Config {
@@ -99,6 +101,14 @@ impl Config {
     pub(crate) fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.color_mode = color_mode;
     }
+
+    pub fn output_stream(&self) -> OutputStreamType {
+        self.output_stream
+    }
+
+    pub(crate) fn set_output_stream(&mut self, stream: OutputStreamType) {
+        self.output_stream = stream;
+    }
 }
 
 impl Default for Config {
@@ -113,6 +123,7 @@ impl Default for Config {
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
             color_mode: ColorMode::Enabled,
+            output_stream: OutputStreamType::Stdout,
         }
     }
 }
@@ -147,6 +158,13 @@ pub enum ColorMode {
     Enabled,
     Forced,
     Disabled,
+}
+
+/// Should the editor use stdout or stderr
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutputStreamType {
+    Stderr,
+    Stdout,
 }
 
 /// Configuration builder
@@ -231,6 +249,14 @@ impl Builder {
         self
     }
 
+    /// Whether to use stdout or stderr.
+    ///
+    /// Be default, use stdout
+    pub fn output_stream(mut self, stream: OutputStreamType) -> Builder {
+        self.set_output_stream(stream);
+        self
+    }
+
     pub fn build(self) -> Config {
         self.p
     }
@@ -302,5 +328,12 @@ pub trait Configurer {
     /// By default, colorization is on except if stdout is not a tty.
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
+    }
+
+    /// Whether to use stdout or stderr
+    ///
+    /// By default, use stdout
+    fn set_output_stream(&mut self, stream: OutputStreamType) {
+        self.config_mut().set_output_stream(stream);
     }
 }

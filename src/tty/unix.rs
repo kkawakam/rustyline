@@ -1,6 +1,7 @@
 //! Unix specific definitions
 use std;
-use std::io::{self, Read, Stdout, Write};
+use std::io::{self, Read, Write};
+use std::os::unix::io::AsRawFd;
 use std::sync;
 use std::sync::atomic;
 
@@ -14,12 +15,13 @@ use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use config::{ColorMode, Config};
+use config::{ColorMode, Config, OutputStreamType};
 use error;
 use highlight::Highlighter;
 use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
+use StdStream;
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -28,14 +30,14 @@ const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
 //#[allow(clippy::identity_conversion)]
-fn get_win_size() -> (usize, usize) {
+fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
     unsafe {
         let mut size: libc::winsize = zeroed();
         // https://github.com/rust-lang/libc/pull/704
         // FIXME: ".into()" used as a temporary fix for a libc bug
-        match libc::ioctl(STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut size) {
+        match libc::ioctl(fileno.as_raw_fd(), libc::TIOCGWINSZ.into(), &mut size) {
             0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }
@@ -382,16 +384,17 @@ impl Receiver for Utf8 {
 
 /// Console output writer
 pub struct PosixRenderer {
-    out: Stdout,
+    out: StdStream,
     cols: usize, // Number of columns in terminal
     buffer: String,
 }
 
 impl PosixRenderer {
-    fn new() -> PosixRenderer {
-        let (cols, _) = get_win_size();
+    fn new(stream_type: OutputStreamType) -> PosixRenderer {
+        let out = StdStream::from_stream_type(stream_type);
+        let (cols, _) = get_win_size(&out);
         PosixRenderer {
-            out: io::stdout(),
+            out: out,
             cols,
             buffer: String::with_capacity(1024),
         }
@@ -557,7 +560,7 @@ impl Renderer for PosixRenderer {
 
     /// Try to update the number of columns in the current terminal,
     fn update_size(&mut self) {
-        let (cols, _) = get_win_size();
+        let (cols, _) = get_win_size(&self.out);
         self.cols = cols;
     }
 
@@ -568,7 +571,7 @@ impl Renderer for PosixRenderer {
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
-        let (_, rows) = get_win_size();
+        let (_, rows) = get_win_size(&self.out);
         rows
     }
 }
@@ -600,6 +603,7 @@ pub struct PosixTerminal {
     stdin_isatty: bool,
     stdout_isatty: bool,
     pub(crate) color_mode: ColorMode,
+    stream_type: OutputStreamType,
 }
 
 impl Term for PosixTerminal {
@@ -607,12 +611,13 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode) -> PosixTerminal {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
             stdout_isatty: is_a_tty(STDOUT_FILENO),
             color_mode,
+            stream_type,
         };
         if !term.unsupported && term.stdin_isatty && term.stdout_isatty {
             install_sigwinch_handler();
@@ -680,7 +685,7 @@ impl Term for PosixTerminal {
     }
 
     fn create_writer(&self) -> PosixRenderer {
-        PosixRenderer::new()
+        PosixRenderer::new(self.stream_type)
     }
 }
 

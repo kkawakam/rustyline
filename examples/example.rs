@@ -5,6 +5,7 @@ use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -56,6 +57,7 @@ fn main() {
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
+        .output_stream(OutputStreamType::Stdout)
         .build();
     let h = MyHelper(FilenameCompleter::new());
     let mut rl = Editor::with_config(config);

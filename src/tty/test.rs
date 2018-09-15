@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::{ColorMode, Config};
+use config::{ColorMode, Config, OutputStreamType};
 use error::ReadlineError;
 use highlight::Highlighter;
 use keys::KeyPress;
@@ -129,7 +129,7 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
 
-    fn new(color_mode: ColorMode) -> DummyTerminal {
+    fn new(color_mode: ColorMode, _stream: OutputStreamType) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,

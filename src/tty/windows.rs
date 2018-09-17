@@ -95,9 +95,7 @@ pub struct ConsoleRawReader {
 impl ConsoleRawReader {
     pub fn new() -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(ConsoleRawReader {
-            handle,
-        })
+        Ok(ConsoleRawReader { handle })
     }
 }
 

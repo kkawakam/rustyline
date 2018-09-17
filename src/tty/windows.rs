@@ -98,11 +98,7 @@ pub struct ConsoleRawReader {
 
 impl ConsoleRawReader {
     pub fn new(stream: OutputStreamType) -> Result<ConsoleRawReader> {
-        let handle = try!(get_std_handle(if stream == OutputStreamType::Stdout {
-            STDIN_FILENO
-        } else {
-            STDERR_FILENO
-        }));
+        let handle = try!(get_std_handle(STDIN_FILENO));
         Ok(ConsoleRawReader {
             handle,
             buf: [0; 2],

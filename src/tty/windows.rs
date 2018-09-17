@@ -93,16 +93,12 @@ impl RawMode for Mode {
 /// Console input reader
 pub struct ConsoleRawReader {
     handle: HANDLE,
-    buf: [u16; 2],
 }
 
 impl ConsoleRawReader {
     pub fn new(stream: OutputStreamType) -> Result<ConsoleRawReader> {
         let handle = try!(get_std_handle(STDIN_FILENO));
-        Ok(ConsoleRawReader {
-            handle,
-            buf: [0; 2],
-        })
+        Ok(ConsoleRawReader { handle })
     }
 }
 
@@ -116,7 +112,7 @@ impl RawReader for ConsoleRawReader {
 
         let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
         let mut count = 0;
-        let mut surrogate = false;
+        let mut surrogate = 0;
         loop {
             // TODO GetNumberOfConsoleInputEvents
             check!(consoleapi::ReadConsoleInputW(
@@ -213,18 +209,14 @@ impl RawReader for ConsoleRawReader {
                 return Ok(KeyPress::Esc);
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
-                    surrogate = true;
-                    self.buf[0] = utf16;
+                    surrogate = utf16;
                     continue;
                 }
-                let buf = if surrogate {
-                    self.buf[1] = utf16;
-                    &self.buf[..]
+                let orc = if surrogate == 0 {
+                    decode_utf16(Some(utf16)).next()
                 } else {
-                    self.buf[0] = utf16;
-                    &self.buf[..1]
+                    decode_utf16([surrogate, utf16].iter().cloned()).next()
                 };
-                let orc = decode_utf16(buf.iter().cloned()).next();
                 if orc.is_none() {
                     return Err(error::ReadlineError::Eof);
                 }

@@ -25,6 +25,7 @@ use StdStream;
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
+const STDERR_FILENO: libc::c_int = libc::STDERR_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
@@ -601,7 +602,7 @@ pub type Terminal = PosixTerminal;
 pub struct PosixTerminal {
     unsupported: bool,
     stdin_isatty: bool,
-    stdout_isatty: bool,
+    stdstream_isatty: bool,
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
 }
@@ -615,11 +616,15 @@ impl Term for PosixTerminal {
         let term = PosixTerminal {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
-            stdout_isatty: is_a_tty(STDOUT_FILENO),
+            stdstream_isatty: is_a_tty(if stream_type == OutputStreamType::Stdout {
+                STDOUT_FILENO
+            } else {
+                STDERR_FILENO
+            }),
             color_mode,
             stream_type,
         };
-        if !term.unsupported && term.stdin_isatty && term.stdout_isatty {
+        if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
         }
         term
@@ -641,7 +646,7 @@ impl Term for PosixTerminal {
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool {
         match self.color_mode {
-            ColorMode::Enabled => self.stdout_isatty,
+            ColorMode::Enabled => self.stdstream_isatty,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
         }

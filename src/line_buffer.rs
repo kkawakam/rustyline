@@ -693,23 +693,29 @@ impl LineBuffer {
         }
         match *mvt {
             Movement::WholeLine => Some(self.buf.clone()),
-            Movement::BeginningOfLine => if self.pos == 0 {
-                None
-            } else {
-                Some(self.buf[..self.pos].to_owned())
-            },
-            Movement::ViFirstPrint => if self.pos == 0 {
-                None
-            } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
-                Some(self.buf[pos..self.pos].to_owned())
-            } else {
-                None
-            },
-            Movement::EndOfLine => if self.pos == self.buf.len() {
-                None
-            } else {
-                Some(self.buf[self.pos..].to_owned())
-            },
+            Movement::BeginningOfLine => {
+                if self.pos == 0 {
+                    None
+                } else {
+                    Some(self.buf[..self.pos].to_owned())
+                }
+            }
+            Movement::ViFirstPrint => {
+                if self.pos == 0 {
+                    None
+                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
+                    Some(self.buf[pos..self.pos].to_owned())
+                } else {
+                    None
+                }
+            }
+            Movement::EndOfLine => {
+                if self.pos == self.buf.len() {
+                    None
+                } else {
+                    Some(self.buf[self.pos..].to_owned())
+                }
+            }
             Movement::BackwardWord(n, word_def) => {
                 if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
                     Some(self.buf[pos..self.pos].to_owned())
@@ -741,16 +747,20 @@ impl LineBuffer {
                     None
                 }
             }
-            Movement::BackwardChar(n) => if let Some(pos) = self.prev_pos(n) {
-                Some(self.buf[pos..self.pos].to_owned())
-            } else {
-                None
-            },
-            Movement::ForwardChar(n) => if let Some(pos) = self.next_pos(n) {
-                Some(self.buf[self.pos..pos].to_owned())
-            } else {
-                None
-            },
+            Movement::BackwardChar(n) => {
+                if let Some(pos) = self.prev_pos(n) {
+                    Some(self.buf[pos..self.pos].to_owned())
+                } else {
+                    None
+                }
+            }
+            Movement::ForwardChar(n) => {
+                if let Some(pos) = self.next_pos(n) {
+                    Some(self.buf[self.pos..pos].to_owned())
+                } else {
+                    None
+                }
+            }
         }
     }
 

@@ -469,14 +469,16 @@ fn readline_edit<H: Helper>(
             Cmd::Overwrite(c) => {
                 try!(s.edit_overwrite_char(c));
             }
-            Cmd::EndOfFile => if !input_state.is_emacs_mode() && !s.line.is_empty() {
-                try!(s.edit_move_end());
-                break;
-            } else if s.line.is_empty() {
-                return Err(error::ReadlineError::Eof);
-            } else {
-                try!(s.edit_delete(1))
-            },
+            Cmd::EndOfFile => {
+                if !input_state.is_emacs_mode() && !s.line.is_empty() {
+                    try!(s.edit_move_end());
+                    break;
+                } else if s.line.is_empty() {
+                    return Err(error::ReadlineError::Eof);
+                } else {
+                    try!(s.edit_delete(1))
+                }
+            }
             Cmd::Move(Movement::EndOfLine) => {
                 // Move to the end of line.
                 try!(s.edit_move_end())
@@ -521,10 +523,12 @@ fn readline_edit<H: Helper>(
                     try!(s.edit_yank(&input_state, text, anchor, n))
                 }
             }
-            Cmd::ViYankTo(ref mvt) => if let Some(text) = s.line.copy(mvt) {
-                let mut kill_ring = editor.kill_ring.lock().unwrap();
-                kill_ring.kill(&text, Mode::Append)
-            },
+            Cmd::ViYankTo(ref mvt) => {
+                if let Some(text) = s.line.copy(mvt) {
+                    let mut kill_ring = editor.kill_ring.lock().unwrap();
+                    kill_ring.kill(&text, Mode::Append)
+                }
+            }
             // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 #[cfg(test)]

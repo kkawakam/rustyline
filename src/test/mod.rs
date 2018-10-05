@@ -47,7 +47,8 @@ fn complete_line() {
         &completer,
         None,
         &Config::default(),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(Some(Cmd::AcceptLine), cmd);
     assert_eq!("rust", s.line.as_str());
     assert_eq!(4, s.line.pos());

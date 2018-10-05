@@ -395,7 +395,7 @@ impl PosixRenderer {
         let out = StdStream::from_stream_type(stream_type);
         let (cols, _) = get_win_size(&out);
         PosixRenderer {
-            out: out,
+            out,
             cols,
             buffer: String::with_capacity(1024),
         }

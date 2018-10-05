@@ -647,7 +647,7 @@ fn readline_raw<H: Helper>(
     editor
         .term
         .create_writer()
-        .write_and_flush("\n".as_bytes())
+        .write_and_flush(b"\n")
         .unwrap();
     user_input
 }

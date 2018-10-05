@@ -49,6 +49,9 @@ Input
 - [ ] Encoding
 - [ ] [Ctrl-][Alt-][Shift-]<Key> (#121)
 
+Layout
+- [ ] Redraw perf (https://crates.io/crates/cassowary)
+
 Mouse
 - [ ] Mouse support
 

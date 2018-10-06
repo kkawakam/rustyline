@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use super::{Editor, Result};
+use super::{Editor, Result, StdStream};
 use completion::Completer;
-use config::{Config, EditMode};
+use config::{Config, EditMode, OutputStreamType};
 use edit::init_state;
 use keymap::{Cmd, InputState};
 use keys::KeyPress;
@@ -47,7 +47,8 @@ fn complete_line() {
         &completer,
         None,
         &Config::default(),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(Some(Cmd::AcceptLine), cmd);
     assert_eq!("rust", s.line.as_str());
     assert_eq!(4, s.line.pos());
@@ -103,4 +104,9 @@ fn unknown_esc_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         assert_line(*mode, &[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
     }
+}
+
+#[test]
+fn from_stream_type() {
+    StdStream::from_stream_type(OutputStreamType::Stdout);
 }

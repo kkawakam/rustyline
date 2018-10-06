@@ -397,35 +397,45 @@ impl InputState {
             }
         }
         let cmd = match key {
-            KeyPress::Char(c) => if positive {
-                Cmd::SelfInsert(n, c)
-            } else {
-                Cmd::Unknown
-            },
+            KeyPress::Char(c) => {
+                if positive {
+                    Cmd::SelfInsert(n, c)
+                } else {
+                    Cmd::Unknown
+                }
+            }
             KeyPress::Ctrl('A') => Cmd::Move(Movement::BeginningOfLine),
-            KeyPress::Ctrl('B') => if positive {
-                Cmd::Move(Movement::BackwardChar(n))
-            } else {
-                Cmd::Move(Movement::ForwardChar(n))
-            },
+            KeyPress::Ctrl('B') => {
+                if positive {
+                    Cmd::Move(Movement::BackwardChar(n))
+                } else {
+                    Cmd::Move(Movement::ForwardChar(n))
+                }
+            }
             KeyPress::Ctrl('E') => Cmd::Move(Movement::EndOfLine),
-            KeyPress::Ctrl('F') => if positive {
-                Cmd::Move(Movement::ForwardChar(n))
-            } else {
-                Cmd::Move(Movement::BackwardChar(n))
-            },
+            KeyPress::Ctrl('F') => {
+                if positive {
+                    Cmd::Move(Movement::ForwardChar(n))
+                } else {
+                    Cmd::Move(Movement::BackwardChar(n))
+                }
+            }
             KeyPress::Ctrl('G') | KeyPress::Esc | KeyPress::Meta('\x07') => Cmd::Abort,
-            KeyPress::Ctrl('H') | KeyPress::Backspace => if positive {
-                Cmd::Kill(Movement::BackwardChar(n))
-            } else {
-                Cmd::Kill(Movement::ForwardChar(n))
-            },
+            KeyPress::Ctrl('H') | KeyPress::Backspace => {
+                if positive {
+                    Cmd::Kill(Movement::BackwardChar(n))
+                } else {
+                    Cmd::Kill(Movement::ForwardChar(n))
+                }
+            }
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Ctrl('K') => if positive {
-                Cmd::Kill(Movement::EndOfLine)
-            } else {
-                Cmd::Kill(Movement::BeginningOfLine)
-            },
+            KeyPress::Ctrl('K') => {
+                if positive {
+                    Cmd::Kill(Movement::EndOfLine)
+                } else {
+                    Cmd::Kill(Movement::BeginningOfLine)
+                }
+            }
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
@@ -437,29 +447,37 @@ impl InputState {
                     _ => Cmd::Unknown,
                 }
             }
-            KeyPress::Meta('\x08') | KeyPress::Meta('\x7f') => if positive {
-                Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
-            } else {
-                Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-            },
+            KeyPress::Meta('\x08') | KeyPress::Meta('\x7f') => {
+                if positive {
+                    Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
+                } else {
+                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
+                }
+            }
             KeyPress::Meta('<') => Cmd::BeginningOfHistory,
             KeyPress::Meta('>') => Cmd::EndOfHistory,
-            KeyPress::Meta('B') | KeyPress::Meta('b') => if positive {
-                Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
-            } else {
-                Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-            },
+            KeyPress::Meta('B') | KeyPress::Meta('b') => {
+                if positive {
+                    Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
+                } else {
+                    Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
+                }
+            }
             KeyPress::Meta('C') | KeyPress::Meta('c') => Cmd::CapitalizeWord,
-            KeyPress::Meta('D') | KeyPress::Meta('d') => if positive {
-                Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-            } else {
-                Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
-            },
-            KeyPress::Meta('F') | KeyPress::Meta('f') => if positive {
-                Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-            } else {
-                Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
-            },
+            KeyPress::Meta('D') | KeyPress::Meta('d') => {
+                if positive {
+                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
+                } else {
+                    Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
+                }
+            }
+            KeyPress::Meta('F') | KeyPress::Meta('f') => {
+                if positive {
+                    Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
+                } else {
+                    Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
+                }
+            }
             KeyPress::Meta('L') | KeyPress::Meta('l') => Cmd::DowncaseWord,
             KeyPress::Meta('T') | KeyPress::Meta('t') => Cmd::TransposeWords(n),
             KeyPress::Meta('U') | KeyPress::Meta('u') => Cmd::UpcaseWord,
@@ -682,11 +700,13 @@ impl InputState {
             }
         }
         let cmd = match key {
-            KeyPress::Char(c) => if self.input_mode == InputMode::Replace {
-                Cmd::Overwrite(c)
-            } else {
-                Cmd::SelfInsert(1, c)
-            },
+            KeyPress::Char(c) => {
+                if self.input_mode == InputMode::Replace {
+                    Cmd::Overwrite(c)
+                } else {
+                    Cmd::SelfInsert(1, c)
+                }
+            }
             KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
             KeyPress::Esc => {

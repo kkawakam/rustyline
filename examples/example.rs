@@ -7,7 +7,7 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
-use rustyline::highlight::Highlighter;
+use rustyline::highlight::{Highlighter, MatchingBracketHighlihter};
 use rustyline::hint::Hinter;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
 
@@ -15,7 +15,7 @@ static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 
 static PROMPT: &'static str = ">> ";
 
-struct MyHelper(FilenameCompleter);
+struct MyHelper(FilenameCompleter, MatchingBracketHighlihter);
 
 impl Completer for MyHelper {
     type Candidate = Pair;
@@ -47,6 +47,14 @@ impl Highlighter for MyHelper {
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
         Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
     }
+
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+        self.1.highlight(line, pos)
+    }
+
+    fn highlight_char(&self, grapheme: &str) -> bool {
+        self.1.highlight_char(grapheme)
+    }
 }
 
 impl Helper for MyHelper {}
@@ -59,7 +67,7 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();
-    let h = MyHelper(FilenameCompleter::new());
+    let h = MyHelper(FilenameCompleter::new(), MatchingBracketHighlihter {});
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);

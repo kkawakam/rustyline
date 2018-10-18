@@ -644,11 +644,7 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // try!(disable_raw_mode(original_mode));
-    editor
-        .term
-        .create_writer()
-        .write_and_flush(b"\n")
-        .unwrap();
+    editor.term.create_writer().write_and_flush(b"\n").unwrap();
     user_input
 }
 

@@ -27,6 +27,8 @@ pub enum Cmd {
     ClearScreen,
     /// complete
     Complete,
+    /// complete-hint
+    CompleteHint(Box<Cmd>),
     /// downcase-word
     DowncaseWord,
     /// vi-eof-maybe
@@ -429,6 +431,7 @@ impl InputState {
                 }
             }
             KeyPress::Tab => Cmd::Complete,
+            KeyPress::Right => Cmd::CompleteHint(Box::new(self.common(key, n, positive))),
             KeyPress::Ctrl('K') => {
                 if positive {
                     Cmd::Kill(Movement::EndOfLine)
@@ -709,6 +712,7 @@ impl InputState {
             }
             KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
+            KeyPress::Right => Cmd::CompleteHint(Box::new(self.common(key, 1, true))),
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;

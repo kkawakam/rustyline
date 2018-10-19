@@ -192,6 +192,23 @@ fn complete_line<R: RawReader, C: Completer>(
     }
 }
 
+/// Completes the current hint
+fn complete_hint_line(
+    s: &mut State,
+    hinter: &Hinter,
+) -> Result<()> {
+    let hint = match hinter.hint(&s.line, s.line.pos()) {
+        Some(hint) => hint,
+        None => return Ok(()),
+    };
+    s.line.move_end();
+    if s.line.yank(&hint, 1).is_none() {
+        try!(s.out.beep());
+    }
+    try!(s.refresh_line());
+    Ok(())
+}
+
 fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State,
@@ -421,6 +438,16 @@ fn readline_edit<H: Helper>(
             } else {
                 continue;
             }
+        }
+
+        if let Cmd::CompleteHint(_) = cmd {
+            if hinter.is_some() {
+                try!(complete_hint_line(
+                    &mut s,
+                    hinter.unwrap(),
+                ));
+            }
+            continue;
         }
 
         if let Cmd::SelfInsert(n, c) = cmd {

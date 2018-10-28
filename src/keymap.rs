@@ -28,7 +28,7 @@ pub enum Cmd {
     /// complete
     Complete,
     /// complete-hint
-    CompleteHint(Box<Cmd>),
+    CompleteHint,
     /// downcase-word
     DowncaseWord,
     /// vi-eof-maybe
@@ -297,6 +297,10 @@ pub trait Refresher {
     fn done_inserting(&mut self);
     /// Vi only, last text inserted.
     fn last_insert(&self) -> Option<String>;
+    /// Returns `true` if the cursor is currently at the end of the line.
+    fn is_cursor_at_end(&self) -> bool;
+    /// Returns `true` if there is a hint displayed.
+    fn has_hint(&self) -> bool;
 }
 
 impl InputState {
@@ -431,7 +435,9 @@ impl InputState {
                 }
             }
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Right => Cmd::CompleteHint(Box::new(self.common(key, n, positive))),
+            // Don't complete hints when the cursor is not at the end of a line
+            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() =>
+                Cmd::CompleteHint,
             KeyPress::Ctrl('K') => {
                 if positive {
                     Cmd::Kill(Movement::EndOfLine)
@@ -712,7 +718,9 @@ impl InputState {
             }
             KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
-            KeyPress::Right => Cmd::CompleteHint(Box::new(self.common(key, 1, true))),
+            // Don't complete hints when the cursor is not at the end of a line
+            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() =>
+                Cmd::CompleteHint,
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;

@@ -440,7 +440,7 @@ fn readline_edit<H: Helper>(
             }
         }
 
-        if let Cmd::CompleteHint(_) = cmd {
+        if let Cmd::CompleteHint = cmd {
             if hinter.is_some() {
                 try!(complete_hint_line(
                     &mut s,

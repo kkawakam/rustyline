@@ -167,6 +167,14 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     fn last_insert(&self) -> Option<String> {
         self.changes.borrow().last_insert()
     }
+
+    fn is_cursor_at_end(&self) -> bool {
+        self.line.pos() == self.line.len()
+    }
+
+    fn has_hint(&self) -> bool {
+        !self.no_hint
+    }
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {

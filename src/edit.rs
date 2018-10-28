@@ -69,7 +69,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
-            let mut rc = input_state.next_cmd(rdr, self, single_esc_abort);
+            let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 try!(self.refresh_line());
@@ -77,19 +77,6 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             }
             if let Ok(Cmd::Replace(_, _)) = rc {
                 self.changes.borrow_mut().begin();
-            }
-
-            // Don't complete hints when the cursor is not at the end of a line
-            if let Ok(cmd) = &mut rc {
-                let mut tmp = None;
-                if let Cmd::CompleteHint(inner_cmd) = cmd {
-                    if self.line.pos() != self.line.len() {
-                        tmp = Some((**inner_cmd).clone());
-                    }
-                }
-                if let Some(tmp) = tmp {
-                    *cmd = tmp;
-                }
             }
             return rc;
         }
@@ -179,6 +166,14 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
 
     fn last_insert(&self) -> Option<String> {
         self.changes.borrow().last_insert()
+    }
+
+    fn is_cursor_at_end(&self) -> bool {
+        self.line.pos() == self.line.len()
+    }
+
+    fn has_hint(&self) -> bool {
+        !self.no_hint
     }
 }
 

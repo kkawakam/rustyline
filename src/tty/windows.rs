@@ -30,7 +30,7 @@ fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "no stdio handle available for this process",
-        ), )?;
+        ))?;
     }
     Ok(handle)
 }
@@ -503,13 +503,14 @@ impl Term for Console {
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 "no stdio handle available for this process",
-            ), )?;
+            ))?;
         }
         let original_stdin_mode = get_console_mode(self.stdin_handle)?;
         // Disable these modes
-        let mut raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
-            | wincon::ENABLE_ECHO_INPUT
-            | wincon::ENABLE_PROCESSED_INPUT);
+        let mut raw = original_stdin_mode
+            & !(wincon::ENABLE_LINE_INPUT
+                | wincon::ENABLE_ECHO_INPUT
+                | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         raw |= wincon::ENABLE_EXTENDED_FLAGS;
         raw |= wincon::ENABLE_INSERT_MODE;

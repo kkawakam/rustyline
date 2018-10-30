@@ -193,10 +193,7 @@ fn complete_line<R: RawReader, C: Completer>(
 }
 
 /// Completes the current hint
-fn complete_hint_line(
-    s: &mut State,
-    hinter: &Hinter,
-) -> Result<()> {
+fn complete_hint_line(s: &mut State, hinter: &Hinter) -> Result<()> {
     let hint = match hinter.hint(&s.line, s.line.pos()) {
         Some(hint) => hint,
         None => return Ok(()),
@@ -442,10 +439,7 @@ fn readline_edit<H: Helper>(
 
         if let Cmd::CompleteHint = cmd {
             if hinter.is_some() {
-                complete_hint_line(
-                    &mut s,
-                    hinter.unwrap(),
-                )?;
+                complete_hint_line(&mut s, hinter.unwrap())?;
             }
             continue;
         }
@@ -460,12 +454,8 @@ fn readline_edit<H: Helper>(
 
         if cmd == Cmd::ReverseSearchHistory {
             // Search history backward
-            let next = reverse_incremental_search(
-                &mut rdr,
-                &mut s,
-                &mut input_state,
-                &editor.history,
-            )?;
+            let next =
+                reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &editor.history)?;
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -671,11 +661,7 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // try!(disable_raw_mode(original_mode));
-    editor
-        .term
-        .create_writer()
-        .write_and_flush(b"\n")
-        .unwrap();
+    editor.term.create_writer().write_and_flush(b"\n").unwrap();
     user_input
 }
 

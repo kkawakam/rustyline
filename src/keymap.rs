@@ -436,8 +436,7 @@ impl InputState {
             }
             KeyPress::Tab => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
-            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() =>
-                Cmd::CompleteHint,
+            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             KeyPress::Ctrl('K') => {
                 if positive {
                     Cmd::Kill(Movement::EndOfLine)
@@ -719,8 +718,7 @@ impl InputState {
             KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
             KeyPress::Tab => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
-            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() =>
-                Cmd::CompleteHint,
+            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;

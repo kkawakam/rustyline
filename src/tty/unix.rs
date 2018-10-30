@@ -71,7 +71,7 @@ pub type Mode = termios::Termios;
 impl RawMode for Mode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        r#try!(termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, self));
+        termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, self)?;
         Ok(())
     }
 }
@@ -135,7 +135,7 @@ impl PosixRawReader {
     /// Handle ESC <seq1> sequences
     fn escape_sequence(&mut self) -> Result<KeyPress> {
         // Read the next byte representing the escape sequence.
-        let seq1 = r#try!(self.next_char());
+        let seq1 = self.next_char()?;
         if seq1 == '[' {
             // ESC [ sequences. (CSI)
             self.escape_csi()
@@ -154,7 +154,7 @@ impl PosixRawReader {
 
     /// Handle ESC [ <seq2> escape sequences
     fn escape_csi(&mut self) -> Result<KeyPress> {
-        let seq2 = r#try!(self.next_char());
+        let seq2 = self.next_char()?;
         if seq2.is_digit(10) {
             match seq2 {
                 '0' | '9' => {
@@ -167,7 +167,7 @@ impl PosixRawReader {
                 }
             }
         } else if seq2 == '[' {
-            let seq3 = r#try!(self.next_char());
+            let seq3 = self.next_char()?;
             // Linux console
             Ok(match seq3 {
                 'A' => KeyPress::F(1),
@@ -200,7 +200,7 @@ impl PosixRawReader {
 
     /// Handle ESC [ <seq2:digit> escape sequences
     fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
-        let seq3 = r#try!(self.next_char());
+        let seq3 = self.next_char()?;
         if seq3 == '~' {
             Ok(match seq2 {
                 '1' | '7' => KeyPress::Home, // tmux, xrvt
@@ -216,7 +216,7 @@ impl PosixRawReader {
                 }
             })
         } else if seq3.is_digit(10) {
-            let seq4 = r#try!(self.next_char());
+            let seq4 = self.next_char()?;
             if seq4 == '~' {
                 Ok(match (seq2, seq3) {
                     ('1', '1') => KeyPress::F(1),  // rxvt-unicode
@@ -238,9 +238,9 @@ impl PosixRawReader {
                     }
                 })
             } else if seq4 == ';' {
-                let seq5 = r#try!(self.next_char());
+                let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
-                    let seq6 = r#try!(self.next_char()); // '~' expected
+                    let seq6 = self.next_char()?; // '~' expected
                     debug!(target: "rustyline",
                            "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
                 } else {
@@ -254,9 +254,9 @@ impl PosixRawReader {
                 Ok(KeyPress::UnknownEscSeq)
             }
         } else if seq3 == ';' {
-            let seq4 = r#try!(self.next_char());
+            let seq4 = self.next_char()?;
             if seq4.is_digit(10) {
-                let seq5 = r#try!(self.next_char());
+                let seq5 = self.next_char()?;
                 if seq2 == '1' {
                     Ok(match (seq4, seq5) {
                         ('5', 'A') => KeyPress::ControlUp,
@@ -300,7 +300,7 @@ impl PosixRawReader {
 
     /// Handle ESC O <seq2> escape sequences
     fn escape_o(&mut self) -> Result<KeyPress> {
-        let seq2 = r#try!(self.next_char());
+        let seq2 = self.next_char()?;
         Ok(match seq2 {
             'A' => KeyPress::Up,    // kcuu1
             'B' => KeyPress::Down,  // kcud1
@@ -326,7 +326,7 @@ impl PosixRawReader {
 
 impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
-        let c = r#try!(self.next_char());
+        let c = self.next_char()?;
 
         let mut key = keys::char_to_key_press(c);
         if key == KeyPress::Esc {
@@ -342,7 +342,7 @@ impl RawReader for PosixRawReader {
                 }
                 Ok(_) => {
                     // escape sequence
-                    key = r#try!(self.escape_sequence())
+                    key = self.escape_sequence()?
                 }
                 // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e.into()),
@@ -354,7 +354,7 @@ impl RawReader for PosixRawReader {
 
     fn next_char(&mut self) -> Result<char> {
         loop {
-            let n = r#try!(self.stdin.read(&mut self.buf));
+            let n = self.stdin.read(&mut self.buf)?;
             if n == 0 {
                 return Err(error::ReadlineError::Eof);
             }
@@ -513,14 +513,14 @@ impl Renderer for PosixRenderer {
             self.buffer.push('\r');
         }
 
-        r#try!(self.out.write_all(self.buffer.as_bytes()));
-        r#try!(self.out.flush());
+        self.out.write_all(self.buffer.as_bytes())?;
+        self.out.flush()?;
         Ok((cursor, end_pos))
     }
 
     fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
-        r#try!(self.out.write_all(buf));
-        r#try!(self.out.flush());
+        self.out.write_all(buf)?;
+        self.out.flush()?;
         Ok(())
     }
 
@@ -658,9 +658,9 @@ impl Term for PosixTerminal {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {
-            r#try!(Err(nix::Error::from_errno(ENOTTY)));
+            Err(nix::Error::from_errno(ENOTTY))?;
         }
-        let original_mode = r#try!(termios::tcgetattr(STDIN_FILENO));
+        let original_mode = termios::tcgetattr(STDIN_FILENO)?;
         let mut raw = original_mode.clone();
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
@@ -680,7 +680,7 @@ impl Term for PosixTerminal {
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
         raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
-        r#try!(termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw));
+        termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
         Ok(original_mode)
     }
 
@@ -698,7 +698,7 @@ impl Term for PosixTerminal {
 pub fn suspend() -> Result<()> {
     use nix::unistd::Pid;
     // suspend the whole process group
-    r#try!(signal::kill(Pid::from_raw(0), signal::SIGTSTP));
+    signal::kill(Pid::from_raw(0), signal::SIGTSTP)?;
     Ok(())
 }
 

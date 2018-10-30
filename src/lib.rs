@@ -83,10 +83,10 @@ fn complete_line<R: RawReader, C: Completer>(
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
-    let (start, candidates) = r#try!(completer.complete(&s.line, s.line.pos()));
+    let (start, candidates) = completer.complete(&s.line, s.line.pos())?;
     // if no completions, we are done
     if candidates.is_empty() {
-        r#try!(s.out.beep());
+        s.out.beep()?;
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
         let mark = s.changes.borrow_mut().begin();
@@ -106,26 +106,26 @@ fn complete_line<R: RawReader, C: Completer>(
                     Borrowed(candidate)
                 };*/
                 completer.update(&mut s.line, start, candidate);
-                r#try!(s.refresh_line());
+                s.refresh_line()?;
             } else {
                 // Restore current edited line
                 s.line.update(&backup, backup_pos);
-                r#try!(s.refresh_line());
+                s.refresh_line()?;
             }
 
-            cmd = r#try!(s.next_cmd(input_state, rdr, true));
+            cmd = s.next_cmd(input_state, rdr, true)?;
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
-                        r#try!(s.out.beep());
+                        s.out.beep()?;
                     }
                 }
                 Cmd::Abort => {
                     // Re-show original buffer
                     if i < candidates.len() {
                         s.line.update(&backup, backup_pos);
-                        r#try!(s.refresh_line());
+                        s.refresh_line()?;
                     }
                     s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
@@ -142,29 +142,29 @@ fn complete_line<R: RawReader, C: Completer>(
             // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start {
                 completer.update(&mut s.line, start, lcp);
-                r#try!(s.refresh_line());
+                s.refresh_line()?;
             }
         }
         // beep if ambiguous
         if candidates.len() > 1 {
-            r#try!(s.out.beep());
+            s.out.beep()?;
         } else {
             return Ok(None);
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = r#try!(s.next_cmd(input_state, rdr, true));
+        let mut cmd = s.next_cmd(input_state, rdr, true)?;
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
         }
         // move cursor to EOL to avoid overwriting the command line
         let save_pos = s.line.pos();
-        r#try!(s.edit_move_end());
+        s.edit_move_end()?;
         s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
-            r#try!(s.out.write_and_flush(msg.as_bytes()));
+            s.out.write_and_flush(msg.as_bytes())?;
             s.old_rows += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -172,7 +172,7 @@ fn complete_line<R: RawReader, C: Completer>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = r#try!(s.next_cmd(input_state, rdr, false));
+                cmd = s.next_cmd(input_state, rdr, false)?;
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
@@ -184,7 +184,7 @@ fn complete_line<R: RawReader, C: Completer>(
         if show_completions {
             page_completions(rdr, s, input_state, highlighter, &candidates)
         } else {
-            r#try!(s.refresh_line());
+            s.refresh_line()?;
             Ok(None)
         }
     } else {
@@ -203,9 +203,9 @@ fn complete_hint_line(
     };
     s.line.move_end();
     if s.line.yank(&hint, 1).is_none() {
-        r#try!(s.out.beep());
+        s.out.beep()?;
     }
-    r#try!(s.refresh_line());
+    s.refresh_line()?;
     Ok(())
 }
 
@@ -236,7 +236,7 @@ fn page_completions<R: RawReader, C: Candidate>(
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
-            r#try!(s.out.write_and_flush(b"\n--More--"));
+            s.out.write_and_flush(b"\n--More--")?;
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -248,7 +248,7 @@ fn page_completions<R: RawReader, C: Candidate>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
             {
-                cmd = r#try!(s.next_cmd(input_state, rdr, false));
+                cmd = s.next_cmd(input_state, rdr, false)?;
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
@@ -259,9 +259,9 @@ fn page_completions<R: RawReader, C: Candidate>(
                 }
                 _ => break,
             }
-            r#try!(s.out.write_and_flush(b"\n"));
+            s.out.write_and_flush(b"\n")?;
         } else {
-            r#try!(s.out.write_and_flush(b"\n"));
+            s.out.write_and_flush(b"\n")?;
         }
         ab.clear();
         for col in 0..num_cols {
@@ -281,10 +281,10 @@ fn page_completions<R: RawReader, C: Candidate>(
                 }
             }
         }
-        r#try!(s.out.write_and_flush(ab.as_bytes()));
+        s.out.write_and_flush(ab.as_bytes())?;
     }
-    r#try!(s.out.write_and_flush(b"\n"));
-    r#try!(s.refresh_line());
+    s.out.write_and_flush(b"\n")?;
+    s.refresh_line()?;
     Ok(None)
 }
 
@@ -316,9 +316,9 @@ fn reverse_incremental_search<R: RawReader>(
         } else {
             format!("(failed reverse-i-search)`{}': ", search_buf)
         };
-        r#try!(s.refresh_prompt_and_line(&prompt));
+        s.refresh_prompt_and_line(&prompt)?;
 
-        cmd = r#try!(s.next_cmd(input_state, rdr, true));
+        cmd = s.next_cmd(input_state, rdr, true)?;
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -348,12 +348,12 @@ fn reverse_incremental_search<R: RawReader>(
                 Cmd::Abort => {
                     // Restore current edited line (before search)
                     s.line.update(&backup, backup_pos);
-                    r#try!(s.refresh_line());
+                    s.refresh_line()?;
                     s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
                 }
                 Cmd::Move(_) => {
-                    r#try!(s.refresh_line()); // restore prompt
+                    s.refresh_line()?; // restore prompt
                     break;
                 }
                 _ => break,
@@ -411,13 +411,13 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    r#try!(s.refresh_line());
+    s.refresh_line()?;
 
-    let mut rdr = r#try!(editor.term.create_reader(&editor.config));
+    let mut rdr = editor.term.create_reader(&editor.config)?;
 
     loop {
         let rc = s.next_cmd(&mut input_state, &mut rdr, false);
-        let mut cmd = r#try!(rc);
+        let mut cmd = rc?;
 
         if cmd.should_reset_kill_ring() {
             editor.reset_kill_ring();
@@ -425,14 +425,14 @@ fn readline_edit<H: Helper>(
 
         // autocomplete
         if cmd == Cmd::Complete && completer.is_some() {
-            let next = r#try!(complete_line(
+            let next = complete_line(
                 &mut rdr,
                 &mut s,
                 &mut input_state,
                 completer.unwrap(),
                 highlighter,
                 &editor.config,
-            ));
+            )?;
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -442,30 +442,30 @@ fn readline_edit<H: Helper>(
 
         if let Cmd::CompleteHint = cmd {
             if hinter.is_some() {
-                r#try!(complete_hint_line(
+                complete_hint_line(
                     &mut s,
                     hinter.unwrap(),
-                ));
+                )?;
             }
             continue;
         }
 
         if let Cmd::SelfInsert(n, c) = cmd {
-            r#try!(s.edit_insert(c, n));
+            s.edit_insert(c, n)?;
             continue;
         } else if let Cmd::Insert(n, text) = cmd {
-            r#try!(s.edit_yank(&input_state, &text, Anchor::Before, n));
+            s.edit_yank(&input_state, &text, Anchor::Before, n)?;
             continue;
         }
 
         if cmd == Cmd::ReverseSearchHistory {
             // Search history backward
-            let next = r#try!(reverse_incremental_search(
+            let next = reverse_incremental_search(
                 &mut rdr,
                 &mut s,
                 &mut input_state,
                 &editor.history,
-            ));
+            )?;
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -476,78 +476,78 @@ fn readline_edit<H: Helper>(
         match cmd {
             Cmd::Move(Movement::BeginningOfLine) => {
                 // Move to the beginning of line.
-                r#try!(s.edit_move_home())
+                s.edit_move_home()?
             }
             Cmd::Move(Movement::ViFirstPrint) => {
-                r#try!(s.edit_move_home());
-                r#try!(s.edit_move_to_next_word(At::Start, Word::Big, 1))
+                s.edit_move_home()?;
+                s.edit_move_to_next_word(At::Start, Word::Big, 1)?
             }
             Cmd::Move(Movement::BackwardChar(n)) => {
                 // Move back a character.
-                r#try!(s.edit_move_backward(n))
+                s.edit_move_backward(n)?
             }
-            Cmd::ReplaceChar(n, c) => r#try!(s.edit_replace_char(c, n)),
+            Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
             Cmd::Replace(mvt, text) => {
-                r#try!(s.edit_kill(&mvt));
+                s.edit_kill(&mvt)?;
                 if let Some(text) = text {
-                    r#try!(s.edit_insert_text(&text))
+                    s.edit_insert_text(&text)?
                 }
             }
             Cmd::Overwrite(c) => {
-                r#try!(s.edit_overwrite_char(c));
+                s.edit_overwrite_char(c)?;
             }
             Cmd::EndOfFile => {
                 if !input_state.is_emacs_mode() && !s.line.is_empty() {
-                    r#try!(s.edit_move_end());
+                    s.edit_move_end()?;
                     break;
                 } else if s.line.is_empty() {
                     return Err(error::ReadlineError::Eof);
                 } else {
-                    r#try!(s.edit_delete(1))
+                    s.edit_delete(1)?
                 }
             }
             Cmd::Move(Movement::EndOfLine) => {
                 // Move to the end of line.
-                r#try!(s.edit_move_end())
+                s.edit_move_end()?
             }
             Cmd::Move(Movement::ForwardChar(n)) => {
                 // Move forward a character.
-                r#try!(s.edit_move_forward(n))
+                s.edit_move_forward(n)?
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
-                r#try!(s.out.clear_screen());
-                r#try!(s.refresh_line())
+                s.out.clear_screen()?;
+                s.refresh_line()?
             }
             Cmd::NextHistory => {
                 // Fetch the next command from the history list.
-                r#try!(s.edit_history_next(&editor.history, false))
+                s.edit_history_next(&editor.history, false)?
             }
             Cmd::PreviousHistory => {
                 // Fetch the previous command from the history list.
-                r#try!(s.edit_history_next(&editor.history, true))
+                s.edit_history_next(&editor.history, true)?
             }
             Cmd::HistorySearchBackward => {
-                r#try!(s.edit_history_search(&editor.history, Direction::Reverse))
+                s.edit_history_search(&editor.history, Direction::Reverse)?
             }
             Cmd::HistorySearchForward => {
-                r#try!(s.edit_history_search(&editor.history, Direction::Forward))
+                s.edit_history_search(&editor.history, Direction::Forward)?
             }
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
-                r#try!(s.edit_transpose_chars())
+                s.edit_transpose_chars()?
             }
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
-                let c = r#try!(rdr.next_char());
-                r#try!(s.edit_insert(c, 1)) // FIXME
+                let c = rdr.next_char()?;
+                s.edit_insert(c, 1)? // FIXME
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 let mut kill_ring = editor.kill_ring.lock().unwrap();
                 if let Some(text) = kill_ring.yank() {
-                    r#try!(s.edit_yank(&input_state, text, anchor, n))
+                    s.edit_yank(&input_state, text, anchor, n)?
                 }
             }
             Cmd::ViYankTo(ref mvt) => {
@@ -563,62 +563,62 @@ fn readline_edit<H: Helper>(
                     editor.term.cursor = s.cursor.col;
                 }
                 // Accept the line regardless of where the cursor is.
-                r#try!(s.edit_move_end());
+                s.edit_move_end()?;
                 if s.hinter.is_some() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
                     s.hinter = None;
-                    r#try!(s.refresh_line());
+                    s.refresh_line()?;
                 }
                 break;
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
-                r#try!(s.edit_history(&editor.history, true))
+                s.edit_history(&editor.history, true)?
             }
             Cmd::EndOfHistory => {
                 // move to last entry in history
-                r#try!(s.edit_history(&editor.history, false))
+                s.edit_history(&editor.history, false)?
             }
             Cmd::Move(Movement::BackwardWord(n, word_def)) => {
                 // move backwards one word
-                r#try!(s.edit_move_to_prev_word(word_def, n))
+                s.edit_move_to_prev_word(word_def, n)?
             }
             Cmd::CapitalizeWord => {
                 // capitalize word after point
-                r#try!(s.edit_word(WordAction::CAPITALIZE))
+                s.edit_word(WordAction::CAPITALIZE)?
             }
             Cmd::Kill(ref mvt) => {
-                r#try!(s.edit_kill(mvt));
+                s.edit_kill(mvt)?;
             }
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
-                r#try!(s.edit_move_to_next_word(at, word_def, n))
+                s.edit_move_to_next_word(at, word_def, n)?
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
-                r#try!(s.edit_word(WordAction::LOWERCASE))
+                s.edit_word(WordAction::LOWERCASE)?
             }
             Cmd::TransposeWords(n) => {
                 // transpose words
-                r#try!(s.edit_transpose_words(n))
+                s.edit_transpose_words(n)?
             }
             Cmd::UpcaseWord => {
                 // uppercase word after point
-                r#try!(s.edit_word(WordAction::UPPERCASE))
+                s.edit_word(WordAction::UPPERCASE)?
             }
             Cmd::YankPop => {
                 // yank-pop
                 let mut kill_ring = editor.kill_ring.lock().unwrap();
                 if let Some((yank_size, text)) = kill_ring.yank_pop() {
-                    r#try!(s.edit_yank_pop(yank_size, text))
+                    s.edit_yank_pop(yank_size, text)?
                 }
             }
-            Cmd::Move(Movement::ViCharSearch(n, cs)) => r#try!(s.edit_move_to(cs, n)),
+            Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
             Cmd::Undo(n) => {
                 s.line.remove_change_listener();
                 if s.changes.borrow_mut().undo(&mut s.line, n) {
-                    r#try!(s.refresh_line());
+                    s.refresh_line()?;
                 }
                 s.line.set_change_listener(s.changes.clone());
             }
@@ -627,10 +627,10 @@ fn readline_edit<H: Helper>(
             }
             #[cfg(unix)]
             Cmd::Suspend => {
-                r#try!(original_mode.disable_raw_mode());
-                r#try!(tty::suspend());
-                r#try!(editor.term.enable_raw_mode()); // TODO original_mode may have changed
-                r#try!(s.refresh_line());
+                original_mode.disable_raw_mode()?;
+                tty::suspend()?;
+                editor.term.enable_raw_mode()?; // TODO original_mode may have changed
+                s.refresh_line()?;
                 continue;
             }
             Cmd::Noop => {}
@@ -662,7 +662,7 @@ fn readline_raw<H: Helper>(
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
 ) -> Result<String> {
-    let original_mode = r#try!(editor.term.enable_raw_mode());
+    let original_mode = editor.term.enable_raw_mode()?;
     let guard = Guard(&original_mode);
     let user_input = readline_edit(prompt, initial, editor, &original_mode);
     if editor.config.auto_add_history() {
@@ -681,7 +681,7 @@ fn readline_raw<H: Helper>(
 
 fn readline_direct() -> Result<String> {
     let mut line = String::new();
-    if r#try!(io::stdin().read_line(&mut line)) > 0 {
+    if io::stdin().read_line(&mut line)? > 0 {
         Ok(line)
     } else {
         Err(error::ReadlineError::Eof)
@@ -758,8 +758,8 @@ impl<H: Helper> Editor<H> {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
-            r#try!(stdout.write_all(prompt.as_bytes()));
-            r#try!(stdout.flush());
+            stdout.write_all(prompt.as_bytes())?;
+            stdout.flush()?;
 
             readline_direct()
         } else if !self.term.is_stdin_tty() {

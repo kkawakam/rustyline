@@ -56,8 +56,8 @@ pub trait Renderer {
     /// the choices were already shown.
     fn beep(&mut self) -> Result<()> {
         // TODO bell-style
-        r#try!(io::stderr().write_all(b"\x07"));
-        r#try!(io::stderr().flush());
+        io::stderr().write_all(b"\x07")?;
+        io::stderr().flush()?;
         Ok(())
     }
 

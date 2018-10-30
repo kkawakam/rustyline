@@ -133,7 +133,7 @@ impl Term for DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
-            color_mode: color_mode,
+            color_mode,
         }
     }
 

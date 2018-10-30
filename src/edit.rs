@@ -7,14 +7,14 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::Result;
-use highlight::Highlighter;
-use hint::Hinter;
-use history::{Direction, History};
-use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use keymap::{InputState, Refresher};
-use line_buffer::{LineBuffer, WordAction, MAX_LINE};
-use tty::{Position, RawReader, Renderer};
-use undo::Changeset;
+use crate::highlight::Highlighter;
+use crate::hint::Hinter;
+use crate::history::{Direction, History};
+use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+use crate::keymap::{InputState, Refresher};
+use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
+use crate::tty::{Position, RawReader, Renderer};
+use crate::undo::Changeset;
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -72,7 +72,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
-                try!(self.refresh_line());
+                r#try!(self.refresh_line());
                 continue;
             }
             if let Ok(Cmd::Replace(_, _)) = rc {
@@ -108,16 +108,16 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                 .map_or(false, |s| h.highlight_char(s))
         }) {
             let prompt_size = self.prompt_size;
-            try!(self.refresh(self.prompt, prompt_size, None));
+            r#try!(self.refresh(self.prompt, prompt_size, None));
         } else {
-            try!(self.out.move_cursor(self.cursor, cursor));
+            r#try!(self.out.move_cursor(self.cursor, cursor));
         }
         self.cursor = cursor;
         Ok(())
     }
 
     fn refresh(&mut self, prompt: &str, prompt_size: Position, hint: Option<String>) -> Result<()> {
-        let (cursor, end_pos) = try!(self.out.refresh_line(
+        let (cursor, end_pos) = r#try!(self.out.refresh_line(
             prompt,
             prompt_size,
             &self.line,
@@ -525,8 +525,8 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
 #[cfg(test)]
 mod test {
     use super::init_state;
-    use history::History;
-    use tty::Sink;
+    use crate::history::History;
+    use crate::tty::Sink;
 
     #[test]
     fn edit_history_next() {

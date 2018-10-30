@@ -3,11 +3,11 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use config::{ColorMode, Config, OutputStreamType};
-use highlight::Highlighter;
-use keys::KeyPress;
-use line_buffer::LineBuffer;
-use Result;
+use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::highlight::Highlighter;
+use crate::keys::KeyPress;
+use crate::line_buffer::LineBuffer;
+use crate::Result;
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -56,8 +56,8 @@ pub trait Renderer {
     /// the choices were already shown.
     fn beep(&mut self) -> Result<()> {
         // TODO bell-style
-        try!(io::stderr().write_all(b"\x07"));
-        try!(io::stderr().flush());
+        r#try!(io::stderr().write_all(b"\x07"));
+        r#try!(io::stderr().flush());
         Ok(())
     }
 

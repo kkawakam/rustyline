@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use super::Result;
-use config::Config;
-use config::EditMode;
-use keys::KeyPress;
-use tty::RawReader;
+use crate::config::Config;
+use crate::config::EditMode;
+use crate::keys::KeyPress;
+use crate::tty::RawReader;
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -355,8 +355,8 @@ impl InputState {
             _ => unreachable!(),
         }
         loop {
-            try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
-            let key = try!(rdr.next_key(true));
+            r#try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
+            let key = r#try!(rdr.next_key(true));
             match key {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
                     if self.num_args == -1 {
@@ -371,7 +371,7 @@ impl InputState {
                 }
                 KeyPress::Char('-') | KeyPress::Meta('-') => {}
                 _ => {
-                    try!(wrt.refresh_line());
+                    r#try!(wrt.refresh_line());
                     return Ok(key);
                 }
             };
@@ -384,11 +384,11 @@ impl InputState {
         wrt: &mut Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key(single_esc_abort));
+        let mut key = r#try!(rdr.next_key(single_esc_abort));
         if let KeyPress::Meta(digit @ '-') = key {
-            key = try!(self.emacs_digit_argument(rdr, wrt, digit));
+            key = r#try!(self.emacs_digit_argument(rdr, wrt, digit));
         } else if let KeyPress::Meta(digit @ '0'...'9') = key {
-            key = try!(self.emacs_digit_argument(rdr, wrt, digit));
+            key = r#try!(self.emacs_digit_argument(rdr, wrt, digit));
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
         {
@@ -449,7 +449,7 @@ impl InputState {
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('X') => {
-                let snd_key = try!(rdr.next_key(true));
+                let snd_key = r#try!(rdr.next_key(true));
                 match snd_key {
                     KeyPress::Ctrl('G') | KeyPress::Esc => Cmd::Abort,
                     KeyPress::Ctrl('U') => Cmd::Undo(n),
@@ -505,8 +505,8 @@ impl InputState {
     ) -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
-            try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
-            let key = try!(rdr.next_key(false));
+            r#try!(wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args)));
+            let key = r#try!(rdr.next_key(false));
             if let KeyPress::Char(digit @ '0'...'9') = key {
                 if self.num_args.abs() < 1000 {
                     // shouldn't ever need more than 4 digits
@@ -516,16 +516,16 @@ impl InputState {
                         .saturating_add(digit.to_digit(10).unwrap() as i16);
                 }
             } else {
-                try!(wrt.refresh_line());
+                r#try!(wrt.refresh_line());
                 return Ok(key);
             };
         }
     }
 
     fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
-        let mut key = try!(rdr.next_key(false));
+        let mut key = r#try!(rdr.next_key(false));
         if let KeyPress::Char(digit @ '1'...'9') = key {
-            key = try!(self.vi_arg_digit(rdr, wrt, digit));
+            key = r#try!(self.vi_arg_digit(rdr, wrt, digit));
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
@@ -573,7 +573,7 @@ impl InputState {
             KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             KeyPress::Char('c') => {
                 self.input_mode = InputMode::Insert;
-                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
+                match r#try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::Replace(mvt, None),
                     None => Cmd::Unknown,
                 }
@@ -583,7 +583,7 @@ impl InputState {
                 Cmd::Replace(Movement::EndOfLine, None)
             }
             KeyPress::Char('d') => {
-                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
+                match r#try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::Kill(mvt),
                     None => Cmd::Unknown,
                 }
@@ -606,7 +606,7 @@ impl InputState {
             }
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 // vi-char-search
-                let cs = try!(self.vi_char_search(rdr, c));
+                let cs = r#try!(self.vi_char_search(rdr, c));
                 match cs {
                     Some(cs) => Cmd::Move(Movement::ViCharSearch(n, cs)),
                     None => Cmd::Unknown,
@@ -629,7 +629,7 @@ impl InputState {
             KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
             KeyPress::Char('r') => {
                 // vi-replace-char:
-                let ch = try!(rdr.next_key(false));
+                let ch = r#try!(rdr.next_key(false));
                 match ch {
                     KeyPress::Char(c) => Cmd::ReplaceChar(n, c),
                     KeyPress::Esc => Cmd::Noop,
@@ -658,7 +658,7 @@ impl InputState {
             KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete: TODO move backward if eol
             KeyPress::Char('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
             KeyPress::Char('y') => {
-                match try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
+                match r#try!(self.vi_cmd_motion(rdr, wrt, key, n)) {
                     Some(mvt) => Cmd::ViYankTo(mvt),
                     None => Cmd::Unknown,
                 }
@@ -696,7 +696,7 @@ impl InputState {
     }
 
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
-        let key = try!(rdr.next_key(false));
+        let key = r#try!(rdr.next_key(false));
         {
             let bindings = self.custom_bindings.read().unwrap();
             if let Some(cmd) = bindings.get(&key) {
@@ -749,14 +749,14 @@ impl InputState {
         key: KeyPress,
         n: RepeatCount,
     ) -> Result<Option<Movement>> {
-        let mut mvt = try!(rdr.next_key(false));
+        let mut mvt = r#try!(rdr.next_key(false));
         if mvt == key {
             return Ok(Some(Movement::WholeLine));
         }
         let mut n = n;
         if let KeyPress::Char(digit @ '1'...'9') = mvt {
             // vi-arg-digit
-            mvt = try!(self.vi_arg_digit(rdr, wrt, digit));
+            mvt = r#try!(self.vi_arg_digit(rdr, wrt, digit));
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
@@ -768,7 +768,7 @@ impl InputState {
             KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
             KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
             KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
-                let cs = try!(self.vi_char_search(rdr, c));
+                let cs = r#try!(self.vi_char_search(rdr, c));
                 match cs {
                     Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                     None => None,
@@ -811,7 +811,7 @@ impl InputState {
         rdr: &mut R,
         cmd: char,
     ) -> Result<Option<CharSearch>> {
-        let ch = try!(rdr.next_key(false));
+        let ch = r#try!(rdr.next_key(false));
         Ok(match ch {
             KeyPress::Char(ch) => {
                 let cs = match cmd {

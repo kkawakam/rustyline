@@ -1,5 +1,5 @@
 //! Kill Ring management
-use line_buffer::{DeleteListener, Direction};
+use crate::line_buffer::{DeleteListener, Direction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {

@@ -10,7 +10,7 @@ use std::ops::Index;
 use std::path::Path;
 
 use super::Result;
-use config::{Config, HistoryDuplicates};
+use crate::config::{Config, HistoryDuplicates};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,15 +125,15 @@ impl History {
         let old_umask = umask();
         let f = File::create(path);
         restore_umask(old_umask);
-        let file = try!(f);
+        let file = r#try!(f);
         fix_perm(&file);
         let mut wtr = BufWriter::new(file);
         for entry in &self.entries {
-            try!(wtr.write_all(entry.as_bytes()));
-            try!(wtr.write_all(b"\n"));
+            r#try!(wtr.write_all(entry.as_bytes()));
+            r#try!(wtr.write_all(b"\n"));
         }
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
-        try!(wtr.flush());
+        r#try!(wtr.flush());
         Ok(())
     }
 
@@ -144,10 +144,10 @@ impl History {
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
-        let file = try!(File::open(&path));
+        let file = r#try!(File::open(&path));
         let rdr = BufReader::new(file);
         for line in rdr.lines() {
-            self.add(try!(line).as_ref()); // TODO truncate to MAX_LINE
+            self.add(r#try!(line).as_ref()); // TODO truncate to MAX_LINE
         }
         Ok(())
     }
@@ -275,7 +275,7 @@ fn fix_perm(file: &File) {
 mod tests {
     extern crate tempdir;
     use super::{Direction, History};
-    use config::Config;
+    use crate::config::Config;
     use std::path::Path;
 
     fn init() -> History {

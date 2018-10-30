@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{self, Path};
 
 use super::Result;
-use line_buffer::LineBuffer;
+use crate::line_buffer::LineBuffer;
 use memchr::memchr;
 
 // TODO: let the implementers choose/find word boudaries ???
@@ -189,7 +189,7 @@ impl Completer for FilenameCompleter {
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
-        let matches = try!(filename_complete(&path, esc_char, break_chars, quote));
+        let matches = r#try!(filename_complete(&path, esc_char, break_chars, quote));
         Ok((start, matches))
     }
 }

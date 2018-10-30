@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use super::{Editor, Result, StdStream};
-use completion::Completer;
-use config::{Config, EditMode, OutputStreamType};
-use edit::init_state;
-use keymap::{Cmd, InputState};
-use keys::KeyPress;
-use tty::Sink;
+use crate::completion::Completer;
+use crate::config::{Config, EditMode, OutputStreamType};
+use crate::edit::init_state;
+use crate::keymap::{Cmd, InputState};
+use crate::keys::KeyPress;
+use crate::tty::Sink;
 
 mod common;
 mod emacs;

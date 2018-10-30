@@ -109,7 +109,7 @@ impl log::Log for Logger {
 }
 
 fn init_logger() -> Result<(), SetLoggerError> {
-    try!(log::set_logger(&LOGGER));
+    r#try!(log::set_logger(&LOGGER));
     log::set_max_level(LevelFilter::Info);
     Ok(())
 }

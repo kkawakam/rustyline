@@ -1,6 +1,6 @@
 //! Syntax highlighting
 
-use config::CompletionType;
+use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed};
 
 /// Syntax highlighter with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).

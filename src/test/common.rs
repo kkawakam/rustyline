@@ -1,8 +1,8 @@
 ///! Basic commands tests.
 use super::{assert_cursor, assert_line, assert_line_with_initial, init_editor};
-use config::EditMode;
-use error::ReadlineError;
-use keys::KeyPress;
+use crate::config::EditMode;
+use crate::error::ReadlineError;
+use crate::keys::KeyPress;
 
 #[test]
 fn home_key() {

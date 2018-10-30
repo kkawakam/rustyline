@@ -1,7 +1,7 @@
 //! History related commands tests
 use super::assert_history;
-use config::EditMode;
-use keys::KeyPress;
+use crate::config::EditMode;
+use crate::keys::KeyPress;
 
 #[test]
 fn down_key() {

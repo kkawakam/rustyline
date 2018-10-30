@@ -9,14 +9,14 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::OutputStreamType;
-use config::{ColorMode, Config};
-use error;
-use highlight::Highlighter;
-use keys::{self, KeyPress};
-use line_buffer::LineBuffer;
-use Result;
-use StdStream;
+use crate::config::OutputStreamType;
+use crate::config::{ColorMode, Config};
+use crate::error;
+use crate::highlight::Highlighter;
+use crate::keys::{self, KeyPress};
+use crate::line_buffer::LineBuffer;
+use crate::Result;
+use crate::StdStream;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;

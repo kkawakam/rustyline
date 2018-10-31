@@ -20,11 +20,15 @@
 // #![feature(tool_lints)]
 
 extern crate dirs;
+#[cfg(target_os = "fuchsia")]
+extern crate fuchsia_zircon as zx;
+#[cfg(target_os = "fuchsia")]
+extern crate fuchsia_device;
 extern crate libc;
 #[macro_use]
 extern crate log;
 extern crate memchr;
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 extern crate nix;
 extern crate unicode_segmentation;
 extern crate unicode_width;
@@ -625,7 +629,7 @@ fn readline_edit<H: Helper>(
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);
             }
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             Cmd::Suspend => {
                 try!(original_mode.disable_raw_mode());
                 try!(tty::suspend());

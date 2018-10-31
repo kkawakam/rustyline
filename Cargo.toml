@@ -23,9 +23,15 @@ unicode-width = "0.1"
 unicode-segmentation = "1.0"
 memchr = "2.0"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(any(target_os = "fuchsia"))))'.dependencies]
 nix = "0.11"
+
+[target.'cfg(unix)'.dependencies]
 utf8parse = "0.1"
+
+[target.'cfg(target_os = "fuchsia")'.dependencies]
+fuchsia-zircon = "0.3.2"
+fuchsia-device = "0.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }

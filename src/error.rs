@@ -1,5 +1,5 @@
 //! Contains error type for handling I/O and Errno errors
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 use nix;
 #[cfg(windows)]
 use std::char;
@@ -23,7 +23,7 @@ pub enum ReadlineError {
     #[cfg(unix)]
     Utf8Error,
     /// Unix Error from syscall
-    #[cfg(unix)]
+    #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
     Errno(nix::Error),
     #[cfg(windows)]
     WindowResize,
@@ -39,7 +39,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             ReadlineError::Utf8Error => write!(f, "invalid utf-8: corrupt contents"),
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
@@ -57,7 +57,7 @@ impl error::Error for ReadlineError {
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(unix)]
             ReadlineError::Utf8Error => "invalid utf-8: corrupt contents",
-            #[cfg(unix)]
+            #[cfg(all(unix, not(any(target_os = "fuchsia"))))]
             ReadlineError::Errno(ref err) => err.description(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
@@ -73,7 +73,7 @@ impl From<io::Error> for ReadlineError {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "fuchsia"))))]
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> ReadlineError {
         ReadlineError::Errno(err)

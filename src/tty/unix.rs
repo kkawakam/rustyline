@@ -66,9 +66,10 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
+#[cfg(not(test))]
 pub type Mode = termios::Termios;
 
-impl RawMode for Mode {
+impl RawMode for termios::Termios {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
         try!(termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, self));
@@ -596,6 +597,7 @@ extern "C" fn sigwinch_handler(_: libc::c_int) {
     debug!(target: "rustyline", "SIGWINCH");
 }
 
+#[cfg(not(test))]
 pub type Terminal = PosixTerminal;
 
 #[derive(Clone, Debug)]
@@ -608,7 +610,7 @@ pub struct PosixTerminal {
 }
 
 impl Term for PosixTerminal {
-    type Mode = Mode;
+    type Mode = termios::Termios;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
@@ -654,7 +656,7 @@ impl Term for PosixTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {
@@ -694,7 +696,7 @@ impl Term for PosixTerminal {
     }
 }
 
-#[cfg(unix)]
+#[cfg(not(test))]
 pub fn suspend() -> Result<()> {
     use nix::unistd::Pid;
     // suspend the whole process group
@@ -702,15 +704,16 @@ pub fn suspend() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(unix, test))]
+#[cfg(test)]
 mod test {
-    use super::{Position, Renderer};
-    use std::io::{self, Stdout};
+    use config::OutputStreamType;
+    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
 
     #[test]
+    #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = io::stdout();
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 80);
+        let out = PosixRenderer::new(OutputStreamType::Stdout);
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }
@@ -722,5 +725,17 @@ mod test {
 
         ::std::env::set_var("TERM", "dumb");
         assert_eq!(true, super::is_unsupported_term());
+    }
+
+    #[test]
+    fn test_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<PosixTerminal>();
+    }
+
+    #[test]
+    fn test_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<PosixTerminal>();
     }
 }

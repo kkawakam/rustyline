@@ -110,3 +110,15 @@ fn unknown_esc_key() {
 fn from_stream_type() {
     StdStream::from_stream_type(OutputStreamType::Stdout);
 }
+
+#[test]
+fn test_send() {
+    fn assert_send<T: Send>() {}
+    assert_send::<Editor<()>>();
+}
+
+#[test]
+fn test_sync() {
+    fn assert_sync<T: Sync>() {}
+    assert_sync::<Editor<()>>();
+}

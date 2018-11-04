@@ -550,6 +550,9 @@ impl Term for Console {
     }
 }
 
+unsafe impl Send for Console {}
+unsafe impl Sync for Console {}
+
 #[cfg(test)]
 mod test {
     use super::Console;

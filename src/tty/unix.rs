@@ -710,6 +710,7 @@ mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
 
     #[test]
+    #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(OutputStreamType::Stdout);
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());

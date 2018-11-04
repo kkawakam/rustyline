@@ -201,16 +201,16 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
 
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope
-#[cfg(all(windows, not(test)))]
+#[cfg(windows)]
 mod windows;
-#[cfg(all(windows, not(test)))]
+#[cfg(windows)]
 pub use self::windows::*;
 
 // If on Unix platform import Unix TTY module
 // and re-export into mod.rs scope
-#[cfg(all(unix, not(test)))]
+#[cfg(unix)]
 mod unix;
-#[cfg(all(unix, not(test)))]
+#[cfg(unix)]
 pub use self::unix::*;
 
 #[cfg(test)]

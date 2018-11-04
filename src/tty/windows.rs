@@ -63,6 +63,7 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     Ok(original_mode)
 }
 
+#[cfg(not(test))]
 pub type Mode = ConsoleMode;
 
 #[derive(Clone, Copy, Debug)]
@@ -73,7 +74,7 @@ pub struct ConsoleMode {
     stdstream_handle: HANDLE,
 }
 
-impl RawMode for Mode {
+impl RawMode for ConsoleMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
         check!(consoleapi::SetConsoleMode(
@@ -420,6 +421,7 @@ impl Renderer for ConsoleRenderer {
 
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
 
+#[cfg(not(test))]
 pub type Terminal = Console;
 
 #[derive(Clone, Debug)]
@@ -436,7 +438,7 @@ pub struct Console {
 impl Console {}
 
 impl Term for Console {
-    type Mode = Mode;
+    type Mode = ConsoleMode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
@@ -498,7 +500,7 @@ impl Term for Console {
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<Mode> {
+    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
         if !self.stdin_isatty {
             Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -532,7 +534,7 @@ impl Term for Console {
             None
         };
 
-        Ok(Mode {
+        Ok(ConsoleMode {
             original_stdin_mode,
             stdin_handle: self.stdin_handle,
             original_stdstream_mode,
@@ -546,5 +548,25 @@ impl Term for Console {
 
     fn create_writer(&self) -> ConsoleRenderer {
         ConsoleRenderer::new(self.stdstream_handle, self.stream_type)
+    }
+}
+
+unsafe impl Send for Console {}
+unsafe impl Sync for Console {}
+
+#[cfg(test)]
+mod test {
+    use super::Console;
+
+    #[test]
+    fn test_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Console>();
+    }
+
+    #[test]
+    fn test_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<Console>();
     }
 }

@@ -111,15 +111,14 @@ fn from_stream_type() {
     StdStream::from_stream_type(OutputStreamType::Stdout);
 }
 
-// this function is never called, but is still type checked; in
-// particular, calls with specific instantiations will require
-// that those types are `Send`.
-#[allow(dead_code, unconditional_recursion)]
-fn ensure_send<T: Send>() {
-    ensure_send::<Editor<()>>();
+#[test]
+fn test_send() {
+    fn assert_send<T: Send>() {}
+    assert_send::<Editor<()>>();
 }
 
-#[allow(dead_code, unconditional_recursion)]
-fn ensure_sync<T: Sync>() {
-    ensure_sync::<Editor<()>>();
+#[test]
+fn test_sync() {
+    fn assert_sync<T: Sync>() {}
+    assert_sync::<Editor<()>>();
 }

@@ -126,15 +126,15 @@ impl History {
         let old_umask = umask();
         let f = File::create(path);
         restore_umask(old_umask);
-        let file = try!(f);
+        let file = f?;
         fix_perm(&file);
         let mut wtr = BufWriter::new(file);
         for entry in &self.entries {
-            try!(wtr.write_all(entry.as_bytes()));
-            try!(wtr.write_all(b"\n"));
+            wtr.write_all(entry.as_bytes())?;
+            wtr.write_all(b"\n")?;
         }
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
-        try!(wtr.flush());
+        wtr.flush()?;
         Ok(())
     }
 
@@ -145,10 +145,10 @@ impl History {
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
-        let file = try!(File::open(&path));
+        let file = File::open(&path)?;
         let rdr = BufReader::new(file);
         for line in rdr.lines() {
-            self.add(try!(line).as_ref()); // TODO truncate to MAX_LINE
+            self.add(line?.as_ref()); // TODO truncate to MAX_LINE
         }
         Ok(())
     }

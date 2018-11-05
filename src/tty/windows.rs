@@ -40,7 +40,7 @@ macro_rules! check {
     ($funcall:expr) => {{
         let rc = unsafe { $funcall };
         if rc == 0 {
-            try!(Err(io::Error::last_os_error()));
+            Err(io::Error::last_os_error())?;
         }
         rc
     }};

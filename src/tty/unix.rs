@@ -706,8 +706,8 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use config::OutputStreamType;
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
+    use config::OutputStreamType;
 
     #[test]
     #[ignore]

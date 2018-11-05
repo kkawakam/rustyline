@@ -660,7 +660,7 @@ fn readline_raw<H: Helper>(
             editor.add_history_entry(line.as_ref());
         }
     }
-    drop(guard); // try!(disable_raw_mode(original_mode));
+    drop(guard); // disable_raw_mode(original_mode)?;
     editor.term.create_writer().write_and_flush(b"\n").unwrap();
     user_input
 }

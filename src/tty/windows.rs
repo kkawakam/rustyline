@@ -25,12 +25,12 @@ const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
     if handle == handleapi::INVALID_HANDLE_VALUE {
-        try!(Err(io::Error::last_os_error()));
+        Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
-        try!(Err(io::Error::new(
+        Err(io::Error::new(
             io::ErrorKind::Other,
             "no stdio handle available for this process",
-        ),));
+        ))?;
     }
     Ok(handle)
 }
@@ -40,7 +40,7 @@ macro_rules! check {
     ($funcall:expr) => {{
         let rc = unsafe { $funcall };
         if rc == 0 {
-            try!(Err(io::Error::last_os_error()));
+            Err(io::Error::last_os_error())?;
         }
         rc
     }};
@@ -98,7 +98,7 @@ pub struct ConsoleRawReader {
 
 impl ConsoleRawReader {
     pub fn new(stream: OutputStreamType) -> Result<ConsoleRawReader> {
-        let handle = try!(get_std_handle(STDIN_FILENO));
+        let handle = get_std_handle(STDIN_FILENO)?;
         Ok(ConsoleRawReader { handle })
     }
 }
@@ -221,7 +221,7 @@ impl RawReader for ConsoleRawReader {
                 if orc.is_none() {
                     return Err(error::ReadlineError::Eof);
                 }
-                let c = try!(orc.unwrap());
+                let c = orc.unwrap()?;
                 if meta {
                     return Ok(KeyPress::Meta(c));
                 } else {
@@ -283,7 +283,7 @@ impl ConsoleRenderer {
 
 impl Renderer for ConsoleRenderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
-        let mut info = try!(self.get_console_screen_buffer_info());
+        let mut info = self.get_console_screen_buffer_info()?;
         if new.row > old.row {
             info.dwCursorPosition.Y += (new.row - old.row) as i16;
         } else {
@@ -313,14 +313,14 @@ impl Renderer for ConsoleRenderer {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
         // position at the start of the prompt, clear to end of previous input
-        let mut info = try!(self.get_console_screen_buffer_info());
+        let mut info = self.get_console_screen_buffer_info()?;
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= current_row as i16;
-        try!(self.set_console_cursor_position(info.dwCursorPosition));
-        try!(self.clear(
+        self.set_console_cursor_position(info.dwCursorPosition)?;
+        self.clear(
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
             info.dwCursorPosition,
-        ));
+        )?;
         self.buffer.clear();
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -344,20 +344,20 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(truncate);
             }
         }
-        try!(self.out.write_all(self.buffer.as_bytes()));
-        try!(self.out.flush());
+        self.out.write_all(self.buffer.as_bytes())?;
+        self.out.flush()?;
 
         // position the cursor
-        let mut info = try!(self.get_console_screen_buffer_info());
+        let mut info = self.get_console_screen_buffer_info()?;
         info.dwCursorPosition.X = cursor.col as i16;
         info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        try!(self.set_console_cursor_position(info.dwCursorPosition));
+        self.set_console_cursor_position(info.dwCursorPosition)?;
         Ok((cursor, end_pos))
     }
 
     fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
-        try!(self.out.write_all(buf));
-        try!(self.out.flush());
+        self.out.write_all(buf)?;
+        self.out.flush()?;
         Ok(())
     }
 
@@ -389,7 +389,7 @@ impl Renderer for ConsoleRenderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
-        let info = try!(self.get_console_screen_buffer_info());
+        let info = self.get_console_screen_buffer_info()?;
         let coord = wincon::COORD { X: 0, Y: 0 };
         check!(wincon::SetConsoleCursorPosition(self.handle, coord));
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
@@ -502,16 +502,17 @@ impl Term for Console {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
         if !self.stdin_isatty {
-            try!(Err(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::Other,
                 "no stdio handle available for this process",
-            ),));
+            ))?;
         }
-        let original_stdin_mode = try!(get_console_mode(self.stdin_handle));
+        let original_stdin_mode = get_console_mode(self.stdin_handle)?;
         // Disable these modes
-        let mut raw = original_stdin_mode & !(wincon::ENABLE_LINE_INPUT
-            | wincon::ENABLE_ECHO_INPUT
-            | wincon::ENABLE_PROCESSED_INPUT);
+        let mut raw = original_stdin_mode
+            & !(wincon::ENABLE_LINE_INPUT
+                | wincon::ENABLE_ECHO_INPUT
+                | wincon::ENABLE_PROCESSED_INPUT);
         // Enable these modes
         raw |= wincon::ENABLE_EXTENDED_FLAGS;
         raw |= wincon::ENABLE_INSERT_MODE;
@@ -520,7 +521,7 @@ impl Term for Console {
         check!(consoleapi::SetConsoleMode(self.stdin_handle, raw));
 
         let original_stdstream_mode = if self.stdstream_isatty {
-            let original_stdstream_mode = try!(get_console_mode(self.stdstream_handle));
+            let original_stdstream_mode = get_console_mode(self.stdstream_handle)?;
             // To enable ANSI colors (Windows 10 only):
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
             if original_stdstream_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {

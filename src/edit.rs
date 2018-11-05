@@ -72,7 +72,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
-                try!(self.refresh_line());
+                self.refresh_line()?;
                 continue;
             }
             if let Ok(Cmd::Replace(_, _)) = rc {
@@ -108,16 +108,16 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                 .map_or(false, |s| h.highlight_char(s))
         }) {
             let prompt_size = self.prompt_size;
-            try!(self.refresh(self.prompt, prompt_size, None));
+            self.refresh(self.prompt, prompt_size, None)?;
         } else {
-            try!(self.out.move_cursor(self.cursor, cursor));
+            self.out.move_cursor(self.cursor, cursor)?;
         }
         self.cursor = cursor;
         Ok(())
     }
 
     fn refresh(&mut self, prompt: &str, prompt_size: Position, hint: Option<String>) -> Result<()> {
-        let (cursor, end_pos) = try!(self.out.refresh_line(
+        let (cursor, end_pos) = self.out.refresh_line(
             prompt,
             prompt_size,
             &self.line,
@@ -125,7 +125,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             self.cursor.row,
             self.old_rows,
             self.highlighter,
-        ));
+        )?;
 
         self.cursor = cursor;
         self.old_rows = end_pos.row;

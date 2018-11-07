@@ -132,10 +132,10 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn hint(&mut self) -> Option<String> {
         if let Some(hinter) = self.hinter {
-            self.no_hint = false;
-            hinter.hint(self.line.as_str(), self.line.pos())
+            let hint = hinter.hint(self.line.as_str(), self.line.pos());
+            self.no_hint = hint.is_none();
+            hint
         } else {
-            //self.no_hint = true;
             None
         }
     }

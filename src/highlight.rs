@@ -3,6 +3,7 @@
 use config::CompletionType;
 use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
+use std::cell::Cell;
 
 /// Syntax highlighter with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ansi color on windows
@@ -48,13 +49,13 @@ pub trait Highlighter {
         let _ = completion;
         Borrowed(candidate)
     }
-    /// Tells if the `ch`ar needs to be highlighted when typed or when cursor
-    /// is moved under.
+    /// Tells if `line` needs to be highlighted when a specific char is typed or
+    /// when cursor is moved under a specific char.
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, grapheme: &str) -> bool {
-        let _ = grapheme;
+    fn highlight_char<'l>(&self, line: &'l str, _pos: usize) -> bool {
+        let _ = line;
         false
     }
 }
@@ -64,15 +65,25 @@ impl Highlighter for () {}
 static OPENS: &'static [u8; 3] = b"{[(";
 static CLOSES: &'static [u8; 3] = b"}])";
 
-pub struct MatchingBracketHighlihter {}
+pub struct MatchingBracketHighlihter {
+    bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
+}
+
+impl MatchingBracketHighlihter {
+    pub fn new() -> Self {
+        MatchingBracketHighlihter {
+            bracket: Cell::new(None),
+        }
+    }
+}
 
 impl Highlighter for MatchingBracketHighlihter {
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
         }
         // highlight matching brace/bracket/parenthese if it exists
-        if let Some((bracket, pos)) = check_bracket(line, pos) {
+        if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
                 copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
@@ -82,14 +93,10 @@ impl Highlighter for MatchingBracketHighlihter {
         Borrowed(line)
     }
 
-    fn highlight_char(&self, grapheme: &str) -> bool {
+    fn highlight_char<'l>(&self, line: &'l str, pos: usize) -> bool {
         // will highlight matching brace/bracket/parenthese if it exists
-        if grapheme.len() != 1 {
-            return false;
-        }
-        // TODO we can't memorize the character to search...
-        let b = grapheme.as_bytes()[0];
-        is_open_bracket(b) || is_close_bracket(b)
+        self.bracket.set(check_bracket(line, pos));
+        self.bracket.get().is_some()
     }
 }
 

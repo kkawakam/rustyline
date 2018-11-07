@@ -52,8 +52,8 @@ impl Highlighter for MyHelper {
         self.1.highlight(line, pos)
     }
 
-    fn highlight_char(&self, grapheme: &str) -> bool {
-        self.1.highlight_char(grapheme)
+    fn highlight_char<'l>(&self, line: &'l str, pos: usize) -> bool {
+        self.1.highlight_char(line, pos)
     }
 }
 
@@ -67,7 +67,7 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();
-    let h = MyHelper(FilenameCompleter::new(), MatchingBracketHighlihter {});
+    let h = MyHelper(FilenameCompleter::new(), MatchingBracketHighlihter::new());
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);

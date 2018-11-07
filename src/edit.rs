@@ -32,7 +32,8 @@ pub struct State<'out, 'prompt> {
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out Hinter>,
     pub highlighter: Option<&'out Highlighter>,
-    no_hint: bool, // `false` if an hint has been displayed
+    no_hint: bool,        // `false` if an hint has been displayed
+    highlight_char: bool, // `true` if a char has been highlighted
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -59,6 +60,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             hinter,
             highlighter,
             no_hint: true,
+            highlight_char: false,
         }
     }
 
@@ -102,11 +104,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         if self.cursor == cursor {
             return Ok(());
         }
-        if self.highlighter.map_or(false, |h| {
-            self.line
-                .grapheme_at_cursor()
-                .map_or(false, |s| h.highlight_char(s))
-        }) {
+        if self.highlight_char() {
             let prompt_size = self.prompt_size;
             self.refresh(self.prompt, prompt_size, None)?;
         } else {
@@ -137,8 +135,28 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             self.no_hint = false;
             hinter.hint(self.line.as_str(), self.line.pos())
         } else {
-            self.no_hint = true;
+            //self.no_hint = true;
             None
+        }
+    }
+
+    fn highlight_char(&mut self) -> bool {
+        if let Some(highlighter) = self.highlighter {
+            let highlight_char = highlighter.highlight_char(&self.line, self.line.pos());
+            if highlight_char {
+                self.highlight_char = true;
+                true
+            } else {
+                if self.highlight_char {
+                    // previously highlighted => force a full refresh
+                    self.highlight_char = false;
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            false
         }
     }
 }
@@ -203,7 +221,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                 if n == 1
                     && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
                     && (hint.is_none() && no_previous_hint) // TODO refresh only current line
-                    && !self.highlighter.map_or(true, |h| h.highlight_char(ch.encode_utf8(&mut self.byte_buffer)))
+                    && !self.highlight_char()
                 {
                     // Avoid a full update of the line in the trivial case.
                     let cursor = self
@@ -519,6 +537,7 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
         hinter: None,
         highlighter: None,
         no_hint: true,
+        highlight_char: false,
     }
 }
 

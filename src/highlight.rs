@@ -138,6 +138,9 @@ fn find_matching_bracket(line: &str, pos: usize, bracket: u8) -> Option<(u8, usi
 
 // check under or before the cursor
 fn check_bracket(line: &str, pos: usize) -> Option<(u8, usize)> {
+    if line.is_empty() {
+        return None;
+    }
     let mut pos = pos;
     if pos >= line.len() {
         pos = line.len() - 1; // before cursor

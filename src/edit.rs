@@ -165,12 +165,14 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         let hint = self.hint();
+        self.highlight_char();
         self.refresh(self.prompt, prompt_size, hint)
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
         let hint = self.hint();
+        self.highlight_char();
         self.refresh(prompt, prompt_size, hint)
     }
 

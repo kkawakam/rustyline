@@ -97,7 +97,7 @@ pub struct ConsoleRawReader {
 }
 
 impl ConsoleRawReader {
-    pub fn new(stream: OutputStreamType) -> Result<ConsoleRawReader> {
+    pub fn new() -> Result<ConsoleRawReader> {
         let handle = get_std_handle(STDIN_FILENO)?;
         Ok(ConsoleRawReader { handle })
     }
@@ -543,7 +543,7 @@ impl Term for Console {
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::new(self.stream_type)
+        ConsoleRawReader::new()
     }
 
     fn create_writer(&self) -> ConsoleRenderer {

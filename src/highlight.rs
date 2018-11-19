@@ -59,19 +59,19 @@ impl Highlighter for () {}
 static OPENS: &'static [u8; 3] = b"{[(";
 static CLOSES: &'static [u8; 3] = b"}])";
 
-pub struct MatchingBracketHighlihter {
+pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
 }
 
-impl MatchingBracketHighlihter {
+impl MatchingBracketHighlighter {
     pub fn new() -> Self {
-        MatchingBracketHighlihter {
+        MatchingBracketHighlighter {
             bracket: Cell::new(None),
         }
     }
 }
 
-impl Highlighter for MatchingBracketHighlihter {
+impl Highlighter for MatchingBracketHighlighter {
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);

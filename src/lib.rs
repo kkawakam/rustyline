@@ -220,7 +220,7 @@ fn page_completions<R: RawReader, C: Candidate>(
     let max_width = cmp::min(
         cols,
         candidates
-            .into_iter()
+            .iter()
             .map(|s| s.display().width())
             .max()
             .unwrap()

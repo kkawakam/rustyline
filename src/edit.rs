@@ -146,14 +146,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             if highlight_char {
                 self.highlight_char = true;
                 true
+            } else if self.highlight_char {
+                // previously highlighted => force a full refresh
+                self.highlight_char = false;
+                true
             } else {
-                if self.highlight_char {
-                    // previously highlighted => force a full refresh
-                    self.highlight_char = false;
-                    true
-                } else {
-                    false
-                }
+                false
             }
         } else {
             false

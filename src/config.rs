@@ -24,6 +24,9 @@ pub struct Config {
     color_mode: ColorMode,
     /// Whether to use stdout or stderr
     output_stream: OutputStreamType,
+    /// If true, newline won't be output when a user input Enter.
+    /// This is useful when a developer wants to output something after user's input.
+    disable_flush_newline: bool,
 }
 
 impl Config {
@@ -109,6 +112,8 @@ impl Config {
     pub(crate) fn set_output_stream(&mut self, stream: OutputStreamType) {
         self.output_stream = stream;
     }
+
+    pub fn disable_flush_newline(&self) -> bool { self.disable_flush_newline }
 }
 
 impl Default for Config {
@@ -124,6 +129,7 @@ impl Default for Config {
             auto_add_history: false,
             color_mode: ColorMode::Enabled,
             output_stream: OutputStreamType::Stdout,
+            disable_flush_newline: false,
         }
     }
 }
@@ -257,6 +263,14 @@ impl Builder {
         self
     }
 
+    /// Tell if newline is flushed when accepting input.
+    ///
+    /// By default, they are flushed.
+    pub fn disable_flush_newline(mut self, yes: bool) -> Builder {
+        self.set_disable_flush_newline(yes);
+        self
+    }
+
     pub fn build(self) -> Config {
         self.p
     }
@@ -335,5 +349,12 @@ pub trait Configurer {
     /// By default, use stdout
     fn set_output_stream(&mut self, stream: OutputStreamType) {
         self.config_mut().set_output_stream(stream);
+    }
+
+    /// Tell if newline is flushed when accepting input.
+    ///
+    /// By default, they are flushed.
+    fn set_disable_flush_newline(&mut self, yes: bool) {
+        self.config_mut().disable_flush_newline = yes;
     }
 }

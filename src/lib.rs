@@ -661,7 +661,11 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;
-    editor.term.create_writer().write_and_flush(b"\n").unwrap();
+    if editor.config.disable_flush_newline() {
+        editor.term.create_writer().write_and_flush(b"").unwrap();
+    } else {
+        editor.term.create_writer().write_and_flush(b"\n").unwrap();
+    }
     user_input
 }
 

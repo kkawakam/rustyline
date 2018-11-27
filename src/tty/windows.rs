@@ -1,6 +1,7 @@
 //! Windows specific definitions
 use std::io::{self, Write};
 use std::mem;
+use std::os::windows::io::{AsRawHandle, RawHandle};
 use std::sync::atomic;
 
 use unicode_width::UnicodeWidthChar;
@@ -16,7 +17,6 @@ use highlight::Highlighter;
 use keys::{self, KeyPress};
 use line_buffer::LineBuffer;
 use Result;
-use StdStream;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -239,18 +239,18 @@ impl RawReader for ConsoleRawReader {
 }
 
 pub struct ConsoleRenderer {
-    out: StdStream,
+    out: OutputStreamType,
     handle: HANDLE,
     cols: usize, // Number of columns in terminal
     buffer: String,
 }
 
 impl ConsoleRenderer {
-    fn new(handle: HANDLE, stream_type: OutputStreamType) -> ConsoleRenderer {
+    fn new(handle: HANDLE, out: OutputStreamType) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
-            out: StdStream::from_stream_type(stream_type),
+            out,
             handle,
             cols,
             buffer: String::with_capacity(1024),
@@ -344,8 +344,7 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(truncate);
             }
         }
-        self.out.write_all(self.buffer.as_bytes())?;
-        self.out.flush()?;
+        self.write_and_flush(self.buffer.as_bytes())?;
 
         // position the cursor
         let mut info = self.get_console_screen_buffer_info()?;
@@ -355,9 +354,17 @@ impl Renderer for ConsoleRenderer {
         Ok((cursor, end_pos))
     }
 
-    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
-        self.out.write_all(buf)?;
-        self.out.flush()?;
+    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
+        match self.out {
+            OutputStreamType::Stdout => {
+                io::stdout().write_all(buf)?;
+                io::stdout().flush()?;
+            }
+            OutputStreamType::Stderr => {
+                io::stderr().write_all(buf)?;
+                io::stderr().flush()?;
+            }
+        }
         Ok(())
     }
 

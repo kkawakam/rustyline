@@ -88,7 +88,7 @@ impl Renderer for Sink {
         pos
     }
 
-    fn write_and_flush(&mut self, _: &[u8]) -> Result<()> {
+    fn write_and_flush(&self, _: &[u8]) -> Result<()> {
         Ok(())
     }
 

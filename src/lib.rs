@@ -664,8 +664,8 @@ fn readline_raw<H: Helper>(
     }
     drop(guard); // disable_raw_mode(original_mode)?;
     match editor.config.output_stream() {
-        OutputStreamType::Stdout => println!(),
-        OutputStreamType::Stderr => eprintln!(),
+        OutputStreamType::Stdout => writeln!(io::stdout(), "")?,
+        OutputStreamType::Stderr => writeln!(io::stderr(), "")?,
     };
     user_input
 }

@@ -25,7 +25,7 @@ Config
 
 Cursor
 - [ ] insert versus overwrite versus command mode
-- [ ] In Vi command mode, prevent user from going to end of line. (#94)
+- [ ] In vi command mode, prevent user from going to end of line. (#94)
 
 Grapheme
 - [ ] grapheme & input auto-wrap are buggy
@@ -83,6 +83,6 @@ Unix
 - [ ] async stdin (https://github.com/Rufflewind/tokio-file-unix)
 
 Windows
-- [ ] is_atty is not working with cygwin/msys (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
+- [ ] is_atty is not working with Cygwin/MSYS (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
 - [X] UTF-16 surrogate pair
-- [ ] handle ansi escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
+- [ ] handle ANSI escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)

@@ -274,7 +274,7 @@ enum InputMode {
     Replace,
 }
 
-/// Tranform key(s) to commands based on current input mode
+/// Transform key(s) to commands based on current input mode
 pub struct InputState {
     mode: EditMode,
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,

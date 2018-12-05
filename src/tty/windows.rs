@@ -368,7 +368,7 @@ impl Renderer for ConsoleRenderer {
         Ok(())
     }
 
-    /// Characters with 2 column width are correctly handled (not splitted).
+    /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
         for c in s.chars() {

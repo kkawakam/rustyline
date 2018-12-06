@@ -5,8 +5,8 @@ use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
-/// Syntax highlighter with [ansi color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-/// Rustyline will try to handle escape sequence for ansi color on windows
+/// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
+/// Rustyline will try to handle escape sequence for ANSI color on windows
 /// when not supported natively (windows <10).
 ///
 /// Currently, the highlighted version *must* have the same display width as
@@ -31,7 +31,7 @@ pub trait Highlighter {
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
         Borrowed(hint)
     }
-    /// Takes the completion `canditate` and
+    /// Takes the completion `candidate` and
     /// returns the highlighted version (with ANSI color).
     ///
     /// Currently, used only with `CompletionType::List`.
@@ -77,7 +77,7 @@ impl Highlighter for MatchingBracketHighlighter {
         if line.len() <= 1 {
             return Borrowed(line);
         }
-        // highlight matching brace/bracket/parenthese if it exists
+        // highlight matching brace/bracket/parenthesis if it exists
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
@@ -89,7 +89,7 @@ impl Highlighter for MatchingBracketHighlighter {
     }
 
     fn highlight_char<'l>(&self, line: &'l str, pos: usize) -> bool {
-        // will highlight matching brace/bracket/parenthese if it exists
+        // will highlight matching brace/bracket/parenthesis if it exists
         self.bracket.set(check_bracket(line, pos));
         self.bracket.get().is_some()
     }

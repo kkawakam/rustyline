@@ -93,7 +93,7 @@ impl Config {
 
     /// Tell if colors should be enabled.
     ///
-    /// By default, they are except if stdout is not a tty.
+    /// By default, they are except if stdout is not a TTY.
     pub fn color_mode(&self) -> ColorMode {
         self.color_mode
     }
@@ -243,7 +243,7 @@ impl Builder {
 
     /// Forces colorization on or off.
     ///
-    /// By default, colorization is on except if stdout is not a tty.
+    /// By default, colorization is on except if stdout is not a TTY.
     pub fn color_mode(mut self, color_mode: ColorMode) -> Self {
         self.set_color_mode(color_mode);
         self
@@ -325,7 +325,7 @@ pub trait Configurer {
 
     /// Forces colorization on or off.
     ///
-    /// By default, colorization is on except if stdout is not a tty.
+    /// By default, colorization is on except if stdout is not a TTY.
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
     }

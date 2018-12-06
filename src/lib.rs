@@ -373,7 +373,7 @@ fn reverse_incremental_search<R: RawReader>(
     Ok(Some(cmd))
 }
 
-/// Handles reading and editting the readline buffer.
+/// Handles reading and editing the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit<H: Helper>(

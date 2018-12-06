@@ -88,7 +88,7 @@ pub enum Cmd {
 
 impl Cmd {
     pub fn should_reset_kill_ring(&self) -> bool {
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::match_same_arms))]
+        #[allow(clippy::match_same_arms)]
         match *self {
             Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
             Cmd::ClearScreen
@@ -343,7 +343,7 @@ impl InputState {
         wrt: &mut Refresher,
         digit: char,
     ) -> Result<KeyPress> {
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
+        #[allow(clippy::cast_possible_truncation)]
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -356,7 +356,7 @@ impl InputState {
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(true)?;
-            #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
+            #[allow(clippy::cast_possible_truncation)]
             match key {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
                     if self.num_args == -1 {
@@ -496,7 +496,7 @@ impl InputState {
         Ok(cmd)
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
+    #[allow(clippy::cast_possible_truncation)]
     fn vi_arg_digit<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -900,7 +900,7 @@ impl InputState {
         num_args
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
+    #[allow(clippy::cast_sign_loss)]
     fn emacs_num_args(&mut self) -> (RepeatCount, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
@@ -914,7 +914,7 @@ impl InputState {
         }
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
+    #[allow(clippy::cast_sign_loss)]
     fn vi_num_args(&mut self) -> RepeatCount {
         let num_args = self.num_args();
         if num_args < 0 {

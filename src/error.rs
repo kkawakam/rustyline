@@ -11,7 +11,7 @@ use std::str;
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
 // #[non_exhaustive]
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::stutter))]
+#[allow(clippy::stutter)]
 #[derive(Debug)]
 pub enum ReadlineError {
     /// I/O Error

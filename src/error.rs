@@ -10,7 +10,8 @@ use std::str;
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
-/// #[non_exhaustive]
+// #[non_exhaustive]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::stutter))]
 #[derive(Debug)]
 pub enum ReadlineError {
     /// I/O Error
@@ -68,21 +69,21 @@ impl error::Error for ReadlineError {
 }
 
 impl From<io::Error> for ReadlineError {
-    fn from(err: io::Error) -> ReadlineError {
+    fn from(err: io::Error) -> Self {
         ReadlineError::Io(err)
     }
 }
 
 #[cfg(unix)]
 impl From<nix::Error> for ReadlineError {
-    fn from(err: nix::Error) -> ReadlineError {
+    fn from(err: nix::Error) -> Self {
         ReadlineError::Errno(err)
     }
 }
 
 #[cfg(windows)]
 impl From<char::DecodeUtf16Error> for ReadlineError {
-    fn from(err: char::DecodeUtf16Error) -> ReadlineError {
+    fn from(err: char::DecodeUtf16Error) -> Self {
         ReadlineError::Decode(err)
     }
 }

@@ -35,6 +35,7 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
     fn refresh_line(
         &mut self,
         prompt: &str,
@@ -50,7 +51,7 @@ pub trait Renderer {
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
-    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()>;
+    fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
@@ -104,7 +105,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).calculate_position(s, orig)
     }
 
-    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
+    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
         (**self).write_and_flush(buf)
     }
 

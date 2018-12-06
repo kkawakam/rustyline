@@ -29,12 +29,12 @@ pub struct History {
 }
 
 impl History {
-    pub fn new() -> History {
+    pub fn new() -> Self {
         Self::with_config(Config::default())
     }
 
-    pub fn with_config(config: Config) -> History {
-        History {
+    pub fn with_config(config: Config) -> Self {
+        Self {
             entries: VecDeque::new(),
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),

@@ -7,7 +7,7 @@ use super::Result;
 use crate::line_buffer::LineBuffer;
 use memchr::memchr;
 
-// TODO: let the implementers choose/find word boudaries ???
+// TODO: let the implementers choose/find word boundaries ???
 // (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
 // ("select t.na| from tbl as t")
 // TODO: make &self &mut self ???
@@ -146,8 +146,8 @@ pub enum Quote {
 }
 
 impl FilenameCompleter {
-    pub fn new() -> FilenameCompleter {
-        FilenameCompleter {
+    pub fn new() -> Self {
+        Self {
             break_chars: &DEFAULT_BREAK_CHARS,
             double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
         }
@@ -155,8 +155,8 @@ impl FilenameCompleter {
 }
 
 impl Default for FilenameCompleter {
-    fn default() -> FilenameCompleter {
-        FilenameCompleter::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 

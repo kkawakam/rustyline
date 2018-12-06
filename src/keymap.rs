@@ -12,7 +12,7 @@ use crate::tty::RawReader;
 pub type RepeatCount = usize;
 
 /// Commands
-/// #[non_exhaustive]
+// #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     /// abort
@@ -88,6 +88,7 @@ pub enum Cmd {
 
 impl Cmd {
     pub fn should_reset_kill_ring(&self) -> bool {
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::match_same_arms))]
         match *self {
             Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
             Cmd::ClearScreen
@@ -110,8 +111,8 @@ impl Cmd {
             | Cmd::SelfInsert(_, _)
             | Cmd::ViYankTo(_)
             | Cmd::Yank(_, _) => true,
-            Cmd::TransposeChars => false, // TODO Validate
-            _ => false,
+            Cmd::TransposeChars // TODO Validate
+            | _ => false,
         }
     }
 
@@ -123,7 +124,7 @@ impl Cmd {
     }
 
     // Replay this command with a possible different `RepeatCount`.
-    fn redo(&self, new: Option<RepeatCount>, wrt: &Refresher) -> Cmd {
+    fn redo(&self, new: Option<RepeatCount>, wrt: &Refresher) -> Self {
         match *self {
             Cmd::Insert(previous, ref text) => {
                 Cmd::Insert(repeat_count(previous, new), text.clone())
@@ -209,7 +210,7 @@ pub enum CharSearch {
 }
 
 impl CharSearch {
-    fn opposite(self) -> CharSearch {
+    fn opposite(self) -> Self {
         match self {
             CharSearch::Forward(c) => CharSearch::Backward(c),
             CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
@@ -243,7 +244,7 @@ pub enum Movement {
 
 impl Movement {
     // Replay this movement with a possible different `RepeatCount`.
-    fn redo(&self, new: Option<RepeatCount>) -> Movement {
+    fn redo(&self, new: Option<RepeatCount>) -> Self {
         match *self {
             Movement::WholeLine => Movement::WholeLine,
             Movement::BeginningOfLine => Movement::BeginningOfLine,
@@ -274,7 +275,7 @@ enum InputMode {
     Replace,
 }
 
-/// Tranform key(s) to commands based on current input mode
+/// Transform key(s) to commands based on current input mode
 pub struct InputState {
     mode: EditMode,
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
@@ -304,11 +305,8 @@ pub trait Refresher {
 }
 
 impl InputState {
-    pub fn new(
-        config: &Config,
-        custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
-    ) -> InputState {
-        InputState {
+    pub fn new(config: &Config, custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>) -> Self {
+        Self {
             mode: config.edit_mode(),
             custom_bindings,
             input_mode: InputMode::Insert,
@@ -345,6 +343,7 @@ impl InputState {
         wrt: &mut Refresher,
         digit: char,
     ) -> Result<KeyPress> {
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
         match digit {
             '0'...'9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -357,6 +356,7 @@ impl InputState {
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(true)?;
+            #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
             match key {
                 KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
                     if self.num_args == -1 {
@@ -496,6 +496,7 @@ impl InputState {
         Ok(cmd)
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_truncation))]
     fn vi_arg_digit<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -899,6 +900,7 @@ impl InputState {
         num_args
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
     fn emacs_num_args(&mut self) -> (RepeatCount, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
@@ -912,6 +914,7 @@ impl InputState {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
     fn vi_num_args(&mut self) -> RepeatCount {
         let num_args = self.num_args();
         if num_args < 0 {

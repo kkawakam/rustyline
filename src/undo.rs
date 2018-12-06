@@ -104,8 +104,8 @@ pub struct Changeset {
 }
 
 impl Changeset {
-    pub fn new() -> Changeset {
-        Changeset {
+    pub fn new() -> Self {
+        Self {
             undo_group_level: 0,
             undos: Vec::new(),
             redos: Vec::new(),
@@ -127,7 +127,7 @@ impl Changeset {
         while self.undo_group_level > 0 {
             self.undo_group_level -= 1;
             if let Some(&Change::Begin) = self.undos.last() {
-                // emtpy Begin..End
+                // empty Begin..End
                 self.undos.pop();
             } else {
                 self.undos.push(Change::End);

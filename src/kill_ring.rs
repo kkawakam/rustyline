@@ -25,8 +25,8 @@ pub struct KillRing {
 
 impl KillRing {
     /// Create a new kill-ring of the given `size`.
-    pub fn new(size: usize) -> KillRing {
-        KillRing {
+    pub fn new(size: usize) -> Self {
+        Self {
             slots: Vec::with_capacity(size),
             index: 0,
             last_action: Action::Other,

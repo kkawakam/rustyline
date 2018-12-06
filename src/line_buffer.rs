@@ -28,7 +28,7 @@ pub(crate) enum Direction {
 }
 
 impl Default for Direction {
-    fn default() -> Direction {
+    fn default() -> Self {
         Direction::Forward
     }
 }
@@ -68,8 +68,8 @@ impl fmt::Debug for LineBuffer {
 
 impl LineBuffer {
     /// Create a new line buffer with the given maximum `capacity`.
-    pub fn with_capacity(capacity: usize) -> LineBuffer {
-        LineBuffer {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
             buf: String::with_capacity(capacity),
             pos: 0,
             dl: None,
@@ -78,11 +78,7 @@ impl LineBuffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn init(
-        line: &str,
-        pos: usize,
-        cl: Option<Rc<RefCell<ChangeListener>>>,
-    ) -> LineBuffer {
+    pub(crate) fn init(line: &str, pos: usize, cl: Option<Rc<RefCell<ChangeListener>>>) -> Self {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
@@ -572,8 +568,13 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .filter(|&(_, ch)| ch.chars().all(|c| c.is_alphanumeric()))
-            .map(|(i, _)| i)
+            .filter_map(|(i, ch)| {
+                if ch.chars().all(|c| c.is_alphanumeric()) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
             .next()
             .map(|i| i + self.pos)
     }
@@ -767,8 +768,7 @@ impl LineBuffer {
 
     pub fn kill(&mut self, mvt: &Movement) -> bool {
         let notify = match *mvt {
-            Movement::ForwardChar(_) => false,
-            Movement::BackwardChar(_) => false,
+            Movement::ForwardChar(_) | Movement::BackwardChar(_) => false,
             _ => true,
         };
         if notify {

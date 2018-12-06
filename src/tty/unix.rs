@@ -1,7 +1,7 @@
 //! Unix specific definitions
 use std;
 use std::io::{self, Read, Write};
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
 use std::sync::atomic;
 
@@ -21,16 +21,22 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
-use crate::StdStream;
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
-const STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
-const STDERR_FILENO: libc::c_int = libc::STDERR_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
-//#[allow(clippy::identity_conversion)]
+impl AsRawFd for OutputStreamType {
+    fn as_raw_fd(&self) -> RawFd {
+        match self {
+            OutputStreamType::Stdout => libc::STDOUT_FILENO,
+            OutputStreamType::Stderr => libc::STDERR_FILENO,
+        }
+    }
+}
+
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::identity_conversion))]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -99,6 +105,7 @@ impl Read for StdinRaw {
                     return Err(error);
                 }
             } else {
+                #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
                 return Ok(res as usize);
             }
         }
@@ -120,8 +127,8 @@ struct Utf8 {
 }
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Result<PosixRawReader> {
-        Ok(PosixRawReader {
+    fn new(config: &Config) -> Result<Self> {
+        Ok(Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
@@ -371,7 +378,7 @@ impl RawReader for PosixRawReader {
 }
 
 impl Receiver for Utf8 {
-    /// Called whenever a codepoint is parsed successfully
+    /// Called whenever a code point is parsed successfully
     fn codepoint(&mut self, c: char) {
         self.c = Some(c);
         self.valid = true;
@@ -386,16 +393,15 @@ impl Receiver for Utf8 {
 
 /// Console output writer
 pub struct PosixRenderer {
-    out: StdStream,
+    out: OutputStreamType,
     cols: usize, // Number of columns in terminal
     buffer: String,
 }
 
 impl PosixRenderer {
-    fn new(stream_type: OutputStreamType) -> PosixRenderer {
-        let out = StdStream::from_stream_type(stream_type);
+    fn new(out: OutputStreamType) -> Self {
         let (cols, _) = get_win_size(&out);
-        PosixRenderer {
+        Self {
             out,
             cols,
             buffer: String::with_capacity(1024),
@@ -502,10 +508,10 @@ impl Renderer for PosixRenderer {
             self.buffer.push_str("\n");
         }
         // position the cursor
-        let cursor_row_movement = end_pos.row - cursor.row;
+        let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
-        if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}A", cursor_row_movement).unwrap();
+        if new_cursor_row_movement > 0 {
+            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
         }
         // position the cursor within the line
         if cursor.col > 0 {
@@ -514,19 +520,26 @@ impl Renderer for PosixRenderer {
             self.buffer.push('\r');
         }
 
-        self.out.write_all(self.buffer.as_bytes())?;
-        self.out.flush()?;
+        self.write_and_flush(self.buffer.as_bytes())?;
         Ok((cursor, end_pos))
     }
 
-    fn write_and_flush(&mut self, buf: &[u8]) -> Result<()> {
-        self.out.write_all(buf)?;
-        self.out.flush()?;
+    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
+        match self.out {
+            OutputStreamType::Stdout => {
+                io::stdout().write_all(buf)?;
+                io::stdout().flush()?;
+            }
+            OutputStreamType::Stderr => {
+                io::stderr().write_all(buf)?;
+                io::stderr().flush()?;
+            }
+        }
         Ok(())
     }
 
     /// Control characters are treated as having zero width.
-    /// Characters with 2 column width are correctly handled (not splitted).
+    /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
@@ -614,15 +627,11 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> PosixTerminal {
-        let term = PosixTerminal {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> Self {
+        let term = Self {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
-            stdstream_isatty: is_a_tty(if stream_type == OutputStreamType::Stdout {
-                STDOUT_FILENO
-            } else {
-                STDERR_FILENO
-            }),
+            stdstream_isatty: is_a_tty(stream_type.as_raw_fd()),
             color_mode,
             stream_type,
         };
@@ -671,7 +680,7 @@ impl Term for PosixTerminal {
             | InputFlags::INPCK
             | InputFlags::ISTRIP
             | InputFlags::IXON);
-        // we don't want raw output, it turns newlines into straight linefeeds
+        // we don't want raw output, it turns newlines into straight line feeds
         // disable all output processing
         // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
 
@@ -707,7 +716,7 @@ pub fn suspend() -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use config::OutputStreamType;
+    use crate::config::OutputStreamType;
 
     #[test]
     #[ignore]

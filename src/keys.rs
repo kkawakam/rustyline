@@ -1,6 +1,6 @@
 //! Key constants
 
-/// #[non_exhaustive]
+// #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyPress {
     UnknownEscSeq,
@@ -34,11 +34,11 @@ pub enum KeyPress {
     Up,
 }
 
-//#[allow(clippy::match_same_arms)]
 pub fn char_to_key_press(c: char) -> KeyPress {
     if !c.is_control() {
         return KeyPress::Char(c);
     }
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::match_same_arms))]
     match c {
         '\x00' => KeyPress::Ctrl(' '),
         '\x01' => KeyPress::Ctrl('A'),

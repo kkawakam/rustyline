@@ -15,7 +15,7 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 
 **Note**:
 * Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
-* Mintty (Cygwin/Mingw) is not supported
+* Mintty (Cygwin/MinGW) is not supported
 
 ## Example
 ```rust
@@ -54,7 +54,7 @@ fn main() {
     rl.save_history("history.txt").unwrap();
 }
 ```
-                          
+
 ## crates.io
 You can use this package in your project by adding the following
 to your `Cargo.toml`:
@@ -92,10 +92,10 @@ Ctrl-J, Ctrl-M, Enter | Finish the line entry
 Ctrl-R       | Reverse Search history (Ctrl-S forward, Ctrl-G cancel)
 Ctrl-T       | Transpose previous character with current character
 Ctrl-U       | Delete from start of line to cursor
-Ctrl-V       | Insert any special character without perfoming its associated action (#65)
+Ctrl-V       | Insert any special character without performing its associated action (#65)
 Ctrl-W       | Delete word leading up to cursor (using white space as a word boundary)
 Ctrl-Y       | Paste from Yank buffer
-Ctrl-Z       | Suspend (unix only)
+Ctrl-Z       | Suspend (Unix only)
 Ctrl-_       | Undo
 
 ### Emacs mode (default mode)
@@ -106,7 +106,7 @@ Ctrl-A, Home | Move cursor to the beginning of line
 Ctrl-B, Left | Move cursor one character left
 Ctrl-E, End  | Move cursor to end of line
 Ctrl-F, Right| Move cursor one character right
-Ctrl-H, BackSpace | Delete character before cursor
+Ctrl-H, Backspace | Delete character before cursor
 Ctrl-I, Tab  | Next completion
 Ctrl-K       | Delete from cursor to end of line
 Ctrl-L       | Clear screen
@@ -124,12 +124,12 @@ Meta-L       | Lower-case the next word
 Meta-T       | Transpose words
 Meta-U       | Upper-case the next word
 Meta-Y       | See Ctrl-Y
-Meta-BackSpace | Kill from the start of the current word, or, if between words, to the start of the previous word
+Meta-Backspace | Kill from the start of the current word, or, if between words, to the start of the previous word
 Meta-0, 1, ..., - | Specify the digit to the argument. `–` starts a negative argument.
 
 [Readline Emacs Editing Mode Cheat Sheet](http://www.catonmat.net/download/readline-emacs-editing-mode-cheat-sheet.pdf)
 
-### Vi command mode
+### vi command mode
 
 Keystroke    | Action
 ---------    | ------
@@ -149,9 +149,9 @@ d<movement>  | Delete text of a movement command
 D, Ctrl-K    | Delete to the end of the line
 e            | Move to the end of the current word
 E            | Move to the end of the current non-blank word
-f<char>      | Move right to the next occurance of `char`
-F<char>      | Move left to the previous occurance of `char`
-h, Ctrl-H, BackSpace | Move one character left
+f<char>      | Move right to the next occurrence of `char`
+F<char>      | Move left to the previous occurrence of `char`
+h, Ctrl-H, Backspace | Move one character left
 l, Space     | Move one character right
 Ctrl-L       | Clear screen
 i            | Insert before cursor
@@ -163,8 +163,8 @@ P            | Insert the yanked text before the cursor
 r            | Replaces a single character under the cursor (without leaving command mode)
 s            | Delete a single character under the cursor and enter input mode
 S            | Change current line (equivalent to 0c$)
-t<char>      | Move right to the next occurance of `char`, then one char backward
-T<char>      | Move left to the previous occurance of `char`, then one char forward
+t<char>      | Move right to the next occurrence of `char`, then one char backward
+T<char>      | Move left to the previous occurrence of `char`, then one char forward
 u            | Undo
 w            | Move one word or token right
 W            | Move one non-blank word right
@@ -172,15 +172,15 @@ x            | Delete a single character under the cursor
 X            | Delete a character before the cursor
 y<movement>  | Yank a movement into buffer (copy)
 
-### Vi insert mode
+### vi insert mode
 
 Keystroke    | Action
 ---------    | ------
-Ctrl-H, BackSpace | Delete character before cursor
+Ctrl-H, Backspace | Delete character before cursor
 Ctrl-I, Tab  | Next completion
 Esc          | Switch to command mode
 
-[Readline VI Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
+[Readline vi Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
 
 [Terminal codes (ANSI/VT100)](http://wiki.bash-hackers.org/scripting/terminalcodes)
 
@@ -207,24 +207,23 @@ $ bind -p
 
 Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
 --------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
-[Go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes   | Yes               |
-[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | ?          | ?                 |
-[Linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
-[Linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
-[Linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
-[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/Vi/prog | No        | Yes  | Ux         | History based     |
-[Prompt-toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
-[Rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/Vi/conf | Yes       | Yes  | ?          | No                |
-[Replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
-Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/Vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
+[go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes   | Yes               |
+[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | ?          | ?                 |
+[linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
+[linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
+[linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
+[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/vi/prog | No        | Yes  | Ux         | History based     |
+[prompt_toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
+[rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/vi/conf | Yes       | Yes  | ?          | No                |
+[replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
+Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
 
-[Go-prompt]: https://github.com/c-bata/go-prompt
+[go-prompt]: https://github.com/c-bata/go-prompt
 [Haskeline]: https://github.com/judah/haskeline
-[Linefeed]: https://github.com/murarth/linefeed
-[Linenoise]: https://github.com/antirez/linenoise
-[Linenoise-ng]: https://github.com/arangodb/linenoise-ng
+[linefeed]: https://github.com/murarth/linefeed
+[linenoise]: https://github.com/antirez/linenoise
+[linenoise-ng]: https://github.com/arangodb/linenoise-ng
 [Liner]: https://github.com/redox-os/liner
-[Prompt-toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
-[Rb-readline]: https://github.com/ConnorAtherton/rb-readline
-[Replxx]: https://github.com/AmokHuginnsson/replxx
-
+[prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
+[rb-readline]: https://github.com/ConnorAtherton/rb-readline
+[replxx]: https://github.com/AmokHuginnsson/replxx

@@ -59,7 +59,9 @@ use unicode_width::UnicodeWidthStr;
 use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 use crate::completion::{longest_common_prefix, Candidate, Completer};
-pub use crate::config::{ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
+pub use crate::config::{
+    ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
+};
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -220,7 +222,7 @@ fn page_completions<R: RawReader, C: Candidate>(
     let max_width = cmp::min(
         cols,
         candidates
-            .into_iter()
+            .iter()
             .map(|s| s.display().width())
             .max()
             .unwrap()
@@ -371,7 +373,7 @@ fn reverse_incremental_search<R: RawReader>(
     Ok(Some(cmd))
 }
 
-/// Handles reading and editting the readline buffer.
+/// Handles reading and editing the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
 fn readline_edit<H: Helper>(
@@ -623,8 +625,7 @@ fn readline_edit<H: Helper>(
                 s.refresh_line()?;
                 continue;
             }
-            Cmd::Noop => {}
-            _ => {
+            Cmd::Noop | _ => {
                 // Ignore the character typed.
             }
         }
@@ -661,7 +662,10 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;
-    editor.term.create_writer().write_and_flush(b"\n").unwrap();
+    match editor.config.output_stream() {
+        OutputStreamType::Stdout => writeln!(io::stdout())?,
+        OutputStreamType::Stderr => writeln!(io::stderr())?,
+    };
     user_input
 }
 
@@ -698,17 +702,17 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-//#[allow(clippy::new_without_default)]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
-    pub fn new() -> Editor<H> {
+    pub fn new() -> Self {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    pub fn with_config(config: Config) -> Editor<H> {
+    pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(config.color_mode(), config.output_stream());
-        Editor {
+        Self {
             term,
             history: History::with_config(config),
             helper: None,
@@ -748,12 +752,12 @@ impl<H: Helper> Editor<H> {
             stdout.flush()?;
 
             readline_direct()
-        } else if !self.term.is_stdin_tty() {
+        } else if self.term.is_stdin_tty() {
+            readline_raw(prompt, initial, self)
+        } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
             readline_direct()
-        } else {
-            readline_raw(prompt, initial, self)
         }
     }
 
@@ -896,61 +900,6 @@ impl<'a, H: Helper> Iterator for Iter<'a, H> {
             Err(error::ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
-    }
-}
-
-enum StdStream {
-    Stdout(io::Stdout),
-    Stderr(io::Stderr),
-}
-impl StdStream {
-    fn from_stream_type(t: config::OutputStreamType) -> StdStream {
-        match t {
-            config::OutputStreamType::Stderr => StdStream::Stderr(io::stderr()),
-            config::OutputStreamType::Stdout => StdStream::Stdout(io::stdout()),
-        }
-    }
-}
-#[cfg(unix)]
-impl std::os::unix::io::AsRawFd for StdStream {
-    fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
-        match self {
-            StdStream::Stdout(e) => e.as_raw_fd(),
-            StdStream::Stderr(e) => e.as_raw_fd(),
-        }
-    }
-}
-impl io::Write for StdStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            StdStream::Stdout(ref mut e) => e.write(buf),
-            StdStream::Stderr(ref mut e) => e.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            StdStream::Stdout(ref mut e) => e.flush(),
-            StdStream::Stderr(ref mut e) => e.flush(),
-        }
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        match self {
-            StdStream::Stdout(ref mut e) => e.write_all(buf),
-            StdStream::Stderr(ref mut e) => e.write_all(buf),
-        }
-    }
-
-    fn write_fmt(&mut self, fmt: std::fmt::Arguments) -> io::Result<()> {
-        match self {
-            StdStream::Stdout(ref mut e) => e.write_fmt(fmt),
-            StdStream::Stderr(ref mut e) => e.write_fmt(fmt),
-        }
-    }
-
-    fn by_ref(&mut self) -> &mut StdStream {
-        self
     }
 }
 

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use super::{Editor, Result, StdStream};
+use super::{Editor, Result};
 use crate::completion::Completer;
-use crate::config::{Config, EditMode, OutputStreamType};
+use crate::config::{Config, EditMode};
 use crate::edit::init_state;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::KeyPress;
@@ -104,11 +104,6 @@ fn unknown_esc_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         assert_line(*mode, &[KeyPress::UnknownEscSeq, KeyPress::Enter], "");
     }
-}
-
-#[test]
-fn from_stream_type() {
-    StdStream::from_stream_type(OutputStreamType::Stdout);
 }
 
 #[test]

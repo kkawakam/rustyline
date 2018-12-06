@@ -36,7 +36,7 @@ impl AsRawFd for OutputStreamType {
     }
 }
 
-//#[allow(clippy::identity_conversion)]
+#[cfg_attr(feature = "cargo-clippy", allow(identity_conversion))]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -105,6 +105,7 @@ impl Read for StdinRaw {
                     return Err(error);
                 }
             } else {
+                #[cfg_attr(feature = "cargo-clippy", allow(cast_sign_loss))]
                 return Ok(res as usize);
             }
         }
@@ -126,8 +127,8 @@ struct Utf8 {
 }
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Result<PosixRawReader> {
-        Ok(PosixRawReader {
+    fn new(config: &Config) -> Result<Self> {
+        Ok(Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
@@ -398,9 +399,9 @@ pub struct PosixRenderer {
 }
 
 impl PosixRenderer {
-    fn new(out: OutputStreamType) -> PosixRenderer {
+    fn new(out: OutputStreamType) -> Self {
         let (cols, _) = get_win_size(&out);
-        PosixRenderer {
+        Self {
             out,
             cols,
             buffer: String::with_capacity(1024),
@@ -507,10 +508,10 @@ impl Renderer for PosixRenderer {
             self.buffer.push_str("\n");
         }
         // position the cursor
-        let cursor_row_movement = end_pos.row - cursor.row;
+        let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
-        if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}A", cursor_row_movement).unwrap();
+        if new_cursor_row_movement > 0 {
+            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
         }
         // position the cursor within the line
         if cursor.col > 0 {
@@ -626,8 +627,8 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> PosixTerminal {
-        let term = PosixTerminal {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> Self {
+        let term = Self {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
             stdstream_isatty: is_a_tty(stream_type.as_raw_fd()),

@@ -104,8 +104,8 @@ pub struct Changeset {
 }
 
 impl Changeset {
-    pub fn new() -> Changeset {
-        Changeset {
+    pub fn new() -> Self {
+        Self {
             undo_group_level: 0,
             undos: Vec::new(),
             redos: Vec::new(),

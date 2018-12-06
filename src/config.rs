@@ -112,8 +112,8 @@ impl Config {
 }
 
 impl Default for Config {
-    fn default() -> Config {
-        Config {
+    fn default() -> Self {
+        Self {
             max_history_size: 100,
             history_duplicates: HistoryDuplicates::IgnoreConsecutive,
             history_ignore_space: false,
@@ -174,14 +174,14 @@ pub struct Builder {
 }
 
 impl Builder {
-    pub fn new() -> Builder {
-        Builder {
+    pub fn new() -> Self {
+        Self {
             p: Config::default(),
         }
     }
 
     /// Set the maximum length for the history.
-    pub fn max_history_size(mut self, max_size: usize) -> Builder {
+    pub fn max_history_size(mut self, max_size: usize) -> Self {
         self.set_max_history_size(max_size);
         self
     }
@@ -190,7 +190,7 @@ impl Builder {
     /// in the history list.
     ///
     /// By default, they are ignored.
-    pub fn history_ignore_dups(mut self, yes: bool) -> Builder {
+    pub fn history_ignore_dups(mut self, yes: bool) -> Self {
         self.set_history_ignore_dups(yes);
         self
     }
@@ -199,20 +199,20 @@ impl Builder {
     /// the history list.
     ///
     /// By default, they are saved.
-    pub fn history_ignore_space(mut self, yes: bool) -> Builder {
+    pub fn history_ignore_space(mut self, yes: bool) -> Self {
         self.set_history_ignore_space(yes);
         self
     }
 
     /// Set `completion_type`.
-    pub fn completion_type(mut self, completion_type: CompletionType) -> Builder {
+    pub fn completion_type(mut self, completion_type: CompletionType) -> Self {
         self.set_completion_type(completion_type);
         self
     }
 
     /// The number of possible completions that determines when the user is
     /// asked whether the list of possibilities should be displayed.
-    pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Builder {
+    pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Self {
         self.set_completion_prompt_limit(completion_prompt_limit);
         self
     }
@@ -222,13 +222,13 @@ impl Builder {
     /// sequence.
     /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another
     /// byte.
-    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Builder {
+    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Self {
         self.set_keyseq_timeout(keyseq_timeout_ms);
         self
     }
 
     /// Choose between Emacs or Vi mode.
-    pub fn edit_mode(mut self, edit_mode: EditMode) -> Builder {
+    pub fn edit_mode(mut self, edit_mode: EditMode) -> Self {
         self.set_edit_mode(edit_mode);
         self
     }
@@ -236,7 +236,7 @@ impl Builder {
     /// Tell if lines are automatically added to the history.
     ///
     /// By default, they are not.
-    pub fn auto_add_history(mut self, yes: bool) -> Builder {
+    pub fn auto_add_history(mut self, yes: bool) -> Self {
         self.set_auto_add_history(yes);
         self
     }
@@ -244,7 +244,7 @@ impl Builder {
     /// Forces colorization on or off.
     ///
     /// By default, colorization is on except if stdout is not a TTY.
-    pub fn color_mode(mut self, color_mode: ColorMode) -> Builder {
+    pub fn color_mode(mut self, color_mode: ColorMode) -> Self {
         self.set_color_mode(color_mode);
         self
     }
@@ -252,7 +252,7 @@ impl Builder {
     /// Whether to use stdout or stderr.
     ///
     /// Be default, use stdout
-    pub fn output_stream(mut self, stream: OutputStreamType) -> Builder {
+    pub fn output_stream(mut self, stream: OutputStreamType) -> Self {
         self.set_output_stream(stream);
         self
     }

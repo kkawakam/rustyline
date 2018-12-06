@@ -702,7 +702,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
+#[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Self {

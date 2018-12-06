@@ -36,7 +36,7 @@ impl AsRawFd for OutputStreamType {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::identity_conversion))]
+#[allow(clippy::identity_conversion)]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -105,7 +105,7 @@ impl Read for StdinRaw {
                     return Err(error);
                 }
             } else {
-                #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
+                #[allow(clippy::cast_sign_loss)]
                 return Ok(res as usize);
             }
         }

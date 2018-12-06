@@ -572,8 +572,13 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .filter_map(|(i, ch)| if ch.chars().all(|c| c.is_alphanumeric()) {Some(i)} else {None})
-            .next()
+            .filter_map(|(i, ch)| {
+                if ch.chars().all(|c| c.is_alphanumeric()) {
+                    Some(i)
+                } else {
+                    None
+                }
+            }).next()
             .map(|i| i + self.pos)
     }
 

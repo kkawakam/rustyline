@@ -305,10 +305,7 @@ pub trait Refresher {
 }
 
 impl InputState {
-    pub fn new(
-        config: &Config,
-        custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
-    ) -> Self {
+    pub fn new(config: &Config, custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>) -> Self {
         Self {
             mode: config.edit_mode(),
             custom_bindings,

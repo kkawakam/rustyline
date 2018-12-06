@@ -625,8 +625,8 @@ fn readline_edit<H: Helper>(
                 s.refresh_line()?;
                 continue;
             }
-            Cmd::Noop => {}
-            _ => {
+            Cmd::Noop
+            | _ => {
                 // Ignore the character typed.
             }
         }
@@ -664,8 +664,8 @@ fn readline_raw<H: Helper>(
     }
     drop(guard); // disable_raw_mode(original_mode)?;
     match editor.config.output_stream() {
-        OutputStreamType::Stdout => writeln!(io::stdout(), "")?,
-        OutputStreamType::Stderr => writeln!(io::stderr(), "")?,
+        OutputStreamType::Stdout => writeln!(io::stdout())?,
+        OutputStreamType::Stderr => writeln!(io::stderr())?,
     };
     user_input
 }
@@ -703,17 +703,17 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-//#[allow(clippy::new_without_default)]
+#[cfg_attr(feature = "cargo-clippy", allow(new_without_default))]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
-    pub fn new() -> Editor<H> {
+    pub fn new() -> Self {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    pub fn with_config(config: Config) -> Editor<H> {
+    pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(config.color_mode(), config.output_stream());
-        Editor {
+        Self {
             term,
             history: History::with_config(config),
             helper: None,
@@ -753,12 +753,12 @@ impl<H: Helper> Editor<H> {
             stdout.flush()?;
 
             readline_direct()
-        } else if !self.term.is_stdin_tty() {
+        } else if self.term.is_stdin_tty() {
+            readline_raw(prompt, initial, self)
+        } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
             readline_direct()
-        } else {
-            readline_raw(prompt, initial, self)
         }
     }
 

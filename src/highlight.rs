@@ -59,13 +59,14 @@ impl Highlighter for () {}
 static OPENS: &'static [u8; 3] = b"{[(";
 static CLOSES: &'static [u8; 3] = b"}])";
 
+#[derive(Default)]
 pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
 }
 
 impl MatchingBracketHighlighter {
     pub fn new() -> Self {
-        MatchingBracketHighlighter {
+        Self {
             bracket: Cell::new(None),
         }
     }

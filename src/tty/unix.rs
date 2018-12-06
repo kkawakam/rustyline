@@ -377,7 +377,7 @@ impl RawReader for PosixRawReader {
 }
 
 impl Receiver for Utf8 {
-    /// Called whenever a codepoint is parsed successfully
+    /// Called whenever a code point is parsed successfully
     fn codepoint(&mut self, c: char) {
         self.c = Some(c);
         self.valid = true;
@@ -538,7 +538,7 @@ impl Renderer for PosixRenderer {
     }
 
     /// Control characters are treated as having zero width.
-    /// Characters with 2 column width are correctly handled (not splitted).
+    /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
@@ -679,7 +679,7 @@ impl Term for PosixTerminal {
             | InputFlags::INPCK
             | InputFlags::ISTRIP
             | InputFlags::IXON);
-        // we don't want raw output, it turns newlines into straight linefeeds
+        // we don't want raw output, it turns newlines into straight line feeds
         // disable all output processing
         // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
 

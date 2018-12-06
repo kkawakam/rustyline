@@ -7,7 +7,7 @@ use super::Result;
 use line_buffer::LineBuffer;
 use memchr::memchr;
 
-// TODO: let the implementers choose/find word boudaries ???
+// TODO: let the implementers choose/find word boundaries ???
 // (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
 // ("select t.na| from tbl as t")
 // TODO: make &self &mut self ???

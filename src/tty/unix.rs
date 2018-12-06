@@ -15,12 +15,12 @@ use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use config::{ColorMode, Config, OutputStreamType};
-use error;
-use highlight::Highlighter;
-use keys::{self, KeyPress};
-use line_buffer::LineBuffer;
-use Result;
+use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::error;
+use crate::highlight::Highlighter;
+use crate::keys::{self, KeyPress};
+use crate::line_buffer::LineBuffer;
+use crate::Result;
 
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 
@@ -36,7 +36,7 @@ impl AsRawFd for OutputStreamType {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(identity_conversion))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::identity_conversion))]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -105,7 +105,7 @@ impl Read for StdinRaw {
                     return Err(error);
                 }
             } else {
-                #[cfg_attr(feature = "cargo-clippy", allow(cast_sign_loss))]
+                #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_sign_loss))]
                 return Ok(res as usize);
             }
         }
@@ -716,7 +716,7 @@ pub fn suspend() -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use config::OutputStreamType;
+    use crate::config::OutputStreamType;
 
     #[test]
     #[ignore]

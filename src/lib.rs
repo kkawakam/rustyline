@@ -56,21 +56,21 @@ use std::result;
 use std::sync::{Arc, Mutex, RwLock};
 use unicode_width::UnicodeWidthStr;
 
-use tty::{RawMode, RawReader, Renderer, Term, Terminal};
+use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
-use completion::{longest_common_prefix, Candidate, Completer};
-pub use config::{
+use crate::completion::{longest_common_prefix, Candidate, Completer};
+pub use crate::config::{
     ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
 };
-use edit::State;
-use highlight::Highlighter;
-use hint::Hinter;
-use history::{Direction, History};
-pub use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use keymap::{InputState, Refresher};
-pub use keys::KeyPress;
-use kill_ring::{KillRing, Mode};
-use line_buffer::WordAction;
+use crate::edit::State;
+use crate::highlight::Highlighter;
+use crate::hint::Hinter;
+use crate::history::{Direction, History};
+pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+use crate::keymap::{InputState, Refresher};
+pub use crate::keys::KeyPress;
+use crate::kill_ring::{KillRing, Mode};
+use crate::line_buffer::WordAction;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -702,7 +702,7 @@ pub struct Editor<H: Helper> {
     custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(new_without_default))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
     pub fn new() -> Self {

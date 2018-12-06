@@ -1,8 +1,8 @@
 //! Undo API
 use std::fmt::Debug;
 
-use keymap::RepeatCount;
-use line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
+use crate::keymap::RepeatCount;
+use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
 use unicode_segmentation::UnicodeSegmentation;
 
 enum Change {
@@ -354,7 +354,7 @@ impl ChangeListener for Changeset {
 #[cfg(test)]
 mod tests {
     use super::Changeset;
-    use line_buffer::LineBuffer;
+    use crate::line_buffer::LineBuffer;
 
     #[test]
     fn test_insert_chars() {

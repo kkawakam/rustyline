@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{self, Path};
 
 use super::Result;
-use line_buffer::LineBuffer;
+use crate::line_buffer::LineBuffer;
 use memchr::memchr;
 
 // TODO: let the implementers choose/find word boundaries ???

@@ -7,14 +7,14 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::Result;
-use highlight::Highlighter;
-use hint::Hinter;
-use history::{Direction, History};
-use keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use keymap::{InputState, Refresher};
-use line_buffer::{LineBuffer, WordAction, MAX_LINE};
-use tty::{Position, RawReader, Renderer};
-use undo::Changeset;
+use crate::highlight::Highlighter;
+use crate::hint::Hinter;
+use crate::history::{Direction, History};
+use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+use crate::keymap::{InputState, Refresher};
+use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
+use crate::tty::{Position, RawReader, Renderer};
+use crate::undo::Changeset;
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -544,8 +544,8 @@ pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> Stat
 #[cfg(test)]
 mod test {
     use super::init_state;
-    use history::History;
-    use tty::Sink;
+    use crate::history::History;
+    use crate::tty::Sink;
 
     #[test]
     fn edit_history_next() {

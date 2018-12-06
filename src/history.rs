@@ -10,7 +10,7 @@ use std::ops::Index;
 use std::path::Path;
 
 use super::Result;
-use config::{Config, HistoryDuplicates};
+use crate::config::{Config, HistoryDuplicates};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -276,7 +276,7 @@ fn fix_perm(file: &File) {
 mod tests {
     extern crate tempdir;
     use super::{Direction, History};
-    use config::Config;
+    use crate::config::Config;
     use std::path::Path;
 
     fn init() -> History {

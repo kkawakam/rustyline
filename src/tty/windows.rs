@@ -10,13 +10,13 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::OutputStreamType;
-use config::{ColorMode, Config};
-use error;
-use highlight::Highlighter;
-use keys::{self, KeyPress};
-use line_buffer::LineBuffer;
-use Result;
+use crate::config::OutputStreamType;
+use crate::config::{ColorMode, Config};
+use crate::error;
+use crate::highlight::Highlighter;
+use crate::keys::{self, KeyPress};
+use crate::line_buffer::LineBuffer;
+use crate::Result;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -155,7 +155,7 @@ impl RawReader for ConsoleRawReader {
                             KeyPress::ShiftLeft
                         } else {
                             KeyPress::Left
-                        })
+                        });
                     }
                     winuser::VK_RIGHT => {
                         return Ok(if ctrl {
@@ -164,7 +164,7 @@ impl RawReader for ConsoleRawReader {
                             KeyPress::ShiftRight
                         } else {
                             KeyPress::Right
-                        })
+                        });
                     }
                     winuser::VK_UP => {
                         return Ok(if ctrl {
@@ -173,7 +173,7 @@ impl RawReader for ConsoleRawReader {
                             KeyPress::ShiftUp
                         } else {
                             KeyPress::Up
-                        })
+                        });
                     }
                     winuser::VK_DOWN => {
                         return Ok(if ctrl {
@@ -182,7 +182,7 @@ impl RawReader for ConsoleRawReader {
                             KeyPress::ShiftDown
                         } else {
                             KeyPress::Down
-                        })
+                        });
                     }
                     winuser::VK_DELETE => return Ok(KeyPress::Delete),
                     winuser::VK_HOME => return Ok(KeyPress::Home),

@@ -3,11 +3,11 @@ use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use config::{ColorMode, Config, OutputStreamType};
-use highlight::Highlighter;
-use keys::KeyPress;
-use line_buffer::LineBuffer;
-use Result;
+use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::highlight::Highlighter;
+use crate::keys::KeyPress;
+use crate::line_buffer::LineBuffer;
+use crate::Result;
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -35,7 +35,7 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
-    #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
     fn refresh_line(
         &mut self,
         prompt: &str,

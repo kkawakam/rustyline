@@ -4,12 +4,12 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use config::{ColorMode, Config, OutputStreamType};
-use error::ReadlineError;
-use highlight::Highlighter;
-use keys::KeyPress;
-use line_buffer::LineBuffer;
-use Result;
+use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::error::ReadlineError;
+use crate::highlight::Highlighter;
+use crate::keys::KeyPress;
+use crate::line_buffer::LineBuffer;
+use crate::Result;
 
 pub type Mode = ();
 
@@ -133,7 +133,7 @@ impl Term for DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
-            color_mode: color_mode,
+            color_mode,
         }
     }
 

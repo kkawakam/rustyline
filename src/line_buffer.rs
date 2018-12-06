@@ -1,5 +1,5 @@
 //! Line buffer with current cursor position
-use keymap::{At, CharSearch, Movement, RepeatCount, Word};
+use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
 use std::cell::RefCell;
 use std::fmt;
 use std::iter;
@@ -78,11 +78,7 @@ impl LineBuffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn init(
-        line: &str,
-        pos: usize,
-        cl: Option<Rc<RefCell<ChangeListener>>>,
-    ) -> Self {
+    pub(crate) fn init(line: &str, pos: usize, cl: Option<Rc<RefCell<ChangeListener>>>) -> Self {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
@@ -578,7 +574,8 @@ impl LineBuffer {
                 } else {
                     None
                 }
-            }).next()
+            })
+            .next()
             .map(|i| i + self.pos)
     }
 
@@ -678,7 +675,7 @@ impl LineBuffer {
 
     fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
         for dl in &self.dl {
-            let mut lock = dl.try_lock();
+            let lock = dl.try_lock();
             if let Ok(mut dl) = lock {
                 dl.delete(range.start, &self.buf[range.start..range.end], dir);
             }
@@ -771,8 +768,7 @@ impl LineBuffer {
 
     pub fn kill(&mut self, mvt: &Movement) -> bool {
         let notify = match *mvt {
-            Movement::ForwardChar(_)
-            | Movement::BackwardChar(_) => false,
+            Movement::ForwardChar(_) | Movement::BackwardChar(_) => false,
             _ => true,
         };
         if notify {
@@ -859,7 +855,7 @@ fn is_other_char(grapheme: &str) -> bool {
 #[cfg(test)]
 mod test {
     use super::{ChangeListener, DeleteListener, Direction, LineBuffer, WordAction, MAX_LINE};
-    use keymap::{At, CharSearch, Word};
+    use crate::keymap::{At, CharSearch, Word};
     use std::cell::RefCell;
     use std::rc::Rc;
 

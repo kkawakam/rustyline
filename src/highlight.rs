@@ -1,6 +1,6 @@
 //! Syntax highlighting
 
-use config::CompletionType;
+use crate::config::CompletionType;
 use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;

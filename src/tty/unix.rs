@@ -458,7 +458,7 @@ impl Renderer for PosixRenderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
-        highlighter: Option<&Highlighter>,
+        highlighter: Option<&dyn Highlighter>,
     ) -> Result<(Position, Position)> {
         use std::fmt::Write;
         self.buffer.clear();

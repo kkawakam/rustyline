@@ -1,6 +1,3 @@
-extern crate log;
-extern crate rustyline;
-
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use std::borrow::Cow::{self, Borrowed, Owned};
 
@@ -52,7 +49,7 @@ impl Highlighter for MyHelper {
         self.1.highlight(line, pos)
     }
 
-    fn highlight_char<'l>(&self, line: &'l str, pos: usize) -> bool {
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
         self.1.highlight_char(line, pos)
     }
 }
@@ -103,11 +100,11 @@ static LOGGER: Logger = Logger;
 struct Logger;
 
 impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         metadata.level() <= Level::Debug
     }
 
-    fn log(&self, record: &Record) {
+    fn log(&self, record: &Record<'_>) {
         if self.enabled(record.metadata()) {
             eprintln!("{} - {}", record.level(), record.args());
         }

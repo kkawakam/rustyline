@@ -72,7 +72,7 @@ impl Renderer for Sink {
         hint: Option<String>,
         _: usize,
         _: usize,
-        _: Option<&Highlighter>,
+        _: Option<&dyn Highlighter>,
     ) -> Result<(Position, Position)> {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
         if let Some(hint) = hint {

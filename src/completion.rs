@@ -195,7 +195,7 @@ impl Completer for FilenameCompleter {
 }
 
 /// Remove escape char
-pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<str> {
+pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
     if esc_char.is_none() {
         return Borrowed(input);
     }
@@ -480,11 +480,11 @@ mod tests {
         assert_eq!(Borrowed(input), super::unescape(input, Some('\\')));
         if cfg!(windows) {
             let input = "c:\\users\\All Users\\";
-            let result: Cow<str> = Borrowed(input);
+            let result: Cow<'_, str> = Borrowed(input);
             assert_eq!(result, super::unescape(input, Some('\\')));
         } else {
             let input = "/User\\ Information";
-            let result: Cow<str> = Owned(String::from("/User Information"));
+            let result: Cow<'_, str> = Owned(String::from("/User Information"));
             assert_eq!(result, super::unescape(input, Some('\\')));
         }
     }

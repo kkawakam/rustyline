@@ -15,21 +15,15 @@
 //!     Err(_) => println!("No input"),
 //! }
 //! ```
-#![allow(unknown_lints)]
 // #![feature(non_exhaustive)]
-// #![feature(tool_lints)]
 
-extern crate dirs;
-extern crate libc;
+use libc;
 #[macro_use]
 extern crate log;
-extern crate memchr;
+
 #[cfg(unix)]
 extern crate nix;
-extern crate unicode_segmentation;
-extern crate unicode_width;
-#[cfg(unix)]
-extern crate utf8parse;
+
 #[cfg(windows)]
 extern crate winapi;
 
@@ -78,10 +72,10 @@ pub type Result<T> = result::Result<T, error::ReadlineError>;
 /// Completes the line/word
 fn complete_line<R: RawReader, C: Completer>(
     rdr: &mut R,
-    s: &mut State,
+    s: &mut State<'_, '_>,
     input_state: &mut InputState,
     completer: &C,
-    highlighter: Option<&Highlighter>,
+    highlighter: Option<&dyn Highlighter>,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -195,7 +189,7 @@ fn complete_line<R: RawReader, C: Completer>(
 }
 
 /// Completes the current hint
-fn complete_hint_line(s: &mut State, hinter: &Hinter) -> Result<()> {
+fn complete_hint_line(s: &mut State<'_, '_>, hinter: &dyn Hinter) -> Result<()> {
     let hint = match hinter.hint(&s.line, s.line.pos()) {
         Some(hint) => hint,
         None => return Ok(()),
@@ -210,9 +204,9 @@ fn complete_hint_line(s: &mut State, hinter: &Hinter) -> Result<()> {
 
 fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
-    s: &mut State,
+    s: &mut State<'_, '_>,
     input_state: &mut InputState,
-    highlighter: Option<&Highlighter>,
+    highlighter: Option<&dyn Highlighter>,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -290,7 +284,7 @@ fn page_completions<R: RawReader, C: Candidate>(
 /// Incremental search
 fn reverse_incremental_search<R: RawReader>(
     rdr: &mut R,
-    s: &mut State,
+    s: &mut State<'_, '_>,
     input_state: &mut InputState,
     history: &History,
 ) -> Result<Option<Cmd>> {
@@ -383,9 +377,9 @@ fn readline_edit<H: Helper>(
     original_mode: &tty::Mode,
 ) -> Result<String> {
     let completer = editor.helper.as_ref();
-    let hinter = editor.helper.as_ref().map(|h| h as &Hinter);
+    let hinter = editor.helper.as_ref().map(|h| h as &dyn Hinter);
     let highlighter = if editor.term.colors_enabled() {
-        editor.helper.as_ref().map(|h| h as &Highlighter)
+        editor.helper.as_ref().map(|h| h as &dyn Highlighter)
     } else {
         None
     };
@@ -639,7 +633,7 @@ fn readline_edit<H: Helper>(
 struct Guard<'m>(&'m tty::Mode);
 
 #[allow(unused_must_use)]
-impl<'m> Drop for Guard<'m> {
+impl Drop for Guard<'_> {
     fn drop(&mut self) {
         let Guard(mode) = *self;
         mode.disable_raw_mode();
@@ -833,7 +827,7 @@ impl<H: Helper> Editor<H> {
     ///     }
     /// }
     /// ```
-    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<H> {
+    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<'_, H> {
         Iter {
             editor: self,
             prompt,
@@ -873,7 +867,7 @@ impl<H: Helper> config::Configurer for Editor<H> {
 }
 
 impl<H: Helper> fmt::Debug for Editor<H> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
             .field("config", &self.config)
@@ -882,10 +876,7 @@ impl<H: Helper> fmt::Debug for Editor<H> {
 }
 
 /// Edited lines iterator
-pub struct Iter<'a, H: Helper>
-where
-    H: 'a,
-{
+pub struct Iter<'a, H: Helper> {
     editor: &'a mut Editor<H>,
     prompt: &'a str,
 }

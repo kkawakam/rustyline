@@ -202,7 +202,7 @@ impl History {
     }
 
     /// Return a forward iterator.
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter(self.entries.iter())
     }
 }
@@ -274,10 +274,10 @@ fn fix_perm(file: &File) {
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
     use super::{Direction, History};
     use crate::config::Config;
     use std::path::Path;
+    use tempdir;
 
     fn init() -> History {
         let mut history = History::new();

@@ -44,7 +44,7 @@ pub trait Renderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
-        highlighter: Option<&Highlighter>,
+        highlighter: Option<&dyn Highlighter>,
     ) -> Result<(Position, Position)>;
 
     /// Calculate the number of columns and rows used to display `s` on a
@@ -88,7 +88,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
-        highlighter: Option<&Highlighter>,
+        highlighter: Option<&dyn Highlighter>,
     ) -> Result<(Position, Position)> {
         (**self).refresh_line(
             prompt,

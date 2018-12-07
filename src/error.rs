@@ -33,7 +33,7 @@ pub enum ReadlineError {
 }
 
 impl fmt::Display for ReadlineError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),

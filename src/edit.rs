@@ -19,7 +19,7 @@ use crate::undo::Changeset;
 /// Represent the state during line editing.
 /// Implement rendering.
 pub struct State<'out, 'prompt> {
-    pub out: &'out mut Renderer,
+    pub out: &'out mut dyn Renderer,
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
@@ -30,19 +30,19 @@ pub struct State<'out, 'prompt> {
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
-    pub hinter: Option<&'out Hinter>,
-    pub highlighter: Option<&'out Highlighter>,
+    pub hinter: Option<&'out dyn Hinter>,
+    pub highlighter: Option<&'out dyn Highlighter>,
     no_hint: bool,        // `false` if an hint has been displayed
     highlight_char: bool, // `true` if a char has been highlighted
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     pub fn new(
-        out: &'out mut Renderer,
+        out: &'out mut dyn Renderer,
         prompt: &'prompt str,
         history_index: usize,
-        hinter: Option<&'out Hinter>,
-        highlighter: Option<&'out Highlighter>,
+        hinter: Option<&'out dyn Hinter>,
+        highlighter: Option<&'out dyn Highlighter>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -196,7 +196,7 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
 }
 
 impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
             .field("prompt_size", &self.prompt_size)
@@ -522,7 +522,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 }
 
 #[cfg(test)]
-pub fn init_state<'out>(out: &'out mut Renderer, line: &str, pos: usize) -> State<'out, 'static> {
+pub fn init_state<'out>(
+    out: &'out mut dyn Renderer,
+    line: &str,
+    pos: usize,
+) -> State<'out, 'static> {
     State {
         out,
         prompt: "",

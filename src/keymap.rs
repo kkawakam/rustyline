@@ -124,7 +124,7 @@ impl Cmd {
     }
 
     // Replay this command with a possible different `RepeatCount`.
-    fn redo(&self, new: Option<RepeatCount>, wrt: &Refresher) -> Self {
+    fn redo(&self, new: Option<RepeatCount>, wrt: &dyn Refresher) -> Self {
         match *self {
             Cmd::Insert(previous, ref text) => {
                 Cmd::Insert(repeat_count(previous, new), text.clone())
@@ -326,7 +326,7 @@ impl InputState {
     pub fn next_cmd<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut Refresher,
+        wrt: &mut dyn Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         match self.mode {
@@ -340,12 +340,12 @@ impl InputState {
     fn emacs_digit_argument<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut Refresher,
+        wrt: &mut dyn Refresher,
         digit: char,
     ) -> Result<KeyPress> {
         #[allow(clippy::cast_possible_truncation)]
         match digit {
-            '0'...'9' => {
+            '0'..='9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
             }
             '-' => {
@@ -358,7 +358,7 @@ impl InputState {
             let key = rdr.next_key(true)?;
             #[allow(clippy::cast_possible_truncation)]
             match key {
-                KeyPress::Char(digit @ '0'...'9') | KeyPress::Meta(digit @ '0'...'9') => {
+                KeyPress::Char(digit @ '0'..='9') | KeyPress::Meta(digit @ '0'..='9') => {
                     if self.num_args == -1 {
                         self.num_args *= digit.to_digit(10).unwrap() as i16;
                     } else if self.num_args.abs() < 1000 {
@@ -381,13 +381,13 @@ impl InputState {
     fn emacs<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut Refresher,
+        wrt: &mut dyn Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         let mut key = rdr.next_key(single_esc_abort)?;
         if let KeyPress::Meta(digit @ '-') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        } else if let KeyPress::Meta(digit @ '0'...'9') = key {
+        } else if let KeyPress::Meta(digit @ '0'..='9') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
@@ -500,14 +500,14 @@ impl InputState {
     fn vi_arg_digit<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut Refresher,
+        wrt: &mut dyn Refresher,
         digit: char,
     ) -> Result<KeyPress> {
         self.num_args = digit.to_digit(10).unwrap() as i16;
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(false)?;
-            if let KeyPress::Char(digit @ '0'...'9') = key {
+            if let KeyPress::Char(digit @ '0'..='9') = key {
                 if self.num_args.abs() < 1000 {
                     // shouldn't ever need more than 4 digits
                     self.num_args = self
@@ -522,9 +522,9 @@ impl InputState {
         }
     }
 
-    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
+    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
         let mut key = rdr.next_key(false)?;
-        if let KeyPress::Char(digit @ '1'...'9') = key {
+        if let KeyPress::Char(digit @ '1'..='9') = key {
             key = self.vi_arg_digit(rdr, wrt, digit)?;
         }
         let no_num_args = self.num_args == 0;
@@ -695,7 +695,7 @@ impl InputState {
         Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut Refresher) -> Result<Cmd> {
+    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
         let key = rdr.next_key(false)?;
         {
             let bindings = self.custom_bindings.read().unwrap();
@@ -744,7 +744,7 @@ impl InputState {
     fn vi_cmd_motion<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut Refresher,
+        wrt: &mut dyn Refresher,
         key: KeyPress,
         n: RepeatCount,
     ) -> Result<Option<Movement>> {
@@ -753,7 +753,7 @@ impl InputState {
             return Ok(Some(Movement::WholeLine));
         }
         let mut n = n;
-        if let KeyPress::Char(digit @ '1'...'9') = mvt {
+        if let KeyPress::Char(digit @ '1'..='9') = mvt {
             // vi-arg-digit
             mvt = self.vi_arg_digit(rdr, wrt, digit)?;
             n = self.vi_num_args().saturating_mul(n);

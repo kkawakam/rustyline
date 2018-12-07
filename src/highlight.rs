@@ -48,7 +48,7 @@ pub trait Highlighter {
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char<'l>(&self, line: &'l str, _pos: usize) -> bool {
+    fn highlight_char(&self, line: &str, _pos: usize) -> bool {
         let _ = line;
         false
     }
@@ -88,7 +88,7 @@ impl Highlighter for MatchingBracketHighlighter {
         Borrowed(line)
     }
 
-    fn highlight_char<'l>(&self, line: &'l str, pos: usize) -> bool {
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
         // will highlight matching brace/bracket/parenthesis if it exists
         self.bracket.set(check_bracket(line, pos));
         self.bracket.get().is_some()

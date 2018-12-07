@@ -53,12 +53,12 @@ pub(crate) trait ChangeListener: DeleteListener {
 pub struct LineBuffer {
     buf: String, // Edited line buffer (rl_line_buffer)
     pos: usize,  // Current cursor position (byte position) (rl_point)
-    dl: Option<Arc<Mutex<DeleteListener>>>,
-    cl: Option<Rc<RefCell<ChangeListener>>>,
+    dl: Option<Arc<Mutex<dyn DeleteListener>>>,
+    cl: Option<Rc<RefCell<dyn ChangeListener>>>,
 }
 
 impl fmt::Debug for LineBuffer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LineBuffer")
             .field("buf", &self.buf)
             .field("pos", &self.pos)
@@ -78,7 +78,11 @@ impl LineBuffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn init(line: &str, pos: usize, cl: Option<Rc<RefCell<ChangeListener>>>) -> Self {
+    pub(crate) fn init(
+        line: &str,
+        pos: usize,
+        cl: Option<Rc<RefCell<dyn ChangeListener>>>,
+    ) -> Self {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
@@ -86,11 +90,11 @@ impl LineBuffer {
         lb
     }
 
-    pub(crate) fn set_delete_listener(&mut self, dl: Arc<Mutex<DeleteListener>>) {
+    pub(crate) fn set_delete_listener(&mut self, dl: Arc<Mutex<dyn DeleteListener>>) {
         self.dl = Some(dl);
     }
 
-    pub(crate) fn set_change_listener(&mut self, dl: Rc<RefCell<ChangeListener>>) {
+    pub(crate) fn set_change_listener(&mut self, dl: Rc<RefCell<dyn ChangeListener>>) {
         self.cl = Some(dl);
     }
 
@@ -673,7 +677,7 @@ impl LineBuffer {
         self.drain(range, Direction::default());
     }
 
-    fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain {
+    fn drain(&mut self, range: Range<usize>, dir: Direction) -> Drain<'_> {
         for dl in &self.dl {
             let lock = dl.try_lock();
             if let Ok(mut dl) = lock {

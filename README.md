@@ -61,7 +61,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "2.1.0"
+rustyline = "3.0.0"
 ```
 
 ## Features

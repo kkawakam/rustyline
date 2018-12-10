@@ -24,9 +24,6 @@ extern crate log;
 #[cfg(unix)]
 extern crate nix;
 
-#[cfg(windows)]
-extern crate winapi;
-
 pub mod completion;
 pub mod config;
 mod edit;

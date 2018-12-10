@@ -1,7 +1,6 @@
 //! Windows specific definitions
 use std::io::{self, Write};
 use std::mem;
-use std::os::windows::io::{AsRawHandle, RawHandle};
 use std::sync::atomic;
 
 use unicode_width::UnicodeWidthChar;
@@ -97,7 +96,7 @@ pub struct ConsoleRawReader {
 }
 
 impl ConsoleRawReader {
-    pub fn new() -> Result<ConsoleRawReader> {
+    pub fn create() -> Result<ConsoleRawReader> {
         let handle = get_std_handle(STDIN_FILENO)?;
         Ok(ConsoleRawReader { handle })
     }
@@ -147,7 +146,7 @@ impl RawReader for ConsoleRawReader {
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
-                match key_event.wVirtualKeyCode as i32 {
+                match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => {
                         return Ok(if ctrl {
                             KeyPress::ControlLeft
@@ -305,7 +304,7 @@ impl Renderer for ConsoleRenderer {
         hint: Option<String>,
         current_row: usize,
         old_rows: usize,
-        highlighter: Option<&Highlighter>,
+        highlighter: Option<&dyn Highlighter>,
     ) -> Result<(Position, Position)> {
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
@@ -550,7 +549,7 @@ impl Term for Console {
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::new()
+        ConsoleRawReader::create()
     }
 
     fn create_writer(&self) -> ConsoleRenderer {

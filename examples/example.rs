@@ -5,30 +5,31 @@ use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
-use rustyline::hint::Hinter;
-use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
+use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
 
 static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
 
 static PROMPT: &'static str = ">> ";
 
-struct MyHelper(FilenameCompleter, MatchingBracketHighlighter);
+struct MyHelper(FilenameCompleter, MatchingBracketHighlighter, HistoryHinter);
 
 impl Completer for MyHelper {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        self.0.complete(line, pos)
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context,
+    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        self.0.complete(line, pos, ctx)
     }
 }
 
 impl Hinter for MyHelper {
-    fn hint(&self, line: &str, _pos: usize) -> Option<String> {
-        if line == "hello" {
-            Some(" World".to_owned())
-        } else {
-            None
-        }
+    fn hint(&self, line: &str, pos: usize, ctx: &Context) -> Option<String> {
+        self.2.hint(line, pos, ctx)
     }
 }
 
@@ -64,7 +65,11 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();
-    let h = MyHelper(FilenameCompleter::new(), MatchingBracketHighlighter::new());
+    let h = MyHelper(
+        FilenameCompleter::new(),
+        MatchingBracketHighlighter::new(),
+        HistoryHinter {},
+    );
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);

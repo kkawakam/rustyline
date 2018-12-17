@@ -6,10 +6,10 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
-use super::Result;
+use super::{Context, Result};
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::{Direction, History};
+use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
@@ -26,23 +26,23 @@ pub struct State<'out, 'prompt> {
     pub cursor: Position,  /* Cursor position (relative to the start of the prompt
                             * for `row`) */
     pub old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
-    history_index: usize, // The history index we are currently editing
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out dyn Hinter>,
     pub highlighter: Option<&'out dyn Highlighter>,
-    no_hint: bool,        // `false` if an hint has been displayed
-    highlight_char: bool, // `true` if a char has been highlighted
+    pub ctx: Context<'out>, // Give access to history for `hinter`
+    no_hint: bool,          // `false` if an hint has been displayed
+    highlight_char: bool,   // `true` if a char has been highlighted
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
     pub fn new(
         out: &'out mut dyn Renderer,
         prompt: &'prompt str,
-        history_index: usize,
         hinter: Option<&'out dyn Hinter>,
         highlighter: Option<&'out dyn Highlighter>,
+        ctx: Context<'out>,
     ) -> State<'out, 'prompt> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -53,12 +53,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             line: LineBuffer::with_capacity(capacity),
             cursor: prompt_size,
             old_rows: 0,
-            history_index,
             saved_line_for_history: LineBuffer::with_capacity(capacity),
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
             hinter,
             highlighter,
+            ctx,
             no_hint: true,
             highlight_char: false,
         }
@@ -132,7 +132,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     fn hint(&mut self) -> Option<String> {
         if let Some(hinter) = self.hinter {
-            let hint = hinter.hint(self.line.as_str(), self.line.pos());
+            let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
             self.no_hint = hint.is_none();
             hint
         } else {
@@ -204,7 +204,6 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
             .field("cursor", &self.cursor)
             .field("cols", &self.out.get_columns())
             .field("old_rows", &self.old_rows)
-            .field("history_index", &self.history_index)
             .field("saved_line_for_history", &self.saved_line_for_history)
             .finish()
     }
@@ -429,27 +428,28 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 
     /// Substitute the currently edited line with the next or previous history
     /// entry.
-    pub fn edit_history_next(&mut self, history: &History, prev: bool) -> Result<()> {
+    pub fn edit_history_next(&mut self, prev: bool) -> Result<()> {
+        let history = self.ctx.history;
         if history.is_empty() {
             return Ok(());
         }
-        if self.history_index == history.len() {
+        if self.ctx.history_index == history.len() {
             if prev {
                 // Save the current edited line before overwriting it
                 self.backup();
             } else {
                 return Ok(());
             }
-        } else if self.history_index == 0 && prev {
+        } else if self.ctx.history_index == 0 && prev {
             return Ok(());
         }
         if prev {
-            self.history_index -= 1;
+            self.ctx.history_index -= 1;
         } else {
-            self.history_index += 1;
+            self.ctx.history_index += 1;
         }
-        if self.history_index < history.len() {
-            let buf = history.get(self.history_index).unwrap();
+        if self.ctx.history_index < history.len() {
+            let buf = history.get(self.ctx.history_index).unwrap();
             self.changes.borrow_mut().begin();
             self.line.update(buf, buf.len());
             self.changes.borrow_mut().end();
@@ -461,26 +461,27 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     // Non-incremental, anchored search
-    pub fn edit_history_search(&mut self, history: &History, dir: Direction) -> Result<()> {
+    pub fn edit_history_search(&mut self, dir: Direction) -> Result<()> {
+        let history = self.ctx.history;
         if history.is_empty() {
             return self.out.beep();
         }
-        if self.history_index == history.len() && dir == Direction::Forward
-            || self.history_index == 0 && dir == Direction::Reverse
+        if self.ctx.history_index == history.len() && dir == Direction::Forward
+            || self.ctx.history_index == 0 && dir == Direction::Reverse
         {
             return self.out.beep();
         }
         if dir == Direction::Reverse {
-            self.history_index -= 1;
+            self.ctx.history_index -= 1;
         } else {
-            self.history_index += 1;
+            self.ctx.history_index += 1;
         }
         if let Some(history_index) = history.starts_with(
             &self.line.as_str()[..self.line.pos()],
-            self.history_index,
+            self.ctx.history_index,
             dir,
         ) {
-            self.history_index = history_index;
+            self.ctx.history_index = history_index;
             let buf = history.get(history_index).unwrap();
             self.changes.borrow_mut().begin();
             self.line.update(buf, buf.len());
@@ -492,28 +493,29 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     /// Substitute the currently edited line with the first/last history entry.
-    pub fn edit_history(&mut self, history: &History, first: bool) -> Result<()> {
+    pub fn edit_history(&mut self, first: bool) -> Result<()> {
+        let history = self.ctx.history;
         if history.is_empty() {
             return Ok(());
         }
-        if self.history_index == history.len() {
+        if self.ctx.history_index == history.len() {
             if first {
                 // Save the current edited line before overwriting it
                 self.backup();
             } else {
                 return Ok(());
             }
-        } else if self.history_index == 0 && first {
+        } else if self.ctx.history_index == 0 && first {
             return Ok(());
         }
         if first {
-            self.history_index = 0;
-            let buf = history.get(self.history_index).unwrap();
+            self.ctx.history_index = 0;
+            let buf = history.get(self.ctx.history_index).unwrap();
             self.changes.borrow_mut().begin();
             self.line.update(buf, buf.len());
             self.changes.borrow_mut().end();
         } else {
-            self.history_index = history.len();
+            self.ctx.history_index = history.len();
             // Restore current edited line
             self.restore();
         }
@@ -526,6 +528,7 @@ pub fn init_state<'out>(
     out: &'out mut dyn Renderer,
     line: &str,
     pos: usize,
+    history: &'out crate::history::History,
 ) -> State<'out, 'static> {
     State {
         out,
@@ -534,12 +537,15 @@ pub fn init_state<'out>(
         line: LineBuffer::init(line, pos, None),
         cursor: Position::default(),
         old_rows: 0,
-        history_index: 0,
         saved_line_for_history: LineBuffer::with_capacity(100),
         byte_buffer: [0; 4],
         changes: Rc::new(RefCell::new(Changeset::new())),
         hinter: None,
         highlighter: None,
+        ctx: Context {
+            history,
+            history_index: 0,
+        },
         no_hint: true,
         highlight_char: false,
     }
@@ -554,38 +560,38 @@ mod test {
     #[test]
     fn edit_history_next() {
         let mut out = Sink::new();
-        let line = "current edited line";
-        let mut s = init_state(&mut out, line, 6);
         let mut history = History::new();
         history.add("line0");
         history.add("line1");
-        s.history_index = history.len();
+        let line = "current edited line";
+        let mut s = init_state(&mut out, line, 6, &history);
+        s.ctx.history_index = history.len();
 
         for _ in 0..2 {
-            s.edit_history_next(&history, false).unwrap();
+            s.edit_history_next(false).unwrap();
             assert_eq!(line, s.line.as_str());
         }
 
-        s.edit_history_next(&history, true).unwrap();
+        s.edit_history_next(true).unwrap();
         assert_eq!(line, s.saved_line_for_history.as_str());
-        assert_eq!(1, s.history_index);
+        assert_eq!(1, s.ctx.history_index);
         assert_eq!("line1", s.line.as_str());
 
         for _ in 0..2 {
-            s.edit_history_next(&history, true).unwrap();
+            s.edit_history_next(true).unwrap();
             assert_eq!(line, s.saved_line_for_history.as_str());
-            assert_eq!(0, s.history_index);
+            assert_eq!(0, s.ctx.history_index);
             assert_eq!("line0", s.line.as_str());
         }
 
-        s.edit_history_next(&history, false).unwrap();
+        s.edit_history_next(false).unwrap();
         assert_eq!(line, s.saved_line_for_history.as_str());
-        assert_eq!(1, s.history_index);
+        assert_eq!(1, s.ctx.history_index);
         assert_eq!("line1", s.line.as_str());
 
-        s.edit_history_next(&history, false).unwrap();
+        s.edit_history_next(false).unwrap();
         // assert_eq!(line, s.saved_line_for_history);
-        assert_eq!(2, s.history_index);
+        assert_eq!(2, s.ctx.history_index);
         assert_eq!(line, s.line.as_str());
     }
 }

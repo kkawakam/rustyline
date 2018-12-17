@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use super::{Editor, Result};
 use crate::completion::Completer;
 use crate::config::{Config, EditMode};
 use crate::edit::init_state;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::KeyPress;
 use crate::tty::Sink;
+use crate::{Context, Editor, Result};
 
 mod common;
 mod emacs;
@@ -26,7 +26,7 @@ struct SimpleCompleter;
 impl Completer for SimpleCompleter {
     type Candidate = String;
 
-    fn complete(&self, line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+    fn complete(&self, line: &str, _pos: usize, _ctx: &Context) -> Result<(usize, Vec<String>)> {
         Ok((0, vec![line.to_owned() + "t"]))
     }
 }
@@ -34,7 +34,8 @@ impl Completer for SimpleCompleter {
 #[test]
 fn complete_line() {
     let mut out = Sink::new();
-    let mut s = init_state(&mut out, "rus", 3);
+    let history = crate::history::History::new();
+    let mut s = init_state(&mut out, "rus", 3, &history);
     let config = Config::default();
     let mut input_state = InputState::new(&config, Arc::new(RwLock::new(HashMap::new())));
     let keys = &[KeyPress::Enter];

@@ -17,7 +17,7 @@
 //! ```
 // #![feature(non_exhaustive)]
 
-use libc;
+extern crate libc;
 #[macro_use]
 extern crate log;
 
@@ -76,7 +76,7 @@ fn complete_line<R: RawReader, C: Completer>(
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
-    let (start, candidates) = completer.complete(&s.line, s.line.pos())?;
+    let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
     // if no completions, we are done
     if candidates.is_empty() {
         s.out.beep()?;
@@ -187,7 +187,7 @@ fn complete_line<R: RawReader, C: Completer>(
 
 /// Completes the current hint
 fn complete_hint_line(s: &mut State<'_, '_>, hinter: &dyn Hinter) -> Result<()> {
-    let hint = match hinter.hint(&s.line, s.line.pos()) {
+    let hint = match hinter.hint(&s.line, s.line.pos(), &s.ctx) {
         Some(hint) => hint,
         None => return Ok(()),
     };
@@ -384,13 +384,11 @@ fn readline_edit<H: Helper>(
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let mut s = State::new(
-        &mut stdout,
-        prompt,
-        editor.history.len(),
-        hinter,
-        highlighter,
-    );
+    let ctx = Context {
+        history: &editor.history,
+        history_index: editor.history.len(),
+    };
+    let mut s = State::new(&mut stdout, prompt, hinter, highlighter, ctx);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -504,18 +502,14 @@ fn readline_edit<H: Helper>(
             }
             Cmd::NextHistory => {
                 // Fetch the next command from the history list.
-                s.edit_history_next(&editor.history, false)?
+                s.edit_history_next(false)?
             }
             Cmd::PreviousHistory => {
                 // Fetch the previous command from the history list.
-                s.edit_history_next(&editor.history, true)?
+                s.edit_history_next(true)?
             }
-            Cmd::HistorySearchBackward => {
-                s.edit_history_search(&editor.history, Direction::Reverse)?
-            }
-            Cmd::HistorySearchForward => {
-                s.edit_history_search(&editor.history, Direction::Forward)?
-            }
+            Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
+            Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
             Cmd::TransposeChars => {
                 // Exchange the char before cursor with the character at cursor.
                 s.edit_transpose_chars()?
@@ -557,11 +551,11 @@ fn readline_edit<H: Helper>(
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
-                s.edit_history(&editor.history, true)?
+                s.edit_history(true)?
             }
             Cmd::EndOfHistory => {
                 // move to last entry in history
-                s.edit_history(&editor.history, false)?
+                s.edit_history(false)?
             }
             Cmd::Move(Movement::BackwardWord(n, word_def)) => {
                 // move backwards one word
@@ -682,6 +676,24 @@ where
 }
 
 impl Helper for () {}
+
+/// Completion/suggestion context
+pub struct Context<'h> {
+    history: &'h History,
+    history_index: usize,
+}
+
+impl<'h> Context<'h> {
+    /// Return an immutable reference to the history object.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// The history index we are currently editing
+    pub fn history_index(&self) -> usize {
+        self.history_index
+    }
+}
 
 /// Line editor
 pub struct Editor<H: Helper> {

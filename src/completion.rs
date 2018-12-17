@@ -3,8 +3,8 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use std::fs;
 use std::path::{self, Path};
 
-use super::Result;
 use crate::line_buffer::LineBuffer;
+use crate::{Context, Result};
 use memchr::memchr;
 
 // TODO: let the implementers choose/find word boundaries ???
@@ -54,7 +54,12 @@ pub trait Completer {
     /// partial word to be completed.
     ///
     /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)>;
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context,
+    ) -> Result<(usize, Vec<Self::Candidate>)>;
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
@@ -65,7 +70,7 @@ pub trait Completer {
 impl Completer for () {
     type Candidate = String;
 
-    fn complete(&self, _line: &str, _pos: usize) -> Result<(usize, Vec<String>)> {
+    fn complete(&self, _line: &str, _pos: usize, _ctx: &Context) -> Result<(usize, Vec<String>)> {
         Ok((0, Vec::with_capacity(0)))
     }
 
@@ -77,8 +82,13 @@ impl Completer for () {
 impl<'c, C: ?Sized + Completer> Completer for &'c C {
     type Candidate = C::Candidate;
 
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)> {
-        (**self).complete(line, pos)
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context,
+    ) -> Result<(usize, Vec<Self::Candidate>)> {
+        (**self).complete(line, pos, ctx)
     }
 
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -91,8 +101,8 @@ macro_rules! box_completer {
             impl<C: ?Sized + Completer> Completer for $id<C> {
                 type Candidate = C::Candidate;
 
-                fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Self::Candidate>)> {
-                    (**self).complete(line, pos)
+                fn complete(&self, line: &str, pos: usize, ctx: &Context) -> Result<(usize, Vec<Self::Candidate>)> {
+                    (**self).complete(line, pos, ctx)
                 }
                 fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
                     (**self).update(line, start, elected)
@@ -163,7 +173,7 @@ impl Default for FilenameCompleter {
 impl Completer for FilenameCompleter {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;

@@ -32,7 +32,7 @@ Grapheme
 
 Hints Callback
 - [X] Not implemented on windows
-- [ ] Do an implementation based on previous history
+- [X] Do an implementation based on previous history
 
 History
 - [ ] Move to the history line n

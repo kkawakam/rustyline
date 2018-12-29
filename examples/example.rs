@@ -6,6 +6,7 @@ use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::validate::Validator;
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
 
 static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
@@ -52,6 +53,12 @@ impl Highlighter for MyHelper {
 
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
         self.1.highlight_char(line, pos)
+    }
+}
+
+impl Validator for MyHelper {
+    fn is_valid(&self, _line: &str) -> bool {
+        true
     }
 }
 

@@ -34,9 +34,9 @@ mod keymap;
 mod keys;
 mod kill_ring;
 pub mod line_buffer;
-mod undo;
-
 mod tty;
+mod undo;
+pub mod validate;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -61,6 +61,7 @@ use crate::keymap::{InputState, Refresher};
 pub use crate::keys::KeyPress;
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
+use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -652,6 +653,7 @@ where
     Self: Completer,
     Self: Hinter,
     Self: Highlighter,
+    Self: Validator,
 {
 }
 

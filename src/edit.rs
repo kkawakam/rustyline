@@ -14,6 +14,7 @@ use crate::keymap::{InputState, Refresher};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use crate::tty::{Position, RawReader, Renderer};
 use crate::undo::Changeset;
+use crate::validate::Validator;
 
 /// Represent the state during line editing.
 /// Implement rendering.

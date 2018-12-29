@@ -515,7 +515,6 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 #[cfg(test)]
                 {

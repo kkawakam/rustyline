@@ -207,7 +207,7 @@ $ bind -p
 
 Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
 --------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
-[go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes   | Yes               |
+[go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes        | Yes               |
 [Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | ?          | ?                 |
 [linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
 [linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
@@ -217,6 +217,7 @@ Library            | Lang    | OS     | Term  | Unicode | History       | Comple
 [rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/vi/conf | Yes       | Yes  | ?          | No                |
 [replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
 Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
+[terminal_cli][]   | Rust    | Ux     | ANSI  | ?       | No            | only line  | ?             | No        | No   | ?          | ?                 |
 
 [go-prompt]: https://github.com/c-bata/go-prompt
 [Haskeline]: https://github.com/judah/haskeline
@@ -227,3 +228,4 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [rb-readline]: https://github.com/ConnorAtherton/rb-readline
 [replxx]: https://github.com/AmokHuginnsson/replxx
+[terminal_cli]: https://github.com/hashmismatch/terminal_cli.rs

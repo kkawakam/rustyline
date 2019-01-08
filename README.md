@@ -71,7 +71,7 @@ rustyline = "3.0.0"
  - Filename completion
  - History search ([Searching for Commands in the History](http://tiswww.case.edu/php/chet/readline/readline.html#SEC8))
  - Kill ring ([Killing Commands](http://tiswww.case.edu/php/chet/readline/readline.html#IDX3))
- - Multi line mode (line wrapping)
+ - Multi line support (line wrapping)
  - Word commands
  - Hints
 
@@ -229,3 +229,15 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 [rb-readline]: https://github.com/ConnorAtherton/rb-readline
 [replxx]: https://github.com/AmokHuginnsson/replxx
 [terminal_cli]: https://github.com/hashmismatch/terminal_cli.rs
+
+## Multi line support
+
+This is a very simple feature that simply causes lines that are longer
+than the current terminal width to be displayed on the next visual
+line instead of horizontally scrolling as more characters are
+typed. Currently this feature is always enabled and there is no
+configuration option to disable it.
+
+_This feature does not allow the end user to hit a special key
+sequence and enter a mode where hitting the return key will cause a
+literal newline to be added to the input buffer_.

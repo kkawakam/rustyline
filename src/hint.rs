@@ -23,7 +23,7 @@ pub struct HistoryHinter {}
 impl Hinter for HistoryHinter {
     fn hint(&self, line: &str, pos: usize, ctx: &Context) -> Option<String> {
         let start = if ctx.history_index() == ctx.history().len() {
-            ctx.history_index() - 1
+            ctx.history_index().saturating_sub(1)
         } else {
             ctx.history_index()
         };

@@ -1,4 +1,4 @@
-use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
+use env_logger;
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
@@ -58,7 +58,7 @@ impl Highlighter for MyHelper {
 impl Helper for MyHelper {}
 
 fn main() {
-    init_logger().is_ok();
+    env_logger::init();
     let config = Config::builder()
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
@@ -99,27 +99,4 @@ fn main() {
         }
     }
     rl.save_history("history.txt").unwrap();
-}
-
-static LOGGER: Logger = Logger;
-struct Logger;
-
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        metadata.level() <= Level::Debug
-    }
-
-    fn log(&self, record: &Record<'_>) {
-        if self.enabled(record.metadata()) {
-            eprintln!("{} - {}", record.level(), record.args());
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-fn init_logger() -> Result<(), SetLoggerError> {
-    log::set_logger(&LOGGER)?;
-    log::set_max_level(LevelFilter::Info);
-    Ok(())
 }

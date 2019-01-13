@@ -32,5 +32,6 @@ utf8parse = "0.1"
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
 
 [dev-dependencies]
+env_logger = "0.6"
 tempdir = "0.3"
 assert_matches = "1.2"

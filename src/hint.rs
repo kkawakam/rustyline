@@ -18,6 +18,12 @@ impl Hinter for () {
     }
 }
 
+impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context) -> Option<String> {
+        (**self).hint(line, pos, ctx)
+    }
+}
+
 pub struct HistoryHinter {}
 
 impl Hinter for HistoryHinter {

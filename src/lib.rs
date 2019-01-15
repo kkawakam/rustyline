@@ -72,7 +72,6 @@ fn complete_line<R: RawReader, C: Completer>(
     s: &mut State<'_, '_>,
     input_state: &mut InputState,
     completer: &C,
-    highlighter: Option<&dyn Highlighter>,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -175,7 +174,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, input_state, highlighter, &candidates)
+            page_completions(rdr, s, input_state, &candidates)
         } else {
             s.refresh_line()?;
             Ok(None)
@@ -203,7 +202,6 @@ fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State<'_, '_>,
     input_state: &mut InputState,
-    highlighter: Option<&dyn Highlighter>,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -259,7 +257,7 @@ fn page_completions<R: RawReader, C: Candidate>(
             if i < candidates.len() {
                 let candidate = &candidates[i].display();
                 let width = candidate.width();
-                if let Some(highlighter) = highlighter {
+                if let Some(highlighter) = s.highlighter {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
@@ -418,7 +416,6 @@ fn readline_edit<H: Helper>(
                 &mut s,
                 &mut input_state,
                 completer.unwrap(),
-                highlighter,
                 &editor.config,
             )?;
             if next.is_some() {

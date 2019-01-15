@@ -72,7 +72,6 @@ fn complete_line<R: RawReader, C: Completer>(
     s: &mut State<'_, '_>,
     input_state: &mut InputState,
     completer: &C,
-    highlighter: Option<&dyn Highlighter>,
     config: &Config,
 ) -> Result<Option<Cmd>> {
     // get a list of completions
@@ -175,7 +174,7 @@ fn complete_line<R: RawReader, C: Completer>(
             true
         };
         if show_completions {
-            page_completions(rdr, s, input_state, highlighter, &candidates)
+            page_completions(rdr, s, input_state, &candidates)
         } else {
             s.refresh_line()?;
             Ok(None)
@@ -186,16 +185,16 @@ fn complete_line<R: RawReader, C: Completer>(
 }
 
 /// Completes the current hint
-fn complete_hint_line(s: &mut State<'_, '_>, hinter: &dyn Hinter) -> Result<()> {
-    let hint = match hinter.hint(&s.line, s.line.pos(), &s.ctx) {
+fn complete_hint_line(s: &mut State<'_, '_>) -> Result<()> {
+    let hint = match s.hint.as_ref() {
         Some(hint) => hint,
         None => return Ok(()),
     };
     s.line.move_end();
-    if s.line.yank(&hint, 1).is_none() {
+    if s.line.yank(hint, 1).is_none() {
         s.out.beep()?;
     }
-    s.refresh_line()?;
+    s.refresh_line_with_msg(None)?;
     Ok(())
 }
 
@@ -203,7 +202,6 @@ fn page_completions<R: RawReader, C: Candidate>(
     rdr: &mut R,
     s: &mut State<'_, '_>,
     input_state: &mut InputState,
-    highlighter: Option<&dyn Highlighter>,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
     use std::cmp;
@@ -259,7 +257,7 @@ fn page_completions<R: RawReader, C: Candidate>(
             if i < candidates.len() {
                 let candidate = &candidates[i].display();
                 let width = candidate.width();
-                if let Some(highlighter) = highlighter {
+                if let Some(highlighter) = s.highlighter {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
@@ -418,7 +416,6 @@ fn readline_edit<H: Helper>(
                 &mut s,
                 &mut input_state,
                 completer.unwrap(),
-                highlighter,
                 &editor.config,
             )?;
             if next.is_some() {
@@ -429,9 +426,7 @@ fn readline_edit<H: Helper>(
         }
 
         if let Cmd::CompleteHint = cmd {
-            if hinter.is_some() {
-                complete_hint_line(&mut s, hinter.unwrap())?;
-            }
+            complete_hint_line(&mut s)?;
             continue;
         }
 
@@ -541,11 +536,10 @@ fn readline_edit<H: Helper>(
                 }
                 // Accept the line regardless of where the cursor is.
                 s.edit_move_end()?;
-                if s.hinter.is_some() {
+                if s.has_hint() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
-                    s.hinter = None;
-                    s.refresh_line()?;
+                    s.refresh_line_with_msg(None)?;
                 }
                 break;
             }

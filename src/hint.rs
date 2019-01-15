@@ -18,6 +18,12 @@ impl Hinter for () {
     }
 }
 
+impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context) -> Option<String> {
+        (**self).hint(line, pos, ctx)
+    }
+}
+
 pub struct HistoryHinter {}
 
 impl Hinter for HistoryHinter {
@@ -45,7 +51,7 @@ impl Hinter for HistoryHinter {
 
 #[cfg(test)]
 mod test {
-    use super::{HistoryHinter, Hinter};
+    use super::{Hinter, HistoryHinter};
     use crate::history::History;
     use crate::Context;
 
@@ -56,7 +62,7 @@ mod test {
             history: &history,
             history_index: 0,
         };
-        let hinter = HistoryHinter{};
+        let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);
         assert_eq!(None, hint);
     }

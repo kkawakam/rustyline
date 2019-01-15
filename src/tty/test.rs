@@ -69,7 +69,7 @@ impl Renderer for Sink {
         _: &str,
         prompt_size: Position,
         line: &LineBuffer,
-        hint: Option<String>,
+        hint: Option<&str>,
         _: usize,
         _: usize,
         _: Option<&dyn Highlighter>,

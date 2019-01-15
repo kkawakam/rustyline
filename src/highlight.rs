@@ -56,6 +56,32 @@ pub trait Highlighter {
 
 impl Highlighter for () {}
 
+impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+        (**self).highlight(line, pos)
+    }
+
+    fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
+        (**self).highlight_prompt(prompt)
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        (**self).highlight_hint(hint)
+    }
+
+    fn highlight_candidate<'c>(
+        &self,
+        candidate: &'c str,
+        completion: CompletionType,
+    ) -> Cow<'c, str> {
+        (**self).highlight_candidate(candidate, completion)
+    }
+
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
+        (**self).highlight_char(line, pos)
+    }
+}
+
 static OPENS: &'static [u8; 3] = b"{[(";
 static CLOSES: &'static [u8; 3] = b"}])";
 

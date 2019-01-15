@@ -301,7 +301,7 @@ impl Renderer for ConsoleRenderer {
         prompt: &str,
         prompt_size: Position,
         line: &LineBuffer,
-        hint: Option<String>,
+        hint: Option<&str>,
         current_row: usize,
         old_rows: usize,
         highlighter: Option<&dyn Highlighter>,

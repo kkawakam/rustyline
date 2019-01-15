@@ -46,7 +46,6 @@ fn complete_line() {
         &mut s,
         &mut input_state,
         &completer,
-        None,
         &Config::default(),
     )
     .unwrap();

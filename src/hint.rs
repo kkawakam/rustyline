@@ -45,7 +45,7 @@ impl Hinter for HistoryHinter {
 
 #[cfg(test)]
 mod test {
-    use super::{HistoryHinter, Hinter};
+    use super::{Hinter, HistoryHinter};
     use crate::history::History;
     use crate::Context;
 
@@ -56,7 +56,7 @@ mod test {
             history: &history,
             history_index: 0,
         };
-        let hinter = HistoryHinter{};
+        let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);
         assert_eq!(None, hint);
     }

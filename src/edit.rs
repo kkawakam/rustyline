@@ -31,9 +31,15 @@ pub struct State<'out, 'prompt> {
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub hinter: Option<&'out dyn Hinter>,
     pub highlighter: Option<&'out dyn Highlighter>,
-    pub ctx: Context<'out>, // Give access to history for `hinter`
-    no_hint: bool,          // `false` if an hint has been displayed
-    highlight_char: bool,   // `true` if a char has been highlighted
+    pub ctx: Context<'out>,   // Give access to history for `hinter`
+    pub hint: Option<String>, // last hint displayed
+    highlight_char: bool,     // `true` if a char has been highlighted
+}
+
+enum Info<'m> {
+    NoHint,
+    Hint,
+    Msg(Option<&'m str>),
 }
 
 impl<'out, 'prompt> State<'out, 'prompt> {
@@ -59,7 +65,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             hinter,
             highlighter,
             ctx,
-            no_hint: true,
+            hint: None,
             highlight_char: false,
         }
     }
@@ -106,7 +112,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         }
         if self.highlight_char() {
             let prompt_size = self.prompt_size;
-            self.refresh(self.prompt, prompt_size, None)?;
+            self.refresh(self.prompt, prompt_size, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.cursor, cursor)?;
         }
@@ -114,12 +120,17 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    fn refresh(&mut self, prompt: &str, prompt_size: Position, hint: Option<String>) -> Result<()> {
+    fn refresh(&mut self, prompt: &str, prompt_size: Position, info: Info) -> Result<()> {
+        let info = match info {
+            Info::NoHint => None,
+            Info::Hint => self.hint.as_ref().map(|hint| hint.as_str()),
+            Info::Msg(msg) => msg,
+        };
         let (cursor, end_pos) = self.out.refresh_line(
             prompt,
             prompt_size,
             &self.line,
-            hint,
+            info,
             self.cursor.row,
             self.old_rows,
             self.highlighter,
@@ -130,13 +141,12 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    fn hint(&mut self) -> Option<String> {
+    fn hint(&mut self) {
         if let Some(hinter) = self.hinter {
             let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
-            self.no_hint = hint.is_none();
-            hint
+            self.hint = hint;
         } else {
-            None
+            self.hint = None
         }
     }
 
@@ -162,16 +172,27 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
-        let hint = self.hint();
+        self.hint();
         self.highlight_char();
-        self.refresh(self.prompt, prompt_size, hint)
+        self.refresh(self.prompt, prompt_size, Info::Hint)
+    }
+
+    fn refresh_line_with_msg(&mut self, msg: Option<String>) -> Result<()> {
+        let prompt_size = self.prompt_size;
+        self.hint = None;
+        self.highlight_char();
+        self.refresh(
+            self.prompt,
+            prompt_size,
+            Info::Msg(msg.as_ref().map(|msg| msg.as_str())),
+        )
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
-        let hint = self.hint();
+        self.hint();
         self.highlight_char();
-        self.refresh(prompt, prompt_size, hint)
+        self.refresh(prompt, prompt_size, Info::Hint)
     }
 
     fn doing_insert(&mut self) {
@@ -191,7 +212,7 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     }
 
     fn has_hint(&self) -> bool {
-        !self.no_hint
+        self.hint.is_some()
     }
 }
 
@@ -215,11 +236,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         if let Some(push) = self.line.insert(ch, n) {
             if push {
                 let prompt_size = self.prompt_size;
-                let no_previous_hint = self.no_hint;
-                let hint = self.hint();
+                let no_previous_hint = self.hint.is_none();
+                self.hint();
                 if n == 1
                     && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
-                    && (hint.is_none() && no_previous_hint) // TODO refresh only current line
+                    && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
                     && !self.highlight_char()
                 {
                     // Avoid a full update of the line in the trivial case.
@@ -231,7 +252,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
                     let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)
                 } else {
-                    self.refresh(self.prompt, prompt_size, hint)
+                    self.refresh(self.prompt, prompt_size, Info::Hint)
                 }
             } else {
                 self.refresh_line()
@@ -546,7 +567,7 @@ pub fn init_state<'out>(
             history,
             history_index: 0,
         },
-        no_hint: true,
+        hint: Some("hint".to_owned()),
         highlight_char: false,
     }
 }

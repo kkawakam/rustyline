@@ -396,15 +396,17 @@ pub struct PosixRenderer {
     out: OutputStreamType,
     cols: usize, // Number of columns in terminal
     buffer: String,
+    tab_stop: usize,
 }
 
 impl PosixRenderer {
-    fn new(out: OutputStreamType) -> Self {
+    fn new(out: OutputStreamType, tab_stop: usize) -> Self {
         let (cols, _) = get_win_size(&out);
         Self {
             out,
             cols,
             buffer: String::with_capacity(1024),
+            tab_stop,
         }
     }
 }
@@ -549,7 +551,11 @@ impl Renderer for PosixRenderer {
                 pos.col = 0;
                 continue;
             }
-            let cw = width(c, &mut esc_seq);
+            let cw = if c == "\t" {
+                self.tab_stop - (pos.col % self.tab_stop)
+            } else {
+                width(c, &mut esc_seq)
+            };
             pos.col += cw;
             if pos.col > self.cols {
                 pos.row += 1;
@@ -620,6 +626,7 @@ pub struct PosixTerminal {
     stdstream_isatty: bool,
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
+    tab_stop: usize,
 }
 
 impl Term for PosixTerminal {
@@ -627,13 +634,14 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> Self {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType, tab_stop: usize) -> Self {
         let term = Self {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
             stdstream_isatty: is_a_tty(stream_type.as_raw_fd()),
             color_mode,
             stream_type,
+            tab_stop,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -701,7 +709,7 @@ impl Term for PosixTerminal {
     }
 
     fn create_writer(&self) -> PosixRenderer {
-        PosixRenderer::new(self.stream_type)
+        PosixRenderer::new(self.stream_type, self.tab_stop)
     }
 }
 
@@ -721,7 +729,7 @@ mod test {
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(OutputStreamType::Stdout);
+        let out = PosixRenderer::new(OutputStreamType::Stdout, 4);
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);

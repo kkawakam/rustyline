@@ -140,7 +140,7 @@ pub trait Term {
     type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
 
-    fn new(color_mode: ColorMode, stream: OutputStreamType) -> Self;
+    fn new(color_mode: ColorMode, stream: OutputStreamType, tab_stop: usize) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;

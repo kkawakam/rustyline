@@ -448,7 +448,7 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType) -> Console {
+    fn new(color_mode: ColorMode, stream_type: OutputStreamType, _tab_stop: usize) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {

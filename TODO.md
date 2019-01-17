@@ -42,15 +42,17 @@ each line input session.
 - [ ] history_truncate_file
 
 Input
-- [ ] Password input (#58)
+- [ ] Password input (#58) (https://github.com/conradkdotcom/rpassword) (https://github.com/antirez/linenoise/issues/125)
 - [X] quoted insert (#65)
-- [ ] quoted TAB (`\t`) insert and width
 - [ ] Overwrite mode (em-toggle-overwrite, vi-replace-mode, rl_insert_mode)
 - [ ] Encoding
 - [ ] [Ctrl-][Alt-][Shift-]<Key> (#121)
 
 Layout
 - [ ] Redraw perf (https://crates.io/crates/cassowary)
+
+Misc
+- [ ] fallible iterator (https://docs.rs/fallible-iterator/0.2.1/fallible_iterator/)
 
 Mouse
 - [ ] Mouse support
@@ -84,5 +86,7 @@ Unix
 
 Windows
 - [ ] is_atty is not working with Cygwin/MSYS (https://github.com/softprops/atty works but then how to make `enable_raw_mode` works ?)
+  (https://github.com/mitsuhiko/console/blob/master/src/windows_term.rs#L285)
+  (https://github.com/mattn/go-isatty/blob/master/isatty_windows.go, https://github.com/mattn/go-tty/blob/master/tty_windows.go#L143)
 - [X] UTF-16 surrogate pair
-- [ ] handle ANSI escape code (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
+- [ ] handle ANSI escape code (#61) (https://github.com/DanielKeep/rust-ansi-interpreter)

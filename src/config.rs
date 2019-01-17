@@ -24,6 +24,8 @@ pub struct Config {
     color_mode: ColorMode,
     /// Whether to use stdout or stderr
     output_stream: OutputStreamType,
+    /// Horizontal space taken by a tab.
+    tab_stop: usize,
 }
 
 impl Config {
@@ -109,6 +111,15 @@ impl Config {
     pub(crate) fn set_output_stream(&mut self, stream: OutputStreamType) {
         self.output_stream = stream;
     }
+
+    /// Horizontal space taken by a tab.
+    pub fn tab_stop(&self) -> usize {
+        self.tab_stop
+    }
+
+    pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
+        self.tab_stop = tab_stop;
+    }
 }
 
 impl Default for Config {
@@ -124,6 +135,7 @@ impl Default for Config {
             auto_add_history: false,
             color_mode: ColorMode::Enabled,
             output_stream: OutputStreamType::Stdout,
+            tab_stop: 8,
         }
     }
 }
@@ -257,6 +269,14 @@ impl Builder {
         self
     }
 
+    /// Horizontal space taken by a tab.
+    ///
+    /// By default, `8`
+    pub fn tab_stop(mut self, tab_stop: usize) -> Self {
+        self.set_tab_stop(tab_stop);
+        self
+    }
+
     pub fn build(self) -> Config {
         self.p
     }
@@ -335,5 +355,12 @@ pub trait Configurer {
     /// By default, use stdout
     fn set_output_stream(&mut self, stream: OutputStreamType) {
         self.config_mut().set_output_stream(stream);
+    }
+
+    /// Horizontal space taken by a tab.
+    ///
+    /// By default, `8`
+    fn set_tab_stop(&mut self, tab_stop: usize) {
+        self.config_mut().set_tab_stop(tab_stop);
     }
 }

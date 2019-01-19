@@ -56,11 +56,7 @@ impl Highlighter for MyHelper {
     }
 }
 
-impl Validator for MyHelper {
-    fn is_valid(&self, _line: &str) -> bool {
-        true
-    }
-}
+impl Validator for MyHelper {}
 
 impl Helper for MyHelper {}
 

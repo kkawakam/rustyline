@@ -15,8 +15,8 @@ pub trait Validator {
     /// If you implement more complex validation checks it's probably
     /// a good idea to also implement a `Hinter` to provide feedback
     /// about what is invalid.
-    #[allow(unused_variables)]
     fn is_valid(&self, line: &str) -> bool {
+        let _ = line;
         true
     }
 }

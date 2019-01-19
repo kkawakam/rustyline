@@ -1,5 +1,14 @@
 //! Input buffer validation API (Multi-line editing)
 
+use crate::line_buffer::LineBuffer;
+
+pub enum ValidationResult {
+    /// Validation fails with an optional error message. User must fix the input.
+    Invalid(Option<String>),
+    /// Validation succeeds with an optional message (instead of https://github.com/kkawakam/rustyline/pull/169)
+    Valid(Option<String>),
+}
+
 /// This trait provides an extension interface for determining whether
 /// the current input buffer is valid. Rustyline uses the method
 /// provided by this trait to decide whether hitting the enter key
@@ -15,9 +24,9 @@ pub trait Validator {
     /// If you implement more complex validation checks it's probably
     /// a good idea to also implement a `Hinter` to provide feedback
     /// about what is invalid.
-    fn is_valid(&self, line: &str) -> bool {
+    fn is_valid(&self, line: &mut LineBuffer) -> ValidationResult {
         let _ = line;
-        true
+        ValidationResult::Valid(None)
     }
 }
 

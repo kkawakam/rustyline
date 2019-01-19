@@ -14,6 +14,7 @@ use crate::keymap::{InputState, Refresher};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use crate::tty::{Position, RawReader, Renderer};
 use crate::undo::Changeset;
+use crate::validate::ValidationResult;
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -92,8 +93,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             }
             if let Some(validator) = self.helper {
                 if let Ok(Cmd::AcceptLine) = rc {
-                    if !validator.is_valid(self.line.as_str()) {
-                        return Ok(Cmd::SelfInsert(1, '\n'));
+                    match validator.is_valid(&mut self.line) {
+                        ValidationResult::Valid(_msg) => return rc,
+                        ValidationResult::Invalid(_msg) => return Ok(Cmd::SelfInsert(1, '\n')),
                     }
                 }
             }

@@ -21,14 +21,14 @@ impl Completer for MyHelper {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context,
+        ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         self.0.complete(line, pos, ctx)
     }
 }
 
 impl Hinter for MyHelper {
-    fn hint(&self, line: &str, pos: usize, ctx: &Context) -> Option<String> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.2.hint(line, pos, ctx)
     }
 }

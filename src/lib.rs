@@ -17,7 +17,6 @@
 //! ```
 // #![feature(non_exhaustive)]
 
-extern crate libc;
 #[macro_use]
 extern crate log;
 
@@ -513,7 +512,7 @@ fn readline_edit<H: Helper>(
             Cmd::QuotedInsert => {
                 // Quoted insert
                 let c = rdr.next_char()?;
-                s.edit_insert(c, 1)? // FIXME
+                s.edit_insert(c, 1)?
             }
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed

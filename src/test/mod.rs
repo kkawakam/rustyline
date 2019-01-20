@@ -26,7 +26,12 @@ struct SimpleCompleter;
 impl Completer for SimpleCompleter {
     type Candidate = String;
 
-    fn complete(&self, line: &str, _pos: usize, _ctx: &Context) -> Result<(usize, Vec<String>)> {
+    fn complete(
+        &self,
+        line: &str,
+        _pos: usize,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<String>)> {
         Ok((0, vec![line.to_owned() + "t"]))
     }
 }

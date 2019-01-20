@@ -58,7 +58,7 @@ pub trait Completer {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context,
+        ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Self::Candidate>)>;
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -70,7 +70,12 @@ pub trait Completer {
 impl Completer for () {
     type Candidate = String;
 
-    fn complete(&self, _line: &str, _pos: usize, _ctx: &Context) -> Result<(usize, Vec<String>)> {
+    fn complete(
+        &self,
+        _line: &str,
+        _pos: usize,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<String>)> {
         Ok((0, Vec::with_capacity(0)))
     }
 
@@ -86,7 +91,7 @@ impl<'c, C: ?Sized + Completer> Completer for &'c C {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context,
+        ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Self::Candidate>)> {
         (**self).complete(line, pos, ctx)
     }
@@ -101,7 +106,7 @@ macro_rules! box_completer {
             impl<C: ?Sized + Completer> Completer for $id<C> {
                 type Candidate = C::Candidate;
 
-                fn complete(&self, line: &str, pos: usize, ctx: &Context) -> Result<(usize, Vec<Self::Candidate>)> {
+                fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
                     (**self).complete(line, pos, ctx)
                 }
                 fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
@@ -173,7 +178,7 @@ impl Default for FilenameCompleter {
 impl Completer for FilenameCompleter {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;

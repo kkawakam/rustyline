@@ -120,7 +120,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    fn refresh(&mut self, prompt: &str, prompt_size: Position, info: Info) -> Result<()> {
+    fn refresh(&mut self, prompt: &str, prompt_size: Position, info: Info<'_>) -> Result<()> {
         let info = match info {
             Info::NoHint => None,
             Info::Hint => self.hint.as_ref().map(|hint| hint.as_str()),

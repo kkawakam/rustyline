@@ -31,6 +31,10 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
     fn next_char(&mut self) -> Result<char> {
         unimplemented!();
     }
+
+    fn read_pasted_text(&mut self) -> Result<String> {
+        unimplemented!()
+    }
 }
 
 impl RawReader for IntoIter<KeyPress> {
@@ -48,6 +52,10 @@ impl RawReader for IntoIter<KeyPress> {
             None => Err(ReadlineError::Eof),
             _ => unimplemented!(),
         }
+    }
+
+    fn read_pasted_text(&mut self) -> Result<String> {
+        unimplemented!()
     }
 }
 

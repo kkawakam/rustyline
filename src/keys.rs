@@ -6,6 +6,8 @@ pub enum KeyPress {
     UnknownEscSeq,
     Backspace, // Ctrl('H')
     BackTab,
+    BracketedPasteStart,
+    BracketedPasteEnd,
     Char(char),
     ControlDown,
     ControlLeft,

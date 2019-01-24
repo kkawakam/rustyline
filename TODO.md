@@ -81,7 +81,7 @@ Undo
 Unix
 - [ ] Terminfo (https://github.com/Stebalien/term)
 - [ ] [ncurses](https://crates.io/crates/ncurses) alternative backend ?
-- [ ] [bracketed paste mode](https://cirw.in/blog/bracketed-paste)
+- [X] [bracketed paste mode](https://cirw.in/blog/bracketed-paste)
 - [ ] async stdin (https://github.com/Rufflewind/tokio-file-unix)
 
 Windows

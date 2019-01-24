@@ -27,6 +27,9 @@ const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 /// Unsupported Terminals that don't support RAW mode
 static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
 
+const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
+const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
+
 impl AsRawFd for OutputStreamType {
     fn as_raw_fd(&self) -> RawFd {
         match self {
@@ -72,13 +75,22 @@ fn is_a_tty(fd: libc::c_int) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
-#[cfg(not(test))]
-pub type Mode = termios::Termios;
+pub struct PosixMode {
+    termios: termios::Termios,
+    out: Option<OutputStreamType>,
+}
 
-impl RawMode for termios::Termios {
+#[cfg(not(test))]
+pub type Mode = PosixMode;
+
+impl RawMode for PosixMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, self)?;
+        termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &self.termios)?;
+        // disable bracketed paste
+        if let Some(out) = self.out {
+            write_and_flush(out, BRACKETED_PASTE_OFF)?;
+        }
         Ok(())
     }
 }
@@ -256,6 +268,23 @@ impl PosixRawReader {
                            "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
                 }
                 Ok(KeyPress::UnknownEscSeq)
+            } else if seq4.is_digit(10) {
+                let seq5 = self.next_char()?;
+                if seq5 == '~' {
+                    Ok(match (seq2, seq3, seq4) {
+                        ('2', '0', '0') => KeyPress::BracketedPasteStart,
+                        ('2', '0', '1') => KeyPress::BracketedPasteEnd,
+                        _ => {
+                            debug!(target: "rustyline",
+                                   "unsupported esc sequence: ESC [ {}{}{}~", seq2, seq3, seq4);
+                            KeyPress::UnknownEscSeq
+                        }
+                    })
+                } else {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: ESC [ {}{}{} {}", seq2, seq3, seq4, seq5);
+                    Ok(KeyPress::UnknownEscSeq)
+                }
             } else {
                 debug!(target: "rustyline",
                        "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
@@ -374,6 +403,26 @@ impl RawReader for PosixRawReader {
                 return Ok(self.receiver.c.take().unwrap());
             }
         }
+    }
+
+    fn read_pasted_text(&mut self) -> Result<String> {
+        let mut buffer = String::new();
+        loop {
+            match self.next_char()? {
+                '\x1b' => {
+                    let key = self.escape_sequence()?;
+                    if key == KeyPress::BracketedPasteEnd {
+                        break
+                    } else {
+                        continue // TODO validate
+                    }
+                },
+                c => buffer.push(c),
+            };
+        }
+        let buffer = buffer.replace("\r\n", "\n");
+        let buffer = buffer.replace("\r", "\n");
+        Ok(buffer)
     }
 }
 
@@ -527,17 +576,7 @@ impl Renderer for PosixRenderer {
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
-        match self.out {
-            OutputStreamType::Stdout => {
-                io::stdout().write_all(buf)?;
-                io::stdout().flush()?;
-            }
-            OutputStreamType::Stderr => {
-                io::stderr().write_all(buf)?;
-                io::stderr().flush()?;
-            }
-        }
-        Ok(())
+        write_and_flush(self.out, buf)
     }
 
     /// Control characters are treated as having zero width.
@@ -630,7 +669,7 @@ pub struct PosixTerminal {
 }
 
 impl Term for PosixTerminal {
-    type Mode = termios::Termios;
+    type Mode = PosixMode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
@@ -700,7 +739,18 @@ impl Term for PosixTerminal {
         raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
-        Ok(original_mode)
+
+        // enable bracketed paste
+        let out = if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
+            debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
+            None
+        } else {
+            Some(self.stream_type)
+        };
+        Ok(PosixMode {
+            termios: original_mode,
+            out,
+        })
     }
 
     /// Create a RAW reader
@@ -718,6 +768,20 @@ pub fn suspend() -> Result<()> {
     use nix::unistd::Pid;
     // suspend the whole process group
     signal::kill(Pid::from_raw(0), signal::SIGTSTP)?;
+    Ok(())
+}
+
+fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
+    match out {
+        OutputStreamType::Stdout => {
+            io::stdout().write_all(buf)?;
+            io::stdout().flush()?;
+        }
+        OutputStreamType::Stderr => {
+            io::stderr().write_all(buf)?;
+            io::stderr().flush()?;
+        }
+    }
     Ok(())
 }
 

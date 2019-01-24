@@ -235,6 +235,10 @@ impl RawReader for ConsoleRawReader {
             }
         }
     }
+
+    fn read_pasted_text(&mut self) -> Result<String> {
+        unimplemented!()
+    }
 }
 
 pub struct ConsoleRenderer {

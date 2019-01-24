@@ -492,7 +492,7 @@ impl InputState {
             KeyPress::Meta('T') | KeyPress::Meta('t') => Cmd::TransposeWords(n),
             KeyPress::Meta('U') | KeyPress::Meta('u') => Cmd::UpcaseWord,
             KeyPress::Meta('Y') | KeyPress::Meta('y') => Cmd::YankPop,
-            _ => self.common(key, n, positive),
+            _ => self.common(rdr, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
         Ok(cmd)
@@ -688,7 +688,7 @@ impl InputState {
                 Cmd::ForwardSearchHistory
             }
             KeyPress::Esc => Cmd::Noop,
-            _ => self.common(key, n, true),
+            _ => self.common(rdr, key, n, true)?,
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -728,7 +728,7 @@ impl InputState {
                 wrt.done_inserting();
                 Cmd::Move(Movement::BackwardChar(1))
             }
-            _ => self.common(key, 1, true),
+            _ => self.common(rdr, key, 1, true)?,
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -829,8 +829,14 @@ impl InputState {
         })
     }
 
-    fn common(&mut self, key: KeyPress, n: RepeatCount, positive: bool) -> Cmd {
-        match key {
+    fn common<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        key: KeyPress,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Result<Cmd> {
+        Ok(match key {
             KeyPress::Home => Cmd::Move(Movement::BeginningOfLine),
             KeyPress::Left => {
                 if positive {
@@ -889,8 +895,12 @@ impl InputState {
             KeyPress::Ctrl('Z') => Cmd::Suspend,
             KeyPress::Ctrl('_') => Cmd::Undo(n),
             KeyPress::UnknownEscSeq => Cmd::Noop,
+            KeyPress::BracketedPasteStart => {
+                let paste = rdr.read_pasted_text()?;
+                Cmd::Insert(1, paste)
+            },
             _ => Cmd::Unknown,
-        }
+        })
     }
 
     fn num_args(&mut self) -> i16 {

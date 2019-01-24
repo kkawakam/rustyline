@@ -22,6 +22,8 @@ pub trait RawReader {
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;
+    /// Bracketed paste
+    fn read_pasted_text(&mut self) -> Result<String>;
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]

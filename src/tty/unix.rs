@@ -412,11 +412,11 @@ impl RawReader for PosixRawReader {
                 '\x1b' => {
                     let key = self.escape_sequence()?;
                     if key == KeyPress::BracketedPasteEnd {
-                        break
+                        break;
                     } else {
-                        continue // TODO validate
+                        continue; // TODO validate
                     }
-                },
+                }
                 c => buffer.push(c),
             };
         }
@@ -446,16 +446,18 @@ pub struct PosixRenderer {
     cols: usize, // Number of columns in terminal
     buffer: String,
     tab_stop: usize,
+    colors_enabled: bool,
 }
 
 impl PosixRenderer {
-    fn new(out: OutputStreamType, tab_stop: usize) -> Self {
+    fn new(out: OutputStreamType, tab_stop: usize, colors_enabled: bool) -> Self {
         let (cols, _) = get_win_size(&out);
         Self {
             out,
             cols,
             buffer: String::with_capacity(1024),
             tab_stop,
+            colors_enabled,
         }
     }
 }
@@ -634,6 +636,10 @@ impl Renderer for PosixRenderer {
         let (_, rows) = get_win_size(&self.out);
         rows
     }
+
+    fn colors_enabled(&self) -> bool {
+        self.colors_enabled
+    }
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
@@ -668,6 +674,16 @@ pub struct PosixTerminal {
     tab_stop: usize,
 }
 
+impl PosixTerminal {
+    fn colors_enabled(&self) -> bool {
+        match self.color_mode {
+            ColorMode::Enabled => self.stdstream_isatty,
+            ColorMode::Forced => true,
+            ColorMode::Disabled => false,
+        }
+    }
+}
+
 impl Term for PosixTerminal {
     type Mode = PosixMode;
     type Reader = PosixRawReader;
@@ -699,15 +715,6 @@ impl Term for PosixTerminal {
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
-    }
-
-    /// Check if output supports colors.
-    fn colors_enabled(&self) -> bool {
-        match self.color_mode {
-            ColorMode::Enabled => self.stdstream_isatty,
-            ColorMode::Forced => true,
-            ColorMode::Disabled => false,
-        }
     }
 
     // Interactive loop:
@@ -759,7 +766,7 @@ impl Term for PosixTerminal {
     }
 
     fn create_writer(&self) -> PosixRenderer {
-        PosixRenderer::new(self.stream_type, self.tab_stop)
+        PosixRenderer::new(self.stream_type, self.tab_stop, self.colors_enabled())
     }
 }
 
@@ -793,7 +800,7 @@ mod test {
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(OutputStreamType::Stdout, 4);
+        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true);
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);

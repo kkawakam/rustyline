@@ -66,13 +66,13 @@ use crate::line_buffer::WordAction;
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 /// Completes the line/word
-fn complete_line<R: RawReader, C: Completer>(
+fn complete_line<R: RawReader, H: Helper>(
     rdr: &mut R,
-    s: &mut State<'_, '_>,
+    s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
-    completer: &C,
     config: &Config,
 ) -> Result<Option<Cmd>> {
+    let completer = s.helper.unwrap();
     // get a list of completions
     let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
     // if no completions, we are done
@@ -184,7 +184,7 @@ fn complete_line<R: RawReader, C: Completer>(
 }
 
 /// Completes the current hint
-fn complete_hint_line(s: &mut State<'_, '_>) -> Result<()> {
+fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     let hint = match s.hint.as_ref() {
         Some(hint) => hint,
         None => return Ok(()),
@@ -197,9 +197,9 @@ fn complete_hint_line(s: &mut State<'_, '_>) -> Result<()> {
     Ok(())
 }
 
-fn page_completions<R: RawReader, C: Candidate>(
+fn page_completions<R: RawReader, C: Candidate, H: Helper>(
     rdr: &mut R,
-    s: &mut State<'_, '_>,
+    s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
@@ -256,7 +256,7 @@ fn page_completions<R: RawReader, C: Candidate>(
             if i < candidates.len() {
                 let candidate = &candidates[i].display();
                 let width = candidate.width();
-                if let Some(highlighter) = s.highlighter {
+                if let Some(highlighter) = s.highlighter() {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
@@ -276,9 +276,9 @@ fn page_completions<R: RawReader, C: Candidate>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<R: RawReader>(
+fn reverse_incremental_search<R: RawReader, H: Helper>(
     rdr: &mut R,
-    s: &mut State<'_, '_>,
+    s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
     history: &History,
 ) -> Result<Option<Cmd>> {
@@ -370,13 +370,7 @@ fn readline_edit<H: Helper>(
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
 ) -> Result<String> {
-    let completer = editor.helper.as_ref();
-    let hinter = editor.helper.as_ref().map(|h| h as &dyn Hinter);
-    let highlighter = if editor.term.colors_enabled() {
-        editor.helper.as_ref().map(|h| h as &dyn Highlighter)
-    } else {
-        None
-    };
+    let helper = editor.helper.as_ref();
 
     let mut stdout = editor.term.create_writer();
 
@@ -385,7 +379,7 @@ fn readline_edit<H: Helper>(
         history: &editor.history,
         history_index: editor.history.len(),
     };
-    let mut s = State::new(&mut stdout, prompt, hinter, highlighter, ctx);
+    let mut s = State::new(&mut stdout, prompt, helper, ctx);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -409,14 +403,8 @@ fn readline_edit<H: Helper>(
         }
 
         // autocomplete
-        if cmd == Cmd::Complete && completer.is_some() {
-            let next = complete_line(
-                &mut rdr,
-                &mut s,
-                &mut input_state,
-                completer.unwrap(),
-                &editor.config,
-            )?;
+        if cmd == Cmd::Complete && s.helper.is_some() {
+            let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
             if next.is_some() {
                 cmd = next.unwrap();
             } else {
@@ -669,6 +657,8 @@ where
 }
 
 impl Helper for () {}
+
+impl<'h, H: ?Sized + Helper> Helper for &'h H {}
 
 /// Completion/suggestion context
 pub struct Context<'h> {

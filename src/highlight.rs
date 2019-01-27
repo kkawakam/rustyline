@@ -48,8 +48,8 @@ pub trait Highlighter {
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, line: &str, _pos: usize) -> bool {
-        let _ = line;
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
+        let _ = (line, pos);
         false
     }
 }

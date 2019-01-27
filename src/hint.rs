@@ -9,14 +9,13 @@ pub trait Hinter {
     /// returns the string that should be displayed or `None`
     /// if no hint is available for the text the user currently typed.
     // TODO Validate: called while editing line but not while moving cursor.
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String>;
-}
-
-impl Hinter for () {
-    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<String> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+        let _ = (line, pos, ctx);
         None
     }
 }
+
+impl Hinter for () {}
 
 impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {

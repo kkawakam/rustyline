@@ -75,6 +75,8 @@ pub trait Renderer {
     fn get_columns(&self) -> usize;
     /// Get the number of rows in the current terminal.
     fn get_rows(&self) -> usize;
+    /// Check if output supports colors.
+    fn colors_enabled(&self) -> bool;
 }
 
 impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
@@ -134,6 +136,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn get_rows(&self) -> usize {
         (**self).get_rows()
     }
+
+    fn colors_enabled(&self) -> bool {
+        (**self).colors_enabled()
+    }
 }
 
 /// Terminal contract
@@ -148,8 +154,6 @@ pub trait Term {
     fn is_unsupported(&self) -> bool;
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool;
-    /// Check if output supports colors.
-    fn colors_enabled(&self) -> bool;
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<Self::Mode>;
     /// Create a RAW reader

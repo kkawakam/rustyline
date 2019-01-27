@@ -4,10 +4,12 @@ use std::sync::{Arc, RwLock};
 use crate::completion::Completer;
 use crate::config::{Config, EditMode};
 use crate::edit::init_state;
+use crate::highlight::Highlighter;
+use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::KeyPress;
 use crate::tty::Sink;
-use crate::{Context, Editor, Result};
+use crate::{Context, Editor, Helper, Result};
 
 mod common;
 mod emacs;
@@ -36,24 +38,21 @@ impl Completer for SimpleCompleter {
     }
 }
 
+impl Helper for SimpleCompleter {}
+impl Hinter for SimpleCompleter {}
+impl Highlighter for SimpleCompleter {}
+
 #[test]
 fn complete_line() {
     let mut out = Sink::new();
     let history = crate::history::History::new();
-    let mut s = init_state(&mut out, "rus", 3, &history);
+    let helper = Some(SimpleCompleter);
+    let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
     let mut input_state = InputState::new(&config, Arc::new(RwLock::new(HashMap::new())));
     let keys = &[KeyPress::Enter];
     let mut rdr = keys.iter();
-    let completer = SimpleCompleter;
-    let cmd = super::complete_line(
-        &mut rdr,
-        &mut s,
-        &mut input_state,
-        &completer,
-        &Config::default(),
-    )
-    .unwrap();
+    let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();
     assert_eq!(Some(Cmd::AcceptLine), cmd);
     assert_eq!("rust", s.line.as_str());
     assert_eq!(4, s.line.pos());

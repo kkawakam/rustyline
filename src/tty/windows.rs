@@ -246,10 +246,11 @@ pub struct ConsoleRenderer {
     handle: HANDLE,
     cols: usize, // Number of columns in terminal
     buffer: String,
+    colors_enabled: bool,
 }
 
 impl ConsoleRenderer {
-    fn new(handle: HANDLE, out: OutputStreamType) -> ConsoleRenderer {
+    fn new(handle: HANDLE, out: OutputStreamType, colors_enabled: bool) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
@@ -257,6 +258,7 @@ impl ConsoleRenderer {
             handle,
             cols,
             buffer: String::with_capacity(1024),
+            colors_enabled,
         }
     }
 
@@ -427,6 +429,10 @@ impl Renderer for ConsoleRenderer {
         let (_, rows) = get_win_size(self.handle);
         rows
     }
+
+    fn colors_enabled(&self) -> bool {
+        self.colors_enabled
+    }
 }
 
 static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
@@ -445,7 +451,16 @@ pub struct Console {
     stream_type: OutputStreamType,
 }
 
-impl Console {}
+impl Console {
+    fn colors_enabled(&self) -> bool {
+        // TODO ANSI Colors & Windows <10
+        match self.color_mode {
+            ColorMode::Enabled => self.stdstream_isatty && self.ansi_colors_supported,
+            ColorMode::Forced => true,
+            ColorMode::Disabled => false,
+        }
+    }
+}
 
 impl Term for Console {
     type Mode = ConsoleMode;
@@ -494,15 +509,6 @@ impl Term for Console {
 
     fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
-    }
-
-    fn colors_enabled(&self) -> bool {
-        // TODO ANSI Colors & Windows <10
-        match self.color_mode {
-            ColorMode::Enabled => self.stdstream_isatty && self.ansi_colors_supported,
-            ColorMode::Forced => true,
-            ColorMode::Disabled => false,
-        }
     }
 
     // pub fn install_sigwinch_handler(&mut self) {
@@ -557,7 +563,7 @@ impl Term for Console {
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.stdstream_handle, self.stream_type)
+        ConsoleRenderer::new(self.stdstream_handle, self.stream_type, self.colors_enabled())
     }
 }
 

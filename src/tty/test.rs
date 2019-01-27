@@ -121,6 +121,10 @@ impl Renderer for Sink {
     fn get_rows(&self) -> usize {
         24
     }
+
+    fn colors_enabled(&self) -> bool {
+        false
+    }
 }
 
 pub type Terminal = DummyTerminal;
@@ -153,10 +157,6 @@ impl Term for DummyTerminal {
 
     fn is_stdin_tty(&self) -> bool {
         true
-    }
-
-    fn colors_enabled(&self) -> bool {
-        false
     }
 
     // Interactive loop:

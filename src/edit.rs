@@ -6,9 +6,8 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
-use super::{Context, Result};
+use super::{Context, Helper, Result};
 use crate::highlight::Highlighter;
-use crate::hint::Hinter;
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
@@ -18,7 +17,7 @@ use crate::undo::Changeset;
 
 /// Represent the state during line editing.
 /// Implement rendering.
-pub struct State<'out, 'prompt> {
+pub struct State<'out, 'prompt, H: Helper> {
     pub out: &'out mut dyn Renderer,
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
@@ -29,8 +28,7 @@ pub struct State<'out, 'prompt> {
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
-    pub hinter: Option<&'out dyn Hinter>,
-    pub highlighter: Option<&'out dyn Highlighter>,
+    pub helper: Option<&'out H>,
     pub ctx: Context<'out>,   // Give access to history for `hinter`
     pub hint: Option<String>, // last hint displayed
     highlight_char: bool,     // `true` if a char has been highlighted
@@ -42,14 +40,13 @@ enum Info<'m> {
     Msg(Option<&'m str>),
 }
 
-impl<'out, 'prompt> State<'out, 'prompt> {
+impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
         out: &'out mut dyn Renderer,
         prompt: &'prompt str,
-        hinter: Option<&'out dyn Hinter>,
-        highlighter: Option<&'out dyn Highlighter>,
+        helper: Option<&'out H>,
         ctx: Context<'out>,
-    ) -> State<'out, 'prompt> {
+    ) -> State<'out, 'prompt, H> {
         let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
@@ -62,11 +59,18 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             saved_line_for_history: LineBuffer::with_capacity(capacity),
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
-            hinter,
-            highlighter,
+            helper,
             ctx,
             hint: None,
             highlight_char: false,
+        }
+    }
+
+    pub fn highlighter(&self) -> Option<&dyn Highlighter> {
+        if self.out.colors_enabled() {
+            self.helper.map(|h| h as &dyn Highlighter)
+        } else {
+            None
         }
     }
 
@@ -126,6 +130,11 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             Info::Hint => self.hint.as_ref().map(|hint| hint.as_str()),
             Info::Msg(msg) => msg,
         };
+        let highlighter = if self.out.colors_enabled() {
+            self.helper.map(|h| h as &dyn Highlighter)
+        } else {
+            None
+        };
         let (cursor, end_pos) = self.out.refresh_line(
             prompt,
             prompt_size,
@@ -133,7 +142,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
             info,
             self.cursor.row,
             self.old_rows,
-            self.highlighter,
+            highlighter,
         )?;
 
         self.cursor = cursor;
@@ -141,8 +150,8 @@ impl<'out, 'prompt> State<'out, 'prompt> {
         Ok(())
     }
 
-    fn hint(&mut self) {
-        if let Some(hinter) = self.hinter {
+    pub fn hint(&mut self) {
+        if let Some(hinter) = self.helper {
             let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
             self.hint = hint;
         } else {
@@ -151,7 +160,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 
     fn highlight_char(&mut self) -> bool {
-        if let Some(highlighter) = self.highlighter {
+        if let Some(highlighter) = self.highlighter() {
             let highlight_char = highlighter.highlight_char(&self.line, self.line.pos());
             if highlight_char {
                 self.highlight_char = true;
@@ -169,7 +178,7 @@ impl<'out, 'prompt> State<'out, 'prompt> {
     }
 }
 
-impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
+impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
@@ -216,7 +225,7 @@ impl<'out, 'prompt> Refresher for State<'out, 'prompt> {
     }
 }
 
-impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
+impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -230,7 +239,7 @@ impl<'out, 'prompt> fmt::Debug for State<'out, 'prompt> {
     }
 }
 
-impl<'out, 'prompt> State<'out, 'prompt> {
+impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Insert the character `ch` at cursor current position.
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n) {
@@ -545,12 +554,13 @@ impl<'out, 'prompt> State<'out, 'prompt> {
 }
 
 #[cfg(test)]
-pub fn init_state<'out>(
+pub fn init_state<'out, H: Helper>(
     out: &'out mut dyn Renderer,
     line: &str,
     pos: usize,
+    helper: Option<&'out H>,
     history: &'out crate::history::History,
-) -> State<'out, 'static> {
+) -> State<'out, 'static, H> {
     State {
         out,
         prompt: "",
@@ -561,8 +571,7 @@ pub fn init_state<'out>(
         saved_line_for_history: LineBuffer::with_capacity(100),
         byte_buffer: [0; 4],
         changes: Rc::new(RefCell::new(Changeset::new())),
-        hinter: None,
-        highlighter: None,
+        helper,
         ctx: Context {
             history,
             history_index: 0,
@@ -585,7 +594,8 @@ mod test {
         history.add("line0");
         history.add("line1");
         let line = "current edited line";
-        let mut s = init_state(&mut out, line, 6, &history);
+        let helper: Option<()> = None;
+        let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history);
         s.ctx.history_index = history.len();
 
         for _ in 0..2 {

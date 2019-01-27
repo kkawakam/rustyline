@@ -284,10 +284,6 @@ impl ConsoleRenderer {
         ));
         Ok(())
     }
-
-    fn colors_enabled(&self) -> bool {
-        self.colors_enabled
-    }
 }
 
 impl Renderer for ConsoleRenderer {
@@ -432,6 +428,10 @@ impl Renderer for ConsoleRenderer {
     fn get_rows(&self) -> usize {
         let (_, rows) = get_win_size(self.handle);
         rows
+    }
+
+    fn colors_enabled(&self) -> bool {
+        self.colors_enabled
     }
 }
 

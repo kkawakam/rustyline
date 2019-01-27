@@ -563,7 +563,7 @@ impl Term for Console {
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.stdstream_handle, self.stream_type)
+        ConsoleRenderer::new(self.stdstream_handle, self.stream_type, self.colors_enabled())
     }
 }
 

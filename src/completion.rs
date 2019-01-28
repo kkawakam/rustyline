@@ -282,6 +282,7 @@ fn filename_complete(
     break_chars: &[u8],
     quote: Quote,
 ) -> Result<Vec<Pair>> {
+    #[cfg(feature = "with-dirs")]
     use dirs::home_dir;
     use std::env::current_dir;
 
@@ -294,12 +295,19 @@ fn filename_complete(
     let dir_path = Path::new(dir_name);
     let dir = if dir_path.starts_with("~") {
         // ~[/...]
-        if let Some(home) = home_dir() {
-            match dir_path.strip_prefix("~") {
-                Ok(rel_path) => home.join(rel_path),
-                _ => home,
+        #[cfg(feature = "with-dirs")]
+        {
+            if let Some(home) = home_dir() {
+                match dir_path.strip_prefix("~") {
+                    Ok(rel_path) => home.join(rel_path),
+                    _ => home,
+                }
+            } else {
+                dir_path.to_path_buf()
             }
-        } else {
+        }
+        #[cfg(not(feature = "with-dirs"))]
+        {
             dir_path.to_path_buf()
         }
     } else if dir_path.is_relative() {

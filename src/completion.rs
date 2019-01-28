@@ -282,10 +282,8 @@ fn filename_complete(
     break_chars: &[u8],
     quote: Quote,
 ) -> Result<Vec<Pair>> {
-    #[cfg(feature = "dirs")]
-    {
-        use dirs::home_dir;
-    }
+    #[cfg(feature = "with-dirs")]
+    use dirs::home_dir;
     use std::env::current_dir;
 
     let sep = path::MAIN_SEPARATOR;
@@ -308,7 +306,7 @@ fn filename_complete(
                 dir_path.to_path_buf()
             }
         }
-        #[cfg(not(feature = "dir"))]
+        #[cfg(not(feature = "with-dirs"))]
         {
             dir_path.to_path_buf()
         }

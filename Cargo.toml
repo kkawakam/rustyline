@@ -35,7 +35,10 @@ winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", 
 env_logger = "0.6"
 tempdir = "0.3"
 assert_matches = "1.2"
+futures = "0.1"
+tokio = "0.1"
 
 [features]
 default = ["with-dirs"]
 with-dirs = ["dirs"]
+

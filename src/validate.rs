@@ -2,6 +2,7 @@
 
 use crate::line_buffer::LineBuffer;
 
+///
 pub enum ValidationResult {
     /// Validation fails with an optional error message. User must fix the input.
     Invalid(Option<String>),
@@ -15,11 +16,12 @@ pub enum ValidationResult {
 /// will end the current editing session and return the current line
 /// buffer to the caller of `Editor::readline` or variants.
 pub trait Validator {
-    /// Takes the currently edited `line` and returns a bool
-    /// indicating whether it is valid or not. The most common
-    /// validity check to implement is probably whether the input is
-    /// complete or not, for instance ensuring that all delimiters are
-    /// fully balanced.
+    /// Takes the currently edited `line` and returns a
+    /// ValidationResult indicating whether it is valid or not along
+    /// with an option message to display about the result. The most
+    /// common validity check to implement is probably whether the
+    /// input is complete or not, for instance ensuring that all
+    /// delimiters are fully balanced.
     ///
     /// If you implement more complex validation checks it's probably
     /// a good idea to also implement a `Hinter` to provide feedback
@@ -27,6 +29,15 @@ pub trait Validator {
     fn is_valid(&self, line: &mut LineBuffer) -> ValidationResult {
         let _ = line;
         ValidationResult::Valid(None)
+    }
+
+    /// Configure whether validation is performed while typing or only
+    /// when user presses the Enter key.
+    ///
+    /// Default is `false`.
+    // TODO we can implement this later.
+    fn validate_while_typing(&self) -> bool {
+        false
     }
 }
 

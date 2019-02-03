@@ -42,3 +42,5 @@ pub trait Validator {
 }
 
 impl Validator for () {}
+
+impl<'h, H: ?Sized + Validator> Validator for &'h H {}

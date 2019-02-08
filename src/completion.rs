@@ -368,8 +368,8 @@ pub fn extract_word<'l>(
     }
     let mut start = None;
     for (i, c) in line.char_indices().rev() {
-        if esc_char.is_some() && start.is_some() {
-            if esc_char.unwrap() == c {
+        if let (Some(esc_char), true) = (esc_char, start.is_some()) {
+            if esc_char == c {
                 // escaped break char
                 start = None;
                 continue;

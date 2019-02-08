@@ -217,10 +217,12 @@ impl RawReader for ConsoleRawReader {
                 } else {
                     decode_utf16([surrogate, utf16].iter().cloned()).next()
                 };
-                if orc.is_none() {
+                let rc = if let Some(rc) = orc {
+                    rc
+                } else {
                     return Err(error::ReadlineError::Eof);
-                }
-                let c = orc.unwrap()?;
+                };
+                let c = rc?;
                 if meta {
                     return Ok(KeyPress::Meta(c));
                 } else {
@@ -563,7 +565,11 @@ impl Term for Console {
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.stdstream_handle, self.stream_type, self.colors_enabled())
+        ConsoleRenderer::new(
+            self.stdstream_handle,
+            self.stream_type,
+            self.colors_enabled(),
+        )
     }
 }
 

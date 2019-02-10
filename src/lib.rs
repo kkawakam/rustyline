@@ -405,8 +405,8 @@ fn readline_edit<H: Helper>(
         // autocomplete
         if cmd == Cmd::Complete && s.helper.is_some() {
             let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
-            if next.is_some() {
-                cmd = next.unwrap();
+            if let Some(next) = next {
+                cmd = next;
             } else {
                 continue;
             }
@@ -429,8 +429,8 @@ fn readline_edit<H: Helper>(
             // Search history backward
             let next =
                 reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &editor.history)?;
-            if next.is_some() {
-                cmd = next.unwrap();
+            if let Some(next) = next {
+                cmd = next;
             } else {
                 continue;
             }
@@ -799,14 +799,20 @@ impl<H: Helper> Editor<H> {
 
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
-        let mut bindings = self.custom_bindings.write().unwrap();
-        bindings.insert(key_seq, cmd)
+        if let Ok(mut bindings) = self.custom_bindings.write() {
+            bindings.insert(key_seq, cmd)
+        } else {
+            None
+        }
     }
 
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
-        let mut bindings = self.custom_bindings.write().unwrap();
-        bindings.remove(&key_seq)
+        if let Ok(mut bindings) = self.custom_bindings.write() {
+            bindings.remove(&key_seq)
+        } else {
+            None
+        }
     }
 
     /// ```

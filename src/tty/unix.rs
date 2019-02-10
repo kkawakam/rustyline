@@ -399,8 +399,8 @@ impl RawReader for PosixRawReader {
             self.parser.advance(&mut self.receiver, b);
             if !self.receiver.valid {
                 return Err(error::ReadlineError::Utf8Error);
-            } else if self.receiver.c.is_some() {
-                return Ok(self.receiver.c.take().unwrap());
+            } else if let Some(c) = self.receiver.c.take() {
+                return Ok(c);
             }
         }
     }

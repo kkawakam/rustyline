@@ -211,10 +211,11 @@ impl Completer for FilenameCompleter {
 
 /// Remove escape char
 pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
-    if esc_char.is_none() {
+    let esc_char = if let Some(c) = esc_char {
+        c
+    } else {
         return Borrowed(input);
-    }
-    let esc_char = esc_char.unwrap();
+    };
     if !input.chars().any(|c| c == esc_char) {
         return Borrowed(input);
     }
@@ -257,14 +258,15 @@ pub fn escape(
     if n == 0 {
         return input; // no need to escape
     }
-    if esc_char.is_none() {
+    let esc_char = if let Some(c) = esc_char {
+        c
+    } else {
         if cfg!(windows) && quote == Quote::None {
             input.insert(0, '"'); // force double quote
             return input;
         }
         return input;
-    }
-    let esc_char = esc_char.unwrap();
+    };
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {

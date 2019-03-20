@@ -63,7 +63,7 @@ impl History {
                     .as_ref()
                     .chars()
                     .next()
-                    .map_or(true, |c| c.is_whitespace()))
+                    .map_or(true, char::is_whitespace))
         {
             return false;
         }

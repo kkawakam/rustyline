@@ -211,7 +211,7 @@ impl Changeset {
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
         graphemes.next().map_or(false, |grapheme| {
-            grapheme.chars().all(|c| c.is_alphanumeric())
+            grapheme.chars().all(char::is_alphanumeric)
         }) && graphemes.next().is_none()
     }
 

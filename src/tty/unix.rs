@@ -219,6 +219,7 @@ impl PosixRawReader {
     }
 
     /// Handle ESC [ <seq2:digit> escape sequences
+    #[allow(clippy::cognitive_complexity)]
     fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
         let seq3 = self.next_char()?;
         if seq3 == '~' {

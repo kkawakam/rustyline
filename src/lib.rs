@@ -840,6 +840,17 @@ impl<H: Helper> Editor<H> {
         let mut kill_ring = self.kill_ring.lock().unwrap();
         kill_ring.reset();
     }
+
+    /// If output stream is a tty, this function returns its width and height as
+    /// a number of characters.
+    pub fn dimensions(&mut self) -> Option<(usize, usize)> {
+        if self.term.is_output_tty() {
+            let out = self.term.create_writer();
+            Some((out.get_columns(), out.get_rows()))
+        } else {
+            None
+        }
+    }
 }
 
 impl<H: Helper> config::Configurer for Editor<H> {

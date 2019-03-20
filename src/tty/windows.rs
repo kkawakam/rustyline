@@ -513,6 +513,10 @@ impl Term for Console {
         self.stdin_isatty
     }
 
+    fn is_output_tty(&self) -> bool {
+        self.stdstream_isatty
+    }
+
     // pub fn install_sigwinch_handler(&mut self) {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
     // }

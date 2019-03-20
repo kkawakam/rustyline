@@ -154,6 +154,8 @@ pub trait Term {
     fn is_unsupported(&self) -> bool;
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool;
+    /// check if output stream is connected to a terminal.
+    fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<Self::Mode>;
     /// Create a RAW reader

@@ -717,6 +717,10 @@ impl Term for PosixTerminal {
         self.stdin_isatty
     }
 
+    fn is_output_tty(&self) -> bool {
+        self.stdstream_isatty
+    }
+
     // Interactive loop:
 
     fn enable_raw_mode(&mut self) -> Result<Self::Mode> {

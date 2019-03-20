@@ -159,6 +159,10 @@ impl Term for DummyTerminal {
         true
     }
 
+    fn is_output_tty(&self) -> bool {
+        false
+    }
+
     // Interactive loop:
 
     fn enable_raw_mode(&mut self) -> Result<Mode> {

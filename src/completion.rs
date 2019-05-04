@@ -59,7 +59,10 @@ pub trait Completer {
         line: &str,
         pos: usize,
         ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<Self::Candidate>)>;
+    ) -> Result<(usize, Vec<Self::Candidate>)> {
+        let _ = (line, pos, ctx);
+        Ok((0, Vec::with_capacity(0)))
+    }
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
@@ -69,15 +72,6 @@ pub trait Completer {
 
 impl Completer for () {
     type Candidate = String;
-
-    fn complete(
-        &self,
-        _line: &str,
-        _pos: usize,
-        _ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<String>)> {
-        Ok((0, Vec::with_capacity(0)))
-    }
 
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
         unreachable!()

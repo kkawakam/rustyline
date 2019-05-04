@@ -39,3 +39,9 @@ assert_matches = "1.2"
 [features]
 default = ["with-dirs"]
 with-dirs = ["dirs"]
+
+[package.metadata.docs.rs]
+features = ["with-dirs"]
+all-features = false
+no-default-features = true
+default-target = "x86_64-unknown-linux-gnu"

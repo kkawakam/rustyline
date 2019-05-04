@@ -167,18 +167,8 @@ impl FilenameCompleter {
             double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
         }
     }
-}
 
-impl Default for FilenameCompleter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Completer for FilenameCompleter {
-    type Candidate = Pair;
-
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+    pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
@@ -206,6 +196,20 @@ impl Completer for FilenameCompleter {
             };
         let matches = filename_complete(&path, esc_char, break_chars, quote)?;
         Ok((start, matches))
+    }
+}
+
+impl Default for FilenameCompleter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Completer for FilenameCompleter {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        self.complete_path(line, pos)
     }
 }
 

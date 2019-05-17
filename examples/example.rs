@@ -80,8 +80,8 @@ fn main() {
     loop {
         let readline = rl.readline(PROMPT);
         match readline {
-            Ok(line) => {
-                rl.add_history_entry(line.as_ref());
+            Ok(ref line) => {
+                rl.add_history_entry(line);
                 println!("Line: {}", line);
             }
             Err(ReadlineError::Interrupted) => {

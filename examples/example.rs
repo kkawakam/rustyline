@@ -82,8 +82,8 @@ fn main() {
         match readline {
             Ok(line) => {
                 let line: String = line;
-                rl.add_history_entry(&line);
-                println!("Line: {}", line);
+                println!("Line: {}", &line);
+                rl.add_history_entry(line);
             }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");

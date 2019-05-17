@@ -81,7 +81,7 @@ fn main() {
         let readline = rl.readline(PROMPT);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.clone());
+                rl.add_history_entry(&line);
                 println!("Line: {}", line);
             }
             Err(ReadlineError::Interrupted) => {

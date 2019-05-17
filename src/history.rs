@@ -148,7 +148,7 @@ impl History {
         let file = File::open(&path)?;
         let rdr = BufReader::new(file);
         for line in rdr.lines() {
-            self.add(line?.clone()); // TODO truncate to MAX_LINE
+            self.add(&line?); // TODO truncate to MAX_LINE
         }
         Ok(())
     }

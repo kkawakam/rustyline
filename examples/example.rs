@@ -81,6 +81,7 @@ fn main() {
         let readline = rl.readline(PROMPT);
         match readline {
             Ok(line) => {
+                let line: String = line;
                 rl.add_history_entry(&line);
                 println!("Line: {}", line);
             }

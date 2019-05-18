@@ -624,7 +624,7 @@ fn readline_raw<H: Helper>(
     let user_input = readline_edit(prompt, initial, editor, &original_mode);
     if editor.config.auto_add_history() {
         if let Ok(ref line) = user_input {
-            editor.add_history_entry(line.as_ref());
+            editor.add_history_entry(line.as_str());
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;

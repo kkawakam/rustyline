@@ -103,7 +103,7 @@ fn main() {
         let readline = rl.readline(p);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_ref());
+                rl.add_history_entry(line.as_str());
                 println!("Line: {}", line);
             }
             Err(ReadlineError::Interrupted) => {

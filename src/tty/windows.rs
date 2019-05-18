@@ -437,7 +437,7 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;

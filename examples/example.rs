@@ -1,6 +1,5 @@
 use env_logger;
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::cell::RefCell;
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
@@ -25,7 +24,7 @@ struct MyHelper {
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,
     hinter: HistoryHinter,
-    prompt: RefCell<Prompt>,
+    prompt: Prompt,
 }
 
 impl Completer for MyHelper {
@@ -48,10 +47,9 @@ impl Hinter for MyHelper {
 }
 
 impl Highlighter for MyHelper {
-    fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
-        if prompt == self.prompt.borrow().prompt {
-            // Borrowed(&self.prompt.borrow().colored_prompt) // FIXME lifetime mismatch
-            Owned(self.prompt.borrow().colored_prompt.to_owned())
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(&'s self, prompt: &'p str) -> Cow<'b, str> {
+        if prompt == self.prompt.prompt {
+            Borrowed(&self.prompt.colored_prompt)
         } else {
             Borrowed(prompt)
         }
@@ -88,7 +86,7 @@ fn main() {
         completer: FilenameCompleter::new(),
         highlighter: MatchingBracketHighlighter::new(),
         hinter: HistoryHinter {},
-        prompt: RefCell::new(prompt),
+        prompt: prompt,
     };
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
@@ -97,10 +95,11 @@ fn main() {
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
+    let mut count = 1;
     loop {
-        let p = ">> ";
-        rl.helper_mut().unwrap().prompt.borrow_mut().set_prompt(p);
-        let readline = rl.readline(p);
+        let p = format!("{}> ", count);
+        rl.helper_mut().unwrap().prompt.set_prompt(&p);
+        let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
@@ -119,6 +118,7 @@ fn main() {
                 break;
             }
         }
+        count += 1;
     }
     rl.save_history("history.txt").unwrap();
 }

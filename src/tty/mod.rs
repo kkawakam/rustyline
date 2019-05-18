@@ -42,6 +42,7 @@ pub trait Renderer {
         &mut self,
         prompt: &str,
         prompt_size: Position,
+        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         current_row: usize,
@@ -88,6 +89,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         &mut self,
         prompt: &str,
         prompt_size: Position,
+        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         current_row: usize,
@@ -97,6 +99,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).refresh_line(
             prompt,
             prompt_size,
+            default_prompt,
             line,
             hint,
             current_row,

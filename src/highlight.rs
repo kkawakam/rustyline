@@ -23,7 +23,12 @@ pub trait Highlighter {
     }
     /// Takes the `prompt` and
     /// returns the highlighted version (with ANSI color).
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(&'s self, prompt: &'p str) -> Cow<'b, str> {
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        default: bool,
+    ) -> Cow<'b, str> {
+        let _ = default;
         Borrowed(prompt)
     }
     /// Takes the `hint` and
@@ -61,8 +66,12 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
         (**self).highlight(line, pos)
     }
 
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(&'s self, prompt: &'p str) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt)
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        default: bool,
+    ) -> Cow<'b, str> {
+        (**self).highlight_prompt(prompt, default)
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {

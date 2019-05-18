@@ -8,23 +8,11 @@ use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
 
-struct Prompt {
-    prompt: String,
-    colored_prompt: String,
-}
-
-impl Prompt {
-    fn set_prompt(&mut self, prompt: &str) {
-        self.prompt = prompt.to_owned();
-        self.colored_prompt = format!("\x1b[1;32m{}\x1b[0m ", prompt);
-    }
-}
-
 struct MyHelper {
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,
     hinter: HistoryHinter,
-    prompt: Prompt,
+    colored_prompt: String,
 }
 
 impl Completer for MyHelper {
@@ -47,9 +35,13 @@ impl Hinter for MyHelper {
 }
 
 impl Highlighter for MyHelper {
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(&'s self, prompt: &'p str) -> Cow<'b, str> {
-        if prompt == self.prompt.prompt {
-            Borrowed(&self.prompt.colored_prompt)
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        default: bool,
+    ) -> Cow<'b, str> {
+        if default {
+            Borrowed(&self.colored_prompt)
         } else {
             Borrowed(prompt)
         }
@@ -78,15 +70,11 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();
-    let prompt = Prompt {
-        prompt: "".to_owned(),
-        colored_prompt: "".to_owned(),
-    };
     let h = MyHelper {
         completer: FilenameCompleter::new(),
         highlighter: MatchingBracketHighlighter::new(),
         hinter: HistoryHinter {},
-        prompt: prompt,
+        colored_prompt: "".to_owned(),
     };
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
@@ -98,7 +86,7 @@ fn main() {
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);
-        rl.helper_mut().unwrap().prompt.set_prompt(&p);
+        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m ", p);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {

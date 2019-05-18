@@ -641,6 +641,40 @@ impl Renderer for PosixRenderer {
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
     }
+
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()> {
+        /* Report cursor location */
+        self.write_and_flush(b"\x1b[6n")?;
+        /* Read the response: ESC [ rows ; cols R */
+        if rdr.next_char()? != '\x1b' {
+            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+        }
+        if rdr.next_char()? != '[' {
+            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+        }
+        read_digits_until(rdr, ';')?;
+        let digit = match rdr.next_char()? {
+            digit @ '0'..='9' => digit,
+            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
+        };
+        read_digits_until(rdr, 'R')?;
+        debug!(target: "rustyline", "initial cursor location: {:?}", digit);
+        if digit != '1' {
+            self.write_and_flush(b"\r")?;
+        }
+        Ok(())
+    }
+}
+
+fn read_digits_until(rdr: &mut RawReader, sep: char) -> Result<()> {
+    loop {
+        match rdr.next_char()? {
+            _digit @ '0'..='9' => continue,
+            c if c == sep => break,
+            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
+        }
+    }
+    Ok(())
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;

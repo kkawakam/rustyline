@@ -74,6 +74,12 @@ impl From<io::Error> for ReadlineError {
     }
 }
 
+impl From<io::ErrorKind> for ReadlineError {
+    fn from(kind: io::ErrorKind) -> Self {
+        ReadlineError::Io(io::Error::from(kind))
+    }
+}
+
 #[cfg(unix)]
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> Self {

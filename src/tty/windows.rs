@@ -435,6 +435,16 @@ impl Renderer for ConsoleRenderer {
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
     }
+
+    fn move_cursor_at_leftmost(&mut self, _: &mut RawReader) -> Result<()> {
+        let mut info = self.get_console_screen_buffer_info()?;
+        if info.dwCursorPosition.X == 0 {
+            return Ok(());
+        }
+        info.dwCursorPosition.X = 0;
+        info.dwCursorPosition.Y += 1;
+        self.set_console_cursor_position(info.dwCursorPosition)
+    }
 }
 
 static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);

@@ -86,7 +86,7 @@ fn main() {
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);
-        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m ", p);
+        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {

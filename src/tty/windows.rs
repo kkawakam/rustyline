@@ -550,6 +550,10 @@ impl Term for Console {
                 let raw = original_stdstream_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
                     unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, raw) != 0 };
+                debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
+            } else {
+                debug!(target: "rustyline", "ANSI colors already enabled");
+                self.ansi_colors_supported = true;
             }
             Some(original_stdstream_mode)
         } else {

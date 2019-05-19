@@ -521,14 +521,10 @@ fn readline_edit<H: Helper>(
                 {
                     editor.term.cursor = s.cursor.col;
                 }
-                // Accept the line regardless of where the cursor is.
-                s.edit_move_end()?;
-                if s.has_hint() {
-                    // Force a refresh without hints to leave the previous
-                    // line as the user typed it after a newline.
-                    s.refresh_line_with_msg(None)?;
+                if s.validate()? {
+                    break;
                 }
-                break;
+                continue;
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history

@@ -1,10 +1,13 @@
-//! Input buffer validation API (Multi-line editing)
+//! Input validation API (Multi-line editing)
 
 use crate::line_buffer::LineBuffer;
 
-///
+/// Input validation result
 pub enum ValidationResult {
-    /// Validation fails with an optional error message. User must fix the input.
+    /// Incomplete input
+    Incomplete,
+    /// Validation fails with an optional error message. User must fix the
+    /// input.
     Invalid(Option<String>),
     /// Validation succeeds with an optional message (instead of https://github.com/kkawakam/rustyline/pull/169)
     Valid(Option<String>),
@@ -17,7 +20,7 @@ pub enum ValidationResult {
 /// buffer to the caller of `Editor::readline` or variants.
 pub trait Validator {
     /// Takes the currently edited `line` and returns a
-    /// ValidationResult indicating whether it is valid or not along
+    /// `ValidationResult` indicating whether it is valid or not along
     /// with an option message to display about the result. The most
     /// common validity check to implement is probably whether the
     /// input is complete or not, for instance ensuring that all
@@ -26,7 +29,10 @@ pub trait Validator {
     /// If you implement more complex validation checks it's probably
     /// a good idea to also implement a `Hinter` to provide feedback
     /// about what is invalid.
-    fn is_valid(&self, line: &mut LineBuffer) -> ValidationResult {
+    ///
+    /// For auto-correction like a missing closing quote or to reject invalid
+    /// char while typing, the `line` is mutable.
+    fn validate(&self, line: &mut LineBuffer) -> ValidationResult {
         let _ = line;
         ValidationResult::Valid(None)
     }
@@ -43,4 +49,12 @@ pub trait Validator {
 
 impl Validator for () {}
 
-impl<'h, H: ?Sized + Validator> Validator for &'h H {}
+impl<'v, V: ?Sized + Validator> Validator for &'v V {
+    fn validate(&self, line: &mut LineBuffer) -> ValidationResult {
+        (**self).validate(line)
+    }
+
+    fn validate_while_typing(&self) -> bool {
+        (**self).validate_while_typing()
+    }
+}

@@ -91,14 +91,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             if let Ok(Cmd::Replace(_, _)) = rc {
                 self.changes.borrow_mut().begin();
             }
-            if let Some(validator) = self.helper {
-                if let Ok(Cmd::AcceptLine) = rc {
-                    match validator.is_valid(&mut self.line) {
-                        ValidationResult::Valid(_msg) => return rc,
-                        ValidationResult::Invalid(_msg) => return Ok(Cmd::SelfInsert(1, '\n')),
-                    }
-                }
-            }
             return rc;
         }
     }
@@ -183,6 +175,40 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             }
         } else {
             false
+        }
+    }
+
+    pub fn validate(&mut self) -> Result<bool> {
+        if let Some(validator) = self.helper {
+            self.changes.borrow_mut().begin();
+            let result = validator.validate(&mut self.line);
+            let corrected = self.changes.borrow_mut().end();
+            let validated = match result {
+                ValidationResult::Incomplete => {
+                    self.edit_move_end()?;
+                    self.edit_insert('\n', 1)?;
+                    false
+                }
+                ValidationResult::Valid(msg) => {
+                    // Accept the line regardless of where the cursor is.
+                    self.edit_move_end()?;
+                    if corrected || self.has_hint() || msg.is_some() {
+                        // Force a refresh without hints to leave the previous
+                        // line as the user typed it after a newline.
+                        self.refresh_line_with_msg(msg)?;
+                    }
+                    true
+                }
+                ValidationResult::Invalid(msg) => {
+                    if corrected || self.has_hint() || msg.is_some() {
+                        self.refresh_line_with_msg(msg)?;
+                    }
+                    false
+                }
+            };
+            Ok(validated)
+        } else {
+            Ok(true)
         }
     }
 }

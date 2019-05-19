@@ -219,6 +219,7 @@ impl PosixRawReader {
     }
 
     /// Handle ESC [ <seq2:digit> escape sequences
+    #[allow(clippy::cognitive_complexity)]
     fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
         let seq3 = self.next_char()?;
         if seq3 == '~' {
@@ -399,8 +400,8 @@ impl RawReader for PosixRawReader {
             self.parser.advance(&mut self.receiver, b);
             if !self.receiver.valid {
                 return Err(error::ReadlineError::Utf8Error);
-            } else if self.receiver.c.is_some() {
-                return Ok(self.receiver.c.take().unwrap());
+            } else if let Some(c) = self.receiver.c.take() {
+                return Ok(c);
             }
         }
     }
@@ -465,42 +466,42 @@ impl PosixRenderer {
 impl Renderer for PosixRenderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         use std::fmt::Write;
-        let mut ab = String::new();
+        self.buffer.clear();
         if new.row > old.row {
             // move down
             let row_shift = new.row - old.row;
             if row_shift == 1 {
-                ab.push_str("\x1b[B");
+                self.buffer.push_str("\x1b[B");
             } else {
-                write!(ab, "\x1b[{}B", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
             }
         } else if new.row < old.row {
             // move up
             let row_shift = old.row - new.row;
             if row_shift == 1 {
-                ab.push_str("\x1b[A");
+                self.buffer.push_str("\x1b[A");
             } else {
-                write!(ab, "\x1b[{}A", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}A", row_shift).unwrap();
             }
         }
         if new.col > old.col {
             // move right
             let col_shift = new.col - old.col;
             if col_shift == 1 {
-                ab.push_str("\x1b[C");
+                self.buffer.push_str("\x1b[C");
             } else {
-                write!(ab, "\x1b[{}C", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
             }
         } else if new.col < old.col {
             // move left
             let col_shift = old.col - new.col;
             if col_shift == 1 {
-                ab.push_str("\x1b[D");
+                self.buffer.push_str("\x1b[D");
             } else {
-                write!(ab, "\x1b[{}D", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}D", col_shift).unwrap();
             }
         }
-        self.write_and_flush(ab.as_bytes())
+        self.write_and_flush(self.buffer.as_bytes())
     }
 
     fn refresh_line(
@@ -715,6 +716,10 @@ impl Term for PosixTerminal {
     /// check if stdin is connected to a terminal.
     fn is_stdin_tty(&self) -> bool {
         self.stdin_isatty
+    }
+
+    fn is_output_tty(&self) -> bool {
+        self.stdstream_isatty
     }
 
     // Interactive loop:

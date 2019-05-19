@@ -63,7 +63,7 @@ impl History {
                     .as_ref()
                     .chars()
                     .next()
-                    .map_or(true, |c| c.is_whitespace()))
+                    .map_or(true, char::is_whitespace))
         {
             return false;
         }
@@ -148,7 +148,7 @@ impl History {
         let file = File::open(&path)?;
         let rdr = BufReader::new(file);
         for line in rdr.lines() {
-            self.add(line?.as_ref()); // TODO truncate to MAX_LINE
+            self.add(line?); // TODO truncate to MAX_LINE
         }
         Ok(())
     }

@@ -137,9 +137,7 @@ impl Cmd {
                     let last_insert = wrt.last_insert();
                     if let Movement::ForwardChar(0) = mvt {
                         Cmd::Replace(
-                            Movement::ForwardChar(
-                                last_insert.as_ref().map_or(0, |text| text.len()),
-                            ),
+                            Movement::ForwardChar(last_insert.as_ref().map_or(0, String::len)),
                             last_insert,
                         )
                     } else {

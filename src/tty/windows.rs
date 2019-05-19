@@ -217,10 +217,12 @@ impl RawReader for ConsoleRawReader {
                 } else {
                     decode_utf16([surrogate, utf16].iter().cloned()).next()
                 };
-                if orc.is_none() {
+                let rc = if let Some(rc) = orc {
+                    rc
+                } else {
                     return Err(error::ReadlineError::Eof);
-                }
-                let c = orc.unwrap()?;
+                };
+                let c = rc?;
                 if meta {
                     return Ok(KeyPress::Meta(c));
                 } else {
@@ -435,7 +437,7 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
-static SIGWINCH: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;
@@ -511,6 +513,10 @@ impl Term for Console {
         self.stdin_isatty
     }
 
+    fn is_output_tty(&self) -> bool {
+        self.stdstream_isatty
+    }
+
     // pub fn install_sigwinch_handler(&mut self) {
     // See ReadConsoleInputW && WINDOW_BUFFER_SIZE_EVENT
     // }
@@ -544,6 +550,10 @@ impl Term for Console {
                 let raw = original_stdstream_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
                     unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, raw) != 0 };
+                debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
+            } else {
+                debug!(target: "rustyline", "ANSI colors already enabled");
+                self.ansi_colors_supported = true;
             }
             Some(original_stdstream_mode)
         } else {
@@ -563,7 +573,11 @@ impl Term for Console {
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.stdstream_handle, self.stream_type, self.colors_enabled())
+        ConsoleRenderer::new(
+            self.stdstream_handle,
+            self.stream_type,
+            self.colors_enabled(),
+        )
     }
 }
 

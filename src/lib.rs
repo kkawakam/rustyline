@@ -406,8 +406,8 @@ fn readline_edit<H: Helper>(
         // autocomplete
         if cmd == Cmd::Complete && s.helper.is_some() {
             let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
-            if next.is_some() {
-                cmd = next.unwrap();
+            if let Some(next) = next {
+                cmd = next;
             } else {
                 continue;
             }
@@ -430,8 +430,8 @@ fn readline_edit<H: Helper>(
             // Search history backward
             let next =
                 reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &editor.history)?;
-            if next.is_some() {
-                cmd = next.unwrap();
+            if let Some(next) = next {
+                cmd = next;
             } else {
                 continue;
             }
@@ -574,11 +574,9 @@ fn readline_edit<H: Helper>(
             }
             Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
             Cmd::Undo(n) => {
-                s.line.remove_change_listener();
                 if s.changes.borrow_mut().undo(&mut s.line, n) {
                     s.refresh_line()?;
                 }
-                s.line.set_change_listener(s.changes.clone());
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);
@@ -624,7 +622,7 @@ fn readline_raw<H: Helper>(
     let user_input = readline_edit(prompt, initial, editor, &original_mode);
     if editor.config.auto_add_history() {
         if let Ok(ref line) = user_input {
-            editor.add_history_entry(line.as_ref());
+            editor.add_history_entry(line.as_str());
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;
@@ -800,14 +798,20 @@ impl<H: Helper> Editor<H> {
 
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
-        let mut bindings = self.custom_bindings.write().unwrap();
-        bindings.insert(key_seq, cmd)
+        if let Ok(mut bindings) = self.custom_bindings.write() {
+            bindings.insert(key_seq, cmd)
+        } else {
+            None
+        }
     }
 
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
-        let mut bindings = self.custom_bindings.write().unwrap();
-        bindings.remove(&key_seq)
+        if let Ok(mut bindings) = self.custom_bindings.write() {
+            bindings.remove(&key_seq)
+        } else {
+            None
+        }
     }
 
     /// ```
@@ -834,6 +838,17 @@ impl<H: Helper> Editor<H> {
     fn reset_kill_ring(&self) {
         let mut kill_ring = self.kill_ring.lock().unwrap();
         kill_ring.reset();
+    }
+
+    /// If output stream is a tty, this function returns its width and height as
+    /// a number of characters.
+    pub fn dimensions(&mut self) -> Option<(usize, usize)> {
+        if self.term.is_output_tty() {
+            let out = self.term.create_writer();
+            Some((out.get_columns(), out.get_rows()))
+        } else {
+            None
+        }
     }
 }
 

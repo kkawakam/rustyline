@@ -98,10 +98,6 @@ impl LineBuffer {
         self.cl = Some(dl);
     }
 
-    pub(crate) fn remove_change_listener(&mut self) {
-        self.cl = None;
-    }
-
     /// Extracts a string slice containing the entire buffer.
     pub fn as_str(&self) -> &str {
         &self.buf
@@ -201,7 +197,10 @@ impl LineBuffer {
         if n == 1 {
             self.buf.insert(self.pos, ch);
             for cl in &self.cl {
-                cl.borrow_mut().insert_char(self.pos, ch);
+                if let Ok(mut cl) = cl.try_borrow_mut() {
+                    cl.insert_char(self.pos, ch);
+                } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
+                  // undoing.
             }
         } else {
             let text = iter::repeat(ch).take(n).collect::<String>();
@@ -573,7 +572,7 @@ impl LineBuffer {
         self.buf[self.pos..]
             .grapheme_indices(true)
             .filter_map(|(i, ch)| {
-                if ch.chars().all(|c| c.is_alphanumeric()) {
+                if ch.chars().all(char::is_alphanumeric) {
                     Some(i)
                 } else {
                     None
@@ -644,8 +643,10 @@ impl LineBuffer {
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
         for cl in &self.cl {
-            cl.borrow_mut()
-                .replace(start, self.buf.index(range.clone()), text);
+            if let Ok(mut cl) = cl.try_borrow_mut() {
+                cl.replace(start, self.buf.index(range.clone()), text);
+            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
+              // undoing.
         }
         self.buf.drain(range);
         if start == self.buf.len() {
@@ -660,7 +661,10 @@ impl LineBuffer {
     /// Return `true` if the text has been inserted at the end of the line.
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
         for cl in &self.cl {
-            cl.borrow_mut().insert_str(idx, s);
+            if let Ok(mut cl) = cl.try_borrow_mut() {
+                cl.insert_str(idx, s);
+            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
+              // undoing.
         }
         if idx == self.buf.len() {
             self.buf.push_str(s);
@@ -685,8 +689,10 @@ impl LineBuffer {
             }
         }
         for cl in &self.cl {
-            cl.borrow_mut()
-                .delete(range.start, &self.buf[range.start..range.end], dir);
+            if let Ok(mut cl) = cl.try_borrow_mut() {
+                cl.delete(range.start, &self.buf[range.start..range.end], dir);
+            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
+              // undoing.
         }
         self.buf.drain(range)
     }
@@ -844,16 +850,16 @@ fn is_end_of_word(word_def: Word, grapheme: &str, next: &str) -> bool {
 
 fn is_word_char(word_def: Word, grapheme: &str) -> bool {
     match word_def {
-        Word::Emacs => grapheme.chars().all(|c| c.is_alphanumeric()),
+        Word::Emacs => grapheme.chars().all(char::is_alphanumeric),
         Word::Vi => is_vi_word_char(grapheme),
-        Word::Big => !grapheme.chars().any(|c| c.is_whitespace()),
+        Word::Big => !grapheme.chars().any(char::is_whitespace),
     }
 }
 fn is_vi_word_char(grapheme: &str) -> bool {
-    grapheme.chars().all(|c| c.is_alphanumeric()) || grapheme == "_"
+    grapheme.chars().all(char::is_alphanumeric) || grapheme == "_"
 }
 fn is_other_char(grapheme: &str) -> bool {
-    !(grapheme.chars().any(|c| c.is_whitespace()) || is_vi_word_char(grapheme))
+    !(grapheme.chars().any(char::is_whitespace) || is_vi_word_char(grapheme))
 }
 
 #[cfg(test)]

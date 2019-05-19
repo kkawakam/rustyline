@@ -121,9 +121,11 @@ impl Changeset {
         mark
     }
 
-    pub fn end(&mut self) {
+    /// Returns `true` when changes happen between the last call to `begin` and this `end`.
+    pub fn end(&mut self) -> bool {
         debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();
+        let mut touched = false;
         while self.undo_group_level > 0 {
             self.undo_group_level -= 1;
             if let Some(&Change::Begin) = self.undos.last() {
@@ -131,8 +133,10 @@ impl Changeset {
                 self.undos.pop();
             } else {
                 self.undos.push(Change::End);
+                touched = true;
             }
         }
+        touched
     }
 
     fn insert_char(idx: usize, c: char) -> Change {
@@ -211,7 +215,7 @@ impl Changeset {
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
         graphemes.next().map_or(false, |grapheme| {
-            grapheme.chars().all(|c| c.is_alphanumeric())
+            grapheme.chars().all(char::is_alphanumeric)
         }) && graphemes.next().is_none()
     }
 
@@ -468,5 +472,15 @@ mod tests {
         cs.end();
         let insert = cs.last_insert();
         assert_eq!(Some("Bye".to_owned()), insert);
+    }
+
+    #[test]
+    fn test_end() {
+        let mut cs = Changeset::new();
+        cs.begin();
+        assert!(!cs.end());
+        cs.begin();
+        cs.insert_str(0, "Hi");
+        assert!(cs.end());
     }
 }

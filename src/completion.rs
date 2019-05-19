@@ -59,7 +59,10 @@ pub trait Completer {
         line: &str,
         pos: usize,
         ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<Self::Candidate>)>;
+    ) -> Result<(usize, Vec<Self::Candidate>)> {
+        let _ = (line, pos, ctx);
+        Ok((0, Vec::with_capacity(0)))
+    }
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
@@ -69,15 +72,6 @@ pub trait Completer {
 
 impl Completer for () {
     type Candidate = String;
-
-    fn complete(
-        &self,
-        _line: &str,
-        _pos: usize,
-        _ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<String>)> {
-        Ok((0, Vec::with_capacity(0)))
-    }
 
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
         unreachable!()
@@ -167,18 +161,8 @@ impl FilenameCompleter {
             double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
         }
     }
-}
 
-impl Default for FilenameCompleter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Completer for FilenameCompleter {
-    type Candidate = Pair;
-
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+    pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
@@ -209,12 +193,27 @@ impl Completer for FilenameCompleter {
     }
 }
 
+impl Default for FilenameCompleter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Completer for FilenameCompleter {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        self.complete_path(line, pos)
+    }
+}
+
 /// Remove escape char
 pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
-    if esc_char.is_none() {
+    let esc_char = if let Some(c) = esc_char {
+        c
+    } else {
         return Borrowed(input);
-    }
-    let esc_char = esc_char.unwrap();
+    };
     if !input.chars().any(|c| c == esc_char) {
         return Borrowed(input);
     }
@@ -257,14 +256,15 @@ pub fn escape(
     if n == 0 {
         return input; // no need to escape
     }
-    if esc_char.is_none() {
+    let esc_char = if let Some(c) = esc_char {
+        c
+    } else {
         if cfg!(windows) && quote == Quote::None {
             input.insert(0, '"'); // force double quote
             return input;
         }
         return input;
-    }
-    let esc_char = esc_char.unwrap();
+    };
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {
@@ -368,8 +368,8 @@ pub fn extract_word<'l>(
     }
     let mut start = None;
     for (i, c) in line.char_indices().rev() {
-        if esc_char.is_some() && start.is_some() {
-            if esc_char.unwrap() == c {
+        if let (Some(esc_char), true) = (esc_char, start.is_some()) {
+            if esc_char == c {
                 // escaped break char
                 start = None;
                 continue;

@@ -34,7 +34,7 @@ fn main() {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_ref());
+                rl.add_history_entry(line.as_str());
                 println!("Line: {}", line);
             },
             Err(ReadlineError::Interrupted) => {
@@ -61,7 +61,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "3.0.0"
+rustyline = "4.1.0"
 ```
 
 ## Features

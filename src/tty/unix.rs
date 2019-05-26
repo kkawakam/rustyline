@@ -660,7 +660,7 @@ impl Renderer for PosixRenderer {
         read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", digit);
         if digit != '1' {
-            self.write_and_flush(b"\r")?;
+            self.write_and_flush(b"\n")?;
         }
         Ok(())
     }

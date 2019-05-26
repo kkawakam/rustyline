@@ -653,28 +653,28 @@ impl Renderer for PosixRenderer {
             return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
         }
         read_digits_until(rdr, ';')?;
-        let digit = match rdr.next_char()? {
-            digit @ '0'..='9' => digit,
-            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
-        };
-        read_digits_until(rdr, 'R')?;
-        debug!(target: "rustyline", "initial cursor location: {:?}", digit);
-        if digit != '1' {
+        let col = read_digits_until(rdr, 'R')?;
+        debug!(target: "rustyline", "initial cursor location: {:?}", col);
+        if col != 1 {
             self.write_and_flush(b"\n")?;
         }
         Ok(())
     }
 }
 
-fn read_digits_until(rdr: &mut RawReader, sep: char) -> Result<()> {
+fn read_digits_until(rdr: &mut RawReader, sep: char) -> Result<u32> {
+    let mut num: u32 = 0;
     loop {
         match rdr.next_char()? {
-            _digit @ '0'..='9' => continue,
+            digit @ '0'..='9' => {
+                num = num.saturating_mul(10).saturating_add(digit.to_digit(10).unwrap());
+                continue
+            },
             c if c == sep => break,
             _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
         }
     }
-    Ok(())
+    Ok(num)
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;

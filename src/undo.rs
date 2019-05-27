@@ -121,7 +121,8 @@ impl Changeset {
         mark
     }
 
-    /// Returns `true` when changes happen between the last call to `begin` and this `end`.
+    /// Returns `true` when changes happen between the last call to `begin` and
+    /// this `end`.
     pub fn end(&mut self) -> bool {
         debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();

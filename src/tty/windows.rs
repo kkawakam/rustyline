@@ -437,10 +437,12 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, _: &mut RawReader) -> Result<()> {
+        self.write_and_flush(b"")?; // we must do this otherwise the cursor position is not reported correctly
         let mut info = self.get_console_screen_buffer_info()?;
         if info.dwCursorPosition.X == 0 {
             return Ok(());
         }
+        debug!(target: "rustyline", "initial cursor location: {:?}, {:?}", info.dwCursorPosition.X, info.dwCursorPosition.Y);
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y += 1;
         self.set_console_cursor_position(info.dwCursorPosition)

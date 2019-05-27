@@ -390,9 +390,9 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    s.refresh_line()?;
-
     let mut rdr = editor.term.create_reader(&editor.config)?;
+    s.move_cursor_at_leftmost(&mut rdr)?;
+    s.refresh_line()?;
 
     loop {
         let rc = s.next_cmd(&mut input_state, &mut rdr, false);

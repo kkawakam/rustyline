@@ -125,6 +125,10 @@ impl Renderer for Sink {
     fn colors_enabled(&self) -> bool {
         false
     }
+
+    fn move_cursor_at_leftmost(&mut self, _: &mut RawReader) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub type Terminal = DummyTerminal;

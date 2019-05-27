@@ -8,7 +8,9 @@ Bell
 
 Color
 - [X] ANSI Colors & Windows 10+
-- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ? https://github.com/mattn/go-colorable/blob/master/colorable_windows.go)
+- [ ] ANSI Colors & Windows <10 (https://docs.rs/console/0.6.1/console/fn.strip_ansi_codes.html ?
+  https://github.com/mattn/go-colorable/blob/master/colorable_windows.go,
+  https://github.com/mattn/ansicolor-w32.c)
 - [ ] Syntax highlighting (https://github.com/trishume/syntect/)
 - [ ] clicolors spec (https://docs.rs/console/0.6.1/console/fn.colors_enabled.html)
 

@@ -77,6 +77,9 @@ pub trait Renderer {
     fn get_rows(&self) -> usize;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
+
+    /// Make sure prompt is at the leftmost edge of the screen
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()>;
 }
 
 impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
@@ -139,6 +142,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn colors_enabled(&self) -> bool {
         (**self).colors_enabled()
+    }
+
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()> {
+        (**self).move_cursor_at_leftmost(rdr)
     }
 }
 

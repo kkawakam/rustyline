@@ -8,11 +8,12 @@ use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
 
-static COLORED_PROMPT: &'static str = "\x1b[1;32m>>\x1b[0m ";
-
-static PROMPT: &'static str = ">> ";
-
-struct MyHelper(FilenameCompleter, MatchingBracketHighlighter, HistoryHinter);
+struct MyHelper {
+    completer: FilenameCompleter,
+    highlighter: MatchingBracketHighlighter,
+    hinter: HistoryHinter,
+    colored_prompt: String,
+}
 
 impl Completer for MyHelper {
     type Candidate = Pair;
@@ -23,20 +24,24 @@ impl Completer for MyHelper {
         pos: usize,
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        self.0.complete(line, pos, ctx)
+        self.completer.complete(line, pos, ctx)
     }
 }
 
 impl Hinter for MyHelper {
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
-        self.2.hint(line, pos, ctx)
+        self.hinter.hint(line, pos, ctx)
     }
 }
 
 impl Highlighter for MyHelper {
-    fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
-        if prompt == PROMPT {
-            Borrowed(COLORED_PROMPT)
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        default: bool,
+    ) -> Cow<'b, str> {
+        if default {
+            Borrowed(&self.colored_prompt)
         } else {
             Borrowed(prompt)
         }
@@ -47,11 +52,11 @@ impl Highlighter for MyHelper {
     }
 
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        self.1.highlight(line, pos)
+        self.highlighter.highlight(line, pos)
     }
 
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
-        self.1.highlight_char(line, pos)
+        self.highlighter.highlight_char(line, pos)
     }
 }
 
@@ -65,11 +70,12 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();
-    let h = MyHelper(
-        FilenameCompleter::new(),
-        MatchingBracketHighlighter::new(),
-        HistoryHinter {},
-    );
+    let h = MyHelper {
+        completer: FilenameCompleter::new(),
+        highlighter: MatchingBracketHighlighter::new(),
+        hinter: HistoryHinter {},
+        colored_prompt: "".to_owned(),
+    };
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
@@ -77,8 +83,11 @@ fn main() {
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
+    let mut count = 1;
     loop {
-        let readline = rl.readline(PROMPT);
+        let p = format!("{}> ", count);
+        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
+        let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
@@ -97,6 +106,7 @@ fn main() {
                 break;
             }
         }
+        count += 1;
     }
     rl.save_history("history.txt").unwrap();
 }

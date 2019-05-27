@@ -76,6 +76,7 @@ impl Renderer for Sink {
         &mut self,
         _: &str,
         prompt_size: Position,
+        _: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         _: usize,

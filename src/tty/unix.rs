@@ -508,6 +508,7 @@ impl Renderer for PosixRenderer {
         &mut self,
         prompt: &str,
         prompt_size: Position,
+        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         current_row: usize,
@@ -538,7 +539,8 @@ impl Renderer for PosixRenderer {
 
         if let Some(highlighter) = highlighter {
             // display the prompt
-            self.buffer.push_str(&highlighter.highlight_prompt(prompt));
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));

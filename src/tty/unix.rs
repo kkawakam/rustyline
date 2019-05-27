@@ -667,9 +667,11 @@ fn read_digits_until(rdr: &mut RawReader, sep: char) -> Result<u32> {
     loop {
         match rdr.next_char()? {
             digit @ '0'..='9' => {
-                num = num.saturating_mul(10).saturating_add(digit.to_digit(10).unwrap());
-                continue
-            },
+                num = num
+                    .saturating_mul(10)
+                    .saturating_add(digit.to_digit(10).unwrap());
+                continue;
+            }
             c if c == sep => break,
             _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
         }

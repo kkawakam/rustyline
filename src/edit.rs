@@ -124,6 +124,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
+    pub fn move_cursor_at_leftmost<R: RawReader>(&mut self, rdr: &mut R) -> Result<()> {
+        self.out.move_cursor_at_leftmost(rdr)
+    }
+
     fn refresh(
         &mut self,
         prompt: &str,

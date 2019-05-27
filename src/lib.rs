@@ -390,9 +390,9 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    s.refresh_line()?;
-
     let mut rdr = editor.term.create_reader(&editor.config)?;
+    s.move_cursor_at_leftmost(&mut rdr)?;
+    s.refresh_line()?;
 
     loop {
         let rc = s.next_cmd(&mut input_state, &mut rdr, false);
@@ -515,7 +515,6 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            // TODO CTRL-_ // undo
             Cmd::AcceptLine => {
                 #[cfg(test)]
                 {
@@ -574,11 +573,9 @@ fn readline_edit<H: Helper>(
             }
             Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
             Cmd::Undo(n) => {
-                s.line.remove_change_listener();
                 if s.changes.borrow_mut().undo(&mut s.line, n) {
                     s.refresh_line()?;
                 }
-                s.line.set_change_listener(s.changes.clone());
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);

@@ -644,7 +644,7 @@ impl Renderer for PosixRenderer {
         self.colors_enabled
     }
 
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()> {
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
@@ -664,7 +664,7 @@ impl Renderer for PosixRenderer {
     }
 }
 
-fn read_digits_until(rdr: &mut RawReader, sep: char) -> Result<u32> {
+fn read_digits_until(rdr: &mut dyn RawReader, sep: char) -> Result<u32> {
     let mut num: u32 = 0;
     loop {
         match rdr.next_char()? {

@@ -80,7 +80,7 @@ pub trait Renderer {
     fn colors_enabled(&self) -> bool;
 
     /// Make sure prompt is at the leftmost edge of the screen
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()>;
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()>;
 }
 
 impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
@@ -147,7 +147,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).colors_enabled()
     }
 
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()> {
         (**self).move_cursor_at_leftmost(rdr)
     }
 }

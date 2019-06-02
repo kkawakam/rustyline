@@ -1,9 +1,10 @@
 //! Tests specific definitions
+use std::io::Sink as StdSink;
 use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, Event, Position, RawMode, RawReader, Renderer, Term};
 use crate::config::{ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
@@ -20,6 +21,10 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyPress> {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.next_key(single_esc_abort).map(Event::KeyPress)
+    }
+
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(*key),
@@ -38,6 +43,10 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
 }
 
 impl RawReader for IntoIter<KeyPress> {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.next_key(single_esc_abort).map(Event::KeyPress)
+    }
+
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         match self.next() {
             Some(key) => Ok(key),
@@ -142,6 +151,7 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type ExternalPrinter = StdSink;
     type Mode = Mode;
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
@@ -180,6 +190,10 @@ impl Term for DummyTerminal {
 
     fn create_writer(&self) -> Sink {
         Sink {}
+    }
+
+    fn create_external_printer(&mut self) -> Result<StdSink> {
+        Ok(::std::io::sink())
     }
 }
 

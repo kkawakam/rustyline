@@ -235,6 +235,10 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn has_hint(&self) -> bool {
         self.hint.is_some()
     }
+
+    fn external_print(&mut self, msg: String) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {

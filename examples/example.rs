@@ -1,5 +1,6 @@
 use env_logger;
 use std::borrow::Cow::{self, Borrowed, Owned};
+use std::io::Write;
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
@@ -83,6 +84,10 @@ fn main() {
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
+    let mut printer = rl.create_external_printer().expect("No printer");
+    printer
+        .write_all(b"External print\n")
+        .expect("External print failure");
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);

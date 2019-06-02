@@ -1,5 +1,5 @@
 //! Windows specific definitions
-use std::io::{self, Write};
+use std::io::{self, Sink, Write};
 use std::mem;
 use std::sync::atomic;
 
@@ -8,7 +8,7 @@ use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, Event, Position, RawMode, RawReader, Renderer, Term};
 use crate::config::OutputStreamType;
 use crate::config::{ColorMode, Config};
 use crate::error;
@@ -103,6 +103,10 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        unimplemented!()
+    }
+
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
         use std::char::decode_utf16;
         use winapi::um::wincon::{
@@ -479,6 +483,7 @@ impl Console {
 }
 
 impl Term for Console {
+    type ExternalPrinter = Sink;
     type Mode = ConsoleMode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
@@ -592,6 +597,10 @@ impl Term for Console {
             self.stream_type,
             self.colors_enabled(),
         )
+    }
+
+    fn create_external_printer(&mut self) -> Result<Sink> {
+        unimplemented!()
     }
 }
 

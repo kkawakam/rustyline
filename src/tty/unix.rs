@@ -1,20 +1,22 @@
 //! Unix specific definitions
 use std;
-use std::io::{self, Read, Write};
+use std::fs::File;
+use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::sync;
 use std::sync::atomic;
+use std::sync::{self, Arc, Mutex};
 
 use libc;
 use nix;
 use nix::poll::{self, EventFlags};
+use nix::sys::select::{self, FdSet};
 use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, width, Event, Position, RawMode, RawReader, Renderer, Term};
 use crate::config::{ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -131,6 +133,8 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    pipe_reader: Option<Arc<Mutex<File>>>,
+    fds: FdSet,
 }
 
 struct Utf8 {
@@ -139,7 +143,7 @@ struct Utf8 {
 }
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Result<Self> {
+    fn new(config: &Config, pipe_reader: Option<Arc<Mutex<File>>>) -> Result<Self> {
         Ok(Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
@@ -149,6 +153,8 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
+            pipe_reader,
+            fds: FdSet::new(),
         })
     }
 
@@ -360,9 +366,50 @@ impl PosixRawReader {
             }
         })
     }
+
+    fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
+        let mut readfds = self.fds;
+        readfds.clear();
+        readfds.insert(STDIN_FILENO);
+        readfds.insert(
+            self.pipe_reader
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .as_raw_fd(),
+        );
+        select::select(
+            readfds.highest().map(|h| h + 1),
+            Some(&mut readfds),
+            None,
+            None,
+            None,
+        )?; // TODO Interrupted
+        if readfds.contains(STDIN_FILENO) {
+            // prefer user input over external print
+            self.next_key(single_esc_abort).map(Event::KeyPress)
+        } else {
+            let mut msg = String::new();
+            self.pipe_reader
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .read_to_string(&mut msg)?;
+            Ok(Event::ExternalPrint(msg))
+        }
+    }
 }
 
 impl RawReader for PosixRawReader {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        match self.pipe_reader {
+            Some(_) => self.select(single_esc_abort),
+            None => self.next_key(single_esc_abort).map(Event::KeyPress),
+        }
+    }
+
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
         let c = self.next_char()?;
 
@@ -711,6 +758,8 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
+    pipe_reader: Option<Arc<Mutex<File>>>,
+    pipe_writer: Option<Arc<Mutex<File>>>,
 }
 
 impl PosixTerminal {
@@ -724,6 +773,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type ExternalPrinter = ExternalPrinter;
     type Mode = PosixMode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
@@ -736,6 +786,8 @@ impl Term for PosixTerminal {
             color_mode,
             stream_type,
             tab_stop,
+            pipe_reader: None,
+            pipe_writer: None,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -805,11 +857,55 @@ impl Term for PosixTerminal {
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        PosixRawReader::new(config)
+        PosixRawReader::new(config, self.pipe_reader.clone())
     }
 
     fn create_writer(&self) -> PosixRenderer {
         PosixRenderer::new(self.stream_type, self.tab_stop, self.colors_enabled())
+    }
+
+    fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
+        if let Some(ref writer) = self.pipe_writer {
+            return Ok(ExternalPrinter {
+                writer: writer.clone(),
+            });
+        }
+        if self.unsupported || !self.is_stdin_tty() || !self.is_output_tty() {
+            use nix::errno::Errno::ENOTTY;
+            Err(nix::Error::from_errno(ENOTTY))?;
+        }
+        use nix::unistd::pipe;
+        use std::os::unix::io::FromRawFd;
+        let (r, w) = pipe()?;
+        let reader = Arc::new(Mutex::new(unsafe { File::from_raw_fd(r) }));
+        let writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) }));
+        self.pipe_reader.replace(reader.clone());
+        self.pipe_writer.replace(writer.clone());
+        Ok(ExternalPrinter { writer }) // TODO when ExternalPrinter is dropped there is no need to use `pipe_reader`
+                                       // anymore
+    }
+}
+
+#[derive(Debug)]
+pub struct ExternalPrinter {
+    writer: Arc<Mutex<File>>,
+}
+
+impl Write for ExternalPrinter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let Ok(mut writer) = self.writer.lock() {
+            writer.write(buf) // TODO write directly to stdout/stderr while not in raw mode
+        } else {
+            Err(io::Error::from(ErrorKind::Other)) // FIXME
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Ok(mut writer) = self.writer.lock() {
+            writer.flush()
+        } else {
+            Err(io::Error::from(ErrorKind::Other)) // FIXME
+        }
     }
 }
 

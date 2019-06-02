@@ -848,6 +848,11 @@ impl<H: Helper> Editor<H> {
             None
         }
     }
+
+    /// Create an external printer
+    pub fn create_external_printer(&mut self) -> Result<<Terminal as Term>::ExternalPrinter> {
+        self.term.create_external_printer()
+    }
 }
 
 impl<H: Helper> config::Configurer for Editor<H> {

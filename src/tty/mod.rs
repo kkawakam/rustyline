@@ -15,8 +15,16 @@ pub trait RawMode: Sized {
     fn disable_raw_mode(&self) -> Result<()>;
 }
 
+/// Input event
+pub enum Event {
+    KeyPress(KeyPress),
+    ExternalPrint(String),
+}
+
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
+    /// Blocking wait for either a key press or an external print
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress>;
     /// For CTRL-V support
@@ -157,6 +165,7 @@ pub trait Term {
     type Reader: RawReader; // rl_instream
     type Writer: Renderer; // rl_outstream
     type Mode: RawMode;
+    type ExternalPrinter: Write;
 
     fn new(color_mode: ColorMode, stream: OutputStreamType, tab_stop: usize) -> Self;
     /// Check if current terminal can provide a rich line-editing user
@@ -172,6 +181,8 @@ pub trait Term {
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+    /// Create an external printer
+    fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }
 
 fn truncate(text: &str, col: usize, max_col: usize) -> &str {

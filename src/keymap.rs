@@ -6,7 +6,7 @@ use super::Result;
 use crate::config::Config;
 use crate::config::EditMode;
 use crate::keys::KeyPress;
-use crate::tty::RawReader;
+use crate::tty::{Event, RawReader};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -302,6 +302,8 @@ pub trait Refresher {
     fn is_cursor_at_end(&self) -> bool;
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
+    /// Display `msg` above currently edited line.
+    fn external_print(&mut self, msg: String) -> Result<()>;
 }
 
 impl InputState {
@@ -329,10 +331,31 @@ impl InputState {
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
+        let single_esc_abort = self.single_esc_abort(single_esc_abort);
+        let key;
+        loop {
+            let event = rdr.wait_for_input(single_esc_abort)?;
+            match event {
+                Event::KeyPress(k) => {
+                    key = k;
+                    break;
+                }
+                Event::ExternalPrint(msg) => {
+                    wrt.external_print(msg)?;
+                }
+            }
+        }
         match self.mode {
-            EditMode::Emacs => self.emacs(rdr, wrt, single_esc_abort),
-            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt),
-            EditMode::Vi => self.vi_command(rdr, wrt),
+            EditMode::Emacs => self.emacs(rdr, wrt, key),
+            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt, key),
+            EditMode::Vi => self.vi_command(rdr, wrt, key),
+        }
+    }
+
+    fn single_esc_abort(&self, single_esc_abort: bool) -> bool {
+        match self.mode {
+            EditMode::Emacs => single_esc_abort,
+            EditMode::Vi => false,
         }
     }
 
@@ -382,9 +405,9 @@ impl InputState {
         &mut self,
         rdr: &mut R,
         wrt: &mut dyn Refresher,
-        single_esc_abort: bool,
+        key: KeyPress,
     ) -> Result<Cmd> {
-        let mut key = rdr.next_key(single_esc_abort)?;
+        let mut key = key;
         if let KeyPress::Meta(digit @ '-') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         } else if let KeyPress::Meta(digit @ '0'..='9') = key {
@@ -522,8 +545,13 @@ impl InputState {
         }
     }
 
-    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
-        let mut key = rdr.next_key(false)?;
+    fn vi_command<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: KeyPress,
+    ) -> Result<Cmd> {
+        let mut key = key;
         if let KeyPress::Char(digit @ '1'..='9') = key {
             key = self.vi_arg_digit(rdr, wrt, digit)?;
         }
@@ -695,8 +723,12 @@ impl InputState {
         Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
-        let key = rdr.next_key(false)?;
+    fn vi_insert<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: KeyPress,
+    ) -> Result<Cmd> {
         {
             let bindings = self.custom_bindings.read().unwrap();
             if let Some(cmd) = bindings.get(&key) {

@@ -127,7 +127,7 @@ impl Renderer for Sink {
         false
     }
 
-    fn move_cursor_at_leftmost(&mut self, _: &mut RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, _: &mut dyn RawReader) -> Result<()> {
         Ok(())
     }
 }

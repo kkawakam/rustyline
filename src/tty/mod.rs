@@ -75,6 +75,8 @@ pub trait Renderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()>;
+    /// Clear rows used by prompt and edited line
+    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()>;
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
@@ -133,6 +135,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn clear_screen(&mut self) -> Result<()> {
         (**self).clear_screen()
+    }
+
+    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
+        (**self).clear_rows(current_row, old_rows)
     }
 
     fn sigwinch(&self) -> bool {

@@ -118,6 +118,10 @@ impl Renderer for Sink {
         Ok(())
     }
 
+    fn clear_rows(&mut self, _: usize, _: usize) -> Result<()> {
+        Ok(())
+    }
+
     fn sigwinch(&self) -> bool {
         false
     }

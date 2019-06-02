@@ -124,7 +124,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
-    pub fn move_cursor_at_leftmost<R: RawReader>(&mut self, rdr: &mut R) -> Result<()> {
+    pub fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()> {
         self.out.move_cursor_at_leftmost(rdr)
     }
 
@@ -236,8 +236,13 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.hint.is_some()
     }
 
-    fn external_print(&mut self, msg: String) -> Result<()> {
-        unimplemented!()
+    fn external_print(&mut self, rdr: &mut dyn RawReader, msg: String) -> Result<()> {
+        self.out.clear_rows(self.cursor.row, self.old_rows)?;
+        self.old_rows = 0;
+        self.cursor.row = 0;
+        self.out.write_and_flush(msg.as_bytes())?;
+        self.move_cursor_at_leftmost(rdr)?;
+        self.refresh_line()
     }
 }
 

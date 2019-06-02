@@ -508,6 +508,23 @@ impl PosixRenderer {
             colors_enabled,
         }
     }
+
+    fn clear_old_rows(&mut self, current_row: usize, old_rows: usize) {
+        use std::fmt::Write;
+        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
+        // this is the default State.
+        let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
+        // move the cursor down as required
+        if cursor_row_movement > 0 {
+            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
+        }
+        // clear old rows
+        for _ in 0..old_rows {
+            self.buffer.push_str("\r\x1b[0K\x1b[A");
+        }
+        // clear the line
+        self.buffer.push_str("\r\x1b[0K");
+    }
 }
 
 impl Renderer for PosixRenderer {
@@ -570,19 +587,7 @@ impl Renderer for PosixRenderer {
         // calculate the desired position of the cursor
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
-        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
-        // this is the default State.
-        let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
-        // move the cursor down as required
-        if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
-        }
-        // clear old rows
-        for _ in 0..old_rows {
-            self.buffer.push_str("\r\x1b[0K\x1b[A");
-        }
-        // clear the line
-        self.buffer.push_str("\r\x1b[0K");
+        self.clear_old_rows(current_row, old_rows);
 
         if let Some(highlighter) = highlighter {
             // display the prompt
@@ -663,6 +668,12 @@ impl Renderer for PosixRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         self.write_and_flush(b"\x1b[H\x1b[2J")
+    }
+
+    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
+        self.buffer.clear();
+        self.clear_old_rows(current_row, old_rows);
+        self.write_and_flush(self.buffer.as_bytes())
     }
 
     /// Check if a SIGWINCH signal has been received

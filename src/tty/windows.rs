@@ -416,6 +416,10 @@ impl Renderer for ConsoleRenderer {
         self.clear(n, coord)
     }
 
+    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
+        unimplemented!()
+    }
+
     fn sigwinch(&self) -> bool {
         SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
     }

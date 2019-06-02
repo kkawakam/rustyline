@@ -303,7 +303,7 @@ pub trait Refresher {
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
     /// Display `msg` above currently edited line.
-    fn external_print(&mut self, msg: String) -> Result<()>;
+    fn external_print(&mut self, rdr: &mut dyn RawReader, msg: String) -> Result<()>;
 }
 
 impl InputState {
@@ -341,7 +341,7 @@ impl InputState {
                     break;
                 }
                 Event::ExternalPrint(msg) => {
-                    wrt.external_print(msg)?;
+                    wrt.external_print(rdr, msg)?;
                 }
             }
         }

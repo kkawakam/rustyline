@@ -12,13 +12,13 @@ use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
-use crate::tty::{Position, RawReader, Renderer};
+use crate::tty::{Position, Renderer, Term, Terminal};
 use crate::undo::Changeset;
 
 /// Represent the state during line editing.
 /// Implement rendering.
 pub struct State<'out, 'prompt, H: Helper> {
-    pub out: &'out mut dyn Renderer,
+    pub out: &'out mut <Terminal as Term>::Writer,
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
@@ -42,7 +42,7 @@ enum Info<'m> {
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
-        out: &'out mut dyn Renderer,
+        out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
@@ -74,10 +74,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    pub fn next_cmd<R: RawReader>(
+    pub fn next_cmd(
         &mut self,
         input_state: &mut InputState,
-        rdr: &mut R,
+        rdr: &mut <Terminal as Term>::Reader,
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
@@ -124,7 +124,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
-    pub fn move_cursor_at_leftmost<R: RawReader>(&mut self, rdr: &mut R) -> Result<()> {
+    pub fn move_cursor_at_leftmost(&mut self, rdr: &mut <Terminal as Term>::Reader) -> Result<()> {
         self.out.move_cursor_at_leftmost(rdr)
     }
 
@@ -567,7 +567,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
 #[cfg(test)]
 pub fn init_state<'out, H: Helper>(
-    out: &'out mut dyn Renderer,
+    out: &'out mut <Terminal as Term>::Writer,
     line: &str,
     pos: usize,
     helper: Option<&'out H>,

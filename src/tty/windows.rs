@@ -289,6 +289,8 @@ impl ConsoleRenderer {
 }
 
 impl Renderer for ConsoleRenderer {
+    type Reader = ConsoleRawReader;
+
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         let mut info = self.get_console_screen_buffer_info()?;
         if new.row > old.row {
@@ -438,7 +440,7 @@ impl Renderer for ConsoleRenderer {
         self.colors_enabled
     }
 
-    fn move_cursor_at_leftmost(&mut self, _: &mut dyn RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
         self.write_and_flush(b"")?; // we must do this otherwise the cursor position is not reported correctly
         let mut info = self.get_console_screen_buffer_info()?;
         if info.dwCursorPosition.X == 0 {

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::vec::IntoIter;
 
 use crate::completion::Completer;
 use crate::config::{Config, EditMode};
@@ -50,8 +51,8 @@ fn complete_line() {
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
     let mut input_state = InputState::new(&config, Arc::new(RwLock::new(HashMap::new())));
-    let keys = &[KeyPress::Enter];
-    let mut rdr = keys.iter();
+    let keys = vec![KeyPress::Enter];
+    let mut rdr: IntoIter<KeyPress> = keys.into_iter();
     let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();
     assert_eq!(Some(Cmd::AcceptLine), cmd);
     assert_eq!("rust", s.line.as_str());

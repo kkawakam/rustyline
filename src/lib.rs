@@ -66,8 +66,8 @@ use crate::line_buffer::WordAction;
 pub type Result<T> = result::Result<T, error::ReadlineError>;
 
 /// Completes the line/word
-fn complete_line<R: RawReader, H: Helper>(
-    rdr: &mut R,
+fn complete_line<H: Helper>(
+    rdr: &mut <Terminal as Term>::Reader,
     s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
     config: &Config,
@@ -197,8 +197,8 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     Ok(())
 }
 
-fn page_completions<R: RawReader, C: Candidate, H: Helper>(
-    rdr: &mut R,
+fn page_completions<C: Candidate, H: Helper>(
+    rdr: &mut <Terminal as Term>::Reader,
     s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
     candidates: &[C],
@@ -276,8 +276,8 @@ fn page_completions<R: RawReader, C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<R: RawReader, H: Helper>(
-    rdr: &mut R,
+fn reverse_incremental_search<H: Helper>(
+    rdr: &mut <Terminal as Term>::Reader,
     s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
     history: &History,

@@ -42,6 +42,8 @@ pub struct Position {
 
 /// Display prompt, line and cursor in terminal output
 pub trait Renderer {
+    type Reader: RawReader;
+
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
@@ -90,10 +92,12 @@ pub trait Renderer {
     fn colors_enabled(&self) -> bool;
 
     /// Make sure prompt is at the leftmost edge of the screen
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()>;
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut Self::Reader) -> Result<()>;
 }
 
 impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
+    type Reader = R::Reader;
+
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         (**self).move_cursor(old, new)
     }
@@ -161,7 +165,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).colors_enabled()
     }
 
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut dyn RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut R::Reader) -> Result<()> {
         (**self).move_cursor_at_leftmost(rdr)
     }
 }
@@ -169,7 +173,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 /// Terminal contract
 pub trait Term {
     type Reader: RawReader; // rl_instream
-    type Writer: Renderer; // rl_outstream
+    type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
     type ExternalPrinter: Write;
 

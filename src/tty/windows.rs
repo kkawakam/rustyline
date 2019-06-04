@@ -289,6 +289,8 @@ impl ConsoleRenderer {
 }
 
 impl Renderer for ConsoleRenderer {
+    type Reader = ConsoleRawReader;
+
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         let mut info = self.get_console_screen_buffer_info()?;
         if new.row > old.row {
@@ -308,6 +310,7 @@ impl Renderer for ConsoleRenderer {
         &mut self,
         prompt: &str,
         prompt_size: Position,
+        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         current_row: usize,
@@ -332,7 +335,8 @@ impl Renderer for ConsoleRenderer {
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // display the prompt
-            self.buffer.push_str(&highlighter.highlight_prompt(prompt));
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));
@@ -434,6 +438,18 @@ impl Renderer for ConsoleRenderer {
 
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
+    }
+
+    fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
+        self.write_and_flush(b"")?; // we must do this otherwise the cursor position is not reported correctly
+        let mut info = self.get_console_screen_buffer_info()?;
+        if info.dwCursorPosition.X == 0 {
+            return Ok(());
+        }
+        debug!(target: "rustyline", "initial cursor location: {:?}, {:?}", info.dwCursorPosition.X, info.dwCursorPosition.Y);
+        info.dwCursorPosition.X = 0;
+        info.dwCursorPosition.Y += 1;
+        self.set_console_cursor_position(info.dwCursorPosition)
     }
 }
 

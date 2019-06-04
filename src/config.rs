@@ -173,6 +173,7 @@ pub enum ColorMode {
 }
 
 /// Should the editor use stdout or stderr
+// TODO console term::TermTarget
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputStreamType {
     Stderr,

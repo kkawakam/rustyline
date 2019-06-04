@@ -464,6 +464,8 @@ impl PosixRenderer {
 }
 
 impl Renderer for PosixRenderer {
+    type Reader = PosixRawReader;
+
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
@@ -508,6 +510,7 @@ impl Renderer for PosixRenderer {
         &mut self,
         prompt: &str,
         prompt_size: Position,
+        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
         current_row: usize,
@@ -538,7 +541,8 @@ impl Renderer for PosixRenderer {
 
         if let Some(highlighter) = highlighter {
             // display the prompt
-            self.buffer.push_str(&highlighter.highlight_prompt(prompt));
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));
@@ -641,6 +645,42 @@ impl Renderer for PosixRenderer {
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
     }
+
+    fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
+        /* Report cursor location */
+        self.write_and_flush(b"\x1b[6n")?;
+        /* Read the response: ESC [ rows ; cols R */
+        if rdr.next_char()? != '\x1b' {
+            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+        }
+        if rdr.next_char()? != '[' {
+            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+        }
+        read_digits_until(rdr, ';')?;
+        let col = read_digits_until(rdr, 'R')?;
+        debug!(target: "rustyline", "initial cursor location: {:?}", col);
+        if col != 1 {
+            self.write_and_flush(b"\n")?;
+        }
+        Ok(())
+    }
+}
+
+fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
+    let mut num: u32 = 0;
+    loop {
+        match rdr.next_char()? {
+            digit @ '0'..='9' => {
+                num = num
+                    .saturating_mul(10)
+                    .saturating_add(digit.to_digit(10).unwrap());
+                continue;
+            }
+            c if c == sep => break,
+            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
+        }
+    }
+    Ok(num)
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;

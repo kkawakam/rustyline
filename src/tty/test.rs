@@ -68,6 +68,8 @@ impl Sink {
 }
 
 impl Renderer for Sink {
+    type Reader = IntoIter<KeyPress>;
+
     fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
         Ok(())
     }
@@ -127,7 +129,7 @@ impl Renderer for Sink {
         false
     }
 
-    fn move_cursor_at_leftmost(&mut self, _: &mut dyn RawReader) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, _: &mut IntoIter<KeyPress>) -> Result<()> {
         Ok(())
     }
 }

@@ -6,7 +6,7 @@ use super::Result;
 use crate::config::Config;
 use crate::config::EditMode;
 use crate::keys::KeyPress;
-use crate::tty::RawReader;
+use crate::tty::{RawReader, Term, Terminal};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -323,9 +323,9 @@ impl InputState {
     /// Parse user input into one command
     /// `single_esc_abort` is used in emacs mode on unix platform when a single
     /// esc key is expected to abort current action.
-    pub fn next_cmd<R: RawReader>(
+    pub fn next_cmd(
         &mut self,
-        rdr: &mut R,
+        rdr: &mut <Terminal as Term>::Reader,
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
     ) -> Result<Cmd> {

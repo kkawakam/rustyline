@@ -79,9 +79,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         input_state: &mut InputState,
         rdr: &mut <Terminal as Term>::Reader,
         single_esc_abort: bool,
+        ignore_external_print: bool,
     ) -> Result<Cmd> {
         loop {
-            let rc = input_state.next_cmd(rdr, self, single_esc_abort);
+            let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 self.refresh_line()?;

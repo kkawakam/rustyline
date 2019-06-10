@@ -330,18 +330,23 @@ impl InputState {
         rdr: &mut <Terminal as Term>::Reader,
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
+        ignore_external_print: bool,
     ) -> Result<Cmd> {
         let single_esc_abort = self.single_esc_abort(single_esc_abort);
         let key;
-        loop {
-            let event = rdr.wait_for_input(single_esc_abort)?;
-            match event {
-                Event::KeyPress(k) => {
-                    key = k;
-                    break;
-                }
-                Event::ExternalPrint(msg) => {
-                    wrt.external_print(rdr, msg)?;
+        if ignore_external_print {
+            key = rdr.next_key(single_esc_abort)?;
+        } else {
+            loop {
+                let event = rdr.wait_for_input(single_esc_abort)?;
+                match event {
+                    Event::KeyPress(k) => {
+                        key = k;
+                        break;
+                    }
+                    Event::ExternalPrint(msg) => {
+                        wrt.external_print(rdr, msg)?;
+                    }
                 }
             }
         }

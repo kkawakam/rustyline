@@ -104,7 +104,7 @@ fn complete_line<H: Helper>(
                 s.refresh_line()?;
             }
 
-            cmd = s.next_cmd(input_state, rdr, true)?;
+            cmd = s.next_cmd(input_state, rdr, true, true)?;
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -143,7 +143,7 @@ fn complete_line<H: Helper>(
             return Ok(None);
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = s.next_cmd(input_state, rdr, true)?;
+        let mut cmd = s.next_cmd(input_state, rdr, true, true)?;
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -163,7 +163,7 @@ fn complete_line<H: Helper>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = s.next_cmd(input_state, rdr, false)?;
+                cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
@@ -235,7 +235,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
             {
-                cmd = s.next_cmd(input_state, rdr, false)?;
+                cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
@@ -305,7 +305,7 @@ fn reverse_incremental_search<H: Helper>(
         };
         s.refresh_prompt_and_line(&prompt)?;
 
-        cmd = s.next_cmd(input_state, rdr, true)?;
+        cmd = s.next_cmd(input_state, rdr, true, true)?;
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -395,7 +395,7 @@ fn readline_edit<H: Helper>(
     s.refresh_line()?;
 
     loop {
-        let rc = s.next_cmd(&mut input_state, &mut rdr, false);
+        let rc = s.next_cmd(&mut input_state, &mut rdr, false, false);
         let mut cmd = rc?;
 
         if cmd.should_reset_kill_ring() {

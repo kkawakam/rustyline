@@ -368,37 +368,48 @@ impl PosixRawReader {
     }
 
     fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
-        let mut readfds = self.fds;
-        readfds.clear();
-        readfds.insert(STDIN_FILENO);
-        readfds.insert(
-            self.pipe_reader
-                .as_ref()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .get_ref()
-                .as_raw_fd(),
-        );
-        select::select(
-            readfds.highest().map(|h| h + 1),
-            Some(&mut readfds),
-            None,
-            None,
-            None,
-        )?; // TODO Interrupted
-        if readfds.contains(STDIN_FILENO) {
-            // prefer user input over external print
-            self.next_key(single_esc_abort).map(Event::KeyPress)
-        } else {
-            let mut msg = String::new();
-            self.pipe_reader
-                .as_ref()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .read_line(&mut msg)?;
-            Ok(Event::ExternalPrint(msg))
+        loop {
+            let mut readfds = self.fds;
+            readfds.clear();
+            readfds.insert(STDIN_FILENO);
+            readfds.insert(
+                self.pipe_reader
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get_ref()
+                    .as_raw_fd(),
+            );
+            select::select(
+                readfds.highest().map(|h| h + 1),
+                Some(&mut readfds),
+                None,
+                None,
+                None,
+            )?; // TODO Interrupted
+            if readfds.contains(STDIN_FILENO) {
+                // prefer user input over external print
+                return self.next_key(single_esc_abort).map(Event::KeyPress);
+            } else {
+                let mut msg = String::new();
+                match self
+                    .pipe_reader
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .read_line(&mut msg)
+                {
+                    Ok(_) => return Ok(Event::ExternalPrint(msg)),
+                    Err(err) => {
+                        if let io::ErrorKind::WouldBlock = err.kind() {
+                            continue;
+                        }
+                        return Err(err.into());
+                    }
+                }
+            }
         }
     }
 }
@@ -898,7 +909,7 @@ impl Term for PosixTerminal {
         self.pipe_reader.replace(reader.clone());
         self.pipe_writer.replace(writer.clone());
         Ok(ExternalPrinter { writer }) // TODO when ExternalPrinter is dropped there is no need to use `pipe_reader`
-                                       // anymore
+                                       // anymore (`Arc::strong_count(&self.pipe_writer) == 1`)
     }
 }
 

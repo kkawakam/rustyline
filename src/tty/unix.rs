@@ -381,34 +381,31 @@ impl PosixRawReader {
                     .get_ref()
                     .as_raw_fd(),
             );
-            select::select(
+            if let Err(err) = select::select(
                 readfds.highest().map(|h| h + 1),
                 Some(&mut readfds),
                 None,
                 None,
                 None,
-            )?; // TODO Interrupted
+            ) {
+                if err == ::nix::Error::Sys(::nix::errno::Errno::EINTR) {
+                    continue;
+                } else {
+                    return Err(err.into());
+                }
+            };
             if readfds.contains(STDIN_FILENO) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else {
                 let mut msg = String::new();
-                match self
-                    .pipe_reader
+                self.pipe_reader
                     .as_ref()
                     .unwrap()
                     .lock()
                     .unwrap()
-                    .read_line(&mut msg)
-                {
-                    Ok(_) => return Ok(Event::ExternalPrint(msg)),
-                    Err(err) => {
-                        if let io::ErrorKind::WouldBlock = err.kind() {
-                            continue;
-                        }
-                        return Err(err.into());
-                    }
-                }
+                    .read_line(&mut msg)?;
+                return Ok(Event::ExternalPrint(msg));
             }
         }
     }
@@ -899,11 +896,9 @@ impl Term for PosixTerminal {
             use nix::errno::Errno::ENOTTY;
             Err(nix::Error::from_errno(ENOTTY))?;
         }
-        use nix::fcntl::{fcntl, FcntlArg, OFlag};
         use nix::unistd::pipe;
         use std::os::unix::io::FromRawFd;
         let (r, w) = pipe()?;
-        fcntl(r, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
         let reader = Arc::new(Mutex::new(BufReader::new(unsafe { File::from_raw_fd(r) })));
         let writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) }));
         self.pipe_reader.replace(reader.clone());

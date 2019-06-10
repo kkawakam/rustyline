@@ -1,7 +1,7 @@
 //! Unix specific definitions
 use std;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic;
 use std::sync::{self, Arc, Mutex};
@@ -133,7 +133,7 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
-    pipe_reader: Option<Arc<Mutex<File>>>,
+    pipe_reader: Option<Arc<Mutex<BufReader<File>>>>,
     fds: FdSet,
 }
 
@@ -143,7 +143,7 @@ struct Utf8 {
 }
 
 impl PosixRawReader {
-    fn new(config: &Config, pipe_reader: Option<Arc<Mutex<File>>>) -> Result<Self> {
+    fn new(config: &Config, pipe_reader: Option<Arc<Mutex<BufReader<File>>>>) -> Result<Self> {
         Ok(Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
@@ -377,6 +377,7 @@ impl PosixRawReader {
                 .unwrap()
                 .lock()
                 .unwrap()
+                .get_ref()
                 .as_raw_fd(),
         );
         select::select(
@@ -396,7 +397,7 @@ impl PosixRawReader {
                 .unwrap()
                 .lock()
                 .unwrap()
-                .read_to_string(&mut msg)?;
+                .read_line(&mut msg)?;
             Ok(Event::ExternalPrint(msg))
         }
     }
@@ -771,7 +772,7 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
-    pipe_reader: Option<Arc<Mutex<File>>>,
+    pipe_reader: Option<Arc<Mutex<BufReader<File>>>>,
     pipe_writer: Option<Arc<Mutex<File>>>,
 }
 
@@ -887,10 +888,12 @@ impl Term for PosixTerminal {
             use nix::errno::Errno::ENOTTY;
             Err(nix::Error::from_errno(ENOTTY))?;
         }
+        use nix::fcntl::{fcntl, FcntlArg, OFlag};
         use nix::unistd::pipe;
         use std::os::unix::io::FromRawFd;
         let (r, w) = pipe()?;
-        let reader = Arc::new(Mutex::new(unsafe { File::from_raw_fd(r) }));
+        fcntl(r, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+        let reader = Arc::new(Mutex::new(BufReader::new(unsafe { File::from_raw_fd(r) })));
         let writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) }));
         self.pipe_reader.replace(reader.clone());
         self.pipe_writer.replace(writer.clone());

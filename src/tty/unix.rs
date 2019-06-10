@@ -8,7 +8,7 @@ use std::sync::{self, Arc, Mutex};
 
 use libc;
 use nix;
-use nix::poll::{self, EventFlags};
+use nix::poll::{self, PollFlags};
 use nix::sys::select::{self, FdSet};
 use nix::sys::signal;
 use nix::sys::termios;
@@ -420,7 +420,7 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            let mut fds = [poll::PollFd::new(STDIN_FILENO, EventFlags::POLLIN)];
+            let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
             match poll::poll(&mut fds, timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape

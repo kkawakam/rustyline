@@ -29,7 +29,7 @@ nix = "0.14"
 utf8parse = "0.1"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
+winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
 
 [dev-dependencies]
 env_logger = "0.6"

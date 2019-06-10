@@ -46,7 +46,9 @@ use std::result;
 use std::sync::{Arc, Mutex, RwLock};
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
+#[cfg(unix)]
+use crate::tty::RawReader;
+use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{

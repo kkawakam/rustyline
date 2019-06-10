@@ -23,6 +23,10 @@ const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
+    check_handle(handle)
+}
+
+fn check_handle(handle: HANDLE) -> Result<HANDLE> {
     if handle == handleapi::INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
@@ -104,7 +108,24 @@ impl ConsoleRawReader {
 
 impl RawReader for ConsoleRawReader {
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        unimplemented!()
+        use std::convert::TryInto;
+        use winapi::shared::minwindef::FALSE;
+        use winapi::um::synchapi::WaitForMultipleObjects;
+        use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
+        let handles = [
+            self.handle,
+            //self., FIXME
+        ];
+        let n = handles.len().try_into().unwrap();
+        let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
+        if rc == WAIT_OBJECT_0 + 0 {
+            // prefer user input over external print
+            return self.next_key(single_esc_abort).map(Event::KeyPress);
+        } else if rc == WAIT_OBJECT_0 + 1 {
+            unimplemented!()
+        } else {
+            Err(io::Error::last_os_error())?
+        }
     }
 
     fn next_key(&mut self, _: bool) -> Result<KeyPress> {
@@ -606,6 +627,13 @@ impl Term for Console {
     }
 
     fn create_external_printer(&mut self) -> Result<Sink> {
+        use std::ptr;
+        use winapi::shared::minwindef::{FALSE, TRUE};
+        use winapi::um::synchapi::CreateEventW;
+        let event =
+            check_handle(unsafe { CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) })?;
+        use winapi::um::handleapi::CloseHandle;
+        unsafe { CloseHandle(event) };
         unimplemented!()
     }
 }

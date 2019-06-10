@@ -34,6 +34,7 @@ winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", 
 [dev-dependencies]
 env_logger = "0.6"
 tempdir = "0.3"
+rand = "0.6"
 assert_matches = "1.2"
 
 [features]

@@ -133,6 +133,7 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    // external print reader
     pipe_reader: Option<Arc<Mutex<BufReader<File>>>>,
     fds: FdSet,
 }
@@ -780,7 +781,9 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
+    // external print reader
     pipe_reader: Option<Arc<Mutex<BufReader<File>>>>,
+    // external print writer
     pipe_writer: Option<Arc<Mutex<File>>>,
 }
 
@@ -871,6 +874,15 @@ impl Term for PosixTerminal {
         } else {
             Some(self.stream_type)
         };
+
+        // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
+        if let Some(ref arc) = self.pipe_writer {
+            if Arc::strong_count(arc) == 1 {
+                self.pipe_writer = None;
+                self.pipe_reader = None;
+            }
+        }
+
         Ok(PosixMode {
             termios: original_mode,
             out,
@@ -903,8 +915,7 @@ impl Term for PosixTerminal {
         let writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) }));
         self.pipe_reader.replace(reader.clone());
         self.pipe_writer.replace(writer.clone());
-        Ok(ExternalPrinter { writer }) // TODO when ExternalPrinter is dropped there is no need to use `pipe_reader`
-                                       // anymore (`Arc::strong_count(&self.pipe_writer) == 1`)
+        Ok(ExternalPrinter { writer })
     }
 }
 

@@ -93,3 +93,10 @@ impl From<char::DecodeUtf16Error> for ReadlineError {
         ReadlineError::Decode(err)
     }
 }
+
+#[cfg(windows)]
+impl From<std::string::FromUtf8Error> for ReadlineError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidInput, err))
+    }
+}

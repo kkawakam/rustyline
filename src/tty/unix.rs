@@ -389,7 +389,9 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != ::nix::Error::Sys(::nix::errno::Errno::EINTR) || SIGWINCH.load(atomic::Ordering::Relaxed) {
+                if err != ::nix::Error::Sys(::nix::errno::Errno::EINTR)
+                    || SIGWINCH.load(atomic::Ordering::Relaxed)
+                {
                     return Err(err.into());
                 } else {
                     continue;

@@ -25,7 +25,7 @@ use crate::Result;
 const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
+static UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";

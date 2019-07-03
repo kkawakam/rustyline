@@ -1,17 +1,18 @@
 //! Windows specific definitions
-use std::fs::File;
-use std::io::{self, BufRead, ErrorKind, Write};
+use std::io::{self, ErrorKind, Write};
 use std::mem;
+use std::ptr;
 use std::sync::atomic;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::Arc;
 
-use miow::pipe::NamedPipe;
-use miow::Overlapped;
 use unicode_width::UnicodeWidthChar;
-use winapi::shared::minwindef::{DWORD, FALSE, WORD};
+use winapi::shared::minwindef::{DWORD, FALSE, TRUE, WORD};
+use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO};
 use winapi::um::winnt::{CHAR, HANDLE};
-use winapi::um::{consoleapi, handleapi, processenv, winbase, winuser};
+use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{truncate, Event, Position, RawMode, RawReader, Renderer, Term};
 use crate::config::OutputStreamType;
@@ -32,7 +33,7 @@ fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
 }
 
 fn check_handle(handle: HANDLE) -> Result<HANDLE> {
-    if handle == handleapi::INVALID_HANDLE_VALUE {
+    if handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
         Err(io::Error::new(
@@ -102,23 +103,20 @@ impl RawMode for ConsoleMode {
 pub struct ConsoleRawReader {
     handle: HANDLE,
     // external print reader
-    pipe_reader: Option<Arc<Mutex<AsyncPipe>>>,
-    buf: Vec<u8>,
+    pipe_reader: Option<Arc<AsyncPipe>>,
 }
 
 impl ConsoleRawReader {
-    fn create(pipe_reader: Option<Arc<Mutex<AsyncPipe>>>) -> Result<ConsoleRawReader> {
+    fn create(pipe_reader: Option<Arc<AsyncPipe>>) -> Result<ConsoleRawReader> {
         let handle = get_std_handle(STDIN_FILENO)?;
         Ok(ConsoleRawReader {
             handle,
             pipe_reader,
-            buf: Vec::with_capacity(4096),
         })
     }
 
     fn select(&mut self) -> Result<Event> {
         use std::convert::TryInto;
-        use winapi::shared::minwindef::FALSE;
         use winapi::um::synchapi::WaitForMultipleObjects;
         use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
 
@@ -138,22 +136,9 @@ impl ConsoleRawReader {
                     key => return Ok(Event::KeyPress(key)),
                 };
             }
-            let pipe_reader = self.pipe_reader.as_ref().unwrap().lock().unwrap();
+            let pipe_reader = self.pipe_reader.as_ref().unwrap();
 
-            // TODO check if buf is empty
-            if let Some(n) = unsafe {
-                self.buf.set_len(self.buf.capacity());
-                pipe_reader
-                    .pipe
-                    .read_overlapped(&mut self.buf, pipe_reader.over.raw())?
-            } {
-                let mut msg = String::new();
-                self.buf.as_slice().read_line(&mut msg)?;
-                self.buf.clear(); // TODO check if msg.len() == n
-                return Ok(Event::ExternalPrint(msg));
-            }
-
-            let handles = [self.handle, pipe_reader.over.event()];
+            let handles = [self.handle, pipe_reader.event.0];
             let n = handles.len().try_into().unwrap();
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 + 0 {
@@ -166,11 +151,12 @@ impl ConsoleRawReader {
                     key => return Ok(Event::KeyPress(key)),
                 };
             } else if rc == WAIT_OBJECT_0 + 1 {
-                let n = unsafe { pipe_reader.pipe.result(pipe_reader.over.raw())? };
-                let mut msg = String::new();
-                self.buf.as_slice().read_line(&mut msg)?;
-                self.buf.clear(); // TODO check if msg.len() == n
-                return Ok(Event::ExternalPrint(msg));
+                debug!(target: "rustyline", "ExternalPrinter::receive");
+                check!(ResetEvent(pipe_reader.event.0));
+                match pipe_reader.receiver.recv() {
+                    Ok(msg) => return Ok(Event::ExternalPrint(msg)),
+                    Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
+                }
             } else {
                 Err(io::Error::last_os_error())?
             }
@@ -572,9 +558,9 @@ pub struct Console {
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
     // external print reader
-    pipe_reader: Option<Arc<Mutex<AsyncPipe>>>,
+    pipe_reader: Option<Arc<AsyncPipe>>,
     // external print writer
-    pipe_writer: Option<Arc<Mutex<File>>>,
+    pipe_writer: Option<SyncSender<String>>,
 }
 
 impl Console {
@@ -595,7 +581,6 @@ impl Term for Console {
     type Writer = ConsoleRenderer;
 
     fn new(color_mode: ColorMode, stream_type: OutputStreamType, _tab_stop: usize) -> Console {
-        use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
             Ok(handle) => {
@@ -688,12 +673,12 @@ impl Term for Console {
         };
 
         // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
-        if let Some(ref arc) = self.pipe_writer {
+        /*if let Some(ref arc) = self.pipe_writer { FIXME
             if Arc::strong_count(arc) == 1 {
                 self.pipe_writer = None;
                 self.pipe_reader = None;
             }
-        }
+        }*/
 
         Ok(ConsoleMode {
             original_stdin_mode,
@@ -716,27 +701,33 @@ impl Term for Console {
     }
 
     fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
-        if let Some(ref writer) = self.pipe_writer {
+        if let Some(ref sender) = self.pipe_writer {
             return Ok(ExternalPrinter {
-                writer: writer.clone(),
+                event: Handle(INVALID_HANDLE_VALUE), // FIXME
+                buf: String::new(),
+                sender: sender.clone(),
             });
         }
         if !self.is_stdin_tty() || !self.is_output_tty() {
             Err(io::Error::from(ErrorKind::Other))?; // FIXME
         }
-        let name = format!(r"\\.\pipe\{}", "rustyline");
-        let pipe = NamedPipe::new(&name)?;
-        let file = File::create(name)?; // sync writer
-                                        // TODO The caller is responsible for calling `CloseHandle` on the `hEvent`
-                                        // field ~ bManualReset set to `FALSE`
-        let over = Overlapped::initialize_with_autoreset_event()?;
-        unsafe { pipe.connect_overlapped(over.raw())? }; // async reader
+        let event = unsafe { CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
+        if event.is_null() {
+            Err(io::Error::last_os_error())?;
+        }
+        let (sender, receiver) = sync_channel(1);
 
-        let reader = Arc::new(Mutex::new(AsyncPipe { pipe, over }));
-        let writer = Arc::new(Mutex::new(file));
+        let reader = Arc::new(AsyncPipe {
+            event: Handle(event),
+            receiver,
+        });
         self.pipe_reader.replace(reader.clone());
-        self.pipe_writer.replace(writer.clone());
-        Ok(ExternalPrinter { writer })
+        self.pipe_writer.replace(sender.clone());
+        Ok(ExternalPrinter {
+            event: Handle(event),
+            buf: String::new(),
+            sender,
+        })
     }
 }
 
@@ -745,30 +736,50 @@ unsafe impl Sync for Console {}
 
 #[derive(Debug)]
 struct AsyncPipe {
-    pipe: NamedPipe,
-    over: Overlapped,
+    event: Handle,
+    receiver: Receiver<String>,
 }
 
 #[derive(Debug)]
 pub struct ExternalPrinter {
-    writer: Arc<Mutex<File>>,
+    event: Handle,
+    buf: String,
+    sender: SyncSender<String>,
 }
 
 impl Write for ExternalPrinter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(mut writer) = self.writer.lock() {
-            writer.write(buf) // TODO write directly to stdout/stderr while not in raw mode
-        } else {
-            Err(io::Error::from(ErrorKind::Other)) // FIXME
-        }
+        // TODO write directly to stdout/stderr while not in raw mode
+        match std::str::from_utf8(buf) {
+            Ok(s) => {
+                self.buf.push_str(s);
+                if s.contains('\n') {
+                    self.flush()?
+                }
+            }
+            Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, e)),
+        };
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Ok(mut writer) = self.writer.lock() {
-            writer.flush()
-        } else {
-            Err(io::Error::from(ErrorKind::Other)) // FIXME
+        if let Err(err) = self.sender.send(self.buf.split_off(0)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
         }
+        check!(SetEvent(self.event.0));
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Handle(HANDLE);
+
+unsafe impl Send for Handle {}
+unsafe impl Sync for Handle {}
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        unsafe { CloseHandle(self.0) };
     }
 }
 

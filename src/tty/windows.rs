@@ -120,28 +120,13 @@ impl ConsoleRawReader {
         use winapi::um::synchapi::WaitForMultipleObjects;
         use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
 
-        let mut count = 0;
+        let pipe_reader = self.pipe_reader.as_ref().unwrap();
+        let handles = [self.handle, pipe_reader.event.0];
+        let n = handles.len().try_into().unwrap();
         loop {
-            // prefer user input over external print
-            loop {
-                check!(consoleapi::GetNumberOfConsoleInputEvents(
-                    self.handle,
-                    &mut count
-                ));
-                if count == 0 {
-                    break;
-                }
-                match read_input(self.handle, count)? {
-                    KeyPress::UnknownEscSeq => continue,
-                    key => return Ok(Event::KeyPress(key)),
-                };
-            }
-            let pipe_reader = self.pipe_reader.as_ref().unwrap();
-
-            let handles = [self.handle, pipe_reader.event.0];
-            let n = handles.len().try_into().unwrap();
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 + 0 {
+                let mut count = 0;
                 check!(consoleapi::GetNumberOfConsoleInputEvents(
                     self.handle,
                     &mut count
@@ -192,7 +177,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
     let mut total = 0;
     let mut surrogate = 0;
     loop {
-        if total > max_count {
+        if total >= max_count {
             return Ok(KeyPress::UnknownEscSeq);
         }
         // TODO GetNumberOfConsoleInputEvents
@@ -703,7 +688,7 @@ impl Term for Console {
     fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
         if let Some(ref sender) = self.pipe_writer {
             return Ok(ExternalPrinter {
-                event: Handle(INVALID_HANDLE_VALUE), // FIXME
+                event: INVALID_HANDLE_VALUE, // FIXME
                 buf: String::new(),
                 sender: sender.clone(),
             });
@@ -724,7 +709,7 @@ impl Term for Console {
         self.pipe_reader.replace(reader.clone());
         self.pipe_writer.replace(sender.clone());
         Ok(ExternalPrinter {
-            event: Handle(event),
+            event: event,
             buf: String::new(),
             sender,
         })
@@ -742,10 +727,13 @@ struct AsyncPipe {
 
 #[derive(Debug)]
 pub struct ExternalPrinter {
-    event: Handle,
+    event: HANDLE,
     buf: String,
     sender: SyncSender<String>,
 }
+
+unsafe impl Send for ExternalPrinter {}
+unsafe impl Sync for ExternalPrinter {}
 
 impl Write for ExternalPrinter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -766,7 +754,7 @@ impl Write for ExternalPrinter {
         if let Err(err) = self.sender.send(self.buf.split_off(0)) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
         }
-        check!(SetEvent(self.event.0));
+        check!(SetEvent(self.event));
         Ok(())
     }
 }

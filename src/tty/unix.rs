@@ -458,7 +458,7 @@ impl RawReader for PosixRawReader {
             let b = self.buf[0];
             self.parser.advance(&mut self.receiver, b);
             if !self.receiver.valid {
-                return Err(error::ReadlineError::Utf8Error);
+                return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
             } else if let Some(c) = self.receiver.c.take() {
                 return Ok(c);
             }
@@ -521,14 +521,14 @@ impl PosixRenderer {
         }
     }
 
-    fn clear_old_rows(&mut self, current_row: usize, old_rows: usize) {
+    fn clear_old_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
         use std::fmt::Write;
         // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
         // this is the default State.
         let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
         // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{}B", cursor_row_movement)?;
         }
         // clear old rows
         for _ in 0..old_rows {
@@ -536,6 +536,7 @@ impl PosixRenderer {
         }
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
+        Ok(())
     }
 }
 
@@ -551,7 +552,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[B");
             } else {
-                write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}B", row_shift)?;
             }
         } else if new.row < old.row {
             // move up
@@ -559,7 +560,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[A");
             } else {
-                write!(self.buffer, "\x1b[{}A", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}A", row_shift)?;
             }
         }
         if new.col > old.col {
@@ -568,7 +569,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[C");
             } else {
-                write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}C", col_shift)?;
             }
         } else if new.col < old.col {
             // move left
@@ -576,7 +577,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[D");
             } else {
-                write!(self.buffer, "\x1b[{}D", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}D", col_shift)?;
             }
         }
         self.write_and_flush(self.buffer.as_bytes())
@@ -601,7 +602,7 @@ impl Renderer for PosixRenderer {
         // calculate the desired position of the cursor
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
-        self.clear_old_rows(current_row, old_rows);
+        self.clear_old_rows(current_row, old_rows)?;
 
         if let Some(highlighter) = highlighter {
             // display the prompt
@@ -633,11 +634,11 @@ impl Renderer for PosixRenderer {
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if new_cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement)?;
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
+            write!(self.buffer, "\r\x1b[{}C", cursor.col)?;
         } else {
             self.buffer.push('\r');
         }
@@ -686,7 +687,7 @@ impl Renderer for PosixRenderer {
 
     fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
         self.buffer.clear();
-        self.clear_old_rows(current_row, old_rows);
+        self.clear_old_rows(current_row, old_rows)?;
         self.write_and_flush(self.buffer.as_bytes())
     }
 

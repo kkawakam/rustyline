@@ -20,16 +20,11 @@ pub enum ReadlineError {
     Eof,
     /// Ctrl-C
     Interrupted,
-    /// Chars Error
-    #[cfg(unix)]
-    Utf8Error,
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
     #[cfg(windows)]
     WindowResize,
-    #[cfg(windows)]
-    Decode(char::DecodeUtf16Error),
 }
 
 impl fmt::Display for ReadlineError {
@@ -39,13 +34,9 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
-            ReadlineError::Utf8Error => write!(f, "invalid utf-8: corrupt contents"),
-            #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
-            #[cfg(windows)]
-            ReadlineError::Decode(ref err) => err.fmt(f),
         }
     }
 }
@@ -57,13 +48,9 @@ impl error::Error for ReadlineError {
             ReadlineError::Eof => "EOF",
             ReadlineError::Interrupted => "Interrupted",
             #[cfg(unix)]
-            ReadlineError::Utf8Error => "invalid utf-8: corrupt contents",
-            #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.description(),
             #[cfg(windows)]
             ReadlineError::WindowResize => "WindowResize",
-            #[cfg(windows)]
-            ReadlineError::Decode(ref err) => err.description(),
         }
     }
 }
@@ -90,13 +77,20 @@ impl From<nix::Error> for ReadlineError {
 #[cfg(windows)]
 impl From<char::DecodeUtf16Error> for ReadlineError {
     fn from(err: char::DecodeUtf16Error) -> Self {
-        ReadlineError::Decode(err)
+        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
 
 #[cfg(windows)]
 impl From<std::string::FromUtf8Error> for ReadlineError {
     fn from(err: std::string::FromUtf8Error) -> Self {
-        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidInput, err))
+        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+}
+
+#[cfg(unix)]
+impl From<fmt::Error> for ReadlineError {
+    fn from(err: fmt::Error) -> Self {
+        ReadlineError::Io(io::Error::new(io::ErrorKind::Other, err))
     }
 }

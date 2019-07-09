@@ -683,7 +683,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
     Ok(num)
 }
 
-static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
+static SIGWINCH_ONCE: sync::Once = sync::Once::new();
 static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
@@ -768,7 +768,7 @@ impl Term for PosixTerminal {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {
-            Err(nix::Error::from_errno(ENOTTY))?;
+            return Err(nix::Error::from_errno(ENOTTY).into());
         }
         let original_mode = termios::tcgetattr(STDIN_FILENO)?;
         let mut raw = original_mode.clone();

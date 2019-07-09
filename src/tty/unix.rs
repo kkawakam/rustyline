@@ -909,7 +909,7 @@ impl Term for PosixTerminal {
         }
         if self.unsupported || !self.is_stdin_tty() || !self.is_output_tty() {
             use nix::errno::Errno::ENOTTY;
-            Err(nix::Error::from_errno(ENOTTY))?;
+            return Err(nix::Error::from_errno(ENOTTY).into());
         }
         use nix::unistd::pipe;
         use std::os::unix::io::FromRawFd;

@@ -3,7 +3,7 @@ use std;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{self, Arc, Mutex};
 
 use libc;
@@ -80,6 +80,7 @@ fn is_a_tty(fd: libc::c_int) -> bool {
 pub struct PosixMode {
     termios: termios::Termios,
     out: Option<OutputStreamType>,
+    raw_mode: Arc<AtomicBool>,
 }
 
 #[cfg(not(test))]
@@ -93,6 +94,7 @@ impl RawMode for PosixMode {
         if let Some(out) = self.out {
             write_and_flush(out, BRACKETED_PASTE_OFF)?;
         }
+        self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -113,9 +115,7 @@ impl Read for StdinRaw {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != io::ErrorKind::Interrupted
-                    || SIGWINCH.load(atomic::Ordering::Relaxed)
-                {
+                if error.kind() != io::ErrorKind::Interrupted || SIGWINCH.load(Ordering::Relaxed) {
                     return Err(error);
                 }
             } else {
@@ -390,7 +390,7 @@ impl PosixRawReader {
                 None,
             ) {
                 if err != ::nix::Error::Sys(::nix::errno::Errno::EINTR)
-                    || SIGWINCH.load(atomic::Ordering::Relaxed)
+                    || SIGWINCH.load(Ordering::Relaxed)
                 {
                     return Err(err.into());
                 } else {
@@ -693,7 +693,7 @@ impl Renderer for PosixRenderer {
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to update the number of columns in the current terminal,
@@ -755,7 +755,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
@@ -769,7 +769,7 @@ fn install_sigwinch_handler() {
 }
 
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    SIGWINCH.store(true, atomic::Ordering::SeqCst);
+    SIGWINCH.store(true, Ordering::SeqCst);
     debug!(target: "rustyline", "SIGWINCH");
 }
 
@@ -784,6 +784,7 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
+    raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<Arc<Mutex<BufReader<File>>>>,
     // external print writer
@@ -814,6 +815,7 @@ impl Term for PosixTerminal {
             color_mode,
             stream_type,
             tab_stop,
+            raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
         };
@@ -870,6 +872,7 @@ impl Term for PosixTerminal {
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
 
+        self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
         let out = if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
             debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
@@ -889,6 +892,7 @@ impl Term for PosixTerminal {
         Ok(PosixMode {
             termios: original_mode,
             out,
+            raw_mode: self.raw_mode.clone(),
         })
     }
 
@@ -905,6 +909,8 @@ impl Term for PosixTerminal {
         if let Some(ref writer) = self.pipe_writer {
             return Ok(ExternalPrinter {
                 writer: writer.clone(),
+                raw_mode: self.raw_mode.clone(),
+                target: self.stream_type,
             });
         }
         if self.unsupported || !self.is_stdin_tty() || !self.is_output_tty() {
@@ -918,29 +924,50 @@ impl Term for PosixTerminal {
         let writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) }));
         self.pipe_reader.replace(reader.clone());
         self.pipe_writer.replace(writer.clone());
-        Ok(ExternalPrinter { writer })
+        Ok(ExternalPrinter {
+            writer,
+            raw_mode: self.raw_mode.clone(),
+            target: self.stream_type,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct ExternalPrinter {
     writer: Arc<Mutex<File>>,
+    raw_mode: Arc<AtomicBool>,
+    target: OutputStreamType,
 }
 
 impl Write for ExternalPrinter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(mut writer) = self.writer.lock() {
-            writer.write(buf) // TODO write directly to stdout/stderr while not in raw mode
+        // write directly to stdout/stderr while not in raw mode
+        if self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().write(buf),
+                OutputStreamType::Stdout => io::stdout().write(buf),
+            }
         } else {
-            Err(io::Error::from(ErrorKind::Other)) // FIXME
+            if let Ok(mut writer) = self.writer.lock() {
+                writer.write(buf)
+            } else {
+                Err(io::Error::from(ErrorKind::Other)) // FIXME
+            }
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Ok(mut writer) = self.writer.lock() {
-            writer.flush()
+        if self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().flush(),
+                OutputStreamType::Stdout => io::stdout().flush(),
+            }
         } else {
-            Err(io::Error::from(ErrorKind::Other)) // FIXME
+            if let Ok(mut writer) = self.writer.lock() {
+                writer.flush()
+            } else {
+                Err(io::Error::from(ErrorKind::Other)) // FIXME
+            }
         }
     }
 }

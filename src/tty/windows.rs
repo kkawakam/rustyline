@@ -2,7 +2,7 @@
 use std::io::{self, ErrorKind, Write};
 use std::mem;
 use std::ptr;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 
@@ -80,6 +80,7 @@ pub struct ConsoleMode {
     stdin_handle: HANDLE,
     original_stdstream_mode: Option<DWORD>,
     stdstream_handle: HANDLE,
+    raw_mode: Arc<AtomicBool>,
 }
 
 impl RawMode for ConsoleMode {
@@ -95,6 +96,7 @@ impl RawMode for ConsoleMode {
                 original_stdstream_mode,
             ));
         }
+        self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -187,7 +189,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
         total += count;
 
         if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-            SIGWINCH.store(true, atomic::Ordering::SeqCst);
+            SIGWINCH.store(true, Ordering::SeqCst);
             debug!(target: "rustyline", "SIGWINCH");
             return Err(error::ReadlineError::WindowResize); // sigwinch + err => err ignored
         } else if rec.EventType != wincon::KEY_EVENT {
@@ -490,7 +492,7 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to get the number of columns in the current terminal,
@@ -528,7 +530,7 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;
@@ -542,6 +544,7 @@ pub struct Console {
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
+    raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<Arc<AsyncPipe>>,
     // external print writer
@@ -596,6 +599,7 @@ impl Term for Console {
             color_mode,
             ansi_colors_supported: false,
             stream_type,
+            raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
         }
@@ -657,6 +661,7 @@ impl Term for Console {
             None
         };
 
+        self.raw_mode.store(true, Ordering::SeqCst);
         // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
         /*if let Some(ref arc) = self.pipe_writer { FIXME
             if Arc::strong_count(arc) == 1 {
@@ -670,6 +675,7 @@ impl Term for Console {
             stdin_handle: self.stdin_handle,
             original_stdstream_mode,
             stdstream_handle: self.stdstream_handle,
+            raw_mode: self.raw_mode.clone(),
         })
     }
 
@@ -691,6 +697,8 @@ impl Term for Console {
                 event: INVALID_HANDLE_VALUE, // FIXME
                 buf: String::new(),
                 sender: sender.clone(),
+                raw_mode: self.raw_mode.clone(),
+                target: self.stream_type,
             });
         }
         if !self.is_stdin_tty() || !self.is_output_tty() {
@@ -712,6 +720,8 @@ impl Term for Console {
             event: event,
             buf: String::new(),
             sender,
+            raw_mode: self.raw_mode.clone(),
+            target: self.stream_type,
         })
     }
 }
@@ -730,6 +740,8 @@ pub struct ExternalPrinter {
     event: HANDLE,
     buf: String,
     sender: SyncSender<String>,
+    raw_mode: Arc<AtomicBool>,
+    target: OutputStreamType,
 }
 
 unsafe impl Send for ExternalPrinter {}
@@ -737,25 +749,39 @@ unsafe impl Sync for ExternalPrinter {}
 
 impl Write for ExternalPrinter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        // TODO write directly to stdout/stderr while not in raw mode
-        match std::str::from_utf8(buf) {
-            Ok(s) => {
-                self.buf.push_str(s);
-                if s.contains('\n') {
-                    self.flush()?
-                }
+        // write directly to stdout/stderr while not in raw mode
+        if self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().write(buf),
+                OutputStreamType::Stdout => io::stdout().write(buf),
             }
-            Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, e)),
-        };
-        Ok(buf.len())
+        } else {
+            match std::str::from_utf8(buf) {
+                Ok(s) => {
+                    self.buf.push_str(s);
+                    if s.contains('\n') {
+                        self.flush()?
+                    }
+                }
+                Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, e)),
+            };
+            Ok(buf.len())
+        }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Err(err) = self.sender.send(self.buf.split_off(0)) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
+        if self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().flush(),
+                OutputStreamType::Stdout => io::stdout().flush(),
+            }
+        } else {
+            if let Err(err) = self.sender.send(self.buf.split_off(0)) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
+            }
+            check!(SetEvent(self.event));
+            Ok(())
         }
-        check!(SetEvent(self.event));
-        Ok(())
     }
 }
 

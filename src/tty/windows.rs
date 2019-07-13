@@ -74,7 +74,7 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
 #[cfg(not(test))]
 pub type Mode = ConsoleMode;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ConsoleMode {
     original_stdin_mode: DWORD,
     stdin_handle: HANDLE,

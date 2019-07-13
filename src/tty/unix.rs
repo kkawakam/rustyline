@@ -947,12 +947,10 @@ impl Write for ExternalPrinter {
                 OutputStreamType::Stderr => io::stderr().write(buf),
                 OutputStreamType::Stdout => io::stdout().write(buf),
             }
+        } else if let Ok(mut writer) = self.writer.lock() {
+            writer.write(buf)
         } else {
-            if let Ok(mut writer) = self.writer.lock() {
-                writer.write(buf)
-            } else {
-                Err(io::Error::from(ErrorKind::Other)) // FIXME
-            }
+            Err(io::Error::from(ErrorKind::Other)) // FIXME
         }
     }
 
@@ -962,12 +960,10 @@ impl Write for ExternalPrinter {
                 OutputStreamType::Stderr => io::stderr().flush(),
                 OutputStreamType::Stdout => io::stdout().flush(),
             }
+        } else if let Ok(mut writer) = self.writer.lock() {
+            writer.flush()
         } else {
-            if let Ok(mut writer) = self.writer.lock() {
-                writer.flush()
-            } else {
-                Err(io::Error::from(ErrorKind::Other)) // FIXME
-            }
+            Err(io::Error::from(ErrorKind::Other)) // FIXME
         }
     }
 }

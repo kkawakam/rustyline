@@ -360,6 +360,11 @@ impl PosixRawReader {
             }
         })
     }
+
+    fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+        let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
+        poll::poll(&mut fds, timeout_ms)
+    }
 }
 
 impl RawReader for PosixRawReader {
@@ -373,8 +378,7 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
-            match poll::poll(&mut fds, timeout_ms) {
+            match self.poll(timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }
@@ -649,6 +653,10 @@ impl Renderer for PosixRenderer {
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
+        if rdr.poll(100)? == 0 {
+            warn!(target: "rustyline", "cannot read initial cursor location");
+            return Ok(());
+        }
         /* Read the response: ESC [ rows ; cols R */
         if rdr.next_char()? != '\x1b' {
             return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));

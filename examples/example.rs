@@ -62,6 +62,8 @@ impl Highlighter for MyHelper {
 
 impl Helper for MyHelper {}
 
+// To debug rustyline:
+// RUST_LOG=rustyline=debug cargo run --example example 2> debug.log
 fn main() {
     env_logger::init();
     let config = Config::builder()

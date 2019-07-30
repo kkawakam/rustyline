@@ -651,6 +651,10 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
+        if rdr.poll(0)? != 0 {
+            warn!(target: "rustyline", "cannot request cursor location");
+            return Ok(());
+        }
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
         if rdr.poll(100)? == 0 {

@@ -391,7 +391,9 @@ fn readline_edit<H: Helper>(
     }
 
     let mut rdr = editor.term.create_reader(&editor.config)?;
-    s.move_cursor_at_leftmost(&mut rdr)?;
+    if editor.term.is_output_tty() {
+        s.move_cursor_at_leftmost(&mut rdr)?;
+    }
     s.refresh_line()?;
 
     loop {

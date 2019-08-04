@@ -3,12 +3,11 @@ use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
 
-use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
 use crate::config::OutputStreamType;
 use crate::config::{ColorMode, Config};
 use crate::error;
@@ -382,13 +381,14 @@ impl Renderer for ConsoleRenderer {
     /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
+        let mut esc_seq = 0;
         for c in s.chars() {
             let cw = if c == '\n' {
                 pos.col = 0;
                 pos.row += 1;
                 None
             } else {
-                c.width()
+                Some(width(&format!("{}", c), &mut esc_seq))
             };
             if let Some(cw) = cw {
                 pos.col += cw;

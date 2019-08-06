@@ -102,7 +102,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.line.update(
             self.saved_line_for_history.as_str(),
             self.saved_line_for_history.pos(),
-            true
+            true,
         );
     }
 

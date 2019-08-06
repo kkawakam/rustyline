@@ -204,9 +204,9 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
         0
     } else if *esc_seq == 2 {
         if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
-        /*} else if s == "m" {
+            /*} else if s == "m" {
             // last
-            *esc_seq = 0;*/
+             *esc_seq = 0;*/
         } else {
             // not supported
             *esc_seq = 0;

@@ -100,7 +100,7 @@ fn complete_line<H: Helper>(
                 s.refresh_line()?;
             } else {
                 // Restore current edited line
-                s.line.update(&backup, backup_pos);
+                s.line.update(&backup, backup_pos, true);
                 s.refresh_line()?;
             }
 
@@ -115,7 +115,7 @@ fn complete_line<H: Helper>(
                 Cmd::Abort => {
                     // Re-show original buffer
                     if i < candidates.len() {
-                        s.line.update(&backup, backup_pos);
+                        s.line.update(&backup, backup_pos, true);
                         s.refresh_line()?;
                     }
                     s.changes.borrow_mut().truncate(mark);
@@ -334,7 +334,7 @@ fn reverse_incremental_search<H: Helper>(
                 }
                 Cmd::Abort => {
                     // Restore current edited line (before search)
-                    s.line.update(&backup, backup_pos);
+                    s.line.update(&backup, backup_pos, true);
                     s.refresh_line()?;
                     s.changes.borrow_mut().truncate(mark);
                     return Ok(None);
@@ -351,7 +351,7 @@ fn reverse_incremental_search<H: Helper>(
                 history_idx = idx;
                 let entry = history.get(idx).unwrap();
                 let pos = entry.find(&search_buf).unwrap();
-                s.line.update(entry, pos);
+                s.line.update(entry, pos, true);
                 true
             }
             _ => false,
@@ -387,7 +387,7 @@ fn readline_edit<H: Helper>(
 
     if let Some((left, right)) = initial {
         s.line
-            .update((left.to_owned() + right).as_ref(), left.len());
+            .update((left.to_owned() + right).as_ref(), left.len(), true);
     }
 
     let mut rdr = editor.term.create_reader(&editor.config)?;

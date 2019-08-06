@@ -47,16 +47,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> State<'out, 'prompt, H> {
-        let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
             out,
             prompt,
             prompt_size,
-            line: LineBuffer::with_capacity(capacity),
+            line: LineBuffer::with_capacity(MAX_LINE),
             cursor: prompt_size,
             old_rows: 0,
-            saved_line_for_history: LineBuffer::with_capacity(capacity),
+            saved_line_for_history: LineBuffer::with_capacity(MAX_LINE),
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
             helper,
@@ -96,13 +95,14 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn backup(&mut self) {
         self.saved_line_for_history
-            .update(self.line.as_str(), self.line.pos());
+            .update(self.line.as_str(), self.line.pos(), false);
     }
 
     pub fn restore(&mut self) {
         self.line.update(
             self.saved_line_for_history.as_str(),
             self.saved_line_for_history.pos(),
+            true
         );
     }
 
@@ -254,32 +254,28 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Insert the character `ch` at cursor current position.
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
-        if let Some(push) = self.line.insert(ch, n) {
-            if push {
-                let prompt_size = self.prompt_size;
-                let no_previous_hint = self.hint.is_none();
-                self.hint();
-                if n == 1
-                    && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
-                    && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
-                    && !self.highlight_char()
-                {
-                    // Avoid a full update of the line in the trivial case.
-                    let cursor = self
-                        .out
-                        .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
-                    self.cursor = cursor;
-                    let bits = ch.encode_utf8(&mut self.byte_buffer);
-                    let bits = bits.as_bytes();
-                    self.out.write_and_flush(bits)
-                } else {
-                    self.refresh(self.prompt, prompt_size, true, Info::Hint)
-                }
+        if self.line.insert(ch, n) {
+            let prompt_size = self.prompt_size;
+            let no_previous_hint = self.hint.is_none();
+            self.hint();
+            if n == 1
+                && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
+                && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
+                && !self.highlight_char()
+            {
+                // Avoid a full update of the line in the trivial case.
+                let cursor = self
+                    .out
+                    .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+                self.cursor = cursor;
+                let bits = ch.encode_utf8(&mut self.byte_buffer);
+                let bits = bits.as_bytes();
+                self.out.write_and_flush(bits)
             } else {
-                self.refresh_line()
+                self.refresh(self.prompt, prompt_size, true, Info::Hint)
             }
         } else {
-            Ok(())
+            self.refresh_line()
         }
     }
 
@@ -493,7 +489,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if self.ctx.history_index < history.len() {
             let buf = history.get(self.ctx.history_index).unwrap();
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(buf, buf.len(), true);
             self.changes.borrow_mut().end();
         } else {
             // Restore current edited line
@@ -526,7 +522,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.ctx.history_index = history_index;
             let buf = history.get(history_index).unwrap();
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(buf, buf.len(), true);
             self.changes.borrow_mut().end();
             self.refresh_line()
         } else {
@@ -554,7 +550,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.ctx.history_index = 0;
             let buf = history.get(self.ctx.history_index).unwrap();
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(buf, buf.len(), true);
             self.changes.borrow_mut().end();
         } else {
             self.ctx.history_index = history.len();

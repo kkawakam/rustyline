@@ -9,8 +9,8 @@ use std::string::Drain;
 use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
-/// Maximum buffer size for the line read
-pub(crate) static MAX_LINE: usize = 4096;
+/// Default maximum buffer size for the read line
+pub(crate) const MAX_LINE: usize = 4096;
 
 /// Word's case change
 #[derive(Clone, Copy)]
@@ -130,12 +130,12 @@ impl LineBuffer {
     }
 
     /// Set line content (`buf`) and cursor position (`pos`).
-    pub fn update(&mut self, buf: &str, pos: usize) {
+    pub fn update(&mut self, buf: &str, pos: usize, can_growth: bool) {
         assert!(pos <= buf.len());
         let end = self.len();
         self.drain(0..end, Direction::default());
         let max = self.buf.capacity();
-        if buf.len() > max {
+        if buf.len() > max && !can_growth {
             self.insert_str(0, &buf[..max]);
             if pos > max {
                 self.pos = max;
@@ -186,13 +186,9 @@ impl LineBuffer {
 
     /// Insert the character `ch` at current cursor position
     /// and advance cursor position accordingly.
-    /// Return `None` when maximum buffer size has been reached,
-    /// `true` when the character has been appended to the end of the line.
-    pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
+    /// Return `true` when the character has been appended to the end of the line.
+    pub fn insert(&mut self, ch: char, n: RepeatCount) -> bool {
         let shift = ch.len_utf8() * n;
-        if self.buf.len() + shift > self.buf.capacity() {
-            return None;
-        }
         let push = self.pos == self.buf.len();
         if n == 1 {
             self.buf.insert(self.pos, ch);
@@ -208,15 +204,15 @@ impl LineBuffer {
             self.insert_str(pos, &text);
         }
         self.pos += shift;
-        Some(push)
+        push
     }
 
     /// Yank/paste `text` at current position.
-    /// Return `None` when maximum buffer size has been reached,
+    /// Return `None` when text is empty,
     /// `true` when the character has been appended to the end of the line.
     pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
-        if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
+        if text.is_empty() {
             return None;
         }
         let push = self.pos == self.buf.len();
@@ -929,18 +925,18 @@ mod test {
     #[test]
     fn insert() {
         let mut s = LineBuffer::with_capacity(MAX_LINE);
-        let push = s.insert('α', 1).unwrap();
+        let push = s.insert('α', 1);
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, push);
 
-        let push = s.insert('ß', 1).unwrap();
+        let push = s.insert('ß', 1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, push);
 
         s.pos = 0;
-        let push = s.insert('γ', 1).unwrap();
+        let push = s.insert('γ', 1);
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(false, push);

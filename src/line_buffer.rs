@@ -9,7 +9,7 @@ use std::string::Drain;
 use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
-/// Default maximum buffer size for the read line
+/// Default maximum buffer size for the line read
 pub(crate) const MAX_LINE: usize = 4096;
 
 /// Word's case change
@@ -51,8 +51,9 @@ pub(crate) trait ChangeListener: DeleteListener {
 ///
 /// The methods do text manipulations or/and cursor movements.
 pub struct LineBuffer {
-    buf: String, // Edited line buffer (rl_line_buffer)
-    pos: usize,  // Current cursor position (byte position) (rl_point)
+    buf: String,      // Edited line buffer (rl_line_buffer)
+    pos: usize,       // Current cursor position (byte position) (rl_point)
+    can_growth: bool, // Whether to allow dynamic growth
     dl: Option<Arc<Mutex<dyn DeleteListener>>>,
     cl: Option<Rc<RefCell<dyn ChangeListener>>>,
 }
@@ -72,9 +73,16 @@ impl LineBuffer {
         Self {
             buf: String::with_capacity(capacity),
             pos: 0,
+            can_growth: false,
             dl: None,
             cl: None,
         }
+    }
+
+    /// Set whether to allow dynamic allocation
+    pub fn can_growth(mut self, can_growth: bool) -> Self {
+        self.can_growth = can_growth;
+        self
     }
 
     #[cfg(test)]
@@ -130,12 +138,12 @@ impl LineBuffer {
     }
 
     /// Set line content (`buf`) and cursor position (`pos`).
-    pub fn update(&mut self, buf: &str, pos: usize, can_growth: bool) {
+    pub fn update(&mut self, buf: &str, pos: usize) {
         assert!(pos <= buf.len());
         let end = self.len();
         self.drain(0..end, Direction::default());
         let max = self.buf.capacity();
-        if buf.len() > max && !can_growth {
+        if !self.can_growth && buf.len() > max {
             self.insert_str(0, &buf[..max]);
             if pos > max {
                 self.pos = max;
@@ -186,9 +194,13 @@ impl LineBuffer {
 
     /// Insert the character `ch` at current cursor position
     /// and advance cursor position accordingly.
-    /// Return `true` when the character has been appended to the end of the line.
-    pub fn insert(&mut self, ch: char, n: RepeatCount) -> bool {
+    /// Return `None` when maximum buffer size has been reached,
+    /// `true` when the character has been appended to the end of the line.
+    pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
         let shift = ch.len_utf8() * n;
+        if !self.can_growth && self.buf.len() + shift > self.buf.capacity() {
+            return None;
+        }
         let push = self.pos == self.buf.len();
         if n == 1 {
             self.buf.insert(self.pos, ch);
@@ -204,15 +216,15 @@ impl LineBuffer {
             self.insert_str(pos, &text);
         }
         self.pos += shift;
-        push
+        Some(push)
     }
 
     /// Yank/paste `text` at current position.
-    /// Return `None` when text is empty,
+    /// Return `None` when maximum buffer size has been reached or is empty,
     /// `true` when the character has been appended to the end of the line.
     pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
-        if text.is_empty() {
+        if text.is_empty() || (!self.can_growth && (self.buf.len() + shift) > self.buf.capacity()) {
             return None;
         }
         let push = self.pos == self.buf.len();
@@ -925,18 +937,18 @@ mod test {
     #[test]
     fn insert() {
         let mut s = LineBuffer::with_capacity(MAX_LINE);
-        let push = s.insert('α', 1);
+        let push = s.insert('α', 1).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, push);
 
-        let push = s.insert('ß', 1);
+        let push = s.insert('ß', 1).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, push);
 
         s.pos = 0;
-        let push = s.insert('γ', 1);
+        let push = s.insert('γ', 1).unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(false, push);

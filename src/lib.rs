@@ -114,7 +114,7 @@ fn complete_line<H: Helper>(
                 }
                 Cmd::CompleteBackward => {
                     if i == 0 {
-                        i = candidates.len() - 1; // Circular
+                        i = candidates.len(); // Circular
                         s.out.beep()?;
                     } else {
                         i = (i - 1) % (candidates.len() + 1); // Circular

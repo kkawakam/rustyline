@@ -27,6 +27,8 @@ pub enum Cmd {
     ClearScreen,
     /// complete
     Complete,
+    /// complete-backward
+    CompleteBackward,
     /// complete-hint
     CompleteHint,
     /// downcase-word
@@ -434,7 +436,14 @@ impl InputState {
                     Cmd::Kill(Movement::ForwardChar(n))
                 }
             }
-            KeyPress::Tab => Cmd::Complete,
+            KeyPress::BackTab => Cmd::CompleteBackward,
+            KeyPress::Tab => {
+                if positive {
+                    Cmd::Complete
+                } else {
+                    Cmd::CompleteBackward
+                }
+            }
             // Don't complete hints when the cursor is not at the end of a line
             KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             KeyPress::Ctrl('K') => {
@@ -717,6 +726,7 @@ impl InputState {
                 }
             }
             KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
+            KeyPress::BackTab => Cmd::CompleteBackward,
             KeyPress::Tab => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
             KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,

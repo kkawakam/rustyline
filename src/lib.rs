@@ -112,6 +112,14 @@ fn complete_line<H: Helper>(
                         s.out.beep()?;
                     }
                 }
+                Cmd::CompleteBackward => {
+                    if i == 0 {
+                        i = candidates.len(); // Circular
+                        s.out.beep()?;
+                    } else {
+                        i = (i - 1) % (candidates.len() + 1); // Circular
+                    }
+                }
                 Cmd::Abort => {
                     // Re-show original buffer
                     if i < candidates.len() {

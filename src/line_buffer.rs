@@ -80,7 +80,7 @@ impl LineBuffer {
     }
 
     /// Set whether to allow dynamic allocation
-    pub fn can_growth(mut self, can_growth: bool) -> Self {
+    pub(crate) fn can_growth(mut self, can_growth: bool) -> Self {
         self.can_growth = can_growth;
         self
     }

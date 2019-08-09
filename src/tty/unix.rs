@@ -6,6 +6,7 @@ use std::sync;
 use std::sync::atomic;
 
 use libc;
+use log::{debug, warn};
 use nix;
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;

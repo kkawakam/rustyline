@@ -17,9 +17,6 @@
 //! ```
 // #![feature(non_exhaustive)]
 
-#[macro_use]
-extern crate log;
-
 #[cfg(unix)]
 extern crate nix;
 
@@ -44,6 +41,8 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{Arc, Mutex, RwLock};
+
+use log::debug;
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
@@ -649,9 +648,7 @@ fn readline_direct() -> Result<String> {
 /// (parse current line once)
 pub trait Helper
 where
-    Self: Completer,
-    Self: Hinter,
-    Self: Highlighter,
+    Self: Completer + Hinter + Highlighter,
 {
 }
 

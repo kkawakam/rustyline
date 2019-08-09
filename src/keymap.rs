@@ -2,6 +2,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use log::debug;
+
 use super::Result;
 use crate::config::Config;
 use crate::config::EditMode;

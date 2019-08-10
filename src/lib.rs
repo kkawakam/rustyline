@@ -379,10 +379,7 @@ fn readline_edit<H: Helper>(
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let ctx = Context {
-        history: &editor.history,
-        history_index: editor.history.len(),
-    };
+    let ctx = Context::new(&editor.history);
     let mut s = State::new(&mut stdout, prompt, helper, ctx);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
@@ -668,6 +665,14 @@ pub struct Context<'h> {
 }
 
 impl<'h> Context<'h> {
+    /// Constructor. Visible for testing.
+    pub fn new(history: &'h History) -> Self {
+        Context {
+            history,
+            history_index: history.len(),
+        }
+    }
+
     /// Return an immutable reference to the history object.
     pub fn history(&self) -> &History {
         &self.history

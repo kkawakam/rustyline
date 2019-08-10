@@ -64,7 +64,7 @@ impl Helper for MyHelper {}
 
 // To debug rustyline:
 // RUST_LOG=rustyline=debug cargo run --example example 2> debug.log
-fn main() {
+fn main() -> rustyline::Result<()> {
     env_logger::init();
     let config = Config::builder()
         .history_ignore_space(true)
@@ -88,7 +88,7 @@ fn main() {
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);
-        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
+        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
@@ -110,5 +110,5 @@ fn main() {
         }
         count += 1;
     }
-    rl.save_history("history.txt").unwrap();
+    rl.save_history("history.txt")
 }

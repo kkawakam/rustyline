@@ -584,10 +584,7 @@ pub fn init_state<'out, H: Helper>(
         byte_buffer: [0; 4],
         changes: Rc::new(RefCell::new(Changeset::new())),
         helper,
-        ctx: Context {
-            history,
-            history_index: 0,
-        },
+        ctx: Context::new(history),
         hint: Some("hint".to_owned()),
         highlight_char: false,
     }

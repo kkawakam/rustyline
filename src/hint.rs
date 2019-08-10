@@ -60,10 +60,7 @@ mod test {
     #[test]
     pub fn empty_history() {
         let history = History::new();
-        let ctx = Context {
-            history: &history,
-            history_index: 0,
-        };
+        let ctx = Context::new(&history);
         let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);
         assert_eq!(None, hint);

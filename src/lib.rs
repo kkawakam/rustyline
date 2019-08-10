@@ -17,9 +17,6 @@
 //! ```
 // #![feature(non_exhaustive)]
 
-#[cfg(unix)]
-extern crate nix;
-
 pub mod completion;
 pub mod config;
 mod edit;

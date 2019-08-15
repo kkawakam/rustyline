@@ -6,8 +6,10 @@ use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline_derive::Helper;
 
+#[derive(Helper)]
 struct MyHelper {
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,
@@ -59,8 +61,6 @@ impl Highlighter for MyHelper {
         self.highlighter.highlight_char(line, pos)
     }
 }
-
-impl Helper for MyHelper {}
 
 // To debug rustyline:
 // RUST_LOG=rustyline=debug cargo run --example example 2> debug.log

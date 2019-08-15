@@ -1,11 +1,11 @@
 use std::borrow::Cow::{self, Borrowed, Owned};
 
-use rustyline::completion::Completer;
 use rustyline::config::Configurer;
 use rustyline::highlight::Highlighter;
-use rustyline::hint::Hinter;
-use rustyline::{ColorMode, Editor, Helper};
+use rustyline::{ColorMode, Editor};
+use rustyline_derive::{Completer, Helper, Hinter};
 
+#[derive(Completer, Helper, Hinter)]
 struct MaskingHighlighter {
     masking: bool,
 }
@@ -24,12 +24,6 @@ impl Highlighter for MaskingHighlighter {
         self.masking
     }
 }
-
-impl Completer for MaskingHighlighter {
-    type Candidate = String;
-}
-impl Hinter for MaskingHighlighter {}
-impl Helper for MaskingHighlighter {}
 
 fn main() -> rustyline::Result<()> {
     println!("This is just a hack. Reading passwords securely requires more than that.");

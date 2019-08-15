@@ -16,7 +16,6 @@ appveyor = { repository = "kkawakam/rustyline" }
 maintenance = { status = "actively-developed" }
 
 [lib]
-#name = "rustyline-derive"
 proc-macro = true
 
 [dependencies]

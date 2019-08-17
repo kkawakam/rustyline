@@ -224,7 +224,7 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 [linefeed]: https://github.com/murarth/linefeed
 [linenoise]: https://github.com/antirez/linenoise
 [linenoise-ng]: https://github.com/arangodb/linenoise-ng
-[Liner]: https://github.com/redox-os/liner
+[Liner]: https://gitlab.redox-os.org/redox-os/liner
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [rb-readline]: https://github.com/ConnorAtherton/rb-readline
 [replxx]: https://github.com/AmokHuginnsson/replxx

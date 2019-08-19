@@ -6,8 +6,10 @@ use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, Helper, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline_derive::Helper;
 
+#[derive(Helper)]
 struct MyHelper {
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,
@@ -60,9 +62,9 @@ impl Highlighter for MyHelper {
     }
 }
 
-impl Helper for MyHelper {}
-
-fn main() {
+// To debug rustyline:
+// RUST_LOG=rustyline=debug cargo run --example example 2> debug.log
+fn main() -> rustyline::Result<()> {
     env_logger::init();
     let config = Config::builder()
         .history_ignore_space(true)
@@ -86,7 +88,7 @@ fn main() {
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);
-        rl.helper_mut().unwrap().colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
+        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
@@ -108,5 +110,5 @@ fn main() {
         }
         count += 1;
     }
-    rl.save_history("history.txt").unwrap();
+    rl.save_history("history.txt")
 }

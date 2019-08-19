@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "5.0.0"
+version = "5.0.1"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -15,6 +15,9 @@ categories = ["command-line-interface"]
 travis-ci = { repository = "kkawakam/rustyline" }
 appveyor = { repository = "kkawakam/rustyline" }
 maintenance = { status = "actively-developed" }
+
+[workspace]
+members = ["rustyline-derive"]
 
 [dependencies]
 dirs = { version = "2.0", optional = true }
@@ -36,6 +39,7 @@ env_logger = "0.6"
 tempdir = "0.3"
 rand = "0.6"
 assert_matches = "1.2"
+rustyline-derive = { version = "0.1.0", path = "rustyline-derive" }
 
 [features]
 default = ["with-dirs"]

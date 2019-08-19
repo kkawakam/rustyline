@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 
+use log::debug;
 use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, FALSE, TRUE, WORD};
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -191,7 +192,9 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
         if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
             SIGWINCH.store(true, Ordering::SeqCst);
             debug!(target: "rustyline", "SIGWINCH");
-            return Err(error::ReadlineError::WindowResize); // sigwinch + err => err ignored
+            return Err(error::ReadlineError::WindowResize); // sigwinch +
+                                                            // err => err
+                                                            // ignored
         } else if rec.EventType != wincon::KEY_EVENT {
             continue;
         }

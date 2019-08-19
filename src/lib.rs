@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use log::debug;
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
+use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{
@@ -502,6 +502,7 @@ fn readline_edit<H: Helper>(
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
+                use tty::RawReader;
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?
             }

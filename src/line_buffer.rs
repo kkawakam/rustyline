@@ -199,8 +199,8 @@ impl LineBuffer {
             for cl in &self.cl {
                 if let Ok(mut cl) = cl.try_borrow_mut() {
                     cl.insert_char(self.pos, ch);
-                } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
-                  // undoing.
+                } // Ok: while undoing, cl is borrowed. And we want to ignore
+                  // changes while undoing.
             }
         } else {
             let text = iter::repeat(ch).take(n).collect::<String>();
@@ -645,8 +645,8 @@ impl LineBuffer {
         for cl in &self.cl {
             if let Ok(mut cl) = cl.try_borrow_mut() {
                 cl.replace(start, self.buf.index(range.clone()), text);
-            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
-              // undoing.
+            } // Ok: while undoing, cl is borrowed. And we want to ignore
+              // changes while undoing.
         }
         self.buf.drain(range);
         if start == self.buf.len() {
@@ -663,8 +663,8 @@ impl LineBuffer {
         for cl in &self.cl {
             if let Ok(mut cl) = cl.try_borrow_mut() {
                 cl.insert_str(idx, s);
-            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
-              // undoing.
+            } // Ok: while undoing, cl is borrowed. And we want to ignore
+              // changes while undoing.
         }
         if idx == self.buf.len() {
             self.buf.push_str(s);
@@ -691,8 +691,8 @@ impl LineBuffer {
         for cl in &self.cl {
             if let Ok(mut cl) = cl.try_borrow_mut() {
                 cl.delete(range.start, &self.buf[range.start..range.end], dir);
-            } // Ok: while undoing, cl is borrowed. And we want to ignore changes while
-              // undoing.
+            } // Ok: while undoing, cl is borrowed. And we want to ignore
+              // changes while undoing.
         }
         self.buf.drain(range)
     }

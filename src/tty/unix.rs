@@ -6,6 +6,7 @@ use std::sync;
 use std::sync::atomic;
 
 use libc;
+use log::{debug, warn};
 use nix;
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
@@ -22,10 +23,10 @@ use crate::keys::{self, KeyPress};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
-const STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
+const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&'static str; 3] = ["dumb", "cons25", "emacs"];
+static UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
@@ -39,16 +40,16 @@ impl AsRawFd for OutputStreamType {
     }
 }
 
+nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
+
 #[allow(clippy::identity_conversion)]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        // https://github.com/rust-lang/libc/pull/704
-        // FIXME: ".into()" used as a temporary fix for a libc bug
-        match libc::ioctl(fileno.as_raw_fd(), libc::TIOCGWINSZ.into(), &mut size) {
-            0 => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
+        match win_size(fileno.as_raw_fd(), &mut size) {
+            Ok(0) => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
             _ => (80, 24),
         }
     }
@@ -71,7 +72,7 @@ fn is_unsupported_term() -> bool {
 }
 
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
-fn is_a_tty(fd: libc::c_int) -> bool {
+fn is_a_tty(fd: RawFd) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
@@ -360,6 +361,11 @@ impl PosixRawReader {
             }
         })
     }
+
+    fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+        let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
+        poll::poll(&mut fds, timeout_ms)
+    }
 }
 
 impl RawReader for PosixRawReader {
@@ -373,8 +379,7 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
-            match poll::poll(&mut fds, timeout_ms) {
+            match self.poll(timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }
@@ -647,8 +652,16 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
+        if rdr.poll(0)? != 0 {
+            debug!(target: "rustyline", "cannot request cursor location");
+            return Ok(());
+        }
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
+        if rdr.poll(100)? == 0 {
+            warn!(target: "rustyline", "cannot read initial cursor location");
+            return Ok(());
+        }
         /* Read the response: ESC [ rows ; cols R */
         if rdr.next_char()? != '\x1b' {
             return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
@@ -683,7 +696,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
     Ok(num)
 }
 
-static SIGWINCH_ONCE: sync::Once = sync::ONCE_INIT;
+static SIGWINCH_ONCE: sync::Once = sync::Once::new();
 static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
@@ -768,7 +781,7 @@ impl Term for PosixTerminal {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {
-            Err(nix::Error::from_errno(ENOTTY))?;
+            return Err(nix::Error::from_errno(ENOTTY).into());
         }
         let original_mode = termios::tcgetattr(STDIN_FILENO)?;
         let mut raw = original_mode.clone();

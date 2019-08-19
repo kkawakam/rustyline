@@ -3,6 +3,7 @@ use std::fmt::Debug;
 
 use crate::keymap::RepeatCount;
 use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
+use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
 
 enum Change {

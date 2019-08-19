@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
 
+use log::debug;
 use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
@@ -125,7 +126,9 @@ impl RawReader for ConsoleRawReader {
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, atomic::Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
-                return Err(error::ReadlineError::WindowResize); // sigwinch + err => err ignored
+                return Err(error::ReadlineError::WindowResize); // sigwinch +
+                                                                // err => err
+                                                                // ignored
             } else if rec.EventType != wincon::KEY_EVENT {
                 continue;
             }

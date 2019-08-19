@@ -17,12 +17,6 @@
 //! ```
 // #![feature(non_exhaustive)]
 
-#[macro_use]
-extern crate log;
-
-#[cfg(unix)]
-extern crate nix;
-
 pub mod completion;
 pub mod config;
 mod edit;
@@ -44,9 +38,11 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{Arc, Mutex, RwLock};
+
+use log::debug;
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
+use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{
@@ -111,6 +107,14 @@ fn complete_line<H: Helper>(
                     i = (i + 1) % (candidates.len() + 1); // Circular
                     if i == candidates.len() {
                         s.out.beep()?;
+                    }
+                }
+                Cmd::CompleteBackward => {
+                    if i == 0 {
+                        i = candidates.len(); // Circular
+                        s.out.beep()?;
+                    } else {
+                        i = (i - 1) % (candidates.len() + 1); // Circular
                     }
                 }
                 Cmd::Abort => {
@@ -376,10 +380,7 @@ fn readline_edit<H: Helper>(
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let ctx = Context {
-        history: &editor.history,
-        history_index: editor.history.len(),
-    };
+    let ctx = Context::new(&editor.history);
     let mut s = State::new(&mut stdout, prompt, helper, ctx);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
@@ -392,7 +393,9 @@ fn readline_edit<H: Helper>(
     }
 
     let mut rdr = editor.term.create_reader(&editor.config)?;
-    s.move_cursor_at_leftmost(&mut rdr)?;
+    if editor.term.is_output_tty() {
+        s.move_cursor_at_leftmost(&mut rdr)?;
+    }
     s.refresh_line()?;
 
     loop {
@@ -500,6 +503,7 @@ fn readline_edit<H: Helper>(
             #[cfg(unix)]
             Cmd::QuotedInsert => {
                 // Quoted insert
+                use tty::RawReader;
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?
             }
@@ -644,10 +648,7 @@ fn readline_direct() -> Result<String> {
 /// (parse current line once)
 pub trait Helper
 where
-    Self: Completer,
-    Self: Hinter,
-    Self: Highlighter,
-    Self: Validator,
+    Self: Completer + Hinter + Highlighter + Validator,
 {
 }
 
@@ -662,6 +663,14 @@ pub struct Context<'h> {
 }
 
 impl<'h> Context<'h> {
+    /// Constructor. Visible for testing.
+    pub fn new(history: &'h History) -> Self {
+        Context {
+            history,
+            history_index: history.len(),
+        }
+    }
+
     /// Return an immutable reference to the history object.
     pub fn history(&self) -> &History {
         &self.history

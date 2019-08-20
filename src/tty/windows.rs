@@ -295,18 +295,18 @@ impl Renderer for ConsoleRenderer {
     type Reader = ConsoleRawReader;
 
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
-        let mut info = self.get_console_screen_buffer_info()?;
+        let mut cursor = self.get_console_screen_buffer_info()?.dwCursorPosition;
         if new.row > old.row {
-            info.dwCursorPosition.Y += (new.row - old.row) as i16;
+            cursor.Y += (new.row - old.row) as i16;
         } else {
-            info.dwCursorPosition.Y -= (old.row - new.row) as i16;
+            cursor.Y -= (old.row - new.row) as i16;
         }
         if new.col > old.col {
-            info.dwCursorPosition.X += (new.col - old.col) as i16;
+            cursor.X += (new.col - old.col) as i16;
         } else {
-            info.dwCursorPosition.X -= (old.col - new.col) as i16;
+            cursor.X -= (old.col - new.col) as i16;
         }
-        self.set_console_cursor_position(info.dwCursorPosition)
+        self.set_console_cursor_position(cursor)
     }
 
     fn refresh_line(
@@ -326,14 +326,12 @@ impl Renderer for ConsoleRenderer {
         let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
         // position at the start of the prompt, clear to end of previous input
-        let mut info = self.get_console_screen_buffer_info()?;
-        info.dwCursorPosition.X = 0;
-        info.dwCursorPosition.Y -= current_row as i16;
-        self.set_console_cursor_position(info.dwCursorPosition)?;
-        self.clear(
-            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
-            info.dwCursorPosition,
-        )?;
+        let info = self.get_console_screen_buffer_info()?;
+        let mut coord = info.dwCursorPosition;
+        coord.X = 0;
+        coord.Y -= current_row as i16;
+        self.set_console_cursor_position(coord)?;
+        self.clear((info.dwSize.X * (old_rows as i16 + 1)) as DWORD, coord)?;
         self.buffer.clear();
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
@@ -361,10 +359,9 @@ impl Renderer for ConsoleRenderer {
         self.write_and_flush(self.buffer.as_bytes())?;
 
         // position the cursor
-        let mut info = self.get_console_screen_buffer_info()?;
-        info.dwCursorPosition.X = cursor.col as i16;
-        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        self.set_console_cursor_position(info.dwCursorPosition)?;
+        coord.X = cursor.col as i16;
+        coord.Y -= (end_pos.row - cursor.row) as i16;
+        self.set_console_cursor_position(coord)?;
         Ok((cursor, end_pos))
     }
 

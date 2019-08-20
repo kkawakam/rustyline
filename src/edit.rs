@@ -47,16 +47,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> State<'out, 'prompt, H> {
-        let capacity = MAX_LINE;
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
             out,
             prompt,
             prompt_size,
-            line: LineBuffer::with_capacity(capacity),
+            line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             cursor: prompt_size,
             old_rows: 0,
-            saved_line_for_history: LineBuffer::with_capacity(capacity),
+            saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
             helper,

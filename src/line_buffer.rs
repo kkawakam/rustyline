@@ -85,6 +85,10 @@ impl LineBuffer {
         self
     }
 
+    fn must_truncate(&self, new_len: usize) -> bool {
+        !self.can_growth && new_len > self.buf.capacity()
+    }
+
     #[cfg(test)]
     pub(crate) fn init(
         line: &str,
@@ -143,7 +147,7 @@ impl LineBuffer {
         let end = self.len();
         self.drain(0..end, Direction::default());
         let max = self.buf.capacity();
-        if !self.can_growth && buf.len() > max {
+        if self.must_truncate(buf.len()) {
             self.insert_str(0, &buf[..max]);
             if pos > max {
                 self.pos = max;
@@ -198,7 +202,7 @@ impl LineBuffer {
     /// `true` when the character has been appended to the end of the line.
     pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
         let shift = ch.len_utf8() * n;
-        if !self.can_growth && self.buf.len() + shift > self.buf.capacity() {
+        if self.must_truncate(self.buf.len() + shift) {
             return None;
         }
         let push = self.pos == self.buf.len();
@@ -224,7 +228,7 @@ impl LineBuffer {
     /// `true` when the character has been appended to the end of the line.
     pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
-        if text.is_empty() || (!self.can_growth && (self.buf.len() + shift) > self.buf.capacity()) {
+        if text.is_empty() || self.must_truncate(self.buf.len() + shift) {
             return None;
         }
         let push = self.pos == self.buf.len();

@@ -19,6 +19,6 @@ maintenance = { status = "actively-developed" }
 proc-macro = true
 
 [dependencies]
-rustyline = { version = "5.0.2", path = ".." }
+rustyline = { version = "5.0", path = ".." }
 syn = "1.0"
 quote = "1.0"

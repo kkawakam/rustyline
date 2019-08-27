@@ -16,7 +16,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
@@ -453,10 +453,16 @@ pub struct PosixRenderer {
     buffer: String,
     tab_stop: usize,
     colors_enabled: bool,
+    bell_style: BellStyle,
 }
 
 impl PosixRenderer {
-    fn new(out: OutputStreamType, tab_stop: usize, colors_enabled: bool) -> Self {
+    fn new(
+        out: OutputStreamType,
+        tab_stop: usize,
+        colors_enabled: bool,
+        bell_style: BellStyle,
+    ) -> Self {
         let (cols, _) = get_win_size(&out);
         Self {
             out,
@@ -464,6 +470,7 @@ impl PosixRenderer {
             buffer: String::with_capacity(1024),
             tab_stop,
             colors_enabled,
+            bell_style,
         }
     }
 }
@@ -620,6 +627,17 @@ impl Renderer for PosixRenderer {
         pos
     }
 
+    fn beep(&mut self) -> Result<()> {
+        match self.bell_style {
+            BellStyle::Visible => {
+                io::stderr().write_all(b"\x07")?;
+                io::stderr().flush()?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         self.write_and_flush(b"\x1b[H\x1b[2J")
@@ -726,6 +744,7 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
+    bell_style: BellStyle,
 }
 
 impl PosixTerminal {
@@ -743,7 +762,12 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType, tab_stop: usize) -> Self {
+    fn new(
+        color_mode: ColorMode,
+        stream_type: OutputStreamType,
+        tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Self {
         let term = Self {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
@@ -751,6 +775,7 @@ impl Term for PosixTerminal {
             color_mode,
             stream_type,
             tab_stop,
+            bell_style,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -824,7 +849,12 @@ impl Term for PosixTerminal {
     }
 
     fn create_writer(&self) -> PosixRenderer {
-        PosixRenderer::new(self.stream_type, self.tab_stop, self.colors_enabled())
+        PosixRenderer::new(
+            self.stream_type,
+            self.tab_stop,
+            self.colors_enabled(),
+            self.bell_style,
+        )
     }
 }
 
@@ -853,12 +883,12 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use crate::config::OutputStreamType;
+    use crate::config::{OutputStreamType, BellStyle};
 
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true);
+        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true, BellStyle::default());
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);

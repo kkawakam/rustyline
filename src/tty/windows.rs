@@ -10,8 +10,7 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use crate::config::OutputStreamType;
-use crate::config::{ColorMode, Config};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
@@ -252,10 +251,16 @@ pub struct ConsoleRenderer {
     cols: usize, // Number of columns in terminal
     buffer: String,
     colors_enabled: bool,
+    bell_style: BellStyle,
 }
 
 impl ConsoleRenderer {
-    fn new(handle: HANDLE, out: OutputStreamType, colors_enabled: bool) -> ConsoleRenderer {
+    fn new(
+        handle: HANDLE,
+        out: OutputStreamType,
+        colors_enabled: bool,
+        bell_style: BellStyle,
+    ) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
@@ -264,6 +269,7 @@ impl ConsoleRenderer {
             cols,
             buffer: String::with_capacity(1024),
             colors_enabled,
+            bell_style,
         }
     }
 
@@ -405,6 +411,17 @@ impl Renderer for ConsoleRenderer {
         pos
     }
 
+    fn beep(&mut self) -> Result<()> {
+        match self.bell_style {
+            BellStyle::Visible => {
+                io::stderr().write_all(b"\x07")?;
+                io::stderr().flush()?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
@@ -467,6 +484,7 @@ pub struct Console {
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
+    bell_style: BellStyle,
 }
 
 impl Console {
@@ -485,7 +503,12 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType, _tab_stop: usize) -> Console {
+    fn new(
+        color_mode: ColorMode,
+        stream_type: OutputStreamType,
+        _tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
@@ -517,6 +540,7 @@ impl Term for Console {
             color_mode,
             ansi_colors_supported: false,
             stream_type,
+            bell_style,
         }
     }
 
@@ -593,6 +617,7 @@ impl Term for Console {
             self.stdstream_handle,
             self.stream_type,
             self.colors_enabled(),
+            self.bell_style,
         )
     }
 }

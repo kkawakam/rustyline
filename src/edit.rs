@@ -83,6 +83,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
+                self.prompt_size = self.out.calculate_position(self.prompt, Position::default());
                 self.refresh_line()?;
                 continue;
             }

@@ -9,11 +9,12 @@ use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 

@@ -15,11 +15,12 @@ use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, width, RawMode, RawReader, Renderer, Term};
 use crate::config::{ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -514,17 +515,19 @@ impl Renderer for PosixRenderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        mut new_layout: Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
+    ) -> Result<Layout> {
         use std::fmt::Write;
         self.buffer.clear();
 
+        let prompt_size = new_layout.prompt_size;
+        let default_prompt = new_layout.default_prompt;
+        let current_row = old_layout.cursor.row;
+        let old_rows = old_layout.end.row;
         // calculate the position of the end of the input line
         let end_pos = self.calculate_position(line, prompt_size);
         // calculate the desired position of the cursor
@@ -584,7 +587,10 @@ impl Renderer for PosixRenderer {
         }
 
         self.write_and_flush(self.buffer.as_bytes())?;
-        Ok((cursor, end_pos))
+
+        new_layout.cursor = cursor;
+        new_layout.end = end_pos;
+        Ok(new_layout)
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {

@@ -3,11 +3,12 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
+use super::{truncate, RawMode, RawReader, Renderer, Term};
 use crate::config::{ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -77,20 +78,19 @@ impl Renderer for Sink {
     fn refresh_line(
         &mut self,
         _: &str,
-        prompt_size: Position,
-        _: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        _: usize,
-        _: usize,
+        _: &Layout,
+        mut new_layout: Layout,
         _: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+    ) -> Result<Layout> {
+        let prompt_size = new_layout.prompt_size;
+        new_layout.cursor = self.calculate_position(&line[..line.pos()], prompt_size);
         if let Some(hint) = hint {
             truncate(&hint, 0, 80);
         }
-        let end = self.calculate_position(&line, prompt_size);
-        Ok((cursor, end))
+        new_layout.end = self.calculate_position(&line, prompt_size);
+        Ok(new_layout)
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

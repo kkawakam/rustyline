@@ -11,8 +11,9 @@ use crate::highlight::Highlighter;
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
+use crate::layout::{Layout, Position};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
-use crate::tty::{Position, Renderer, Term, Terminal};
+use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 
 /// Represent the state during line editing.
@@ -22,9 +23,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
-    pub cursor: Position,  /* Cursor position (relative to the start of the prompt
-                            * for `row`) */
-    pub old_rows: usize, // Number of rows used so far (from start of prompt to end of input)
+    pub layout: Layout,
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
@@ -53,8 +52,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             prompt,
             prompt_size,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
-            cursor: prompt_size,
-            old_rows: 0,
+            layout: Layout::default(),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
             changes: Rc::new(RefCell::new(Changeset::new())),
@@ -83,7 +81,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
-                self.prompt_size = self.out.calculate_position(self.prompt, Position::default());
+                self.prompt_size = self
+                    .out
+                    .calculate_position(self.prompt, Position::default());
                 self.refresh_line()?;
                 continue;
             }
@@ -111,16 +111,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         let cursor = self
             .out
             .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
-        if self.cursor == cursor {
+        if self.layout.cursor == cursor {
             return Ok(());
         }
         if self.highlight_char() {
             let prompt_size = self.prompt_size;
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {
-            self.out.move_cursor(self.cursor, cursor)?;
+            self.out.move_cursor(self.layout.cursor, cursor)?;
         }
-        self.cursor = cursor;
+        self.layout.cursor = cursor;
         Ok(())
     }
 
@@ -145,19 +145,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else {
             None
         };
-        let (cursor, end_pos) = self.out.refresh_line(
+        let new_layout = Layout::new(prompt_size, default_prompt);
+        self.layout = self.out.refresh_line(
             prompt,
-            prompt_size,
-            default_prompt,
             &self.line,
             info,
-            self.cursor.row,
-            self.old_rows,
+            &self.layout,
+            new_layout,
             highlighter,
         )?;
 
-        self.cursor = cursor;
-        self.old_rows = end_pos.row;
         Ok(())
     }
 
@@ -243,9 +240,8 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
             .field("prompt", &self.prompt)
             .field("prompt_size", &self.prompt_size)
             .field("buf", &self.line)
-            .field("cursor", &self.cursor)
             .field("cols", &self.out.get_columns())
-            .field("old_rows", &self.old_rows)
+            .field("layout", &self.layout)
             .field("saved_line_for_history", &self.saved_line_for_history)
             .finish()
     }
@@ -260,7 +256,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
                 if n == 1
-                    && self.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
+                    && self.layout.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
                     && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
                     && !self.highlight_char()
                 {
@@ -268,7 +264,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     let cursor = self
                         .out
                         .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
-                    self.cursor = cursor;
+                    self.layout.cursor = cursor;
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)
@@ -578,8 +574,7 @@ pub fn init_state<'out, H: Helper>(
         prompt: "",
         prompt_size: Position::default(),
         line: LineBuffer::init(line, pos, None),
-        cursor: Position::default(),
-        old_rows: 0,
+        layout: Layout::default(),
         saved_line_for_history: LineBuffer::with_capacity(100),
         byte_buffer: [0; 4],
         changes: Rc::new(RefCell::new(Changeset::new())),

@@ -6,6 +6,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::config::{ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -26,12 +27,6 @@ pub trait RawReader {
     fn read_pasted_text(&mut self) -> Result<String>;
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct Position {
-    pub col: usize,
-    pub row: usize,
-}
-
 /// Display prompt, line and cursor in terminal output
 pub trait Renderer {
     type Reader: RawReader;
@@ -43,14 +38,12 @@ pub trait Renderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)>;
+    ) -> Result<Layout>;
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
@@ -95,24 +88,13 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
-        (**self).refresh_line(
-            prompt,
-            prompt_size,
-            default_prompt,
-            line,
-            hint,
-            current_row,
-            old_rows,
-            highlighter,
-        )
+    ) -> Result<Layout> {
+        (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

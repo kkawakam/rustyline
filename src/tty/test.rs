@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{truncate, RawMode, RawReader, Renderer, Term};
-use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
@@ -141,6 +141,7 @@ pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
     pub cursor: usize, // cursor position before last command
     pub color_mode: ColorMode,
+    pub bell_style: BellStyle,
 }
 
 impl Term for DummyTerminal {
@@ -148,11 +149,17 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
 
-    fn new(color_mode: ColorMode, _stream: OutputStreamType, _tab_stop: usize) -> DummyTerminal {
+    fn new(
+        color_mode: ColorMode,
+        _stream: OutputStreamType,
+        _tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
             color_mode,
+            bell_style,
         }
     }
 

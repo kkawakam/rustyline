@@ -1,9 +1,8 @@
 //! This module implements and describes common TTY methods & traits
-use std::io::{self, Write};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
@@ -53,12 +52,7 @@ pub trait Renderer {
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
-    fn beep(&mut self) -> Result<()> {
-        // TODO bell-style
-        io::stderr().write_all(b"\x07")?;
-        io::stderr().flush()?;
-        Ok(())
-    }
+    fn beep(&mut self) -> Result<()>;
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()>;
@@ -144,7 +138,12 @@ pub trait Term {
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
 
-    fn new(color_mode: ColorMode, stream: OutputStreamType, tab_stop: usize) -> Self;
+    fn new(
+        color_mode: ColorMode,
+        stream: OutputStreamType,
+        tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;

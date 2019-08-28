@@ -20,6 +20,8 @@ pub struct Config {
     /// If true, each nonblank line returned by `readline` will be
     /// automatically added to the history.
     auto_add_history: bool,
+    /// Beep or Flash or nothing
+    bell_style: BellStyle,
     /// if colors should be enabled.
     color_mode: ColorMode,
     /// Whether to use stdout or stderr
@@ -93,6 +95,11 @@ impl Config {
         self.auto_add_history
     }
 
+    /// Bell style: beep, flash or nothing.
+    pub fn bell_style(&self) -> BellStyle {
+        self.bell_style
+    }
+
     /// Tell if colors should be enabled.
     ///
     /// By default, they are except if stdout is not a TTY.
@@ -133,10 +140,36 @@ impl Default for Config {
             keyseq_timeout: -1,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
+            bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
             output_stream: OutputStreamType::Stdout,
             tab_stop: 8,
         }
+    }
+}
+
+/// Beep or flash or nothing
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BellStyle {
+    /// Beep
+    Audible,
+    /// Silent
+    None,
+    /// Flash screen (not supported)
+    Visible,
+}
+
+/// `Audible` by default on unix (overriden by current Terminal settings).
+/// `None` on windows.
+impl Default for BellStyle {
+    #[cfg(windows)]
+    fn default() -> Self {
+        BellStyle::None
+    }
+
+    #[cfg(unix)]
+    fn default() -> Self {
+        BellStyle::Audible
     }
 }
 
@@ -254,6 +287,12 @@ impl Builder {
         self
     }
 
+    /// Set bell style: beep, flash or nothing.
+    pub fn bell_style(mut self, bell_style: BellStyle) -> Self {
+        self.set_bell_style(bell_style);
+        self
+    }
+
     /// Forces colorization on or off.
     ///
     /// By default, colorization is on except if stdout is not a TTY.
@@ -342,6 +381,11 @@ pub trait Configurer {
     /// By default, they are not.
     fn set_auto_add_history(&mut self, yes: bool) {
         self.config_mut().auto_add_history = yes;
+    }
+
+    /// Set bell style: beep, flash or nothing.
+    fn set_bell_style(&mut self, bell_style: BellStyle) {
+        self.config_mut().bell_style = bell_style;
     }
 
     /// Forces colorization on or off.

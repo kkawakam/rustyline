@@ -413,7 +413,7 @@ impl Renderer for ConsoleRenderer {
 
     fn beep(&mut self) -> Result<()> {
         match self.bell_style {
-            BellStyle::Visible => {
+            BellStyle::Audible => {
                 io::stderr().write_all(b"\x07")?;
                 io::stderr().flush()?;
                 Ok(())

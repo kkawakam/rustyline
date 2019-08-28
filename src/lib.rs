@@ -708,7 +708,7 @@ impl<H: Helper> Editor<H> {
             config.color_mode(),
             config.output_stream(),
             config.tab_stop(),
-            config.bell_style()
+            config.bell_style(),
         );
         Self {
             term,

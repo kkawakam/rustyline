@@ -149,7 +149,12 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
 
-    fn new(color_mode: ColorMode, _stream: OutputStreamType, _tab_stop: usize, bell_style: BellStyle) -> DummyTerminal {
+    fn new(
+        color_mode: ColorMode,
+        _stream: OutputStreamType,
+        _tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,

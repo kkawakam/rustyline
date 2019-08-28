@@ -156,7 +156,12 @@ pub trait Term {
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
 
-    fn new(color_mode: ColorMode, stream: OutputStreamType, tab_stop: usize, bell_style: BellStyle) -> Self;
+    fn new(
+        color_mode: ColorMode,
+        stream: OutputStreamType,
+        tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;

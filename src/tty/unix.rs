@@ -629,7 +629,7 @@ impl Renderer for PosixRenderer {
 
     fn beep(&mut self) -> Result<()> {
         match self.bell_style {
-            BellStyle::Visible => {
+            BellStyle::Audible => {
                 io::stderr().write_all(b"\x07")?;
                 io::stderr().flush()?;
                 Ok(())
@@ -883,7 +883,7 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use crate::config::{OutputStreamType, BellStyle};
+    use crate::config::{BellStyle, OutputStreamType};
 
     #[test]
     #[ignore]

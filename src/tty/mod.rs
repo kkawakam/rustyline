@@ -40,9 +40,9 @@ pub trait Renderer {
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
-        new_layout: Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<Layout>;
+    ) -> Result<()>;
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
@@ -85,9 +85,9 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
-        new_layout: Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<Layout> {
+    ) -> Result<()> {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 

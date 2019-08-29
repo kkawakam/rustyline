@@ -322,18 +322,14 @@ impl Renderer for ConsoleRenderer {
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
-        mut new_layout: Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<Layout> {
-        let prompt_size = new_layout.prompt_size;
+    ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
+        let cursor = new_layout.cursor;
+        let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
-
-        // calculate the position of the end of the input line
-        let end_pos = self.calculate_position(line, prompt_size);
-        // calculate the desired position of the cursor
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
         // position at the start of the prompt, clear to end of previous input
         let info = self.get_console_screen_buffer_info()?;
@@ -373,9 +369,7 @@ impl Renderer for ConsoleRenderer {
         coord.Y -= (end_pos.row - cursor.row) as i16;
         self.set_console_cursor_position(coord)?;
 
-        new_layout.cursor = cursor;
-        new_layout.end = end_pos;
-        Ok(new_layout)
+        Ok(())
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {

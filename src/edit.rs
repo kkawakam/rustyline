@@ -119,8 +119,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, cursor)?;
+            self.layout.prompt_size = self.prompt_size;
+            self.layout.cursor = cursor;
+            debug_assert!(self.layout.prompt_size <= self.layout.cursor);
+            debug_assert!(self.layout.cursor <= self.layout.end);
         }
-        self.layout.cursor = cursor;
         Ok(())
     }
 
@@ -145,15 +148,35 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else {
             None
         };
-        let new_layout = Layout::new(prompt_size, default_prompt);
-        self.layout = self.out.refresh_line(
+
+        // calculate the desired position of the cursor
+        let pos = self.line.pos();
+        let cursor = self.out.calculate_position(&self.line[..pos], prompt_size);
+        // calculate the position of the end of the input line
+        let end = if pos == self.line.len() {
+            cursor
+        } else {
+            self.out.calculate_position(&self.line[pos..], cursor)
+        };
+
+        let new_layout = Layout {
+            prompt_size,
+            default_prompt,
+            cursor,
+            end,
+        };
+        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
+        debug_assert!(new_layout.cursor <= new_layout.end);
+
+        self.out.refresh_line(
             prompt,
             &self.line,
             info,
             &self.layout,
-            new_layout,
+            &new_layout,
             highlighter,
         )?;
+        self.layout = new_layout;
 
         Ok(())
     }
@@ -255,16 +278,18 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
+                let width = ch.width().unwrap_or(0);
                 if n == 1
-                    && self.layout.cursor.col + ch.width().unwrap_or(0) < self.out.get_columns()
+                    && width != 0 // Ctrl-V + \t or \n ...
+                    && self.layout.cursor.col + width < self.out.get_columns()
                     && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
                     && !self.highlight_char()
                 {
                     // Avoid a full update of the line in the trivial case.
-                    let cursor = self
-                        .out
-                        .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
-                    self.layout.cursor = cursor;
+                    self.layout.cursor.col += width;
+                    self.layout.end.col += width;
+                    debug_assert!(self.layout.prompt_size <= self.layout.cursor);
+                    debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)

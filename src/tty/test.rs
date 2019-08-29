@@ -77,20 +77,17 @@ impl Renderer for Sink {
 
     fn refresh_line(
         &mut self,
-        _: &str,
-        line: &LineBuffer,
+        _prompt: &str,
+        _line: &LineBuffer,
         hint: Option<&str>,
-        _: &Layout,
-        mut new_layout: Layout,
-        _: Option<&dyn Highlighter>,
-    ) -> Result<Layout> {
-        let prompt_size = new_layout.prompt_size;
-        new_layout.cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+        _old_layout: &Layout,
+        _new_layout: &Layout,
+        _highlighter: Option<&dyn Highlighter>,
+    ) -> Result<()> {
         if let Some(hint) = hint {
             truncate(&hint, 0, 80);
         }
-        new_layout.end = self.calculate_position(&line, prompt_size);
-        Ok(new_layout)
+        Ok(())
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

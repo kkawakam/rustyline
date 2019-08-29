@@ -525,22 +525,19 @@ impl Renderer for PosixRenderer {
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
-        mut new_layout: Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<Layout> {
+    ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
 
-        let prompt_size = new_layout.prompt_size;
         let default_prompt = new_layout.default_prompt;
+        let cursor = new_layout.cursor;
+        let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
-        // calculate the position of the end of the input line
-        let end_pos = self.calculate_position(line, prompt_size);
-        // calculate the desired position of the cursor
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
 
-        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
+        // old_rows < cursor.row if the prompt spans multiple lines and if
         // this is the default State.
         let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
         // move the cursor down as required
@@ -595,9 +592,7 @@ impl Renderer for PosixRenderer {
 
         self.write_and_flush(self.buffer.as_bytes())?;
 
-        new_layout.cursor = cursor;
-        new_layout.end = end_pos;
-        Ok(new_layout)
+        Ok(())
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {

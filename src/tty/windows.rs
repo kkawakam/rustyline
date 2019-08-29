@@ -365,6 +365,7 @@ impl Renderer for ConsoleRenderer {
         self.write_and_flush(self.buffer.as_bytes())?;
 
         // position the cursor
+        let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
         coord.X = cursor.col as i16;
         coord.Y -= (end_pos.row - cursor.row) as i16;
         self.set_console_cursor_position(coord)?;

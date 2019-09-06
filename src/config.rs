@@ -171,6 +171,11 @@ impl Default for BellStyle {
     fn default() -> Self {
         BellStyle::Audible
     }
+
+    #[cfg(not(any(unix, windows)))]
+    fn default() -> Self {
+        BellStyle::None
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -217,7 +217,7 @@ mod unix;
 #[cfg(unix)]
 pub use self::unix::*;
 
-#[cfg(test)]
+#[cfg(any(test, not(any(windows, unix))))]
 mod test;
-#[cfg(test)]
+#[cfg(any(test, not(any(windows, unix))))]
 pub use self::test::*;

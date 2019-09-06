@@ -185,7 +185,7 @@ impl Term for DummyTerminal {
     }
 
     fn create_writer(&self) -> Sink {
-        Sink {}
+        Sink::new()
     }
 }
 

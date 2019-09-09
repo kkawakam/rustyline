@@ -15,7 +15,7 @@ use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{truncate, width, RawMode, RawReader, Renderer, Term};
+use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -566,11 +566,10 @@ impl Renderer for PosixRenderer {
         }
         // display hint
         if let Some(hint) = hint {
-            let truncate = truncate(&hint, end_pos.col, self.cols);
             if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(truncate));
+                self.buffer.push_str(&highlighter.highlight_hint(hint));
             } else {
-                self.buffer.push_str(truncate);
+                self.buffer.push_str(hint);
             }
         }
         // we have to generate our own newline on line wrap

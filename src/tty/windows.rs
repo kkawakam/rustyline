@@ -9,7 +9,7 @@ use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{truncate, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -331,6 +331,29 @@ impl Renderer for ConsoleRenderer {
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
 
+        self.buffer.clear();
+        if let Some(highlighter) = highlighter {
+            // TODO handle ansi escape code (SetConsoleTextAttribute)
+            // append the prompt
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            // append the input line
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // append the prompt
+            self.buffer.push_str(prompt);
+            // append the input line
+            self.buffer.push_str(line);
+        }
+        // append hint
+        if let Some(hint) = hint {
+            if let Some(highlighter) = highlighter {
+                self.buffer.push_str(&highlighter.highlight_hint(hint));
+            } else {
+                self.buffer.push_str(hint);
+            }
+        }
         // position at the start of the prompt, clear to end of previous input
         let info = self.get_console_screen_buffer_info()?;
         let mut coord = info.dwCursorPosition;
@@ -338,30 +361,7 @@ impl Renderer for ConsoleRenderer {
         coord.Y -= current_row as i16;
         self.set_console_cursor_position(coord)?;
         self.clear((info.dwSize.X * (old_rows as i16 + 1)) as DWORD, coord)?;
-        self.buffer.clear();
-        if let Some(highlighter) = highlighter {
-            // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // display the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
-        } else {
-            // display the prompt
-            self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
-        }
-        // display hint
-        if let Some(hint) = hint {
-            let truncate = truncate(&hint, end_pos.col, self.cols);
-            if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(truncate));
-            } else {
-                self.buffer.push_str(truncate);
-            }
-        }
+        // display prompt, input line and hint
         self.write_and_flush(self.buffer.as_bytes())?;
 
         // position the cursor

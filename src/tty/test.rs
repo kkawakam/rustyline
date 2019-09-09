@@ -3,7 +3,7 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{truncate, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
@@ -79,14 +79,11 @@ impl Renderer for Sink {
         &mut self,
         _prompt: &str,
         _line: &LineBuffer,
-        hint: Option<&str>,
+        _hint: Option<&str>,
         _old_layout: &Layout,
         _new_layout: &Layout,
         _highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
-        if let Some(hint) = hint {
-            truncate(&hint, 0, 80);
-        }
         Ok(())
     }
 

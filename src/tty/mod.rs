@@ -1,5 +1,4 @@
 //! This module implements and describes common TTY methods & traits
-use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
@@ -157,20 +156,6 @@ pub trait Term {
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
-}
-
-fn truncate(text: &str, col: usize, max_col: usize) -> &str {
-    let mut col = col;
-    let mut esc_seq = 0;
-    let mut end = text.len();
-    for (i, s) in text.grapheme_indices(true) {
-        col += width(s, &mut esc_seq);
-        if col > max_col {
-            end = i;
-            break;
-        }
-    }
-    &text[..end]
 }
 
 fn width(s: &str, esc_seq: &mut u8) -> usize {

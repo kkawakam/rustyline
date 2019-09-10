@@ -192,11 +192,11 @@ impl History {
                     .rev()
                     .skip(self.entries.len() - 1 - start)
                     .position(test);
-                index.and_then(|index| Some(start - index))
+                index.map(|index| start - index)
             }
             Direction::Forward => {
                 let index = self.entries.iter().skip(start).position(test);
-                index.and_then(|index| Some(index + start))
+                index.map(|index| index + start)
             }
         }
     }

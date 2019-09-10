@@ -153,11 +153,14 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         let pos = self.line.pos();
         let cursor = self.out.calculate_position(&self.line[..pos], prompt_size);
         // calculate the position of the end of the input line
-        let end = if pos == self.line.len() {
+        let mut end = if pos == self.line.len() {
             cursor
         } else {
             self.out.calculate_position(&self.line[pos..], cursor)
         };
+        if let Some(info) = info {
+            end = self.out.calculate_position(&info, end);
+        }
 
         let new_layout = Layout {
             prompt_size,

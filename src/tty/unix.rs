@@ -13,9 +13,10 @@ use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use utf8parse::{Parser, Receiver};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -694,6 +695,36 @@ impl Renderer for PosixRenderer {
             self.write_and_flush(b"\n")?;
         }
         Ok(())
+    }
+}
+
+fn width(s: &str, esc_seq: &mut u8) -> usize {
+    if *esc_seq == 1 {
+        if s == "[" {
+            // CSI
+            *esc_seq = 2;
+        } else {
+            // two-character sequence
+            *esc_seq = 0;
+        }
+        0
+    } else if *esc_seq == 2 {
+        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
+            /*} else if s == "m" {
+            // last
+             *esc_seq = 0;*/
+        } else {
+            // not supported
+            *esc_seq = 0;
+        }
+        0
+    } else if s == "\x1b" {
+        *esc_seq = 1;
+        0
+    } else if s == "\n" {
+        0
+    } else {
+        s.width()
     }
 }
 

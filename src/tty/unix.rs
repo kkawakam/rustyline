@@ -1,5 +1,6 @@
 //! Unix specific definitions
 use std;
+use std::cmp::Ordering;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
@@ -483,7 +484,8 @@ impl Renderer for PosixRenderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
-        if new.row > old.row {
+        let row_ordering = new.row.cmp(&old.row);
+        if row_ordering == Ordering::Greater {
             // move down
             let row_shift = new.row - old.row;
             if row_shift == 1 {
@@ -491,7 +493,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
             }
-        } else if new.row < old.row {
+        } else if row_ordering == Ordering::Less {
             // move up
             let row_shift = old.row - new.row;
             if row_shift == 1 {
@@ -500,7 +502,8 @@ impl Renderer for PosixRenderer {
                 write!(self.buffer, "\x1b[{}A", row_shift).unwrap();
             }
         }
-        if new.col > old.col {
+        let col_ordering = new.col.cmp(&old.col);
+        if col_ordering == Ordering::Greater {
             // move right
             let col_shift = new.col - old.col;
             if col_shift == 1 {
@@ -508,7 +511,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
             }
-        } else if new.col < old.col {
+        } else if col_ordering == Ordering::Less {
             // move left
             let col_shift = old.col - new.col;
             if col_shift == 1 {
@@ -540,7 +543,7 @@ impl Renderer for PosixRenderer {
 
         // old_rows < cursor.row if the prompt spans multiple lines and if
         // this is the default State.
-        let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
+        let cursor_row_movement = old_rows.saturating_sub(current_row);
         // move the cursor down as required
         if cursor_row_movement > 0 {
             write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();

@@ -35,7 +35,7 @@ utf8parse = "0.1"
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
 
 [dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.7"
 tempdir = "0.3"
 assert_matches = "1.2"
 rustyline-derive = { version = "0.2.0", path = "rustyline-derive" }

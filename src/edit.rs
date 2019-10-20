@@ -258,6 +258,14 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn has_hint(&self) -> bool {
         self.hint.is_some()
     }
+
+    fn line(&self) -> &str {
+        self.line.as_str()
+    }
+
+    fn pos(&self) -> usize {
+        self.line.pos()
+    }
 }
 
 impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {

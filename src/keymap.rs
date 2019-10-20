@@ -1,5 +1,6 @@
 //! Bindings from keys to command for Emacs and Vi modes
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::{Arc, RwLock};
 
 use log::debug;
@@ -12,6 +13,58 @@ use crate::tty::{RawReader, Term, Terminal};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
+
+/// Custom dynamic action
+#[derive(Clone)]
+pub struct Action {
+    pub name: String,
+    /// Takes the currently edited `line` with the cursor `pos`ition and
+    /// returns the command to be performed or `None` to perform the default
+    /// one.
+    pub action: fn(line: &str, pos: usize, ctx: &ActionContext) -> Option<Cmd>,
+}
+
+impl std::fmt::Debug for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Action").field("name", &self.name).finish()
+    }
+}
+
+impl PartialEq for Action {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+pub struct ActionContext<'r> {
+    mode: EditMode,
+    input_mode: InputMode,
+    wrt: &'r dyn Refresher,
+}
+
+impl<'r> ActionContext<'r> {
+    fn new(is: &InputState, wrt: &'r dyn Refresher) -> Self {
+        ActionContext {
+            mode: is.mode,
+            input_mode: is.input_mode,
+            wrt,
+        }
+    }
+
+    pub fn mode(&self) -> EditMode {
+        self.mode
+    }
+
+    /// vi only
+    pub fn input_mode(&self) -> InputMode {
+        self.input_mode
+    }
+
+    /// Returns `true` if there is a hint displayed.
+    pub fn has_hint(&self) -> bool {
+        self.wrt.has_hint()
+    }
+}
 
 /// Commands
 // #[non_exhaustive]
@@ -41,6 +94,8 @@ pub enum Cmd {
     EndOfHistory,
     /// forward-search-history
     ForwardSearchHistory,
+    /// Custom dynamic action
+    Custom(Action),
     /// history-search-backward
     HistorySearchBackward,
     /// history-search-forward
@@ -267,8 +322,8 @@ impl Movement {
     }
 }
 
-#[derive(PartialEq)]
-enum InputMode {
+#[derive(Clone, Copy, PartialEq)]
+pub enum InputMode {
     /// Vi Command/Alternate
     Command,
     /// Insert/Input mode
@@ -306,6 +361,10 @@ pub trait Refresher {
     fn is_cursor_at_end(&self) -> bool;
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
+    /// currently edited line
+    fn line(&self) -> &str;
+    /// Current cursor position (byte position)
+    fn pos(&self) -> usize;
 }
 
 impl InputState {
@@ -340,7 +399,6 @@ impl InputState {
         }
     }
 
-    // TODO dynamic prompt (arg: ?)
     fn emacs_digit_argument<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -382,6 +440,21 @@ impl InputState {
         }
     }
 
+    fn custom_binding(&self, wrt: &mut dyn Refresher, key: KeyPress) -> Option<Cmd> {
+        let bindings = self.custom_bindings.read().unwrap();
+        let cmd = bindings.get(&key);
+        if let Some(cmd) = cmd {
+            debug!(target: "rustyline", "Custom command: {:?}", cmd);
+            if let Cmd::Custom(action) = cmd {
+                let ctx = ActionContext::new(self, wrt);
+                return (action.action)(wrt.line(), wrt.pos(), &ctx);
+            } else {
+                return Some(cmd.clone());
+            }
+        }
+        None
+    }
+
     fn emacs<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -395,16 +468,13 @@ impl InputState {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(Some(n), wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+
+        if let Some(cmd) = self.custom_binding(wrt, key) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(Some(n), wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             KeyPress::Char(c) => {
@@ -540,20 +610,16 @@ impl InputState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    if no_num_args {
-                        cmd.redo(None, wrt)
-                    } else {
-                        cmd.redo(Some(n), wrt)
-                    }
+        if let Some(cmd) = self.custom_binding(wrt, key) {
+            return Ok(if cmd.is_repeatable() {
+                if no_num_args {
+                    cmd.redo(None, wrt)
                 } else {
-                    cmd.clone()
-                });
-            }
+                    cmd.redo(Some(n), wrt)
+                }
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             KeyPress::Char('$') |
@@ -708,16 +774,12 @@ impl InputState {
 
     fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
         let key = rdr.next_key(false)?;
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(None, wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+        if let Some(cmd) = self.custom_binding(wrt, key) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(None, wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             KeyPress::Char(c) => {

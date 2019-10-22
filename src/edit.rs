@@ -122,7 +122,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.layout.prompt_size = self.prompt_size;
             self.layout.cursor = cursor;
             debug_assert!(self.layout.prompt_size <= self.layout.cursor);
-            debug_assert!(self.layout.cursor <= self.layout.end);
+            //debug_assert!(self.layout.cursor <= self.layout.end);
         }
         Ok(())
     }

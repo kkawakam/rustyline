@@ -159,6 +159,7 @@ fn ctrl_n() {
             KeyPress::Ctrl('N'),
             KeyPress::Enter,
         ],
+        "",
         ("line2", ""),
     );
 }
@@ -169,6 +170,7 @@ fn ctrl_p() {
         EditMode::Emacs,
         &["line1"],
         &[KeyPress::Ctrl('P'), KeyPress::Enter],
+        "",
         ("line1", ""),
     );
 }

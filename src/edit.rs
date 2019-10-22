@@ -210,6 +210,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             false
         }
     }
+
+    pub fn is_default_prompt(&self) -> bool {
+        self.layout.default_prompt
+    }
 }
 
 impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {

@@ -265,9 +265,14 @@ impl PosixRawReader {
             } else if seq4 == ';' {
                 let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
-                    let seq6 = self.next_char()?; // '~' expected
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                    let seq6 = self.next_char()?;
+                    if seq6.is_digit(10) {
+                        self.next_char()?; // 'R' expected
+                    } else if seq6 == 'R' {
+                    } else {
+                        debug!(target: "rustyline",
+                               "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                    }
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
@@ -299,7 +304,10 @@ impl PosixRawReader {
             let seq4 = self.next_char()?;
             if seq4.is_digit(10) {
                 let seq5 = self.next_char()?;
-                if seq2 == '1' {
+                if seq5.is_digit(10) {
+                    self.next_char()?; // 'R' expected
+                    Ok(KeyPress::UnknownEscSeq)
+                } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
                         ('5', 'A') => KeyPress::ControlUp,
                         ('5', 'B') => KeyPress::ControlDown,
@@ -680,21 +688,18 @@ impl Renderer for PosixRenderer {
         }
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
-        if rdr.poll(100)? == 0 {
+        /* Read the response: ESC [ rows ; cols R */
+        if rdr.poll(100)? == 0
+            || rdr.next_char()? != '\x1b'
+            || rdr.next_char()? != '['
+            || read_digits_until(rdr, ';')?.is_none()
+        {
             warn!(target: "rustyline", "cannot read initial cursor location");
             return Ok(());
         }
-        /* Read the response: ESC [ rows ; cols R */
-        if rdr.next_char()? != '\x1b' {
-            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
-        }
-        if rdr.next_char()? != '[' {
-            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
-        }
-        read_digits_until(rdr, ';')?;
         let col = read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", col);
-        if col != 1 {
+        if col.is_some() && col != Some(1) {
             self.write_and_flush(b"\n")?;
         }
         Ok(())
@@ -731,7 +736,7 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     }
 }
 
-fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
+fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>> {
     let mut num: u32 = 0;
     loop {
         match rdr.next_char()? {
@@ -742,10 +747,10 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
                 continue;
             }
             c if c == sep => break,
-            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
+            _ => return Ok(None),
         }
     }
-    Ok(num)
+    Ok(Some(num))
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();

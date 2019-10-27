@@ -430,7 +430,7 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(hint);
             }
         }
-        let info = self.get_console_screen_buffer_info()?;
+        let mut info = self.get_console_screen_buffer_info()?;
         // position at the start of the prompt, clear to end of previous input
         self.clear_old_rows(&mut info, old_layout)?;
         // display prompt, input line and hint

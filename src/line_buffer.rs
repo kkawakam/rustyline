@@ -9,8 +9,8 @@ use std::string::Drain;
 use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
-/// Maximum buffer size for the line read
-pub(crate) static MAX_LINE: usize = 4096;
+/// Default maximum buffer size for the line read
+pub(crate) const MAX_LINE: usize = 4096;
 
 /// Word's case change
 #[derive(Clone, Copy)]
@@ -51,8 +51,9 @@ pub(crate) trait ChangeListener: DeleteListener {
 ///
 /// The methods do text manipulations or/and cursor movements.
 pub struct LineBuffer {
-    buf: String, // Edited line buffer (rl_line_buffer)
-    pos: usize,  // Current cursor position (byte position) (rl_point)
+    buf: String,      // Edited line buffer (rl_line_buffer)
+    pos: usize,       // Current cursor position (byte position) (rl_point)
+    can_growth: bool, // Whether to allow dynamic growth
     dl: Option<Arc<Mutex<dyn DeleteListener>>>,
     cl: Option<Rc<RefCell<dyn ChangeListener>>>,
 }
@@ -72,9 +73,20 @@ impl LineBuffer {
         Self {
             buf: String::with_capacity(capacity),
             pos: 0,
+            can_growth: false,
             dl: None,
             cl: None,
         }
+    }
+
+    /// Set whether to allow dynamic allocation
+    pub(crate) fn can_growth(mut self, can_growth: bool) -> Self {
+        self.can_growth = can_growth;
+        self
+    }
+
+    fn must_truncate(&self, new_len: usize) -> bool {
+        !self.can_growth && new_len > self.buf.capacity()
     }
 
     #[cfg(test)]
@@ -135,7 +147,7 @@ impl LineBuffer {
         let end = self.len();
         self.drain(0..end, Direction::default());
         let max = self.buf.capacity();
-        if buf.len() > max {
+        if self.must_truncate(buf.len()) {
             self.insert_str(0, &buf[..max]);
             if pos > max {
                 self.pos = max;
@@ -190,7 +202,7 @@ impl LineBuffer {
     /// `true` when the character has been appended to the end of the line.
     pub fn insert(&mut self, ch: char, n: RepeatCount) -> Option<bool> {
         let shift = ch.len_utf8() * n;
-        if self.buf.len() + shift > self.buf.capacity() {
+        if self.must_truncate(self.buf.len() + shift) {
             return None;
         }
         let push = self.pos == self.buf.len();
@@ -212,11 +224,11 @@ impl LineBuffer {
     }
 
     /// Yank/paste `text` at current position.
-    /// Return `None` when maximum buffer size has been reached,
+    /// Return `None` when maximum buffer size has been reached or is empty,
     /// `true` when the character has been appended to the end of the line.
     pub fn yank(&mut self, text: &str, n: RepeatCount) -> Option<bool> {
         let shift = text.len() * n;
-        if text.is_empty() || (self.buf.len() + shift) > self.buf.capacity() {
+        if text.is_empty() || self.must_truncate(self.buf.len() + shift) {
             return None;
         }
         let push = self.pos == self.buf.len();

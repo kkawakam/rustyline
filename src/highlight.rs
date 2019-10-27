@@ -91,8 +91,8 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     }
 }
 
-static OPENS: &[u8; 3] = b"{[(";
-static CLOSES: &[u8; 3] = b"}])";
+const OPENS: &[u8; 3] = b"{[(";
+const CLOSES: &[u8; 3] = b"}])";
 
 #[derive(Default)]
 pub struct MatchingBracketHighlighter {

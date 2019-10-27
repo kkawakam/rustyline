@@ -1,5 +1,6 @@
 //! Unix specific definitions
 use std;
+use std::cmp::Ordering;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
@@ -13,20 +14,22 @@ use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use utf8parse::{Parser, Receiver};
 
-use super::{truncate, width, Position, RawMode, RawReader, Renderer, Term};
-use crate::config::{ColorMode, Config, OutputStreamType};
+use super::{RawMode, RawReader, Renderer, Term};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
-static UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
+const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
@@ -262,9 +265,14 @@ impl PosixRawReader {
             } else if seq4 == ';' {
                 let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
-                    let seq6 = self.next_char()?; // '~' expected
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                    let seq6 = self.next_char()?;
+                    if seq6.is_digit(10) {
+                        self.next_char()?; // 'R' expected
+                    } else if seq6 == 'R' {
+                    } else {
+                        debug!(target: "rustyline",
+                               "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                    }
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
@@ -296,7 +304,10 @@ impl PosixRawReader {
             let seq4 = self.next_char()?;
             if seq4.is_digit(10) {
                 let seq5 = self.next_char()?;
-                if seq2 == '1' {
+                if seq5.is_digit(10) {
+                    self.next_char()?; // 'R' expected
+                    Ok(KeyPress::UnknownEscSeq)
+                } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
                         ('5', 'A') => KeyPress::ControlUp,
                         ('5', 'B') => KeyPress::ControlDown,
@@ -453,10 +464,16 @@ pub struct PosixRenderer {
     buffer: String,
     tab_stop: usize,
     colors_enabled: bool,
+    bell_style: BellStyle,
 }
 
 impl PosixRenderer {
-    fn new(out: OutputStreamType, tab_stop: usize, colors_enabled: bool) -> Self {
+    fn new(
+        out: OutputStreamType,
+        tab_stop: usize,
+        colors_enabled: bool,
+        bell_style: BellStyle,
+    ) -> Self {
         let (cols, _) = get_win_size(&out);
         Self {
             out,
@@ -464,6 +481,7 @@ impl PosixRenderer {
             buffer: String::with_capacity(1024),
             tab_stop,
             colors_enabled,
+            bell_style,
         }
     }
 }
@@ -474,7 +492,8 @@ impl Renderer for PosixRenderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
-        if new.row > old.row {
+        let row_ordering = new.row.cmp(&old.row);
+        if row_ordering == Ordering::Greater {
             // move down
             let row_shift = new.row - old.row;
             if row_shift == 1 {
@@ -482,7 +501,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
             }
-        } else if new.row < old.row {
+        } else if row_ordering == Ordering::Less {
             // move up
             let row_shift = old.row - new.row;
             if row_shift == 1 {
@@ -491,7 +510,8 @@ impl Renderer for PosixRenderer {
                 write!(self.buffer, "\x1b[{}A", row_shift).unwrap();
             }
         }
-        if new.col > old.col {
+        let col_ordering = new.col.cmp(&old.col);
+        if col_ordering == Ordering::Greater {
             // move right
             let col_shift = new.col - old.col;
             if col_shift == 1 {
@@ -499,7 +519,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
             }
-        } else if new.col < old.col {
+        } else if col_ordering == Ordering::Less {
             // move left
             let col_shift = old.col - new.col;
             if col_shift == 1 {
@@ -514,25 +534,24 @@ impl Renderer for PosixRenderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
+    ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
 
-        // calculate the position of the end of the input line
-        let end_pos = self.calculate_position(line, prompt_size);
-        // calculate the desired position of the cursor
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
+        let default_prompt = new_layout.default_prompt;
+        let cursor = new_layout.cursor;
+        let end_pos = new_layout.end;
+        let current_row = old_layout.cursor.row;
+        let old_rows = old_layout.end.row;
 
-        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
+        // old_rows < cursor.row if the prompt spans multiple lines and if
         // this is the default State.
-        let cursor_row_movement = old_rows.checked_sub(current_row).unwrap_or(0);
+        let cursor_row_movement = old_rows.saturating_sub(current_row);
         // move the cursor down as required
         if cursor_row_movement > 0 {
             write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
@@ -559,11 +578,10 @@ impl Renderer for PosixRenderer {
         }
         // display hint
         if let Some(hint) = hint {
-            let truncate = truncate(&hint, end_pos.col, self.cols);
             if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(truncate));
+                self.buffer.push_str(&highlighter.highlight_hint(hint));
             } else {
-                self.buffer.push_str(truncate);
+                self.buffer.push_str(hint);
             }
         }
         // we have to generate our own newline on line wrap
@@ -584,7 +602,8 @@ impl Renderer for PosixRenderer {
         }
 
         self.write_and_flush(self.buffer.as_bytes())?;
-        Ok((cursor, end_pos))
+
+        Ok(())
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
@@ -618,6 +637,17 @@ impl Renderer for PosixRenderer {
             pos.row += 1;
         }
         pos
+    }
+
+    fn beep(&mut self) -> Result<()> {
+        match self.bell_style {
+            BellStyle::Audible => {
+                io::stderr().write_all(b"\x07")?;
+                io::stderr().flush()?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Clear the screen. Used to handle ctrl+l
@@ -658,28 +688,55 @@ impl Renderer for PosixRenderer {
         }
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
-        if rdr.poll(100)? == 0 {
+        /* Read the response: ESC [ rows ; cols R */
+        if rdr.poll(100)? == 0
+            || rdr.next_char()? != '\x1b'
+            || rdr.next_char()? != '['
+            || read_digits_until(rdr, ';')?.is_none()
+        {
             warn!(target: "rustyline", "cannot read initial cursor location");
             return Ok(());
         }
-        /* Read the response: ESC [ rows ; cols R */
-        if rdr.next_char()? != '\x1b' {
-            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
-        }
-        if rdr.next_char()? != '[' {
-            return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
-        }
-        read_digits_until(rdr, ';')?;
         let col = read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", col);
-        if col != 1 {
+        if col.is_some() && col != Some(1) {
             self.write_and_flush(b"\n")?;
         }
         Ok(())
     }
 }
 
-fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
+fn width(s: &str, esc_seq: &mut u8) -> usize {
+    if *esc_seq == 1 {
+        if s == "[" {
+            // CSI
+            *esc_seq = 2;
+        } else {
+            // two-character sequence
+            *esc_seq = 0;
+        }
+        0
+    } else if *esc_seq == 2 {
+        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
+            /*} else if s == "m" {
+            // last
+             *esc_seq = 0;*/
+        } else {
+            // not supported
+            *esc_seq = 0;
+        }
+        0
+    } else if s == "\x1b" {
+        *esc_seq = 1;
+        0
+    } else if s == "\n" {
+        0
+    } else {
+        s.width()
+    }
+}
+
+fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>> {
     let mut num: u32 = 0;
     loop {
         match rdr.next_char()? {
@@ -690,10 +747,10 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<u32> {
                 continue;
             }
             c if c == sep => break,
-            _ => return Err(error::ReadlineError::from(io::ErrorKind::InvalidData)),
+            _ => return Ok(None),
         }
     }
-    Ok(num)
+    Ok(Some(num))
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();
@@ -726,6 +783,7 @@ pub struct PosixTerminal {
     pub(crate) color_mode: ColorMode,
     stream_type: OutputStreamType,
     tab_stop: usize,
+    bell_style: BellStyle,
 }
 
 impl PosixTerminal {
@@ -743,7 +801,12 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType, tab_stop: usize) -> Self {
+    fn new(
+        color_mode: ColorMode,
+        stream_type: OutputStreamType,
+        tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Self {
         let term = Self {
             unsupported: is_unsupported_term(),
             stdin_isatty: is_a_tty(STDIN_FILENO),
@@ -751,6 +814,7 @@ impl Term for PosixTerminal {
             color_mode,
             stream_type,
             tab_stop,
+            bell_style,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -824,7 +888,12 @@ impl Term for PosixTerminal {
     }
 
     fn create_writer(&self) -> PosixRenderer {
-        PosixRenderer::new(self.stream_type, self.tab_stop, self.colors_enabled())
+        PosixRenderer::new(
+            self.stream_type,
+            self.tab_stop,
+            self.colors_enabled(),
+            self.bell_style,
+        )
     }
 }
 
@@ -853,12 +922,12 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use crate::config::OutputStreamType;
+    use crate::config::{BellStyle, OutputStreamType};
 
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true);
+        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true, BellStyle::default());
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);

@@ -4,7 +4,7 @@ API
 Async (#126)
 
 Bell
-- [ ] bell-style
+- [X] bell-style
 
 Color
 - [X] ANSI Colors & Windows 10+

@@ -121,31 +121,31 @@ pub struct FilenameCompleter {
     double_quotes_special_chars: &'static [u8],
 }
 
-static DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
+const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 
 // rl_basic_word_break_characters, rl_completer_word_break_characters
 #[cfg(unix)]
-static DEFAULT_BREAK_CHARS: [u8; 18] = [
+const DEFAULT_BREAK_CHARS: [u8; 18] = [
     b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&',
     b'{', b'(', b'\0',
 ];
 #[cfg(unix)]
-static ESCAPE_CHAR: Option<char> = Some('\\');
+const ESCAPE_CHAR: Option<char> = Some('\\');
 // Remove \ to make file completion works on windows
 #[cfg(windows)]
-static DEFAULT_BREAK_CHARS: [u8; 17] = [
+const DEFAULT_BREAK_CHARS: [u8; 17] = [
     b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{',
     b'(', b'\0',
 ];
 #[cfg(windows)]
-static ESCAPE_CHAR: Option<char> = None;
+const ESCAPE_CHAR: Option<char> = None;
 
 // In double quotes, not all break_chars need to be escaped
 // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
 #[cfg(unix)]
-static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
+const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
 #[cfg(windows)]
-static DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
+const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Quote {

@@ -96,14 +96,22 @@ fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyPress], expec
 // `entries`: history entries before `keys` pressed
 // `keys`: keys to press
 // `expected`: line status before enter key: strings before and after cursor
-fn assert_history(mode: EditMode, entries: &[&str], keys: &[KeyPress], expected: (&str, &str)) {
+fn assert_history(
+    mode: EditMode,
+    entries: &[&str],
+    keys: &[KeyPress],
+    prompt: &str,
+    expected: (&str, &str),
+) {
     let mut editor = init_editor(mode, keys);
     for entry in entries {
         editor.history.add(*entry);
     }
-    let actual_line = editor.readline("").unwrap();
+    let actual_line = editor.readline(prompt).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    assert_eq!(expected.0.len(), editor.term.cursor);
+    if prompt.is_empty() {
+        assert_eq!(expected.0.len(), editor.term.cursor);
+    }
 }
 
 #[test]

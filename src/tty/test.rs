@@ -3,11 +3,12 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{truncate, Position, RawMode, RawReader, Renderer, Term};
-use crate::config::{ColorMode, Config, OutputStreamType};
+use super::{RawMode, RawReader, Renderer, Term};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -76,21 +77,14 @@ impl Renderer for Sink {
 
     fn refresh_line(
         &mut self,
-        _: &str,
-        prompt_size: Position,
-        _: bool,
-        line: &LineBuffer,
-        hint: Option<&str>,
-        _: usize,
-        _: usize,
-        _: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
-        if let Some(hint) = hint {
-            truncate(&hint, 0, 80);
-        }
-        let end = self.calculate_position(&line, prompt_size);
-        Ok((cursor, end))
+        _prompt: &str,
+        _line: &LineBuffer,
+        _hint: Option<&str>,
+        _old_layout: &Layout,
+        _new_layout: &Layout,
+        _highlighter: Option<&dyn Highlighter>,
+    ) -> Result<()> {
+        Ok(())
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
@@ -141,6 +135,7 @@ pub struct DummyTerminal {
     pub keys: Vec<KeyPress>,
     pub cursor: usize, // cursor position before last command
     pub color_mode: ColorMode,
+    pub bell_style: BellStyle,
 }
 
 impl Term for DummyTerminal {
@@ -148,11 +143,17 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyPress>;
     type Writer = Sink;
 
-    fn new(color_mode: ColorMode, _stream: OutputStreamType, _tab_stop: usize) -> DummyTerminal {
+    fn new(
+        color_mode: ColorMode,
+        _stream: OutputStreamType,
+        _tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
             color_mode,
+            bell_style,
         }
     }
 

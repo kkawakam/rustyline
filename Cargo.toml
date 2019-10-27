@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "5.0.1"
+version = "5.0.3"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -35,11 +35,11 @@ utf8parse = "0.1"
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
 
 [dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.7"
 tempdir = "0.3"
 rand = "0.6"
 assert_matches = "1.2"
-rustyline-derive = { version = "0.1.0", path = "rustyline-derive" }
+rustyline-derive = { version = "0.2.0", path = "rustyline-derive" }
 
 [features]
 default = ["with-dirs"]

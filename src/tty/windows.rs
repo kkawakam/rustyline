@@ -15,12 +15,12 @@ use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
-use super::{truncate, Event, Position, RawMode, RawReader, Renderer, Term};
-use crate::config::OutputStreamType;
-use crate::config::{ColorMode, Config};
+use super::{Event, RawMode, RawReader, Renderer, Term};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -313,10 +313,16 @@ pub struct ConsoleRenderer {
     cols: usize, // Number of columns in terminal
     buffer: String,
     colors_enabled: bool,
+    bell_style: BellStyle,
 }
 
 impl ConsoleRenderer {
-    fn new(handle: HANDLE, out: OutputStreamType, colors_enabled: bool) -> ConsoleRenderer {
+    fn new(
+        handle: HANDLE,
+        out: OutputStreamType,
+        colors_enabled: bool,
+        bell_style: BellStyle,
+    ) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(handle);
         ConsoleRenderer {
@@ -325,6 +331,7 @@ impl ConsoleRenderer {
             cols,
             buffer: String::with_capacity(1024),
             colors_enabled,
+            bell_style,
         }
     }
 
@@ -354,9 +361,10 @@ impl ConsoleRenderer {
     fn clear_old_rows(
         &mut self,
         info: &mut CONSOLE_SCREEN_BUFFER_INFO,
-        current_row: usize,
-        old_rows: usize,
+        layout: &Layout,
     ) -> Result<()> {
+        let current_row = layout.cursor.row;
+        let old_rows = layout.end.row;
         // position at the start of the prompt, clear to end of previous input
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y -= current_row as i16;
@@ -372,72 +380,69 @@ impl Renderer for ConsoleRenderer {
     type Reader = ConsoleRawReader;
 
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
-        let mut info = self.get_console_screen_buffer_info()?;
+        let mut cursor = self.get_console_screen_buffer_info()?.dwCursorPosition;
         if new.row > old.row {
-            info.dwCursorPosition.Y += (new.row - old.row) as i16;
+            cursor.Y += (new.row - old.row) as i16;
         } else {
-            info.dwCursorPosition.Y -= (old.row - new.row) as i16;
+            cursor.Y -= (old.row - new.row) as i16;
         }
         if new.col > old.col {
-            info.dwCursorPosition.X += (new.col - old.col) as i16;
+            cursor.X += (new.col - old.col) as i16;
         } else {
-            info.dwCursorPosition.X -= (old.col - new.col) as i16;
+            cursor.X -= (old.col - new.col) as i16;
         }
-        self.set_console_cursor_position(info.dwCursorPosition)
+        self.set_console_cursor_position(cursor)
     }
 
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
-        // calculate the position of the end of the input line
-        let end_pos = self.calculate_position(line, prompt_size);
-        // calculate the desired position of the cursor
-        let cursor = self.calculate_position(&line[..line.pos()], prompt_size);
-
-        let mut info = self.get_console_screen_buffer_info()?;
-        // position at the start of the prompt, clear to end of previous input
-        self.clear_old_rows(&mut info, current_row, old_rows)?;
+    ) -> Result<()> {
+        let default_prompt = new_layout.default_prompt;
+        let cursor = new_layout.cursor;
+        let end_pos = new_layout.end;
 
         self.buffer.clear();
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // display the prompt
+            // append the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
+            // append the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));
         } else {
-            // display the prompt
+            // append the prompt
             self.buffer.push_str(prompt);
-            // display the input line
+            // append the input line
             self.buffer.push_str(line);
         }
-        // display hint
+        // append hint
         if let Some(hint) = hint {
-            let truncate = truncate(&hint, end_pos.col, self.cols);
             if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(truncate));
+                self.buffer.push_str(&highlighter.highlight_hint(hint));
             } else {
-                self.buffer.push_str(truncate);
+                self.buffer.push_str(hint);
             }
         }
+        let info = self.get_console_screen_buffer_info()?;
+        // position at the start of the prompt, clear to end of previous input
+        self.clear_old_rows(&mut info, old_layout)?;
+        // display prompt, input line and hint
         self.write_and_flush(self.buffer.as_bytes())?;
 
         // position the cursor
-        let mut info = self.get_console_screen_buffer_info()?;
-        info.dwCursorPosition.X = cursor.col as i16;
-        info.dwCursorPosition.Y -= (end_pos.row - cursor.row) as i16;
-        self.set_console_cursor_position(info.dwCursorPosition)?;
-        Ok((cursor, end_pos))
+        let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
+        coord.X = cursor.col as i16;
+        coord.Y -= (end_pos.row - cursor.row) as i16;
+        self.set_console_cursor_position(coord)?;
+
+        Ok(())
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
@@ -480,6 +485,17 @@ impl Renderer for ConsoleRenderer {
         pos
     }
 
+    fn beep(&mut self) -> Result<()> {
+        match self.bell_style {
+            BellStyle::Audible => {
+                io::stderr().write_all(b"\x07")?;
+                io::stderr().flush()?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
@@ -489,9 +505,9 @@ impl Renderer for ConsoleRenderer {
         self.clear(n, coord)
     }
 
-    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
         let mut info = self.get_console_screen_buffer_info()?;
-        self.clear_old_rows(&mut info, current_row, old_rows)
+        self.clear_old_rows(&mut info, layout)
     }
 
     fn sigwinch(&self) -> bool {
@@ -547,6 +563,7 @@ pub struct Console {
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
+    bell_style: BellStyle,
     raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<Arc<AsyncPipe>>,
@@ -571,7 +588,12 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(color_mode: ColorMode, stream_type: OutputStreamType, _tab_stop: usize) -> Console {
+    fn new(
+        color_mode: ColorMode,
+        stream_type: OutputStreamType,
+        _tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Console {
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
             Ok(handle) => {
@@ -602,6 +624,7 @@ impl Term for Console {
             color_mode,
             ansi_colors_supported: false,
             stream_type,
+            bell_style,
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
@@ -691,6 +714,7 @@ impl Term for Console {
             self.stdstream_handle,
             self.stream_type,
             self.colors_enabled(),
+            self.bell_style,
         )
     }
 

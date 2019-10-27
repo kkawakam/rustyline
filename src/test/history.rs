@@ -10,12 +10,14 @@ fn down_key() {
             *mode,
             &["line1"],
             &[KeyPress::Down, KeyPress::Enter],
+            "",
             ("", ""),
         );
         assert_history(
             *mode,
             &["line1", "line2"],
             &[KeyPress::Up, KeyPress::Up, KeyPress::Down, KeyPress::Enter],
+            "",
             ("line2", ""),
         );
         assert_history(
@@ -27,6 +29,7 @@ fn down_key() {
                 KeyPress::Down, // restore original line
                 KeyPress::Enter,
             ],
+            "",
             ("a", ""),
         );
         assert_history(
@@ -37,6 +40,7 @@ fn down_key() {
                 KeyPress::Down, // noop
                 KeyPress::Enter,
             ],
+            "",
             ("a", ""),
         );
     }
@@ -45,17 +49,19 @@ fn down_key() {
 #[test]
 fn up_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_history(*mode, &[], &[KeyPress::Up, KeyPress::Enter], ("", ""));
+        assert_history(*mode, &[], &[KeyPress::Up, KeyPress::Enter], "", ("", ""));
         assert_history(
             *mode,
             &["line1"],
             &[KeyPress::Up, KeyPress::Enter],
+            "",
             ("line1", ""),
         );
         assert_history(
             *mode,
             &["line1", "line2"],
             &[KeyPress::Up, KeyPress::Up, KeyPress::Enter],
+            "",
             ("line1", ""),
         );
     }
@@ -68,6 +74,7 @@ fn ctrl_r() {
             *mode,
             &[],
             &[KeyPress::Ctrl('R'), KeyPress::Char('o'), KeyPress::Enter],
+            "",
             ("o", ""),
         );
         assert_history(
@@ -79,6 +86,7 @@ fn ctrl_r() {
                 KeyPress::Right, // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("cargo", ""),
         );
         assert_history(
@@ -90,6 +98,7 @@ fn ctrl_r() {
                 KeyPress::Right, // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("ru", "stc"),
         );
         assert_history(
@@ -102,6 +111,7 @@ fn ctrl_r() {
                 KeyPress::Right, // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("r", "ustc"),
         );
         assert_history(
@@ -114,6 +124,7 @@ fn ctrl_r() {
                 KeyPress::Right, // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("r", "ustc"),
         );
         assert_history(
@@ -126,6 +137,7 @@ fn ctrl_r() {
                 KeyPress::Right,     // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("car", "go"),
         );
         assert_history(
@@ -138,7 +150,21 @@ fn ctrl_r() {
                 KeyPress::Ctrl('G'), // abort (FIXME: doesn't work with vi mode)
                 KeyPress::Enter,
             ],
+            "",
             ("a", ""),
+        );
+    }
+}
+
+#[test]
+fn ctrl_r_with_long_prompt() {
+    for mode in &[EditMode::Emacs, EditMode::Vi] {
+        assert_history(
+            *mode,
+            &["rustc", "cargo"],
+            &[KeyPress::Ctrl('R'), KeyPress::Char('o'), KeyPress::Enter],
+            ">>>>>>>>>>>>>>>>>>>>>>>>>>> ",
+            ("cargo", ""),
         );
     }
 }
@@ -157,6 +183,7 @@ fn ctrl_s() {
                 KeyPress::Right, // just to assert cursor pos
                 KeyPress::Enter,
             ],
+            "",
             ("car", "go"),
         );
     }
@@ -168,12 +195,14 @@ fn meta_lt() {
         EditMode::Emacs,
         &[""],
         &[KeyPress::Meta('<'), KeyPress::Enter],
+        "",
         ("", ""),
     );
     assert_history(
         EditMode::Emacs,
         &["rustc", "cargo"],
         &[KeyPress::Meta('<'), KeyPress::Enter],
+        "",
         ("rustc", ""),
     );
 }
@@ -184,12 +213,14 @@ fn meta_gt() {
         EditMode::Emacs,
         &[""],
         &[KeyPress::Meta('>'), KeyPress::Enter],
+        "",
         ("", ""),
     );
     assert_history(
         EditMode::Emacs,
         &["rustc", "cargo"],
         &[KeyPress::Meta('<'), KeyPress::Meta('>'), KeyPress::Enter],
+        "",
         ("", ""),
     );
     assert_history(
@@ -201,6 +232,7 @@ fn meta_gt() {
             KeyPress::Meta('>'), // restore original line
             KeyPress::Enter,
         ],
+        "",
         ("a", ""),
     );
 }

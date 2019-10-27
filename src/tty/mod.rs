@@ -1,11 +1,10 @@
 //! This module implements and describes common TTY methods & traits
-use std::io::{self, Write};
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
+use std::io::Write;
 
-use crate::config::{ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
+use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
 
@@ -34,12 +33,6 @@ pub trait RawReader {
     fn read_pasted_text(&mut self) -> Result<String>;
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct Position {
-    pub col: usize,
-    pub row: usize,
-}
-
 /// Display prompt, line and cursor in terminal output
 pub trait Renderer {
     type Reader: RawReader;
@@ -51,14 +44,12 @@ pub trait Renderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)>;
+    ) -> Result<()>;
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
@@ -68,17 +59,12 @@ pub trait Renderer {
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
-    fn beep(&mut self) -> Result<()> {
-        // TODO bell-style
-        io::stderr().write_all(b"\x07")?;
-        io::stderr().flush()?;
-        Ok(())
-    }
+    fn beep(&mut self) -> Result<()>;
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()>;
     /// Clear rows used by prompt and edited line
-    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()>;
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()>;
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
@@ -105,24 +91,13 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        prompt_size: Position,
-        default_prompt: bool,
         line: &LineBuffer,
         hint: Option<&str>,
-        current_row: usize,
-        old_rows: usize,
+        old_layout: &Layout,
+        new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-    ) -> Result<(Position, Position)> {
-        (**self).refresh_line(
-            prompt,
-            prompt_size,
-            default_prompt,
-            line,
-            hint,
-            current_row,
-            old_rows,
-            highlighter,
-        )
+    ) -> Result<()> {
+        (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
@@ -141,8 +116,8 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).clear_screen()
     }
 
-    fn clear_rows(&mut self, current_row: usize, old_rows: usize) -> Result<()> {
-        (**self).clear_rows(current_row, old_rows)
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
+        (**self).clear_rows(layout)
     }
 
     fn sigwinch(&self) -> bool {
@@ -177,7 +152,12 @@ pub trait Term {
     type Mode: RawMode;
     type ExternalPrinter: Write;
 
-    fn new(color_mode: ColorMode, stream: OutputStreamType, tab_stop: usize) -> Self;
+    fn new(
+        color_mode: ColorMode,
+        stream: OutputStreamType,
+        tab_stop: usize,
+        bell_style: BellStyle,
+    ) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
@@ -193,50 +173,6 @@ pub trait Term {
     fn create_writer(&self) -> Self::Writer;
     /// Create an external printer
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
-}
-
-fn truncate(text: &str, col: usize, max_col: usize) -> &str {
-    let mut col = col;
-    let mut esc_seq = 0;
-    let mut end = text.len();
-    for (i, s) in text.grapheme_indices(true) {
-        col += width(s, &mut esc_seq);
-        if col > max_col {
-            end = i;
-            break;
-        }
-    }
-    &text[..end]
-}
-
-fn width(s: &str, esc_seq: &mut u8) -> usize {
-    if *esc_seq == 1 {
-        if s == "[" {
-            // CSI
-            *esc_seq = 2;
-        } else {
-            // two-character sequence
-            *esc_seq = 0;
-        }
-        0
-    } else if *esc_seq == 2 {
-        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
-        /*} else if s == "m" {
-            // last
-            *esc_seq = 0;*/
-        } else {
-            // not supported
-            *esc_seq = 0;
-        }
-        0
-    } else if s == "\x1b" {
-        *esc_seq = 1;
-        0
-    } else if s == "\n" {
-        0
-    } else {
-        s.width()
-    }
 }
 
 // If on Windows platform import Windows TTY module

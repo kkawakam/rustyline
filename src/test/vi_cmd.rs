@@ -441,6 +441,7 @@ fn j() {
                 *key,
                 KeyPress::Enter,
             ],
+            "",
             ("line2", ""),
         );
     }
@@ -457,6 +458,7 @@ fn k() {
             EditMode::Vi,
             &["line1"],
             &[KeyPress::Esc, *key, KeyPress::Enter],
+            "",
             ("line1", ""),
         );
     }

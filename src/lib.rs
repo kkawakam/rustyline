@@ -27,6 +27,7 @@ pub mod history;
 mod keymap;
 mod keys;
 mod kill_ring;
+mod layout;
 pub mod line_buffer;
 mod undo;
 
@@ -160,7 +161,7 @@ fn complete_line<H: Helper>(
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             s.out.write_and_flush(msg.as_bytes())?;
-            s.old_rows += 1;
+            s.layout.end.row += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
                 && cmd != Cmd::SelfInsert(1, 'n')
@@ -522,15 +523,15 @@ fn readline_edit<H: Helper>(
             Cmd::AcceptLine => {
                 #[cfg(test)]
                 {
-                    editor.term.cursor = s.cursor.col;
+                    editor.term.cursor = s.layout.cursor.col;
                 }
                 // Accept the line regardless of where the cursor is.
-                s.edit_move_end()?;
-                if s.has_hint() {
+                if s.has_hint() || !s.is_default_prompt() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
                     s.refresh_line_with_msg(None)?;
                 }
+                s.edit_move_end()?;
                 break;
             }
             Cmd::BeginningOfHistory => {
@@ -708,6 +709,7 @@ impl<H: Helper> Editor<H> {
             config.color_mode(),
             config.output_stream(),
             config.tab_stop(),
+            config.bell_style(),
         );
         Self {
             term,

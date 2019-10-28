@@ -777,7 +777,7 @@ unsafe impl Sync for ExternalPrinter {}
 impl Write for ExternalPrinter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // write directly to stdout/stderr while not in raw mode
-        if self.raw_mode.load(Ordering::SeqCst) {
+        if !self.raw_mode.load(Ordering::SeqCst) {
             match self.target {
                 OutputStreamType::Stderr => io::stderr().write(buf),
                 OutputStreamType::Stdout => io::stdout().write(buf),
@@ -797,7 +797,7 @@ impl Write for ExternalPrinter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if self.raw_mode.load(Ordering::SeqCst) {
+        if !self.raw_mode.load(Ordering::SeqCst) {
             match self.target {
                 OutputStreamType::Stderr => io::stderr().flush(),
                 OutputStreamType::Stdout => io::stdout().flush(),

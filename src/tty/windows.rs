@@ -741,7 +741,7 @@ impl Term for Console {
             event: Handle(event),
             receiver,
         });
-        self.pipe_reader.replace(reader.clone());
+        self.pipe_reader.replace(reader);
         self.pipe_writer.replace(sender.clone());
         Ok(ExternalPrinter {
             event: event,

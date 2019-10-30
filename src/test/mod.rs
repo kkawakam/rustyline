@@ -18,7 +18,7 @@ mod history;
 mod vi_cmd;
 mod vi_insert;
 
-fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
+fn init_editor(mode: EditMode, keys: &[KeyPress]) -> SimpleEditor {
     let config = Config::builder().edit_mode(mode).build();
     let mut editor = Editor::<()>::with_config(config);
     editor.term.keys.extend(keys.iter().cloned());
@@ -122,11 +122,11 @@ fn unknown_esc_key() {
 #[test]
 fn test_send() {
     fn assert_send<T: Send>() {}
-    assert_send::<Editor<()>>();
+    assert_send::<SimpleEditor>();
 }
 
 #[test]
 fn test_sync() {
     fn assert_sync<T: Sync>() {}
-    assert_sync::<Editor<()>>();
+    assert_sync::<SimpleEditor>();
 }

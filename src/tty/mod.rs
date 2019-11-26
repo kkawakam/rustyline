@@ -217,7 +217,7 @@ mod unix;
 #[cfg(unix)]
 pub use self::unix::*;
 
-#[cfg(any(test, not(any(windows, unix))))]
+#[cfg(any(test, target_arch = "wasm32"))]
 mod test;
-#[cfg(any(test, not(any(windows, unix))))]
+#[cfg(any(test, target_arch = "wasm32"))]
 pub use self::test::*;

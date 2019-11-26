@@ -245,7 +245,7 @@ impl<'a> DoubleEndedIterator for Iter<'a> {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_arch = "wasm32"))]
 fn umask() -> u16 {
     0
 }
@@ -253,11 +253,7 @@ fn umask() -> u16 {
 fn umask() -> libc::mode_t {
     unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
 }
-#[cfg(not(any(windows, unix)))]
-fn umask() -> u16 {
-    0
-}
-#[cfg(windows)]
+#[cfg(any(windows, target_arch = "wasm32"))]
 fn restore_umask(_: u16) {}
 #[cfg(unix)]
 fn restore_umask(old_umask: libc::mode_t) {
@@ -265,10 +261,8 @@ fn restore_umask(old_umask: libc::mode_t) {
         libc::umask(old_umask);
     }
 }
-#[cfg(not(any(windows, unix)))]
-fn restore_umask(_: u16) {}
 
-#[cfg(windows)]
+#[cfg(any(windows, target_arch = "wasm32"))]
 fn fix_perm(_: &File) {}
 #[cfg(unix)]
 fn fix_perm(file: &File) {
@@ -277,8 +271,6 @@ fn fix_perm(file: &File) {
         libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
     }
 }
-#[cfg(not(any(windows, unix)))]
-fn fix_perm(_: &File) {}
 
 #[cfg(test)]
 mod tests {

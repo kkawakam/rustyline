@@ -139,9 +139,9 @@ const DEFAULT_BREAK_CHARS: [u8; 17] = [
 ];
 #[cfg(windows)]
 const ESCAPE_CHAR: Option<char> = None;
-#[cfg(not(any(windows, unix)))]
+#[cfg(target_arch = "wasm32")]
 const DEFAULT_BREAK_CHARS: [u8; 0] = [];
-#[cfg(not(any(windows, unix)))]
+#[cfg(target_arch = "wasm32")]
 const ESCAPE_CHAR: Option<char> = None;
 
 // In double quotes, not all break_chars need to be escaped
@@ -150,7 +150,7 @@ const ESCAPE_CHAR: Option<char> = None;
 const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
 #[cfg(windows)]
 const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
-#[cfg(not(any(windows, unix)))]
+#[cfg(target_arch = "wasm32")]
 const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = [];
 
 #[derive(Clone, Copy, Debug, PartialEq)]

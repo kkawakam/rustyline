@@ -162,7 +162,7 @@ pub enum BellStyle {
 /// `Audible` by default on unix (overriden by current Terminal settings).
 /// `None` on windows.
 impl Default for BellStyle {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_arch = "wasm32"))]
     fn default() -> Self {
         BellStyle::None
     }
@@ -170,11 +170,6 @@ impl Default for BellStyle {
     #[cfg(unix)]
     fn default() -> Self {
         BellStyle::Audible
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    fn default() -> Self {
-        BellStyle::None
     }
 }
 

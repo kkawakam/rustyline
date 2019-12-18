@@ -483,7 +483,7 @@ fn readline_edit<H: Helper>(
             }
             Cmd::ClearScreen => {
                 // Clear the screen leaving the current line at the top of the screen.
-                s.out.clear_screen()?;
+                s.clear_screen()?;
                 s.refresh_line()?
             }
             Cmd::NextHistory => {

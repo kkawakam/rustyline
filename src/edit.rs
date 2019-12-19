@@ -278,6 +278,13 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
 }
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+    pub fn clear_screen(&mut self) -> Result<()> {
+        self.out.clear_screen()?;
+        self.layout.cursor = Position::default();
+        self.layout.end = Position::default();
+        Ok(())
+    }
+
     /// Insert the character `ch` at cursor current position.
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n) {

@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "5.0.3"
+version = "5.0.6"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -20,6 +20,7 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
+cfg-if = "0.1"
 dirs = { version = "2.0", optional = true }
 libc = "0.2"
 log = "0.4"

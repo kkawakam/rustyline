@@ -245,30 +245,32 @@ impl<'a> DoubleEndedIterator for Iter<'a> {
     }
 }
 
-#[cfg(windows)]
-fn umask() -> u16 {
-    0
-}
-#[cfg(unix)]
-fn umask() -> libc::mode_t {
-    unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
-}
-#[cfg(windows)]
-fn restore_umask(_: u16) {}
-#[cfg(unix)]
-fn restore_umask(old_umask: libc::mode_t) {
-    unsafe {
-        libc::umask(old_umask);
-    }
-}
+cfg_if::cfg_if! {
+    if #[cfg(any(windows, target_arch = "wasm32"))] {
+        fn umask() -> u16 {
+            0
+        }
 
-#[cfg(windows)]
-fn fix_perm(_: &File) {}
-#[cfg(unix)]
-fn fix_perm(file: &File) {
-    use std::os::unix::io::AsRawFd;
-    unsafe {
-        libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
+        fn restore_umask(_: u16) {}
+
+        fn fix_perm(_: &File) {}
+    } else if #[cfg(unix)] {
+        fn umask() -> libc::mode_t {
+            unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
+        }
+
+        fn restore_umask(old_umask: libc::mode_t) {
+            unsafe {
+                libc::umask(old_umask);
+            }
+        }
+
+        fn fix_perm(file: &File) {
+            use std::os::unix::io::AsRawFd;
+            unsafe {
+                libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
+            }
+        }
     }
 }
 

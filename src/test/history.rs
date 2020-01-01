@@ -162,11 +162,7 @@ fn ctrl_r_with_long_prompt() {
         assert_history(
             *mode,
             &["rustc", "cargo"],
-            &[
-                KeyPress::Ctrl('R'),
-                KeyPress::Char('o'),
-                KeyPress::Enter,
-            ],
+            &[KeyPress::Ctrl('R'), KeyPress::Char('o'), KeyPress::Enter],
             ">>>>>>>>>>>>>>>>>>>>>>>>>>> ",
             ("cargo", ""),
         );

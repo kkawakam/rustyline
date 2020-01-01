@@ -61,7 +61,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "5.0.3"
+rustyline = "5.0.6"
 ```
 
 ## Features
@@ -217,7 +217,7 @@ Library            | Lang    | OS     | Term  | Unicode | History       | Comple
 [rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/vi/conf | Yes       | Yes  | ?          | No                |
 [replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
 Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
-[terminal_cli][]   | Rust    | Ux     | ANSI  | ?       | No            | only line  | ?             | No        | No   | ?          | ?                 |
+[termwiz][]        | Rust    | Ux/Win | Any   | ?       | Yes           | any        | Emacs         | No        | No   | Ux/Win     | No                |
 
 [go-prompt]: https://github.com/c-bata/go-prompt
 [Haskeline]: https://github.com/judah/haskeline
@@ -228,7 +228,7 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [rb-readline]: https://github.com/ConnorAtherton/rb-readline
 [replxx]: https://github.com/AmokHuginnsson/replxx
-[terminal_cli]: https://github.com/hashmismatch/terminal_cli.rs
+[termwiz]: https://github.com/wez/wezterm/tree/master/termwiz
 
 ## Multi line support
 

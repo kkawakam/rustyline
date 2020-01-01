@@ -175,21 +175,19 @@ pub trait Term {
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }
 
-// If on Windows platform import Windows TTY module
-// and re-export into mod.rs scope
-#[cfg(windows)]
-mod windows;
-#[cfg(windows)]
-pub use self::windows::*;
-
-// If on Unix platform import Unix TTY module
-// and re-export into mod.rs scope
-#[cfg(unix)]
-mod unix;
-#[cfg(unix)]
-pub use self::unix::*;
-
-#[cfg(test)]
-mod test;
-#[cfg(test)]
-pub use self::test::*;
+cfg_if::cfg_if! {
+    if #[cfg(any(test, target_arch = "wasm32"))] {
+        mod test;
+        pub use self::test::*;
+    } else if #[cfg(windows)] {
+        // If on Windows platform import Windows TTY module
+        // and re-export into mod.rs scope
+        mod windows;
+        pub use self::windows::*;
+    } else if #[cfg(unix)] {
+        // If on Unix platform import Unix TTY module
+        // and re-export into mod.rs scope
+        mod unix;
+        pub use self::unix::*;
+    }
+}

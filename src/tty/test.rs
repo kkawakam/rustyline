@@ -196,7 +196,7 @@ impl Term for DummyTerminal {
     }
 
     fn create_writer(&self) -> Sink {
-        Sink {}
+        Sink::new()
     }
 
     fn create_external_printer(&mut self) -> Result<StdSink> {

@@ -1,5 +1,0 @@
-sudo: false
-language: rust
-script:
-  - cargo build --verbose
-  - cargo test --verbose

@@ -368,7 +368,6 @@ impl InputState {
         }
     }
 
-    // TODO dynamic prompt (arg: ?)
     fn emacs_digit_argument<R: RawReader>(
         &mut self,
         rdr: &mut R,

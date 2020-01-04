@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
@@ -171,6 +172,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);
 
+        debug!(target: "rustyline", "old layout: {:?}", self.layout);
+        debug!(target: "rustyline", "new layout: {:?}", new_layout);
         self.out.refresh_line(
             prompt,
             &self.line,

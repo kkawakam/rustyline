@@ -1,6 +1,5 @@
 # RustyLine
-[![Build Status](https://travis-ci.org/kkawakam/rustyline.svg?branch=master)](https://travis-ci.org/kkawakam/rustyline)
-[![Build Status](https://ci.appveyor.com/api/projects/status/github/kkawakam/rustyline?branch=master&svg=true)](https://ci.appveyor.com/project/kkawakam/rustyline/branch/master)
+[![Build Status](https://github.com/kkawakam/rustyline/workflows/Rust/badge.svg)](https://github.com/kkawakam/rustyline/actions)
 [![dependency status](https://deps.rs/repo/github/kkawakam/rustyline/status.svg)](https://deps.rs/repo/github/kkawakam/rustyline)
 [![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
 [![Docs](https://docs.rs/rustyline/badge.svg)](https://docs.rs/rustyline)

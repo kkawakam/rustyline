@@ -3,9 +3,9 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::config::Configurer;
 use rustyline::highlight::Highlighter;
 use rustyline::{ColorMode, Editor};
-use rustyline_derive::{Completer, Helper, Hinter};
+use rustyline_derive::{Completer, Helper, Hinter, Validator};
 
-#[derive(Completer, Helper, Hinter)]
+#[derive(Completer, Helper, Hinter, Validator)]
 struct MaskingHighlighter {
     masking: bool,
 }

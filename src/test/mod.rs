@@ -10,6 +10,7 @@ use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::KeyPress;
 use crate::tty::Sink;
+use crate::validate::Validator;
 use crate::{Context, Editor, Helper, Result};
 
 mod common;
@@ -42,6 +43,7 @@ impl Completer for SimpleCompleter {
 impl Helper for SimpleCompleter {}
 impl Hinter for SimpleCompleter {}
 impl Highlighter for SimpleCompleter {}
+impl Validator for SimpleCompleter {}
 
 #[test]
 fn complete_line() {

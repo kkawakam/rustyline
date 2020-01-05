@@ -1,9 +1,9 @@
 //! Command processor
 
+use log::debug;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
@@ -11,12 +11,12 @@ use super::{Context, Helper, Result};
 use crate::highlight::Highlighter;
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Refresher};
+use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
-use crate::validate::ValidationResult;
+use crate::validate::{ValidationContext, ValidationResult};
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -222,7 +222,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn validate(&mut self) -> Result<bool> {
         if let Some(validator) = self.helper {
             self.changes.borrow_mut().begin();
-            let result = validator.validate(&mut self.line);
+            let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
             let validated = match result {
                 ValidationResult::Incomplete => {
@@ -251,6 +251,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else {
             Ok(true)
         }
+    }
+}
+
+impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+    fn input(&self) -> &str {
+        self.line.as_str()
     }
 }
 

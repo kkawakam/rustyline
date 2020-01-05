@@ -1,16 +1,37 @@
 //! Input validation API (Multi-line editing)
 
-use crate::line_buffer::LineBuffer;
+use crate::keymap::Invoke;
+use crate::Result;
 
 /// Input validation result
+#[non_exhaustive]
 pub enum ValidationResult {
     /// Incomplete input
     Incomplete,
     /// Validation fails with an optional error message. User must fix the
     /// input.
     Invalid(Option<String>),
-    /// Validation succeeds with an optional message (instead of https://github.com/kkawakam/rustyline/pull/169)
+    /// Validation succeeds with an optional message
     Valid(Option<String>),
+}
+
+pub struct ValidationContext<'i> {
+    i: &'i mut dyn Invoke,
+}
+
+impl<'i> ValidationContext<'i> {
+    pub(crate) fn new(i: &'i mut dyn Invoke) -> Self {
+        ValidationContext { i }
+    }
+
+    pub fn input(&self) -> &str {
+        self.i.input()
+    }
+
+    // TODO
+    //fn invoke(&mut self, cmd: Cmd) -> Result<?> {
+    //    self.i.invoke(cmd)
+    //}
 }
 
 /// This trait provides an extension interface for determining whether
@@ -19,7 +40,7 @@ pub enum ValidationResult {
 /// will end the current editing session and return the current line
 /// buffer to the caller of `Editor::readline` or variants.
 pub trait Validator {
-    /// Takes the currently edited `line` and returns a
+    /// Takes the currently edited `input` and returns a
     /// `ValidationResult` indicating whether it is valid or not along
     /// with an option message to display about the result. The most
     /// common validity check to implement is probably whether the
@@ -31,10 +52,10 @@ pub trait Validator {
     /// about what is invalid.
     ///
     /// For auto-correction like a missing closing quote or to reject invalid
-    /// char while typing, the `line` is mutable.
-    fn validate(&self, line: &mut LineBuffer) -> ValidationResult {
-        let _ = line;
-        ValidationResult::Valid(None)
+    /// char while typing, the input will be mutable (TODO).
+    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
+        let _ = ctx;
+        Ok(ValidationResult::Valid(None))
     }
 
     /// Configure whether validation is performed while typing or only
@@ -50,8 +71,8 @@ pub trait Validator {
 impl Validator for () {}
 
 impl<'v, V: ?Sized + Validator> Validator for &'v V {
-    fn validate(&self, line: &mut LineBuffer) -> ValidationResult {
-        (**self).validate(line)
+    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
+        (**self).validate(ctx)
     }
 
     fn validate_while_typing(&self) -> bool {

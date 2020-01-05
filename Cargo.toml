@@ -12,8 +12,7 @@ license = "MIT"
 categories = ["command-line-interface"]
 
 [badges]
-travis-ci = { repository = "kkawakam/rustyline" }
-appveyor = { repository = "kkawakam/rustyline" }
+github-actions = { repository = "kkawakam/rustyline", workflow = "Rust" }
 maintenance = { status = "actively-developed" }
 
 [workspace]

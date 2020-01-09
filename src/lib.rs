@@ -29,9 +29,9 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
-mod undo;
-
 mod tty;
+mod undo;
+pub mod validate;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -60,6 +60,7 @@ use crate::keymap::{InputState, Refresher};
 pub use crate::keys::KeyPress;
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
+use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, error::ReadlineError>;
@@ -534,7 +535,10 @@ fn readline_edit<H: Helper>(
                     s.refresh_line_with_msg(None)?;
                 }
                 s.edit_move_end()?;
-                break;
+                if s.validate()? {
+                    break;
+                }
+                continue;
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -654,7 +658,7 @@ fn readline_direct() -> Result<String> {
 /// (parse current line once)
 pub trait Helper
 where
-    Self: Completer + Hinter + Highlighter,
+    Self: Completer + Hinter + Highlighter + Validator,
 {
 }
 

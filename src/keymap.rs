@@ -343,6 +343,14 @@ pub struct InputState {
     last_char_search: Option<CharSearch>, // vi only
 }
 
+/// Provide indirect mutation to user input.
+pub trait Invoke {
+    /// currently edited line
+    fn input(&self) -> &str;
+    // TODO
+    //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
+}
+
 pub trait Refresher {
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.

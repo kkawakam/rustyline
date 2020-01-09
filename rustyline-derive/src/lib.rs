@@ -56,3 +56,16 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
     };
     TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(Validator)]
+pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let expanded = quote! {
+        impl #impl_generics rustyline::validate::Validator for #name #ty_generics #where_clause {
+        }
+    };
+    TokenStream::from(expanded)
+}

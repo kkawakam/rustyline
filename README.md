@@ -60,7 +60,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "5.0.6"
+rustyline = "6.0.0"
 ```
 
 ## Features
@@ -237,6 +237,9 @@ line instead of horizontally scrolling as more characters are
 typed. Currently this feature is always enabled and there is no
 configuration option to disable it.
 
-_This feature does not allow the end user to hit a special key
+This feature does not allow the end user to hit a special key
 sequence and enter a mode where hitting the return key will cause a
-literal newline to be added to the input buffer_.
+literal newline to be added to the input buffer.
+
+The way to achieve multi-line editing is to implement the `Validator`
+trait.

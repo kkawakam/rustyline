@@ -7,9 +7,9 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
-use rustyline_derive::Helper;
+use rustyline_derive::{Helper, Validator};
 
-#[derive(Helper)]
+#[derive(Helper, Validator)]
 struct MyHelper {
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,

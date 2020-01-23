@@ -30,6 +30,7 @@ memchr = "2.0"
 [target.'cfg(unix)'.dependencies]
 nix = "0.16"
 utf8parse = "0.2"
+skim = { version = "0.7", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
@@ -43,9 +44,10 @@ rustyline-derive = { version = "0.3.0", path = "rustyline-derive" }
 [features]
 default = ["with-dirs"]
 with-dirs = ["dirs"]
+with-fuzzy = ["skim"]
 
 [package.metadata.docs.rs]
-features = ["with-dirs"]
+features = ["with-dirs", "with-fuzzy"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"

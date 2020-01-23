@@ -70,6 +70,9 @@ fn complete_line<H: Helper>(
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
+    #[cfg(all(unix, feature = "with-fuzzy"))]
+    use skim::{Skim, SkimOptionsBuilder};
+
     let completer = s.helper.unwrap();
     // get a list of completions
     let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
@@ -185,6 +188,43 @@ fn complete_line<H: Helper>(
             Ok(None)
         }
     } else {
+        // if fuzzy feature is enabled and on unix based systems check for the corresponding completion_type
+        #[cfg(all(unix, feature = "with-fuzzy"))]
+        {
+            if CompletionType::Fuzzy == config.completion_type() {
+                // skim takes input of candidates separated by new line
+                let input = candidates
+                    .iter()
+                    .map(|c| c.display())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                // setup skim and run with input options
+                // will display UI for fuzzy search and return selected results
+                // by default skim multi select is off so only expect one selection
+
+                let options = SkimOptionsBuilder::default()
+                    .height(Some("20%"))
+                    .prompt(Some("? "))
+                    .reverse(true)
+                    .build()
+                    .unwrap();
+
+                let selected_items =
+                    Skim::run_with(&options, Some(Box::new(std::io::Cursor::new(input))))
+                        .map(|out| out.selected_items)
+                        .unwrap_or_else(|| Vec::new());
+
+                // match the first (and only) returned option with the candidate and update the line
+                // otherwise only refresh line to clear the skim UI changes
+                if let Some(item) = selected_items.first() {
+                    if let Some(candidate) = candidates.get(item.get_index()) {
+                        completer.update(&mut s.line, start, candidate.replacement());
+                    }
+                }
+                s.refresh_line()?;
+            }
+        };
         Ok(None)
     }
 }

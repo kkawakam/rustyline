@@ -242,6 +242,10 @@ pub enum Movement {
     BackwardChar(RepeatCount),
     /// forward-char
     ForwardChar(RepeatCount),
+    /// move to the same column on the previous line
+    LineUp(RepeatCount),
+    /// move to the same column on the next line
+    LineDown(RepeatCount),
 }
 
 impl Movement {
@@ -263,6 +267,8 @@ impl Movement {
             }
             Movement::BackwardChar(previous) => Movement::BackwardChar(repeat_count(previous, new)),
             Movement::ForwardChar(previous) => Movement::ForwardChar(repeat_count(previous, new)),
+            Movement::LineUp(previous) => Movement::LineUp(repeat_count(previous, new)),
+            Movement::LineDown(previous) => Movement::LineDown(repeat_count(previous, new)),
         }
     }
 }
@@ -690,10 +696,12 @@ impl InputState {
             KeyPress::Char(' ') => Cmd::Move(Movement::ForwardChar(n)),
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
             KeyPress::Char('+') |
-            KeyPress::Char('j') | // TODO: move to the start of the line.
+            KeyPress::Char('j') => Cmd::Move(Movement::LineDown(n)),
+            // TODO: move to the start of the line.
             KeyPress::Ctrl('N') => Cmd::NextHistory,
             KeyPress::Char('-') |
-            KeyPress::Char('k') | // TODO: move to the start of the line.
+            KeyPress::Char('k') => Cmd::Move(Movement::LineUp(n)),
+            // TODO: move to the start of the line.
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('R') => {
                 self.input_mode = InputMode::Insert; // TODO Validate

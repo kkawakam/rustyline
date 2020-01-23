@@ -480,6 +480,63 @@ impl LineBuffer {
         }
     }
 
+    /// Moves the cursor to the same column in the line above
+    pub fn move_to_line_up(&mut self, n: RepeatCount) -> bool {
+        match self.buf[..self.pos].rfind('\n') {
+            Some(off) => {
+                let column = self.buf[off+1..self.pos].graphemes(true).count();
+
+                let mut dest_start = self.buf[..off].rfind('\n').unwrap_or(0);
+                let mut dest_end = off;
+                for _ in 1..n {
+                    if dest_start == 0 { break; }
+                    dest_end = dest_start-1;
+                    dest_start = self.buf[..dest_end].rfind('\n')
+                        .unwrap_or(0);
+                }
+
+                let new_off = self.buf[dest_start..dest_end]
+                    .grapheme_indices(true)
+                    .nth(column)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(off); // if there's no enough columns
+                self.pos = dest_start + new_off;
+                return true;
+            }
+            None => return false,
+        }
+    }
+
+    /// Moves the cursor to the same column in the line above
+    pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
+        match self.buf[self.pos..].find('\n') {
+            Some(off) => {
+                let line_start = self.buf[..self.pos].rfind('\n')
+                    .unwrap_or(0);
+                let column = self.buf[line_start..self.pos]
+                    .graphemes(true).count();
+                let mut dest_start = self.pos + off+1;
+                let mut dest_end = self.buf[dest_start..].find('\n')
+                    .map(|v| dest_start + v)
+                    .unwrap_or(self.buf.len());
+                for _ in 1..n {
+                    if dest_end == self.buf.len() { break; }
+                    dest_start = dest_end+1;
+                    dest_end = self.buf[dest_start..].find('\n')
+                        .unwrap_or(self.buf.len());
+                }
+                let new_off = self.buf[dest_start..dest_end]
+                    .grapheme_indices(true)
+                    .nth(column)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(dest_end); // if there's no enough columns
+                self.pos = dest_start + new_off;
+                return true;
+            }
+            None => return false,
+        }
+    }
+
     fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
         let mut shift = 0;
         let search_result = match cs {
@@ -785,6 +842,12 @@ impl LineBuffer {
                     None
                 }
             }
+            Movement::LineUp(n) => {
+                todo!("copy line up");
+            }
+            Movement::LineDown(n) => {
+                todo!("copy line down");
+            }
         }
     }
 
@@ -829,6 +892,12 @@ impl LineBuffer {
                 self.delete_word(at, word_def, n)
             }
             Movement::ViCharSearch(n, cs) => self.delete_to(cs, n),
+            Movement::LineUp(n) => {
+                todo!("kill up lines");
+            }
+            Movement::LineDown(n) => {
+                todo!("kill down lines");
+            }
             Movement::ViFirstPrint => {
                 false // TODO
             }

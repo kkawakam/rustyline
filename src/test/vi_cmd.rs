@@ -429,6 +429,63 @@ fn j() {
     for key in &[
         KeyPress::Char('j'),
         KeyPress::Char('+'),
+    ] {
+        assert_cursor(
+            EditMode::Vi,
+            ("Hel", "lo,\nworld!"),
+            // NOTE: escape moves backwards on char
+            &[KeyPress::Esc, *key, KeyPress::Enter],
+            ("Hello,\nwo", "rld!"),
+        );
+        assert_cursor(
+            EditMode::Vi,
+            ("", "One\nTwo\nThree"),
+            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            ("One\nTwo\n", "Three"),
+        );
+        assert_cursor(
+            EditMode::Vi,
+            ("Hel", "lo,\nworld!"),
+            // NOTE: escape moves backwards on char
+            &[KeyPress::Esc, KeyPress::Char('7'), *key, KeyPress::Enter],
+            ("Hello,\nwo", "rld!"),
+        );
+    }
+}
+
+#[test]
+fn k() {
+    for key in &[
+        KeyPress::Char('k'),
+        KeyPress::Char('-'),
+    ] {
+        assert_cursor(
+            EditMode::Vi,
+            ("Hello,\nworl", "d!"),
+            // NOTE: escape moves backwards on char
+            &[KeyPress::Esc, *key, KeyPress::Enter],
+            ("Hel", "lo,\nworld!"),
+        );
+        assert_cursor(
+            EditMode::Vi,
+            ("One\nTwo\nT", "hree"),
+            // NOTE: escape moves backwards on char
+            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            ("", "One\nTwo\nThree"),
+        );
+        assert_cursor(
+            EditMode::Vi,
+            ("Hello,\nworl", "d!"),
+            // NOTE: escape moves backwards on char
+            &[KeyPress::Esc, KeyPress::Char('5'), *key, KeyPress::Enter],
+            ("Hel", "lo,\nworld!"),
+        );
+    }
+}
+
+#[test]
+fn ctrl_n() {
+    for key in &[
         KeyPress::Ctrl('N'),
     ] {
         assert_history(
@@ -448,10 +505,8 @@ fn j() {
 }
 
 #[test]
-fn k() {
+fn ctrl_p() {
     for key in &[
-        KeyPress::Char('k'),
-        KeyPress::Char('-'),
         KeyPress::Ctrl('P'),
     ] {
         assert_history(

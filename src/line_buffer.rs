@@ -495,12 +495,11 @@ impl LineBuffer {
                         .unwrap_or(0);
                 }
 
-                let new_off = self.buf[dest_start..dest_end]
+                self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
                     .nth(column)
-                    .map(|(idx, _)| idx)
+                    .map(|(idx, _)| dest_start + idx)
                     .unwrap_or(off); // if there's no enough columns
-                self.pos = dest_start + new_off;
                 return true;
             }
             None => return false,

@@ -480,6 +480,12 @@ fn k() {
             &[KeyPress::Esc, KeyPress::Char('5'), *key, KeyPress::Enter],
             ("Hel", "lo,\nworld!"),
         );
+        assert_cursor(
+            EditMode::Vi,
+            ("first line\nshort\nlong line", ""),
+            &[KeyPress::Esc, *key, KeyPress::Enter],
+            ("first line\nshort", "\nlong line"),
+        );
     }
 }
 

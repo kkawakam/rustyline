@@ -508,6 +508,8 @@ fn readline_edit<H: Helper>(
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?
             }
+            #[cfg(not(unix))]
+            Cmd::QuotedInsert => {}
             Cmd::Yank(n, anchor) => {
                 // retrieve (yank) last item killed
                 let mut kill_ring = editor.kill_ring.lock().unwrap();
@@ -603,6 +605,8 @@ fn readline_edit<H: Helper>(
                 s.refresh_line()?;
                 continue;
             }
+            #[cfg(not(unix))]
+            Cmd::Suspend => {}
             Cmd::Move(Movement::WholeLine) => {} // not an actual movement
             Cmd::Complete | Cmd::CompleteBackward | Cmd::CompleteHint |
             Cmd::ForwardSearchHistory | Cmd::ReverseSearchHistory |

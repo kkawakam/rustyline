@@ -812,6 +812,8 @@ impl InputState {
                 Some(Movement::BackwardChar(n))
             }
             KeyPress::Char('l') | KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
+            KeyPress::Char('j') | KeyPress::Char('+') => Some(Movement::LineDown(n)),
+            KeyPress::Char('k') | KeyPress::Char('-') => Some(Movement::LineUp(n)),
             KeyPress::Char('w') => {
                 // 'cw' is 'ce'
                 if key == KeyPress::Char('c') {

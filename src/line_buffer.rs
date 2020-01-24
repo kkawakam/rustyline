@@ -507,6 +507,49 @@ impl LineBuffer {
         }
     }
 
+    /// N lines up starting from the current one
+    ///
+    /// Fails if the cursor is on the first line
+    fn n_lines_up(&self, n: RepeatCount) -> Option<(usize, usize)> {
+        let mut start = if let Some(off) = self.buf[..self.pos].rfind('\n') {
+            off+1
+        } else {
+            return None;
+        };
+        let end = self.buf[self.pos..].find('\n')
+            .map(|x| self.pos + x + 1).unwrap_or(self.buf.len());
+        for _ in 0..n {
+            if let Some(off) = self.buf[..start-1].rfind('\n') {
+                start = off+1
+            } else {
+                start = 0;
+                break;
+            }
+        }
+        return Some((start, end));
+    }
+
+    /// N lines down starting from the current one
+    ///
+    /// Fails if the cursor is on the last line
+    fn n_lines_down(&self, n: RepeatCount) -> Option<(usize, usize)> {
+        let mut end = if let Some(off) = self.buf[self.pos..].find('\n') {
+            self.pos + off + 1
+        } else {
+            return None;
+        };
+        let start = self.buf[..self.pos].rfind('\n').unwrap_or(0);
+        for _ in 0..n {
+            if let Some(off) = self.buf[end..].find('\n') {
+                end = end + off + 1
+            } else {
+                end = self.buf.len();
+                break;
+            };
+        }
+        return Some((start, end));
+    }
+
     /// Moves the cursor to the same column in the line above
     pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
         match self.buf[self.pos..].find('\n') {
@@ -843,10 +886,18 @@ impl LineBuffer {
                 }
             }
             Movement::LineUp(n) => {
-                todo!("copy line up");
+                if let Some((start, end)) = self.n_lines_up(n) {
+                    Some(self.buf[start..end].to_owned())
+                } else {
+                    None
+                }
             }
             Movement::LineDown(n) => {
-                todo!("copy line down");
+                if let Some((start, end)) = self.n_lines_down(n) {
+                    Some(self.buf[start..end].to_owned())
+                } else {
+                    None
+                }
             }
         }
     }
@@ -893,10 +944,20 @@ impl LineBuffer {
             }
             Movement::ViCharSearch(n, cs) => self.delete_to(cs, n),
             Movement::LineUp(n) => {
-                todo!("kill up lines");
+                if let Some((start, end)) = self.n_lines_up(n) {
+                    self.delete_range(start..end);
+                    true
+                } else {
+                    false
+                }
             }
             Movement::LineDown(n) => {
-                todo!("kill down lines");
+                if let Some((start, end)) = self.n_lines_down(n) {
+                    self.delete_range(start..end);
+                    true
+                } else {
+                    false
+                }
             }
             Movement::ViFirstPrint => {
                 false // TODO

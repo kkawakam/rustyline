@@ -566,14 +566,15 @@ impl LineBuffer {
                     if dest_end == self.buf.len() { break; }
                     dest_start = dest_end+1;
                     dest_end = self.buf[dest_start..].find('\n')
+                        .map(|v| dest_start + v)
                         .unwrap_or(self.buf.len());
                 }
-                let new_off = self.buf[dest_start..dest_end]
+                self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
                     .nth(column)
-                    .map(|(idx, _)| idx)
+                    .map(|(idx, _)| dest_start + idx)
                     .unwrap_or(dest_end); // if there's no enough columns
-                self.pos = dest_start + new_off;
+                debug_assert!(self.pos <= self.buf.len());
                 return true;
             }
             None => return false,

@@ -536,6 +536,16 @@ fn readline_edit<H: Helper>(
                 // Fetch the previous command from the history list.
                 s.edit_history_next(true)?
             }
+            Cmd::LineUpOrPreviousHistory => {
+                if !s.edit_move_line_up(1)? {
+                    s.edit_history_next(true)?
+                }
+            }
+            Cmd::LineDownOrNextHistory => {
+                if !s.edit_move_line_down(1)? {
+                    s.edit_history_next(false)?
+                }
+            }
             Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
             Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
             Cmd::TransposeChars => {
@@ -603,10 +613,10 @@ fn readline_edit<H: Helper>(
                 s.edit_move_to_next_word(at, word_def, n)?
             }
             Cmd::Move(Movement::LineUp(n)) => {
-                s.edit_move_line_up(n)?
+                s.edit_move_line_up(n)?;
             }
             Cmd::Move(Movement::LineDown(n)) => {
-                s.edit_move_line_down(n)?
+                s.edit_move_line_down(n)?;
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point

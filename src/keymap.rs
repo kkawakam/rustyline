@@ -88,6 +88,12 @@ pub enum Cmd {
     Yank(RepeatCount, Anchor),
     /// yank-pop
     YankPop,
+    /// moves cursor to the line above or switches to prev history entry if
+    /// the cursor is already on the first line
+    LineUpOrPreviousHistory,
+    /// moves cursor to the line below or switches to next history entry if
+    /// the cursor is already on the last line
+    LineDownOrNextHistory,
 }
 
 impl Cmd {
@@ -891,8 +897,8 @@ impl InputState {
             }
             KeyPress::Ctrl('J') |
             KeyPress::Enter => Cmd::AcceptLine,
-            KeyPress::Down => Cmd::NextHistory,
-            KeyPress::Up => Cmd::PreviousHistory,
+            KeyPress::Down => Cmd::LineDownOrNextHistory,
+            KeyPress::Up => Cmd::LineUpOrPreviousHistory,
             KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
             KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
             KeyPress::Ctrl('T') => Cmd::TransposeChars,

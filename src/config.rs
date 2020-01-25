@@ -214,7 +214,7 @@ pub enum OutputStreamType {
 }
 
 /// Configuration builder
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Builder {
     p: Config,
 }

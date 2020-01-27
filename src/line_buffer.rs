@@ -294,6 +294,11 @@ impl LineBuffer {
         }
     }
 
+    /// Is cursor at the end of input (whitespaces after cursor is discarded)
+    pub fn is_end_of_input(&self) -> bool {
+        self.pos >= self.buf.trim_end().len()
+    }
+
     /// Delete the character at the right of the cursor without altering the
     /// cursor position. Basically this is what happens with the "Delete"
     /// keyboard key.

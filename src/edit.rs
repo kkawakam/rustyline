@@ -142,7 +142,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     ) -> Result<()> {
         let info = match info {
             Info::NoHint => None,
-            Info::Hint => self.hint.as_ref().map(String::as_str),
+            Info::Hint => self.hint.as_deref(),
             Info::Msg(msg) => msg,
         };
         let highlighter = if self.out.colors_enabled() {
@@ -272,12 +272,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
-        self.refresh(
-            self.prompt,
-            prompt_size,
-            true,
-            Info::Msg(msg.as_ref().map(String::as_str)),
-        )
+        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg.as_deref()))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {

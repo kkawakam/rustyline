@@ -188,7 +188,8 @@ fn complete_line<H: Helper>(
             Ok(None)
         }
     } else {
-        // if fuzzy feature is enabled and on unix based systems check for the corresponding completion_type
+        // if fuzzy feature is enabled and on unix based systems check for the
+        // corresponding completion_type
         #[cfg(all(unix, feature = "with-fuzzy"))]
         {
             if CompletionType::Fuzzy == config.completion_type() {
@@ -213,10 +214,10 @@ fn complete_line<H: Helper>(
                 let selected_items =
                     Skim::run_with(&options, Some(Box::new(std::io::Cursor::new(input))))
                         .map(|out| out.selected_items)
-                        .unwrap_or_else(|| Vec::new());
+                        .unwrap_or_else(Vec::new);
 
-                // match the first (and only) returned option with the candidate and update the line
-                // otherwise only refresh line to clear the skim UI changes
+                // match the first (and only) returned option with the candidate and update the
+                // line otherwise only refresh line to clear the skim UI changes
                 if let Some(item) = selected_items.first() {
                     if let Some(candidate) = candidates.get(item.get_index()) {
                         completer.update(&mut s.line, start, candidate.replacement());
@@ -457,7 +458,7 @@ fn readline_edit<H: Helper>(
             }
         }
 
-        if let Cmd::CompleteHint = cmd {
+        if Cmd::CompleteHint == cmd {
             complete_hint_line(&mut s)?;
             continue;
         }

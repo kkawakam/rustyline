@@ -115,8 +115,8 @@ impl Cmd {
             | Cmd::SelfInsert(_, _)
             | Cmd::ViYankTo(_)
             | Cmd::Yank(_, _) => true,
-            Cmd::TransposeChars // TODO Validate
-            | _ => false,
+            // Cmd::TransposeChars | TODO Validate
+            _ => false,
         }
     }
 

@@ -191,8 +191,8 @@ pub enum CompletionType {
 
     /// Complete the match using fuzzy search and selection
     /// (like fzf and plugins)
-    /// Currently only available for unix platforms as dependency on skim->tuikit
-    /// Compile with `--features=fuzzy` to enable
+    /// Currently only available for unix platforms as dependency on
+    /// skim->tuikit Compile with `--features=fuzzy` to enable
     #[cfg(all(unix, feature = "with-fuzzy"))]
     Fuzzy,
 }

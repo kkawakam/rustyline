@@ -6,7 +6,6 @@ use std::char;
 use std::error;
 use std::fmt;
 use std::io;
-use std::str;
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
@@ -50,23 +49,7 @@ impl fmt::Display for ReadlineError {
     }
 }
 
-impl error::Error for ReadlineError {
-    fn description(&self) -> &str {
-        match *self {
-            ReadlineError::Io(ref err) => err.description(),
-            ReadlineError::Eof => "EOF",
-            ReadlineError::Interrupted => "Interrupted",
-            #[cfg(unix)]
-            ReadlineError::Utf8Error => "invalid utf-8: corrupt contents",
-            #[cfg(unix)]
-            ReadlineError::Errno(ref err) => err.description(),
-            #[cfg(windows)]
-            ReadlineError::WindowResize => "WindowResize",
-            #[cfg(windows)]
-            ReadlineError::Decode(ref err) => err.description(),
-        }
-    }
-}
+impl error::Error for ReadlineError {}
 
 impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> Self {

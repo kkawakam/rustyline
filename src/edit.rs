@@ -512,6 +512,24 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
+    /// Moves the cursor to the same column in the line above
+    pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.move_to_line_up(n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Moves the cursor to the same column in the line above
+    pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<()> {
+        if self.line.move_to_line_down(n) {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn edit_move_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
         if self.line.move_to(cs, n) {
             self.move_cursor()

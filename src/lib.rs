@@ -602,6 +602,12 @@ fn readline_edit<H: Helper>(
                 // move forwards one word
                 s.edit_move_to_next_word(at, word_def, n)?
             }
+            Cmd::Move(Movement::LineUp(n)) => {
+                s.edit_move_line_up(n)?
+            }
+            Cmd::Move(Movement::LineDown(n)) => {
+                s.edit_move_line_down(n)?
+            }
             Cmd::DowncaseWord => {
                 // lowercase word after point
                 s.edit_word(WordAction::LOWERCASE)?

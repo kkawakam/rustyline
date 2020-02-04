@@ -513,20 +513,22 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     /// Moves the cursor to the same column in the line above
-    pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<()> {
+    pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
         if self.line.move_to_line_up(n) {
-            self.move_cursor()
+            self.move_cursor()?;
+            Ok(true)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 
     /// Moves the cursor to the same column in the line above
-    pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<()> {
+    pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
         if self.line.move_to_line_down(n) {
-            self.move_cursor()
+            self.move_cursor()?;
+            Ok(true)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 

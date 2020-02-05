@@ -281,6 +281,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::SelfInsert(1, ' ')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
+                && cmd != Cmd::AcceptOrInsertLine
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -288,7 +289,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
-                Cmd::AcceptLine => {
+                Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -572,20 +573,21 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::AcceptLine => {
+            Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
                 #[cfg(test)]
                 {
                     editor.term.cursor = s.layout.cursor.col;
                 }
-                // Accept the line regardless of where the cursor is.
                 if s.has_hint() || !s.is_default_prompt() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
                     s.refresh_line_with_msg(None)?;
                 }
-                s.edit_move_end()?;
-                if s.validate()? {
+                // Only accept value if cursor is at the end of the buffer
+                if s.validate()? && (cmd == Cmd::AcceptLine || s.line.is_end_of_input()) {
                     break;
+                } else {
+                    s.edit_insert('\n', 1)?;
                 }
                 continue;
             }

@@ -94,6 +94,9 @@ pub enum Cmd {
     /// moves cursor to the line below or switches to next history entry if
     /// the cursor is already on the last line
     LineDownOrNextHistory,
+    /// accepts the line when cursor is at the end of the text (non including
+    /// trailing whitespace), inserts newline character otherwise
+    AcceptOrInsertLine,
 }
 
 impl Cmd {

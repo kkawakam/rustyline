@@ -226,13 +226,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let corrected = self.changes.borrow_mut().end();
             let validated = match result {
                 ValidationResult::Incomplete => {
-                    self.edit_move_end()?;
-                    self.edit_insert('\n', 1)?;
                     false
                 }
                 ValidationResult::Valid(msg) => {
                     // Accept the line regardless of where the cursor is.
-                    self.edit_move_end()?;
                     if corrected || self.has_hint() || msg.is_some() {
                         // Force a refresh without hints to leave the previous
                         // line as the user typed it after a newline.

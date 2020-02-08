@@ -15,6 +15,7 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 **Note**:
 * Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
 * Mintty (Cygwin/MinGW) is not supported
+* Highlighting / Colors are not supported on Windows < Windows 10 except with ConEmu and `ColorMode::Forced`.
 
 ## Example
 ```rust

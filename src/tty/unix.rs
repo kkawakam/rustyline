@@ -1,5 +1,6 @@
 //! Unix specific definitions
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
@@ -18,7 +19,7 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, Key, KeyPress};
+use crate::keys::{self, Key, KeyMods, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::tty::add_prompt_and_highlight;
@@ -126,6 +127,285 @@ impl Read for StdinRaw {
     }
 }
 
+// Escape sequences tend to be small (They also aren't all UTF8 but in practice
+// they pretty much are)
+type EscapeSeq = smallvec::SmallVec<[u8; 12]>;
+
+/// Basically a dictionary from escape sequences to keys. It can also tell us if
+/// a sequence cannot possibly result in
+struct EscapeBindings {
+    bindings: HashMap<EscapeSeq, KeyPress>,
+    // Stores each prefix of a binding in bindings. For example: if we have
+    // b"\x1b[18;2~" as a binding, `prefixes` will store `\x1b`, `\x1b[`,
+    // `\x1b[1`, `\x1b[18`, `\x1b[18;`, and so on. We also use it to detect if
+    // there's an ambiguous binding during startup.
+    //
+    // In an ideal world we'd use some prefix tree structure, but I surprisingly
+    // couldn't find one that actually supported an `item_with_prefix_exists`
+    // (or similar) function.
+    //
+    // This exists so we know when to emit an "unknown escape code" complaint.
+    prefixes: HashSet<EscapeSeq>,
+    max_len: usize,
+}
+
+impl EscapeBindings {
+    pub fn common_unix() -> Self {
+        let mut res = Self {
+            bindings: HashMap::new(),
+            prefixes: HashSet::new(),
+            max_len: 0,
+        };
+        res.add_common_unix();
+        res
+    }
+
+    // Note: the overwrite flag is always false during initialization. It means
+    // we panic if there's a dupe or if one escape is the prefix of another. and
+    // just here for the hard-coded binding list, that we don't accidentally
+    // break various bindings when stuff inevitably gets added to the default
+    // list. If we implement populating the binding set dynamically (via
+    // terminfo, a config file, ...) then we should allow overwriting.
+    //
+    // Also this takes string input only because it debug formats much nicer. As
+    // I mentioned above, escape sequences aren't generally utf8-encoded.
+    fn bind(&mut self, binding: impl Into<KeyPress>, seq_str: &str, overwrite: bool) {
+        let binding = binding.into();
+        let seq = seq_str.as_bytes();
+        assert!(!seq.is_empty());
+        assert!(overwrite || !self.prefixes.contains(seq), "{:?}", seq_str);
+        assert!(
+            overwrite || !self.bindings.contains_key(seq),
+            "{:?}",
+            seq_str
+        );
+        if seq.len() > 1 {
+            // Go in reverse so that we don't add the same prefixes again and
+            // again --
+            for i in (1..seq.len()).rev() {
+                let existed = self.prefixes.insert(seq[..i].into());
+                if existed {
+                    break;
+                }
+                // Check if the thing we're adding is already blocked because it
+                // has a prefix.
+                assert!(
+                    overwrite || !self.bindings.contains_key(&seq[..i]),
+                    "{:?} is prefix of {:?}: {:?}",
+                    &seq_str[..i],
+                    seq_str,
+                    binding
+                );
+            }
+        }
+        let existed = self.bindings.insert(seq.into(), binding);
+        if !overwrite {
+            assert_eq!(existed, None, "{:?} {:?}", seq_str, binding);
+        }
+        if seq.len() >= self.max_len {
+            self.max_len = seq.len();
+        }
+    }
+
+    // Ideally some of this would be read out of terminfo, but... that's a pain
+    // and terminfo doesn't have entries for everything, and sometime's it's
+    // just wrong anyway (*cough* iTerm *cough*). So instead we just add
+    // more-or-less everything we care about to the set of bindings. That said,
+    // this is actually fine. These are the strings that are coming out of the
+    // terminal, so long as two terminals don't use the same strings to mean
+    // different things, it won't be a problem that we have so many items in our list.
+    fn add_common_unix(&mut self) {
+        // Ansi, vt220+, xterm, ...
+        self.bind(Key::Up, "\x1b[A", false);
+        self.bind(Key::Down, "\x1b[B", false);
+        self.bind(Key::Right, "\x1b[C", false);
+        self.bind(Key::Left, "\x1b[D", false);
+        self.bind(Key::End, "\x1b[F", false);
+        self.bind(Key::Home, "\x1b[H", false);
+        self.bind(Key::BackTab, "\x1b[Z", false);
+
+        // v220-style special keys
+        self.bind(Key::Home, "\x1b[1~", false);
+        self.bind(Key::Insert, "\x1b[2~", false);
+        self.bind(Key::Delete, "\x1b[3~", false);
+        self.bind(Key::End, "\x1b[4~", false);
+        self.bind(Key::PageUp, "\x1b[5~", false);
+        self.bind(Key::PageDown, "\x1b[6~", false);
+
+        // Apparently from tmux or rxvt? okay.
+        self.bind(Key::Home, "\x1b[7~", false);
+        self.bind(Key::End, "\x1b[8~", false);
+
+        // xterm family "app mode"
+        self.bind(Key::Up, "\x1bOA", false);
+        self.bind(Key::Down, "\x1bOB", false);
+        self.bind(Key::Right, "\x1bOC", false);
+        self.bind(Key::Left, "\x1bOD", false);
+        self.bind(Key::Home, "\x1bOH", false);
+        self.bind(Key::End, "\x1bOF", false);
+
+        // Present in the last version of this code, but I think i
+        self.bind(Key::Up.ctrl(), "\x1bOa", false);
+        self.bind(Key::Down.ctrl(), "\x1bOb", false);
+        self.bind(Key::Right.ctrl(), "\x1bOc", false);
+        self.bind(Key::Left.ctrl(), "\x1bOd", false);
+
+        // vt100-style (F1-F4 are more common)
+        self.bind(Key::F(1), "\x1bOP", false);
+        self.bind(Key::F(2), "\x1bOQ", false);
+        self.bind(Key::F(3), "\x1bOR", false);
+        self.bind(Key::F(4), "\x1bOS", false);
+        self.bind(Key::F(5), "\x1bOt", false);
+        self.bind(Key::F(6), "\x1bOu", false);
+        self.bind(Key::F(7), "\x1bOv", false);
+        self.bind(Key::F(8), "\x1bOl", false);
+        self.bind(Key::F(9), "\x1bOw", false);
+        self.bind(Key::F(10), "\x1bOx", false);
+
+        // linux console
+        self.bind(Key::F(1), "\x1b[[A", false);
+        self.bind(Key::F(2), "\x1b[[B", false);
+        self.bind(Key::F(3), "\x1b[[C", false);
+        self.bind(Key::F(4), "\x1b[[D", false);
+        self.bind(Key::F(5), "\x1b[[E", false);
+        // rxvt-family, but follows the v220 format
+        self.bind(Key::F(1), "\x1b[11~", false);
+        self.bind(Key::F(2), "\x1b[12~", false);
+        self.bind(Key::F(3), "\x1b[13~", false);
+        self.bind(Key::F(4), "\x1b[14~", false);
+        self.bind(Key::F(5), "\x1b[15~", false);
+        // these are common, though.
+        self.bind(Key::F(6), "\x1b[17~", false);
+        self.bind(Key::F(7), "\x1b[18~", false);
+        self.bind(Key::F(8), "\x1b[19~", false);
+        self.bind(Key::F(9), "\x1b[20~", false);
+        self.bind(Key::F(10), "\x1b[21~", false);
+        self.bind(Key::F(11), "\x1b[23~", false);
+        self.bind(Key::F(12), "\x1b[24~", false);
+
+        // RXVT among others
+        self.bind(Key::Up.ctrl(), "\x1b[Oa", false);
+        self.bind(Key::Down.ctrl(), "\x1b[Ob", false);
+        self.bind(Key::Right.ctrl(), "\x1b[Oc", false);
+        self.bind(Key::Left.ctrl(), "\x1b[Od", false);
+        self.bind(Key::Home.ctrl(), "\x1b[7^", false);
+        self.bind(Key::End.ctrl(), "\x1b[8^", false);
+
+        self.bind(Key::Up.shift(), "\x1b[a", false);
+        self.bind(Key::Down.shift(), "\x1b[b", false);
+        self.bind(Key::Right.shift(), "\x1b[c", false);
+        self.bind(Key::Left.shift(), "\x1b[d", false);
+        self.bind(Key::Home.shift(), "\x1b[7$", false);
+        self.bind(Key::End.shift(), "\x1b[8$", false);
+
+        if cfg!(target_os = "macos") {
+            // Ugh. These are annoying, since I like these terminals, but the
+            // codes they send are annoying special cases, so we actually check
+            // for them directly. Thankfully, they announce their presence via
+            // the `TERM_PROGRAM` var.
+            if let Ok(v) = std::env::var("TERM_PROGRAM") {
+                debug!(target: "rustyline", "term program: {}", v);
+                match v.as_str() {
+                    "Apple_Terminal" => {
+                        // Yep, really.
+                        self.bind(Key::Left.meta(), "\x1bb", false);
+                        self.bind(Key::Right.meta(), "\x1bf", false);
+                    }
+                    "iTerm.app" => {
+                        self.bind(Key::Up.meta(), "\x1b\x1b[A", false);
+                        self.bind(Key::Down.meta(), "\x1b\x1b[B", false);
+                        self.bind(Key::Right.meta(), "\x1b\x1b[C", false);
+                        self.bind(Key::Left.meta(), "\x1b\x1b[D", false);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // xterm style key mods. Some of these are in terminfos (kLFT3 and so
+        // on), at least in the extensions section (e.g. pass -x to infocmp).
+        // But they're all documented here:
+        // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+        let mods = [
+            ("2", KeyMods::SHIFT),
+            // Bind alt to meta, since it should be harmless to do so, and might
+            // prevent issues for someone.
+            ("3", KeyMods::META),       // Alt
+            ("4", KeyMods::META_SHIFT), // Alt + Shift
+            ("5", KeyMods::CTRL),
+            ("6", KeyMods::CTRL_SHIFT),
+            ("7", KeyMods::CTRL_META),       // Ctrl + Alt
+            ("8", KeyMods::CTRL_META_SHIFT), // Ctrl + Alt + Shift
+            ("9", KeyMods::META),
+            ("10", KeyMods::META_SHIFT),
+            ("11", KeyMods::META),       // Meta + Alt
+            ("12", KeyMods::META_SHIFT), // Meta + Alt + Shift
+            ("13", KeyMods::CTRL_META),
+            ("14", KeyMods::CTRL_META_SHIFT),
+            ("15", KeyMods::CTRL_META),       // Meta + Ctrl + Alt
+            ("16", KeyMods::CTRL_META_SHIFT), // Meta + Ctrl + Alt + Shift
+        ];
+        let keys = [
+            ("A", Key::Up),
+            ("B", Key::Down),
+            ("C", Key::Right),
+            ("D", Key::Left),
+            ("H", Key::Home),
+            ("F", Key::End),
+        ];
+
+        for &(num, m) in mods.iter() {
+            for &(ch, k) in keys.iter() {
+                // e.g. \E[1;2A
+                self.bind(k.with_mods(m), &format!("\x1b[1;{}{}", num, ch), false);
+            }
+        }
+        // still xterm, seems to be a slight variation...
+        self.bind(Key::PageUp.shift(), "\x1b[5;2~", false);
+        self.bind(Key::PageDown.shift(), "\x1b[6;2~", false);
+
+        self.bind(Key::BracketedPasteStart, "\x1b[200~", false);
+        self.bind(Key::BracketedPasteEnd, "\x1b[201~", false);
+    }
+
+    pub fn lookup(&self, v: &[u8]) -> EscapeSearchResult {
+        if let Some(k) = self.bindings.get(v) {
+            EscapeSearchResult::Matched(*k)
+        } else if self.prefixes.contains(v) {
+            EscapeSearchResult::IsPrefix
+        } else {
+            EscapeSearchResult::NoMatch
+        }
+    }
+}
+
+struct EscDebug<'a>(&'a [u8]);
+impl<'a> std::fmt::Debug for EscDebug<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, &b) in self.0.iter().enumerate() {
+            if i != 0 {
+                f.write_str(" ")?;
+            }
+            if b == 0x1b {
+                f.write_str("ESC")?;
+            } else if b.is_ascii_graphic() && !b.is_ascii_whitespace() {
+                write!(f, "{}", b as char)?;
+            } else {
+                write!(f, "'\\x{:02x}'", b)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Return value of `EscapeBinding::lookup`
+#[derive(Clone, Copy)]
+enum EscapeSearchResult {
+    Matched(KeyPress),
+    IsPrefix,
+    NoMatch,
+}
+
 /// Console input reader
 pub struct PosixRawReader {
     stdin: StdinRaw,
@@ -133,6 +413,7 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    escapes: EscapeBindings,
 }
 
 struct Utf8 {
@@ -147,6 +428,7 @@ impl PosixRawReader {
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
             parser: Parser::new(),
+            escapes: EscapeBindings::common_unix(),
             receiver: Utf8 {
                 c: None,
                 valid: true,
@@ -154,221 +436,38 @@ impl PosixRawReader {
         })
     }
 
-    /// Handle ESC <seq1> sequences
     fn escape_sequence(&mut self) -> Result<KeyPress> {
-        // Read the next byte representing the escape sequence.
-        let seq1 = self.next_char()?;
-        if seq1 == '[' {
-            // ESC [ sequences. (CSI)
-            self.escape_csi()
-        } else if seq1 == 'O' {
-            // xterm
-            // ESC O sequences. (SS3)
-            self.escape_o()
-        } else if seq1 == '\x1b' {
-            // ESC ESC
-            Ok(KeyPress::ESC)
-        } else {
-            // TODO ESC-R (r): Undo all changes made to this line.
-            Ok(KeyPress::meta(seq1))
-        }
-    }
+        let mut buffer = EscapeSeq::new();
+        buffer.push(b'\x1b');
+        let mut first = true;
+        loop {
+            let c = self.next_char()?;
+            buffer.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
 
-    /// Handle ESC [ <seq2> escape sequences
-    fn escape_csi(&mut self) -> Result<KeyPress> {
-        let seq2 = self.next_char()?;
-        if seq2.is_digit(10) {
-            match seq2 {
-                '0' | '9' => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                    Ok(Key::UnknownEscSeq.into())
+            match self.escapes.lookup(&buffer) {
+                EscapeSearchResult::Matched(k) => {
+                    return Ok(k);
                 }
-                _ => {
-                    // Extended escape, read additional byte.
-                    self.extended_escape(seq2)
-                }
-            }
-        } else if seq2 == '[' {
-            let seq3 = self.next_char()?;
-            // Linux console
-            Ok(match seq3 {
-                'A' => key_press!(F(1)),
-                'B' => key_press!(F(2)),
-                'C' => key_press!(F(3)),
-                'D' => key_press!(F(4)),
-                'E' => key_press!(F(5)),
-                _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ [ {:?}", seq3);
-                    Key::UnknownEscSeq.into()
-                }
-            })
-        } else {
-            // ANSI
-            Ok(match seq2 {
-                'A' => Key::Up.into(),    // kcuu1
-                'B' => Key::Down.into(),  // kcud1
-                'C' => Key::Right.into(), // kcuf1
-                'D' => Key::Left.into(),  // kcub1
-                'F' => Key::End.into(),
-                'H' => Key::Home.into(), // khome
-                'Z' => Key::BackTab.into(),
-                _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                    Key::UnknownEscSeq.into()
-                }
-            })
-        }
-    }
-
-    /// Handle ESC [ <seq2:digit> escape sequences
-    #[allow(clippy::cognitive_complexity)]
-    fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
-        let seq3 = self.next_char()?;
-        if seq3 == '~' {
-            Ok(match seq2 {
-                '1' | '7' => KeyPress::HOME, // tmux, xrvt
-                '2' => KeyPress::INSERT,
-                '3' => KeyPress::DELETE,    // kdch1
-                '4' | '8' => KeyPress::END, // tmux, xrvt
-                '5' => KeyPress::PAGE_UP,   // kpp
-                '6' => KeyPress::PAGE_DOWN, // knp
-                _ => {
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ~", seq2);
-                    Key::UnknownEscSeq.into()
-                }
-            })
-        } else if seq3.is_digit(10) {
-            let seq4 = self.next_char()?;
-            if seq4 == '~' {
-                Ok(match (seq2, seq3) {
-                    ('1', '1') => Key::F(1).into(),  // rxvt-unicode
-                    ('1', '2') => Key::F(2).into(),  // rxvt-unicode
-                    ('1', '3') => Key::F(3).into(),  // rxvt-unicode
-                    ('1', '4') => Key::F(4).into(),  // rxvt-unicode
-                    ('1', '5') => Key::F(5).into(),  // kf5
-                    ('1', '7') => Key::F(6).into(),  // kf6
-                    ('1', '8') => Key::F(7).into(),  // kf7
-                    ('1', '9') => Key::F(8).into(),  // kf8
-                    ('2', '0') => Key::F(9).into(),  // kf9
-                    ('2', '1') => Key::F(10).into(), // kf10
-                    ('2', '3') => Key::F(11).into(), // kf11
-                    ('2', '4') => Key::F(12).into(), // kf12
-                    _ => {
-                        debug!(target: "rustyline",
-                               "unsupported esc sequence: ESC [ {}{} ~", seq2, seq3);
-                        Key::UnknownEscSeq.into()
-                    }
-                })
-            } else if seq4 == ';' {
-                let seq5 = self.next_char()?;
-                if seq5.is_digit(10) {
-                    let seq6 = self.next_char()?;
-                    if seq6.is_digit(10) {
-                        self.next_char()?; // 'R' expected
-                    } else if seq6 == 'R' {
+                EscapeSearchResult::IsPrefix => {}
+                EscapeSearchResult::NoMatch => {
+                    return if first {
+                        // This is a bit cludgey, but works for now. Ideally we'd do
+                        // this based on timing out on a read instead.
+                        if c == '\x1b' {
+                            // ESC ESC
+                            Ok(KeyPress::ESC)
+                        } else {
+                            // TODO ESC-R (r): Undo all changes made to this line.
+                            Ok(KeyPress::meta(c))
+                        }
                     } else {
-                        debug!(target: "rustyline",
-                               "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
-                    }
-                } else {
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
+                        debug!(target: "rustyline", "unsupported esc sequence: {:?}", EscDebug(&buffer));
+                        Ok(Key::UnknownEscSeq.into())
+                    };
                 }
-                Ok(Key::UnknownEscSeq.into())
-            } else if seq4.is_digit(10) {
-                let seq5 = self.next_char()?;
-                if seq5 == '~' {
-                    Ok(match (seq2, seq3, seq4) {
-                        ('2', '0', '0') => Key::BracketedPasteStart.into(),
-                        ('2', '0', '1') => Key::BracketedPasteEnd.into(),
-                        _ => {
-                            debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ {}{}{}~", seq2, seq3, seq4);
-                            Key::UnknownEscSeq.into()
-                        }
-                    })
-                } else {
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{}{} {}", seq2, seq3, seq4, seq5);
-                    Ok(Key::UnknownEscSeq.into())
-                }
-            } else {
-                debug!(target: "rustyline",
-                       "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
-                Ok(Key::UnknownEscSeq.into())
             }
-        } else if seq3 == ';' {
-            let seq4 = self.next_char()?;
-            if seq4.is_digit(10) {
-                let seq5 = self.next_char()?;
-                if seq5.is_digit(10) {
-                    self.next_char()?; // 'R' expected
-                    Ok(Key::UnknownEscSeq.into())
-                } else if seq2 == '1' {
-                    Ok(match (seq4, seq5) {
-                        ('5', 'A') => KeyPress::ctrl(Key::Up),
-                        ('5', 'B') => KeyPress::ctrl(Key::Down),
-                        ('5', 'C') => KeyPress::ctrl(Key::Right),
-                        ('5', 'D') => KeyPress::ctrl(Key::Left),
-                        ('2', 'A') => KeyPress::shift(Key::Up),
-                        ('2', 'B') => KeyPress::shift(Key::Down),
-                        ('2', 'C') => KeyPress::shift(Key::Right),
-                        ('2', 'D') => KeyPress::shift(Key::Left),
-                        _ => {
-                            debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ 1 ; {} {:?}", seq4, seq5);
-                            Key::UnknownEscSeq.into()
-                        }
-                    })
-                } else {
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ; {} {:?}", seq2, seq4, seq5);
-                    Ok(Key::UnknownEscSeq.into())
-                }
-            } else {
-                debug!(target: "rustyline",
-                       "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
-                Ok(Key::UnknownEscSeq.into())
-            }
-        } else {
-            Ok(match (seq2, seq3) {
-                ('5', 'A') => KeyPress::ctrl(Key::Up),
-                ('5', 'B') => KeyPress::ctrl(Key::Down),
-                ('5', 'C') => KeyPress::ctrl(Key::Right),
-                ('5', 'D') => KeyPress::ctrl(Key::Left),
-                _ => {
-                    debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
-                    Key::UnknownEscSeq.into()
-                }
-            })
+            first = false;
         }
-    }
-
-    /// Handle ESC O <seq2> escape sequences
-    fn escape_o(&mut self) -> Result<KeyPress> {
-        let seq2 = self.next_char()?;
-        Ok(match seq2 {
-            'A' => KeyPress::UP,     // kcuu1
-            'B' => KeyPress::DOWN,   // kcud1
-            'C' => KeyPress::RIGHT,  // kcuf1
-            'D' => KeyPress::LEFT,   // kcub1
-            'F' => KeyPress::END,    // kend
-            'H' => KeyPress::HOME,   // khome
-            'P' => Key::F(1).into(), // kf1
-            'Q' => Key::F(2).into(), // kf2
-            'R' => Key::F(3).into(), // kf3
-            'S' => Key::F(4).into(), // kf4
-            'a' => KeyPress::ctrl(Key::Up),
-            'b' => KeyPress::ctrl(Key::Down),
-            'c' => KeyPress::ctrl(Key::Right), // rxvt
-            'd' => KeyPress::ctrl(Key::Left),  // rxvt
-            _ => {
-                debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
-                Key::UnknownEscSeq.into()
-            }
-        })
     }
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {

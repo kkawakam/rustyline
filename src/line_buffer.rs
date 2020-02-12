@@ -160,6 +160,23 @@ impl LineBuffer {
         }
     }
 
+    fn end_of_line(&self) -> usize {
+        if let Some(n) = self.buf[self.pos..].find('\n') {
+            n + self.pos
+        } else {
+            self.buf.len()
+        }
+    }
+
+    fn start_of_line(&self) -> usize {
+        if let Some(i) = self.buf[..self.pos].rfind('\n') {
+            // `i` is before the new line, e.g. at the end of the previous one.
+            i + 1
+        } else {
+            0
+        }
+    }
+
     /// Returns the character at current cursor position.
     pub(crate) fn grapheme_at_cursor(&self) -> Option<&str> {
         if self.pos == self.buf.len() {
@@ -274,8 +291,8 @@ impl LineBuffer {
         }
     }
 
-    /// Move cursor to the start of the line.
-    pub fn move_home(&mut self) -> bool {
+    /// Move cursor to the start of the buffer.
+    pub fn move_buffer_start(&mut self) -> bool {
         if self.pos > 0 {
             self.pos = 0;
             true
@@ -284,12 +301,34 @@ impl LineBuffer {
         }
     }
 
-    /// Move cursor to the end of the line.
-    pub fn move_end(&mut self) -> bool {
+    /// Move cursor to the end of the buffer.
+    pub fn move_buffer_end(&mut self) -> bool {
         if self.pos == self.buf.len() {
             false
         } else {
             self.pos = self.buf.len();
+            true
+        }
+    }
+
+    /// Move cursor to the start of the line.
+    pub fn move_home(&mut self) -> bool {
+        let start = self.start_of_line();
+        if self.pos > start {
+            self.pos = start;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Move cursor to the end of the line.
+    pub fn move_end(&mut self) -> bool {
+        let end = self.end_of_line();
+        if self.pos == end {
+            false
+        } else {
+            self.pos = end;
             true
         }
     }
@@ -334,6 +373,22 @@ impl LineBuffer {
     pub fn kill_line(&mut self) -> bool {
         if !self.buf.is_empty() && self.pos < self.buf.len() {
             let start = self.pos;
+            let end = self.end_of_line();
+            if start == end {
+                self.delete(1);
+            } else {
+                self.drain(start..end, Direction::Forward);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Kill the text from point to the end of the buffer.
+    pub fn kill_buffer(&mut self) -> bool {
+        if !self.buf.is_empty() && self.pos < self.buf.len() {
+            let start = self.pos;
             let end = self.buf.len();
             self.drain(start..end, Direction::Forward);
             true
@@ -344,6 +399,23 @@ impl LineBuffer {
 
     /// Kill backward from point to the beginning of the line.
     pub fn discard_line(&mut self) -> bool {
+        if self.pos > 0 && !self.buf.is_empty() {
+            let start = self.start_of_line();
+            let end = self.pos;
+            if end == start {
+                self.backspace(1)
+            } else {
+                self.drain(start..end, Direction::Backward);
+                self.pos = start;
+                true
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Kill backward from point to the beginning of the buffer.
+    pub fn discard_buffer(&mut self) -> bool {
         if self.pos > 0 && !self.buf.is_empty() {
             let end = self.pos;
             self.drain(0..end, Direction::Backward);
@@ -826,12 +898,21 @@ impl LineBuffer {
             return None;
         }
         match *mvt {
-            Movement::WholeLine => Some(self.buf.clone()),
-            Movement::BeginningOfLine => {
-                if self.pos == 0 {
+            Movement::WholeLine => {
+                let start = self.start_of_line();
+                let end = self.end_of_line();
+                if start == end {
                     None
                 } else {
-                    Some(self.buf[..self.pos].to_owned())
+                    Some(self.buf[start..self.pos].to_owned())
+                }
+            },
+            Movement::BeginningOfLine => {
+                let start = self.start_of_line();
+                if self.pos == start {
+                    None
+                } else {
+                    Some(self.buf[start..self.pos].to_owned())
                 }
             }
             Movement::ViFirstPrint => {
@@ -844,10 +925,32 @@ impl LineBuffer {
                 }
             }
             Movement::EndOfLine => {
+                let end = self.end_of_line();
+                if self.pos == end {
+                    None
+                } else {
+                    Some(self.buf[self.pos..end].to_owned())
+                }
+            }
+            Movement::EndOfBuffer => {
                 if self.pos == self.buf.len() {
                     None
                 } else {
                     Some(self.buf[self.pos..].to_owned())
+                }
+            }
+            Movement::WholeBuffer => {
+                if self.buf.is_empty() {
+                    None
+                } else {
+                    Some(self.buf.clone())
+                }
+            }
+            Movement::BeginningOfBuffer => {
+                if self.pos == 0 {
+                    None
+                } else {
+                    Some(self.buf[..self.pos].to_owned())
                 }
             }
             Movement::BackwardWord(n, word_def) => {
@@ -971,6 +1074,18 @@ impl LineBuffer {
             }
             Movement::ViFirstPrint => {
                 false // TODO
+            }
+            Movement::EndOfBuffer => {
+                // Kill the text from point to the end of the buffer.
+                self.kill_buffer()
+            }
+            Movement::BeginningOfBuffer => {
+                // Kill backward from point to the beginning of the buffer.
+                self.discard_buffer()
+            }
+            Movement::WholeBuffer => {
+                self.move_buffer_start();
+                self.kill_buffer()
             }
         };
         if notify {
@@ -1142,6 +1257,56 @@ mod test {
     }
 
     #[test]
+    fn move_home_end_multiline() {
+        let text = "αa\nsdf ßc\nasdf";
+        let mut s = LineBuffer::init(text, 7, None);
+        let ok = s.move_home();
+        assert_eq!(text, s.buf);
+        assert_eq!(4, s.pos);
+        assert_eq!(true, ok);
+
+        let ok = s.move_home();
+        assert_eq!(text, s.buf);
+        assert_eq!(4, s.pos);
+        assert_eq!(false, ok);
+
+        let ok = s.move_end();
+        assert_eq!(text, s.buf);
+        assert_eq!(11, s.pos);
+        assert_eq!(true, ok);
+
+        let ok = s.move_end();
+        assert_eq!(text, s.buf);
+        assert_eq!(11, s.pos);
+        assert_eq!(false, ok);
+    }
+
+    #[test]
+    fn move_buffer_multiline() {
+        let text = "αa\nsdf ßc\nasdf";
+        let mut s = LineBuffer::init(text, 7, None);
+        let ok = s.move_buffer_start();
+        assert_eq!(text, s.buf);
+        assert_eq!(0, s.pos);
+        assert_eq!(true, ok);
+
+        let ok = s.move_buffer_start();
+        assert_eq!(text, s.buf);
+        assert_eq!(0, s.pos);
+        assert_eq!(false, ok);
+
+        let ok = s.move_buffer_end();
+        assert_eq!(text, s.buf);
+        assert_eq!(text.len(), s.pos);
+        assert_eq!(true, ok);
+
+        let ok = s.move_buffer_end();
+        assert_eq!(text, s.buf);
+        assert_eq!(text.len(), s.pos);
+        assert_eq!(false, ok);
+    }
+
+    #[test]
     fn move_grapheme() {
         let mut s = LineBuffer::init("ag̈", 4, None);
         assert_eq!(4, s.len());
@@ -1186,6 +1351,62 @@ mod test {
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
         cl.borrow().assert_deleted_str_eq("αß");
+    }
+
+    #[test]
+    fn kill_multiline() {
+        let cl = Listener::new();
+        let mut s = LineBuffer::init("αß\nγδ 12\nε f4", 7, Some(cl.clone()));
+
+        let ok = s.kill_line();
+        assert_eq!("αß\nγ\nε f4", s.buf);
+        assert_eq!(7, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("δ 12");
+
+        let ok = s.kill_line();
+        assert_eq!("αß\nγε f4", s.buf);
+        assert_eq!(7, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("\n");
+
+        let ok = s.kill_line();
+        assert_eq!("αß\nγ", s.buf);
+        assert_eq!(7, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("ε f4");
+
+        let ok = s.kill_line();
+        assert_eq!(7, s.pos);
+        assert_eq!(false, ok);
+    }
+
+    #[test]
+    fn discard_multiline() {
+        let cl = Listener::new();
+        let mut s = LineBuffer::init("αß\nc γδε", 9, Some(cl.clone()));
+
+        let ok = s.discard_line();
+        assert_eq!("αß\nδε", s.buf);
+        assert_eq!(5, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("c γ");
+
+        let ok = s.discard_line();
+        assert_eq!("αßδε", s.buf);
+        assert_eq!(4, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("\n");
+
+        let ok = s.discard_line();
+        assert_eq!("δε", s.buf);
+        assert_eq!(0, s.pos);
+        assert_eq!(true, ok);
+        cl.borrow().assert_deleted_str_eq("αß");
+
+        let ok = s.discard_line();
+        assert_eq!(0, s.pos);
+        assert_eq!(false, ok);
     }
 
     #[test]

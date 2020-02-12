@@ -620,6 +620,14 @@ fn readline_edit<H: Helper>(
             Cmd::Move(Movement::LineDown(n)) => {
                 s.edit_move_line_down(n)?;
             }
+            Cmd::Move(Movement::BeginningOfBuffer) => {
+                // Move to the start of the buffer.
+                s.edit_move_buffer_start()?
+            }
+            Cmd::Move(Movement::EndOfBuffer) => {
+                // Move to the end of the buffer.
+                s.edit_move_buffer_end()?
+            }
             Cmd::DowncaseWord => {
                 // lowercase word after point
                 s.edit_word(WordAction::LOWERCASE)?

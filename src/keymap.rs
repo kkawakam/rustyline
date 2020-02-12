@@ -255,6 +255,11 @@ pub enum Movement {
     LineUp(RepeatCount),
     /// move to the same column on the next line
     LineDown(RepeatCount),
+    WholeBuffer, // not really a movement
+    /// beginning-of-buffer
+    BeginningOfBuffer,
+    /// end-of-buffer
+    EndOfBuffer,
 }
 
 impl Movement {
@@ -278,6 +283,9 @@ impl Movement {
             Movement::ForwardChar(previous) => Movement::ForwardChar(repeat_count(previous, new)),
             Movement::LineUp(previous) => Movement::LineUp(repeat_count(previous, new)),
             Movement::LineDown(previous) => Movement::LineDown(repeat_count(previous, new)),
+            Movement::WholeBuffer => Movement::WholeBuffer,
+            Movement::BeginningOfBuffer => Movement::BeginningOfBuffer,
+            Movement::EndOfBuffer => Movement::EndOfBuffer,
         }
     }
 }

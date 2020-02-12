@@ -563,19 +563,21 @@ impl LineBuffer {
             Some(off) => {
                 let column = self.buf[off + 1..self.pos].graphemes(true).count();
 
-                let mut dest_start = self.buf[..off].rfind('\n').unwrap_or(0);
+                let mut dest_start = self.buf[..off].rfind('\n').map(|n| n + 1).unwrap_or(0);
                 let mut dest_end = off;
                 for _ in 1..n {
                     if dest_start == 0 {
                         break;
                     }
                     dest_end = dest_start - 1;
-                    dest_start = self.buf[..dest_end].rfind('\n').unwrap_or(0);
+                    dest_start = self.buf[..dest_end].rfind('\n').map(|n| n + 1)
+                        .unwrap_or(0);
                 }
-
-                self.pos = self.buf[dest_start..dest_end]
+                let gidx =self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
-                    .nth(column)
+                    .nth(column);
+
+                self.pos = gidx
                     .map(|(idx, _)| dest_start + idx)
                     .unwrap_or(off); // if there's no enough columns
                 true
@@ -633,9 +635,13 @@ impl LineBuffer {
     pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
         match self.buf[self.pos..].find('\n') {
             Some(off) => {
-                let line_start = self.buf[..self.pos].rfind('\n').unwrap_or(0);
-                let column = self.buf[line_start..self.pos].graphemes(true).count();
-                let mut dest_start = self.pos + off + 1;
+                let line_start = self.buf[..self.pos]
+                    .rfind('\n')
+                    .map(|n| n + 1)
+                    .unwrap_or(0);
+                let column = self.buf[line_start..self.pos]
+                    .graphemes(true).count();
+                let mut dest_start = self.pos + off+1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
                     .map(|v| dest_start + v)
@@ -1770,5 +1776,45 @@ mod test {
 
         let mut s = LineBuffer::init("ßeta / __", 9, None);
         assert!(!s.transpose_words(1));
+    }
+
+    #[test]
+    fn move_by_line() {
+        let text = "aa123\nsdf bc\nasdf";
+        let mut s = LineBuffer::init(text, 14, None);
+        // move up
+        let ok = s.move_to_line_up(1);
+        assert_eq!(7, s.pos);
+        assert!(ok);
+
+        let ok = s.move_to_line_up(1);
+        assert_eq!(1, s.pos);
+        assert!(ok);
+
+        let ok = s.move_to_line_up(1);
+        assert_eq!(1, s.pos);
+        assert!(!ok);
+
+        // move down
+        let ok = s.move_to_line_down(1);
+        assert_eq!(7, s.pos);
+        assert!(ok);
+
+        let ok = s.move_to_line_down(1);
+        assert_eq!(14, s.pos);
+        assert!(ok);
+
+        let ok = s.move_to_line_down(1);
+        assert_eq!(14, s.pos);
+        assert!(!ok);
+
+        // move by multiple steps
+        let ok = s.move_to_line_up(2);
+        assert_eq!(1, s.pos);
+        assert!(ok);
+
+        let ok = s.move_to_line_down(2);
+        assert_eq!(14, s.pos);
+        assert!(ok);
     }
 }

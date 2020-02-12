@@ -49,7 +49,7 @@ impl RawReader for IntoIter<KeyPress> {
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         match self.next() {
-            Some(KeyPress::Char(c)) => Ok(c),
+            Some(key_press!(Char(c))) => Ok(c),
             None => Err(ReadlineError::Eof),
             _ => unimplemented!(),
         }

@@ -392,7 +392,7 @@ impl InputState {
             let key = rdr.next_key(true)?;
             #[allow(clippy::cast_possible_truncation)]
             match key {
-                KeyPress::Char(digit @ '0'..='9') | KeyPress::Meta(digit @ '0'..='9') => {
+                key_press!(digit @ '0'..='9') | key_press!(META, digit @ '0'..='9') => {
                     if self.num_args == -1 {
                         self.num_args *= digit.to_digit(10).unwrap() as i16;
                     } else if self.num_args.abs() < 1000 {
@@ -403,7 +403,7 @@ impl InputState {
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }
                 }
-                KeyPress::Char('-') | KeyPress::Meta('-') => {}
+                key_press!('-') | key_press!(META, '-') => {}
                 _ => {
                     wrt.refresh_line()?;
                     return Ok(key);
@@ -419,9 +419,9 @@ impl InputState {
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         let mut key = rdr.next_key(single_esc_abort)?;
-        if let KeyPress::Meta(digit @ '-') = key {
+        if let key_press!(META, digit @ '-') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        } else if let KeyPress::Meta(digit @ '0'..='9') = key {
+        } else if let key_press!(META, digit @ '0'..='9') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
@@ -437,39 +437,39 @@ impl InputState {
             }
         }
         let cmd = match key {
-            KeyPress::Char(c) => {
+            key_press!(Char(c)) => {
                 if positive {
                     Cmd::SelfInsert(n, c)
                 } else {
                     Cmd::Unknown
                 }
             }
-            KeyPress::Ctrl('A') => Cmd::Move(Movement::BeginningOfLine),
-            KeyPress::Ctrl('B') => {
+            key_press!(CTRL, 'A') => Cmd::Move(Movement::BeginningOfLine),
+            key_press!(CTRL, 'B') => {
                 if positive {
                     Cmd::Move(Movement::BackwardChar(n))
                 } else {
                     Cmd::Move(Movement::ForwardChar(n))
                 }
             }
-            KeyPress::Ctrl('E') => Cmd::Move(Movement::EndOfLine),
-            KeyPress::Ctrl('F') => {
+            key_press!(CTRL, 'E') => Cmd::Move(Movement::EndOfLine),
+            key_press!(CTRL, 'F') => {
                 if positive {
                     Cmd::Move(Movement::ForwardChar(n))
                 } else {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            KeyPress::Ctrl('G') | KeyPress::Esc | KeyPress::Meta('\x07') => Cmd::Abort,
-            KeyPress::Ctrl('H') | KeyPress::Backspace => {
+            key_press!(CTRL, 'G') | key_press!(Esc) | key_press!(META, '\x07') => Cmd::Abort,
+            key_press!(CTRL, 'H') | key_press!(Backspace) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardChar(n))
                 } else {
                     Cmd::Kill(Movement::ForwardChar(n))
                 }
             }
-            KeyPress::BackTab => Cmd::CompleteBackward,
-            KeyPress::Tab => {
+            key_press!(BackTab) => Cmd::CompleteBackward,
+            key_press!(Tab) => {
                 if positive {
                     Cmd::Complete
                 } else {
@@ -477,60 +477,60 @@ impl InputState {
                 }
             }
             // Don't complete hints when the cursor is not at the end of a line
-            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
-            KeyPress::Ctrl('K') => {
+            key_press!(Right) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            key_press!(CTRL, 'K') => {
                 if positive {
                     Cmd::Kill(Movement::EndOfLine)
                 } else {
                     Cmd::Kill(Movement::BeginningOfLine)
                 }
             }
-            KeyPress::Ctrl('L') => Cmd::ClearScreen,
-            KeyPress::Ctrl('N') => Cmd::NextHistory,
-            KeyPress::Ctrl('P') => Cmd::PreviousHistory,
-            KeyPress::Ctrl('X') => {
+            key_press!(CTRL, 'L') => Cmd::ClearScreen,
+            key_press!(CTRL, 'N') => Cmd::NextHistory,
+            key_press!(CTRL, 'P') => Cmd::PreviousHistory,
+            key_press!(CTRL, 'X') => {
                 let snd_key = rdr.next_key(true)?;
                 match snd_key {
-                    KeyPress::Ctrl('G') | KeyPress::Esc => Cmd::Abort,
-                    KeyPress::Ctrl('U') => Cmd::Undo(n),
+                    key_press!(CTRL, 'G') | key_press!(Esc) => Cmd::Abort,
+                    key_press!(CTRL, 'U') => Cmd::Undo(n),
                     _ => Cmd::Unknown,
                 }
             }
-            KeyPress::Meta('\x08') | KeyPress::Meta('\x7f') => {
+            key_press!(META, '\x08') | key_press!(META, '\x7f') => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
-            KeyPress::Meta('<') => Cmd::BeginningOfHistory,
-            KeyPress::Meta('>') => Cmd::EndOfHistory,
-            KeyPress::Meta('B') | KeyPress::Meta('b') => {
+            key_press!(META, '<') => Cmd::BeginningOfHistory,
+            key_press!(META, '>') => Cmd::EndOfHistory,
+            key_press!(META, 'B') | key_press!(META, 'b') => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
-            KeyPress::Meta('C') | KeyPress::Meta('c') => Cmd::CapitalizeWord,
-            KeyPress::Meta('D') | KeyPress::Meta('d') => {
+            key_press!(META, 'C') | key_press!(META, 'c') => Cmd::CapitalizeWord,
+            key_press!(META, 'D') | key_press!(META, 'd') => {
                 if positive {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            KeyPress::Meta('F') | KeyPress::Meta('f') => {
+            key_press!(META, 'F') | key_press!(META, 'f') => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            KeyPress::Meta('L') | KeyPress::Meta('l') => Cmd::DowncaseWord,
-            KeyPress::Meta('T') | KeyPress::Meta('t') => Cmd::TransposeWords(n),
-            KeyPress::Meta('U') | KeyPress::Meta('u') => Cmd::UpcaseWord,
-            KeyPress::Meta('Y') | KeyPress::Meta('y') => Cmd::YankPop,
+            key_press!(META, 'L') | key_press!(META, 'l') => Cmd::DowncaseWord,
+            key_press!(META, 'T') | key_press!(META, 't') => Cmd::TransposeWords(n),
+            key_press!(META, 'U') | key_press!(META, 'u') => Cmd::UpcaseWord,
+            key_press!(META, 'Y') | key_press!(META, 'y') => Cmd::YankPop,
             _ => self.common(rdr, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
@@ -548,7 +548,7 @@ impl InputState {
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(false)?;
-            if let KeyPress::Char(digit @ '0'..='9') = key {
+            if let key_press!(digit @ '0'..='9') = key {
                 if self.num_args.abs() < 1000 {
                     // shouldn't ever need more than 4 digits
                     self.num_args = self
@@ -565,7 +565,7 @@ impl InputState {
 
     fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
         let mut key = rdr.next_key(false)?;
-        if let KeyPress::Char(digit @ '1'..='9') = key {
+        if let key_press!(Char(digit @ '1'..='9')) = key {
             key = self.vi_arg_digit(rdr, wrt, digit)?;
         }
         let no_num_args = self.num_args == 0;
@@ -586,8 +586,8 @@ impl InputState {
             }
         }
         let cmd = match key {
-            KeyPress::Char('$') | KeyPress::End => Cmd::Move(Movement::EndOfLine),
-            KeyPress::Char('.') => {
+            key_press!('$') | key_press!(End) => Cmd::Move(Movement::EndOfLine),
+            key_press!('.') => {
                 // vi-redo (repeat last command)
                 if no_num_args {
                     self.last_cmd.redo(None, wrt)
@@ -595,55 +595,55 @@ impl InputState {
                     self.last_cmd.redo(Some(n), wrt)
                 }
             }
-            // TODO KeyPress::Char('%') => Cmd::???, Move to the corresponding opening/closing
+            // TODO key_press!('%') => Cmd::???, Move to the corresponding opening/closing
             // bracket
-            KeyPress::Char('0') => Cmd::Move(Movement::BeginningOfLine),
-            KeyPress::Char('^') => Cmd::Move(Movement::ViFirstPrint),
-            KeyPress::Char('a') => {
+            key_press!('0') => Cmd::Move(Movement::BeginningOfLine),
+            key_press!('^') => Cmd::Move(Movement::ViFirstPrint),
+            key_press!('a') => {
                 // vi-append-mode
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::ForwardChar(n))
             }
-            KeyPress::Char('A') => {
+            key_press!('A') => {
                 // vi-append-eol
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::EndOfLine)
             }
-            KeyPress::Char('b') => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), // vi-prev-word
-            KeyPress::Char('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
-            KeyPress::Char('c') => {
+            key_press!('b') => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), // vi-prev-word
+            key_press!('B') => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
+            key_press!('c') => {
                 self.input_mode = InputMode::Insert;
                 match self.vi_cmd_motion(rdr, wrt, key, n)? {
                     Some(mvt) => Cmd::Replace(mvt, None),
                     None => Cmd::Unknown,
                 }
             }
-            KeyPress::Char('C') => {
+            key_press!('C') => {
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::EndOfLine, None)
             }
-            KeyPress::Char('d') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+            key_press!('d') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
                 Some(mvt) => Cmd::Kill(mvt),
                 None => Cmd::Unknown,
             },
-            KeyPress::Char('D') | KeyPress::Ctrl('K') => Cmd::Kill(Movement::EndOfLine),
-            KeyPress::Char('e') => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Vi)),
-            KeyPress::Char('E') => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big)),
-            KeyPress::Char('i') => {
+            key_press!('D') | key_press!(CTRL, 'K') => Cmd::Kill(Movement::EndOfLine),
+            key_press!('e') => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Vi)),
+            key_press!('E') => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big)),
+            key_press!('i') => {
                 // vi-insertion-mode
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Noop
             }
-            KeyPress::Char('I') => {
+            key_press!('I') => {
                 // vi-insert-beg
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::BeginningOfLine)
             }
-            KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
+            key_press!(Char(c)) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 // vi-char-search
                 let cs = self.vi_char_search(rdr, c)?;
                 match cs {
@@ -651,74 +651,76 @@ impl InputState {
                     None => Cmd::Unknown,
                 }
             }
-            KeyPress::Char(';') => match self.last_char_search {
+            key_press!(';') => match self.last_char_search {
                 Some(cs) => Cmd::Move(Movement::ViCharSearch(n, cs)),
                 None => Cmd::Noop,
             },
-            KeyPress::Char(',') => match self.last_char_search {
+            key_press!(',') => match self.last_char_search {
                 Some(ref cs) => Cmd::Move(Movement::ViCharSearch(n, cs.opposite())),
                 None => Cmd::Noop,
             },
-            // TODO KeyPress::Char('G') => Cmd::???, Move to the history line n
-            KeyPress::Char('p') => Cmd::Yank(n, Anchor::After), // vi-put
-            KeyPress::Char('P') => Cmd::Yank(n, Anchor::Before), // vi-put
-            KeyPress::Char('r') => {
+            // TODO key_press!('G') => Cmd::???, Move to the history line n
+            key_press!('p') => Cmd::Yank(n, Anchor::After), // vi-put
+            key_press!('P') => Cmd::Yank(n, Anchor::Before), // vi-put
+            key_press!('r') => {
                 // vi-replace-char:
                 let ch = rdr.next_key(false)?;
                 match ch {
-                    KeyPress::Char(c) => Cmd::ReplaceChar(n, c),
-                    KeyPress::Esc => Cmd::Noop,
+                    key_press!(Char(c)) => Cmd::ReplaceChar(n, c),
+                    key_press!(Esc) => Cmd::Noop,
                     _ => Cmd::Unknown,
                 }
             }
-            KeyPress::Char('R') => {
+            key_press!('R') => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
                 Cmd::Replace(Movement::ForwardChar(0), None)
             }
-            KeyPress::Char('s') => {
+            key_press!('s') => {
                 // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::ForwardChar(n), None)
             }
-            KeyPress::Char('S') => {
+            key_press!('S') => {
                 // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::WholeLine, None)
             }
-            KeyPress::Char('u') => Cmd::Undo(n),
-            // KeyPress::Char('U') => Cmd::???, // revert-line
-            KeyPress::Char('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), /* vi-next-word */
-            KeyPress::Char('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), /* vi-next-word */
+
+            key_press!('u') => Cmd::Undo(n),
+            // key_press!('U') => Cmd::???, // revert-line
+            key_press!('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), /* vi-next-word */
+            key_press!('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), /* vi-next-word */
             // TODO move backward if eol
-            KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete
-            KeyPress::Char('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
-            KeyPress::Char('y') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+            key_press!('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete
+            key_press!('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
+            key_press!('y') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
                 Some(mvt) => Cmd::ViYankTo(mvt),
                 None => Cmd::Unknown,
             },
-            // KeyPress::Char('Y') => Cmd::???, // vi-yank-to
-            KeyPress::Char('h') | KeyPress::Ctrl('H') | KeyPress::Backspace => {
+            // key_press!('Y') => Cmd::???, // vi-yank-to
+            key_press!('h') | key_press!(CTRL, 'H') | key_press!(Backspace) => {
                 Cmd::Move(Movement::BackwardChar(n))
             }
-            KeyPress::Ctrl('G') => Cmd::Abort,
-            KeyPress::Char('l') | KeyPress::Char(' ') => Cmd::Move(Movement::ForwardChar(n)),
-            KeyPress::Ctrl('L') => Cmd::ClearScreen,
-            KeyPress::Char('+') | KeyPress::Char('j') => Cmd::Move(Movement::LineDown(n)),
+            key_press!(CTRL, 'G') => Cmd::Abort,
+            key_press!('l') | key_press!(' ') => Cmd::Move(Movement::ForwardChar(n)),
+            key_press!(CTRL, 'L') => Cmd::ClearScreen,
+            key_press!('+') | key_press!('j') => Cmd::Move(Movement::LineDown(n)),
             // TODO: move to the start of the line.
-            KeyPress::Ctrl('N') => Cmd::NextHistory,
-            KeyPress::Char('-') | KeyPress::Char('k') => Cmd::Move(Movement::LineUp(n)),
+            key_press!(CTRL, 'N') => Cmd::NextHistory,
+            key_press!('-') | key_press!('k') => Cmd::Move(Movement::LineUp(n)),
+
             // TODO: move to the start of the line.
-            KeyPress::Ctrl('P') => Cmd::PreviousHistory,
-            KeyPress::Ctrl('R') => {
+            key_press!(CTRL, 'P') => Cmd::PreviousHistory,
+            key_press!(CTRL, 'R') => {
                 self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ReverseSearchHistory
             }
-            KeyPress::Ctrl('S') => {
+            key_press!(CTRL, 'S') => {
                 self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ForwardSearchHistory
             }
-            KeyPress::Esc => Cmd::Noop,
+            key_press!(Esc) => Cmd::Noop,
             _ => self.common(rdr, key, n, true)?,
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
@@ -742,19 +744,19 @@ impl InputState {
             }
         }
         let cmd = match key {
-            KeyPress::Char(c) => {
+            key_press!(Char(c)) => {
                 if self.input_mode == InputMode::Replace {
                     Cmd::Overwrite(c)
                 } else {
                     Cmd::SelfInsert(1, c)
                 }
             }
-            KeyPress::Ctrl('H') | KeyPress::Backspace => Cmd::Kill(Movement::BackwardChar(1)),
-            KeyPress::BackTab => Cmd::CompleteBackward,
-            KeyPress::Tab => Cmd::Complete,
+            key_press!(CTRL, 'H') | key_press!(Backspace) => Cmd::Kill(Movement::BackwardChar(1)),
+            key_press!(BackTab) => Cmd::CompleteBackward,
+            key_press!(Tab) => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
-            KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
-            KeyPress::Esc => {
+            key_press!(Right) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            key_press!(Esc) => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;
                 wrt.done_inserting();
@@ -787,51 +789,51 @@ impl InputState {
             return Ok(Some(Movement::WholeLine));
         }
         let mut n = n;
-        if let KeyPress::Char(digit @ '1'..='9') = mvt {
+        if let key_press!(Char(digit @ '1'..='9')) = mvt {
             // vi-arg-digit
             mvt = self.vi_arg_digit(rdr, wrt, digit)?;
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
-            KeyPress::Char('$') => Some(Movement::EndOfLine),
-            KeyPress::Char('0') => Some(Movement::BeginningOfLine),
-            KeyPress::Char('^') => Some(Movement::ViFirstPrint),
-            KeyPress::Char('b') => Some(Movement::BackwardWord(n, Word::Vi)),
-            KeyPress::Char('B') => Some(Movement::BackwardWord(n, Word::Big)),
-            KeyPress::Char('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
-            KeyPress::Char('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
-            KeyPress::Char(c) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
+            key_press!('$') => Some(Movement::EndOfLine),
+            key_press!('0') => Some(Movement::BeginningOfLine),
+            key_press!('^') => Some(Movement::ViFirstPrint),
+            key_press!('b') => Some(Movement::BackwardWord(n, Word::Vi)),
+            key_press!('B') => Some(Movement::BackwardWord(n, Word::Big)),
+            key_press!('e') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
+            key_press!('E') => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
+            key_press!(Char(c)) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = self.vi_char_search(rdr, c)?;
                 match cs {
                     Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                     None => None,
                 }
             }
-            KeyPress::Char(';') => match self.last_char_search {
+            key_press!(';') => match self.last_char_search {
                 Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                 None => None,
             },
-            KeyPress::Char(',') => match self.last_char_search {
+            key_press!(',') => match self.last_char_search {
                 Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
                 None => None,
             },
-            KeyPress::Char('h') | KeyPress::Ctrl('H') | KeyPress::Backspace => {
+            key_press!('h') | key_press!(CTRL, 'H') | key_press!(Backspace) => {
                 Some(Movement::BackwardChar(n))
             }
-            KeyPress::Char('l') | KeyPress::Char(' ') => Some(Movement::ForwardChar(n)),
-            KeyPress::Char('j') | KeyPress::Char('+') => Some(Movement::LineDown(n)),
-            KeyPress::Char('k') | KeyPress::Char('-') => Some(Movement::LineUp(n)),
-            KeyPress::Char('w') => {
+            key_press!('l') | key_press!(' ') => Some(Movement::ForwardChar(n)),
+            key_press!('j') | key_press!('+') => Some(Movement::LineDown(n)),
+            key_press!('k') | key_press!('-') => Some(Movement::LineUp(n)),
+            key_press!('w') => {
                 // 'cw' is 'ce'
-                if key == KeyPress::Char('c') {
+                if key == key_press!('c') {
                     Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Vi))
                 }
             }
-            KeyPress::Char('W') => {
+            key_press!('W') => {
                 // 'cW' is 'cE'
-                if key == KeyPress::Char('c') {
+                if key == key_press!('c') {
                     Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Big))
@@ -848,7 +850,7 @@ impl InputState {
     ) -> Result<Option<CharSearch>> {
         let ch = rdr.next_key(false)?;
         Ok(match ch {
-            KeyPress::Char(ch) => {
+            key_press!(Char(ch)) => {
                 let cs = match cmd {
                     'f' => CharSearch::Forward(ch),
                     't' => CharSearch::ForwardBefore(ch),
@@ -871,65 +873,65 @@ impl InputState {
         positive: bool,
     ) -> Result<Cmd> {
         Ok(match key {
-            KeyPress::Home => Cmd::Move(Movement::BeginningOfLine),
-            KeyPress::Left => {
+            key_press!(Home) => Cmd::Move(Movement::BeginningOfLine),
+            key_press!(Left) => {
                 if positive {
                     Cmd::Move(Movement::BackwardChar(n))
                 } else {
                     Cmd::Move(Movement::ForwardChar(n))
                 }
             }
-            KeyPress::Ctrl('C') => Cmd::Interrupt,
-            KeyPress::Ctrl('D') => Cmd::EndOfFile,
-            KeyPress::Delete => {
+            key_press!(CTRL, 'C') => Cmd::Interrupt,
+            key_press!(CTRL, 'D') => Cmd::EndOfFile,
+            key_press!(Delete) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardChar(n))
                 } else {
                     Cmd::Kill(Movement::BackwardChar(n))
                 }
             }
-            KeyPress::End => Cmd::Move(Movement::EndOfLine),
-            KeyPress::Right => {
+            key_press!(End) => Cmd::Move(Movement::EndOfLine),
+            key_press!(Right) => {
                 if positive {
                     Cmd::Move(Movement::ForwardChar(n))
                 } else {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            KeyPress::Ctrl('J') |
-            KeyPress::Enter => Cmd::AcceptLine,
-            KeyPress::Down => Cmd::LineDownOrNextHistory,
-            KeyPress::Up => Cmd::LineUpOrPreviousHistory,
-            KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
-            KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
-            KeyPress::Ctrl('T') => Cmd::TransposeChars,
-            KeyPress::Ctrl('U') => {
+            key_press!(CTRL, 'J') |
+            key_press!(Enter) => Cmd::AcceptLine,
+            key_press!(Down) => Cmd::LineDownOrNextHistory,
+            key_press!(Up) => Cmd::LineUpOrPreviousHistory,
+            key_press!(CTRL, 'R') => Cmd::ReverseSearchHistory,
+            key_press!(CTRL, 'S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            key_press!(CTRL, 'T') => Cmd::TransposeChars,
+            key_press!(CTRL, 'U') => {
                 if positive {
                     Cmd::Kill(Movement::BeginningOfLine)
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
             },
-            KeyPress::Ctrl('Q') | // most terminals override Ctrl+Q to resume execution
-            KeyPress::Ctrl('V') => Cmd::QuotedInsert,
-            KeyPress::Ctrl('W') => {
+            key_press!(CTRL, 'Q') | // most terminals override Ctrl+Q to resume execution
+            key_press!(CTRL, 'V') => Cmd::QuotedInsert,
+            key_press!(CTRL, 'W') => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
                 } else {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 }
             }
-            KeyPress::Ctrl('Y') => {
+            key_press!(CTRL, 'Y') => {
                 if positive {
                     Cmd::Yank(n, Anchor::Before)
                 } else {
                     Cmd::Unknown // TODO Validate
                 }
             }
-            KeyPress::Ctrl('Z') => Cmd::Suspend,
-            KeyPress::Ctrl('_') => Cmd::Undo(n),
-            KeyPress::UnknownEscSeq => Cmd::Noop,
-            KeyPress::BracketedPasteStart => {
+            key_press!(CTRL, 'Z') => Cmd::Suspend,
+            key_press!(CTRL, '_') => Cmd::Undo(n),
+            key_press!(UnknownEscSeq) => Cmd::Noop,
+            key_press!(BracketedPasteStart) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
             },

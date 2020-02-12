@@ -13,7 +13,7 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyPress};
+use crate::keys::{self, Key, KeyMods, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::tty::add_prompt_and_highlight;
@@ -147,70 +147,40 @@ impl RawReader for ConsoleRawReader {
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt && !alt_gr;
             let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
+            let mods = KeyMods::ctrl_meta_shift(ctrl, meta, shift);
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
-                match i32::from(key_event.wVirtualKeyCode) {
-                    winuser::VK_LEFT => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlLeft
-                        } else if shift {
-                            KeyPress::ShiftLeft
-                        } else {
-                            KeyPress::Left
-                        });
-                    }
-                    winuser::VK_RIGHT => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlRight
-                        } else if shift {
-                            KeyPress::ShiftRight
-                        } else {
-                            KeyPress::Right
-                        });
-                    }
-                    winuser::VK_UP => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlUp
-                        } else if shift {
-                            KeyPress::ShiftUp
-                        } else {
-                            KeyPress::Up
-                        });
-                    }
-                    winuser::VK_DOWN => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlDown
-                        } else if shift {
-                            KeyPress::ShiftDown
-                        } else {
-                            KeyPress::Down
-                        });
-                    }
-                    winuser::VK_DELETE => return Ok(KeyPress::Delete),
-                    winuser::VK_HOME => return Ok(KeyPress::Home),
-                    winuser::VK_END => return Ok(KeyPress::End),
-                    winuser::VK_PRIOR => return Ok(KeyPress::PageUp),
-                    winuser::VK_NEXT => return Ok(KeyPress::PageDown),
-                    winuser::VK_INSERT => return Ok(KeyPress::Insert),
-                    winuser::VK_F1 => return Ok(KeyPress::F(1)),
-                    winuser::VK_F2 => return Ok(KeyPress::F(2)),
-                    winuser::VK_F3 => return Ok(KeyPress::F(3)),
-                    winuser::VK_F4 => return Ok(KeyPress::F(4)),
-                    winuser::VK_F5 => return Ok(KeyPress::F(5)),
-                    winuser::VK_F6 => return Ok(KeyPress::F(6)),
-                    winuser::VK_F7 => return Ok(KeyPress::F(7)),
-                    winuser::VK_F8 => return Ok(KeyPress::F(8)),
-                    winuser::VK_F9 => return Ok(KeyPress::F(9)),
-                    winuser::VK_F10 => return Ok(KeyPress::F(10)),
-                    winuser::VK_F11 => return Ok(KeyPress::F(11)),
-                    winuser::VK_F12 => return Ok(KeyPress::F(12)),
+                return Ok(match i32::from(key_event.wVirtualKeyCode) {
+                    winuser::VK_LEFT => Key::Left,
+                    winuser::VK_RIGHT => Key::Right,
+                    winuser::VK_UP => Key::Up,
+                    winuser::VK_DOWN => Key::Down,
+                    winuser::VK_DELETE => Key::Delete,
+                    winuser::VK_HOME => Key::Home,
+                    winuser::VK_END => Key::End,
+                    winuser::VK_PRIOR => Key::PageUp,
+                    winuser::VK_NEXT => Key::PageDown,
+                    winuser::VK_INSERT => Key::Insert,
+                    winuser::VK_F1 => Key::F(1),
+                    winuser::VK_F2 => Key::F(2),
+                    winuser::VK_F3 => Key::F(3),
+                    winuser::VK_F4 => Key::F(4),
+                    winuser::VK_F5 => Key::F(5),
+                    winuser::VK_F6 => Key::F(6),
+                    winuser::VK_F7 => Key::F(7),
+                    winuser::VK_F8 => Key::F(8),
+                    winuser::VK_F9 => Key::F(9),
+                    winuser::VK_F10 => Key::F(10),
+                    winuser::VK_F11 => Key::F(11),
+                    winuser::VK_F12 => Key::F(12),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
-                };
+                }
+                .with_mods(mods));
             } else if utf16 == 27 {
-                return Ok(KeyPress::Esc);
+                return Ok(Key::Esc.with_mods(mods));
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -228,14 +198,16 @@ impl RawReader for ConsoleRawReader {
                 };
                 let c = rc?;
                 if meta {
-                    return Ok(KeyPress::Meta(c));
+                    return Ok(KeyPress::meta(c));
                 } else {
                     let mut key = keys::char_to_key_press(c);
-                    if key == KeyPress::Tab && shift {
-                        key = KeyPress::BackTab;
-                    } else if key == KeyPress::Char(' ') && ctrl {
-                        key = KeyPress::Ctrl(' ');
+                    if key == KeyPress::TAB && shift {
+                        key = KeyPress::BACK_TAB;
+                    } else if key == KeyPress::from(' ') && ctrl {
+                        key = KeyPress::ctrl(' ');
                     }
+                    // XXX should this be key.with_mods(mods)? Leaving it as-is
+                    // for now because it seems deliberate.
                     return Ok(key);
                 }
             }

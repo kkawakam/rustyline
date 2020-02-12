@@ -8,7 +8,7 @@ fn dollar() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hi"),
-        &[KeyPress::Esc, KeyPress::Char('$'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('$'), KeyPress::ENTER],
         ("Hi", ""), // FIXME
     );
 }
@@ -24,11 +24,11 @@ fn semi_colon() {
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('f'),
-            KeyPress::Char('o'),
-            KeyPress::Char(';'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('f'),
+            KeyPress::from('o'),
+            KeyPress::from(';'),
+            KeyPress::ENTER,
         ],
         ("Hello, w", "orld!"),
     );
@@ -40,11 +40,11 @@ fn comma() {
         EditMode::Vi,
         ("Hello, w", "orld!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('f'),
-            KeyPress::Char('l'),
-            KeyPress::Char(','),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('f'),
+            KeyPress::from('l'),
+            KeyPress::from(','),
+            KeyPress::ENTER,
         ],
         ("Hel", "lo, world!"),
     );
@@ -55,7 +55,7 @@ fn zero() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Esc, KeyPress::Char('0'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('0'), KeyPress::ENTER],
         ("", "Hi"),
     );
 }
@@ -65,7 +65,7 @@ fn caret() {
     assert_cursor(
         EditMode::Vi,
         (" Hi", ""),
-        &[KeyPress::Esc, KeyPress::Char('^'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('^'), KeyPress::ENTER],
         (" ", "Hi"),
     );
 }
@@ -76,10 +76,10 @@ fn a() {
         EditMode::Vi,
         ("B", "e"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('a'),
-            KeyPress::Char('y'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('a'),
+            KeyPress::from('y'),
+            KeyPress::ENTER,
         ],
         ("By", "e"),
     );
@@ -91,10 +91,10 @@ fn uppercase_a() {
         EditMode::Vi,
         ("", "By"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('A'),
-            KeyPress::Char('e'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('A'),
+            KeyPress::from('e'),
+            KeyPress::ENTER,
         ],
         ("Bye", ""),
     );
@@ -105,17 +105,17 @@ fn b() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
-        &[KeyPress::Esc, KeyPress::Char('b'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('b'), KeyPress::ENTER],
         ("Hello, ", "world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('b'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('b'),
+            KeyPress::ENTER,
         ],
         ("Hello", ", world!"),
     );
@@ -126,17 +126,17 @@ fn uppercase_b() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
-        &[KeyPress::Esc, KeyPress::Char('B'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('B'), KeyPress::ENTER],
         ("Hello, ", "world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('B'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('B'),
+            KeyPress::ENTER,
         ],
         ("", "Hello, world!"),
     );
@@ -148,10 +148,10 @@ fn uppercase_c() {
         EditMode::Vi,
         ("Hello, w", "orld!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('C'),
-            KeyPress::Char('i'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('C'),
+            KeyPress::from('i'),
+            KeyPress::ENTER,
         ],
         ("Hello, i", ""),
     );
@@ -159,23 +159,23 @@ fn uppercase_c() {
 
 #[test]
 fn ctrl_k() {
-    for key in &[KeyPress::Char('D'), KeyPress::Ctrl('K')] {
+    for key in &[KeyPress::from('D'), KeyPress::ctrl('K')] {
         assert_cursor(
             EditMode::Vi,
             ("Hi", ""),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("H", ""),
         );
         assert_cursor(
             EditMode::Vi,
             ("", "Hi"),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("", ""),
         );
         assert_cursor(
             EditMode::Vi,
             ("By", "e"),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("B", ""),
         );
     }
@@ -186,17 +186,17 @@ fn e() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[KeyPress::Esc, KeyPress::Char('e'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('e'), KeyPress::ENTER],
         ("Hell", "o, world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('e'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('e'),
+            KeyPress::ENTER,
         ],
         ("Hello, worl", "d!"),
     );
@@ -207,17 +207,17 @@ fn uppercase_e() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[KeyPress::Esc, KeyPress::Char('E'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('E'), KeyPress::ENTER],
         ("Hello", ", world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('E'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('E'),
+            KeyPress::ENTER,
         ],
         ("Hello, world", "!"),
     );
@@ -229,10 +229,10 @@ fn f() {
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('f'),
-            KeyPress::Char('r'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('f'),
+            KeyPress::from('r'),
+            KeyPress::ENTER,
         ],
         ("Hello, wo", "rld!"),
     );
@@ -240,11 +240,11 @@ fn f() {
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('3'),
-            KeyPress::Char('f'),
-            KeyPress::Char('l'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('3'),
+            KeyPress::from('f'),
+            KeyPress::from('l'),
+            KeyPress::ENTER,
         ],
         ("Hello, wor", "ld!"),
     );
@@ -256,10 +256,10 @@ fn uppercase_f() {
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('F'),
-            KeyPress::Char('r'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('F'),
+            KeyPress::from('r'),
+            KeyPress::ENTER,
         ],
         ("Hello, wo", "rld!"),
     );
@@ -267,11 +267,11 @@ fn uppercase_f() {
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('3'),
-            KeyPress::Char('F'),
-            KeyPress::Char('l'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('3'),
+            KeyPress::from('F'),
+            KeyPress::from('l'),
+            KeyPress::ENTER,
         ],
         ("He", "llo, world!"),
     );
@@ -283,10 +283,10 @@ fn i() {
         EditMode::Vi,
         ("Be", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('i'),
-            KeyPress::Char('y'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('i'),
+            KeyPress::from('y'),
+            KeyPress::ENTER,
         ],
         ("By", "e"),
     );
@@ -298,10 +298,10 @@ fn uppercase_i() {
         EditMode::Vi,
         ("Be", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('I'),
-            KeyPress::Char('y'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('I'),
+            KeyPress::from('y'),
+            KeyPress::ENTER,
         ],
         ("y", "Be"),
     );
@@ -313,10 +313,10 @@ fn u() {
         EditMode::Vi,
         ("Hello, ", "world"),
         &[
-            KeyPress::Esc,
-            KeyPress::Ctrl('W'),
-            KeyPress::Char('u'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::ctrl('W'),
+            KeyPress::from('u'),
+            KeyPress::ENTER,
         ],
         ("Hello,", " world"),
     );
@@ -327,17 +327,17 @@ fn w() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[KeyPress::Esc, KeyPress::Char('w'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('w'), KeyPress::ENTER],
         ("Hello", ", world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('w'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('w'),
+            KeyPress::ENTER,
         ],
         ("Hello, ", "world!"),
     );
@@ -348,17 +348,17 @@ fn uppercase_w() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[KeyPress::Esc, KeyPress::Char('W'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('W'), KeyPress::ENTER],
         ("Hello, ", "world!"),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('2'),
-            KeyPress::Char('W'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('2'),
+            KeyPress::from('W'),
+            KeyPress::ENTER,
         ],
         ("Hello, world", "!"),
     );
@@ -369,7 +369,7 @@ fn x() {
     assert_cursor(
         EditMode::Vi,
         ("", "a"),
-        &[KeyPress::Esc, KeyPress::Char('x'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('x'), KeyPress::ENTER],
         ("", ""),
     );
 }
@@ -379,7 +379,7 @@ fn uppercase_x() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Esc, KeyPress::Char('X'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('X'), KeyPress::ENTER],
         ("", "i"),
     );
 }
@@ -387,20 +387,20 @@ fn uppercase_x() {
 #[test]
 fn h() {
     for key in &[
-        KeyPress::Char('h'),
-        KeyPress::Ctrl('H'),
-        KeyPress::Backspace,
+        KeyPress::from('h'),
+        KeyPress::ctrl('H'),
+        KeyPress::BACKSPACE,
     ] {
         assert_cursor(
             EditMode::Vi,
             ("Bye", ""),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("B", "ye"),
         );
         assert_cursor(
             EditMode::Vi,
             ("Bye", ""),
-            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('2'), *key, KeyPress::ENTER],
             ("", "Bye"),
         );
     }
@@ -408,17 +408,17 @@ fn h() {
 
 #[test]
 fn l() {
-    for key in &[KeyPress::Char('l'), KeyPress::Char(' ')] {
+    for key in &[KeyPress::from('l'), KeyPress::from(' ')] {
         assert_cursor(
             EditMode::Vi,
             ("", "Hi"),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("H", "i"),
         );
         assert_cursor(
             EditMode::Vi,
             ("", "Hi"),
-            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('2'), *key, KeyPress::ENTER],
             ("Hi", ""),
         );
     }
@@ -426,25 +426,26 @@ fn l() {
 
 #[test]
 fn j() {
-    for key in &[KeyPress::Char('j'), KeyPress::Char('+')] {
+    for key in &[KeyPress::from('j'), KeyPress::from('+')] {
+
         assert_cursor(
             EditMode::Vi,
             ("Hel", "lo,\nworld!"),
             // NOTE: escape moves backwards on char
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("Hello,\nwo", "rld!"),
         );
         assert_cursor(
             EditMode::Vi,
             ("", "One\nTwo\nThree"),
-            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('2'), *key, KeyPress::ENTER],
             ("One\nTwo\n", "Three"),
         );
         assert_cursor(
             EditMode::Vi,
             ("Hel", "lo,\nworld!"),
             // NOTE: escape moves backwards on char
-            &[KeyPress::Esc, KeyPress::Char('7'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('7'), *key, KeyPress::ENTER],
             ("Hello,\nwo", "rld!"),
         );
     }
@@ -452,32 +453,32 @@ fn j() {
 
 #[test]
 fn k() {
-    for key in &[KeyPress::Char('k'), KeyPress::Char('-')] {
+    for key in &[KeyPress::from('k'), KeyPress::from('-')] {
         assert_cursor(
             EditMode::Vi,
             ("Hello,\nworl", "d!"),
             // NOTE: escape moves backwards on char
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("Hel", "lo,\nworld!"),
         );
         assert_cursor(
             EditMode::Vi,
             ("One\nTwo\nT", "hree"),
             // NOTE: escape moves backwards on char
-            &[KeyPress::Esc, KeyPress::Char('2'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('2'), *key, KeyPress::ENTER],
             ("", "One\nTwo\nThree"),
         );
         assert_cursor(
             EditMode::Vi,
             ("Hello,\nworl", "d!"),
             // NOTE: escape moves backwards on char
-            &[KeyPress::Esc, KeyPress::Char('5'), *key, KeyPress::Enter],
+            &[KeyPress::ESC, KeyPress::from('5'), *key, KeyPress::ENTER],
             ("Hel", "lo,\nworld!"),
         );
         assert_cursor(
             EditMode::Vi,
             ("first line\nshort\nlong line", ""),
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             ("first line\nshort", "\nlong line"),
         );
     }
@@ -485,16 +486,16 @@ fn k() {
 
 #[test]
 fn ctrl_n() {
-    for key in &[KeyPress::Ctrl('N')] {
+    for key in &[KeyPress::ctrl('N')] {
         assert_history(
             EditMode::Vi,
             &["line1", "line2"],
             &[
-                KeyPress::Esc,
-                KeyPress::Ctrl('P'),
-                KeyPress::Ctrl('P'),
+                KeyPress::ESC,
+                KeyPress::ctrl('P'),
+                KeyPress::ctrl('P'),
                 *key,
-                KeyPress::Enter,
+                KeyPress::ENTER,
             ],
             "",
             ("line2", ""),
@@ -504,11 +505,11 @@ fn ctrl_n() {
 
 #[test]
 fn ctrl_p() {
-    for key in &[KeyPress::Ctrl('P')] {
+    for key in &[KeyPress::ctrl('P')] {
         assert_history(
             EditMode::Vi,
             &["line1"],
-            &[KeyPress::Esc, *key, KeyPress::Enter],
+            &[KeyPress::ESC, *key, KeyPress::ENTER],
             "",
             ("line1", ""),
         );
@@ -521,10 +522,10 @@ fn p() {
         EditMode::Vi,
         ("Hello, ", "world"),
         &[
-            KeyPress::Esc,
-            KeyPress::Ctrl('W'),
-            KeyPress::Char('p'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::ctrl('W'),
+            KeyPress::from('p'),
+            KeyPress::ENTER,
         ],
         (" Hello", ",world"),
     );
@@ -536,10 +537,10 @@ fn uppercase_p() {
         EditMode::Vi,
         ("Hello, ", "world"),
         &[
-            KeyPress::Esc,
-            KeyPress::Ctrl('W'),
-            KeyPress::Char('P'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::ctrl('W'),
+            KeyPress::from('P'),
+            KeyPress::ENTER,
         ],
         ("Hello", ", world"),
     );
@@ -551,10 +552,10 @@ fn r() {
         EditMode::Vi,
         ("Hi", ", world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('r'),
-            KeyPress::Char('o'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('r'),
+            KeyPress::from('o'),
+            KeyPress::ENTER,
         ],
         ("H", "o, world!"),
     );
@@ -562,11 +563,11 @@ fn r() {
         EditMode::Vi,
         ("He", "llo, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('4'),
-            KeyPress::Char('r'),
-            KeyPress::Char('i'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('4'),
+            KeyPress::from('r'),
+            KeyPress::from('i'),
+            KeyPress::ENTER,
         ],
         ("Hiii", "i, world!"),
     );
@@ -578,10 +579,10 @@ fn s() {
         EditMode::Vi,
         ("Hi", ", world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('s'),
-            KeyPress::Char('o'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('s'),
+            KeyPress::from('o'),
+            KeyPress::ENTER,
         ],
         ("Ho", ", world!"),
     );
@@ -589,11 +590,11 @@ fn s() {
         EditMode::Vi,
         ("He", "llo, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('4'),
-            KeyPress::Char('s'),
-            KeyPress::Char('i'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('4'),
+            KeyPress::from('s'),
+            KeyPress::from('i'),
+            KeyPress::ENTER,
         ],
         ("Hi", ", world!"),
     );
@@ -604,7 +605,7 @@ fn uppercase_s() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, ", "world"),
-        &[KeyPress::Esc, KeyPress::Char('S'), KeyPress::Enter],
+        &[KeyPress::ESC, KeyPress::from('S'), KeyPress::ENTER],
         ("", ""),
     );
 }
@@ -615,10 +616,10 @@ fn t() {
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('t'),
-            KeyPress::Char('r'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('t'),
+            KeyPress::from('r'),
+            KeyPress::ENTER,
         ],
         ("Hello, w", "orld!"),
     );
@@ -626,11 +627,11 @@ fn t() {
         EditMode::Vi,
         ("", "Hello, world!"),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('3'),
-            KeyPress::Char('t'),
-            KeyPress::Char('l'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('3'),
+            KeyPress::from('t'),
+            KeyPress::from('l'),
+            KeyPress::ENTER,
         ],
         ("Hello, wo", "rld!"),
     );
@@ -642,10 +643,10 @@ fn uppercase_t() {
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('T'),
-            KeyPress::Char('r'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('T'),
+            KeyPress::from('r'),
+            KeyPress::ENTER,
         ],
         ("Hello, wor", "ld!"),
     );
@@ -653,11 +654,11 @@ fn uppercase_t() {
         EditMode::Vi,
         ("Hello, world!", ""),
         &[
-            KeyPress::Esc,
-            KeyPress::Char('3'),
-            KeyPress::Char('T'),
-            KeyPress::Char('l'),
-            KeyPress::Enter,
+            KeyPress::ESC,
+            KeyPress::from('3'),
+            KeyPress::from('T'),
+            KeyPress::from('l'),
+            KeyPress::ENTER,
         ],
         ("Hel", "lo, world!"),
     );

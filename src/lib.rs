@@ -16,7 +16,8 @@
 //! }
 //! ```
 // #![feature(non_exhaustive)]
-
+#[macro_use]
+mod keys;
 pub mod completion;
 pub mod config;
 mod edit;
@@ -25,7 +26,6 @@ pub mod highlight;
 pub mod hint;
 pub mod history;
 mod keymap;
-mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
@@ -55,7 +55,7 @@ use crate::hint::Hinter;
 use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
-pub use crate::keys::KeyPress;
+pub use crate::keys::{Key, KeyMods, KeyPress};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::validate::Validator;

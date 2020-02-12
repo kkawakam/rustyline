@@ -8,7 +8,7 @@ fn insert_mode_by_default() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Char('a'), KeyPress::Enter],
+        &[KeyPress::from('a'), KeyPress::ENTER],
         ("a", ""),
     );
 }
@@ -18,7 +18,7 @@ fn ctrl_h() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Ctrl('H'), KeyPress::Enter],
+        &[KeyPress::ctrl('H'), KeyPress::ENTER],
         ("H", ""),
     );
 }
@@ -28,19 +28,19 @@ fn backspace() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[KeyPress::BACKSPACE, KeyPress::ENTER],
         ("", ""),
     );
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[KeyPress::BACKSPACE, KeyPress::ENTER],
         ("H", ""),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hi"),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[KeyPress::BACKSPACE, KeyPress::ENTER],
         ("", "Hi"),
     );
 }
@@ -50,7 +50,7 @@ fn esc() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Enter],
+        &[KeyPress::from('a'), KeyPress::ESC, KeyPress::ENTER],
         ("", "a"),
     );
 }

@@ -79,3 +79,51 @@ impl<'v, V: ?Sized + Validator> Validator for &'v V {
         (**self).validate_while_typing()
     }
 }
+
+/// Simple matching bracket validator.
+#[derive(Default)]
+pub struct MatchingBracketValidator {
+    _priv: (),
+}
+
+impl MatchingBracketValidator {
+    pub fn new() -> Self {
+        Self { _priv: () }
+    }
+}
+
+impl Validator for MatchingBracketValidator {
+    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
+        Ok(validate_brackets(ctx.input()))
+    }
+}
+
+fn validate_brackets(input: &str) -> ValidationResult {
+    let mut stack = vec![];
+    for c in input.chars() {
+        match c {
+            '(' | '[' | '{' => stack.push(c),
+            ')' | ']' | '}' => match (stack.pop(), c) {
+                (Some('('), ')') | (Some('['), ']') | (Some('{'), '}') => {}
+                (Some(wanted), _) => {
+                    return ValidationResult::Invalid(Some(format!(
+                        "Mismatched brackets: {:?} is not properly closed",
+                        wanted
+                    )))
+                }
+                (None, c) => {
+                    return ValidationResult::Invalid(Some(format!(
+                        "Mismatched brackets: {:?} is unpaired",
+                        c
+                    )))
+                }
+            },
+            _ => {}
+        }
+    }
+    if stack.is_empty() {
+        ValidationResult::Valid(None)
+    } else {
+        ValidationResult::Incomplete
+    }
+}

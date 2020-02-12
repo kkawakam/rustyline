@@ -110,6 +110,10 @@ impl History {
         }
     }
 
+    // New multiline-aware history files start with `#V2\n` and have newlines
+    // and backslashes escaped in them.
+    const FILE_VERSION_V2: &'static str = "#V2";
+
     /// Save the history in the specified file.
     // TODO append_history
     // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
@@ -127,10 +131,12 @@ impl History {
         let file = f?;
         fix_perm(&file);
         let mut wtr = BufWriter::new(file);
+        wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
-            wtr.write_all(entry.as_bytes())?;
             wtr.write_all(b"\n")?;
+            wtr.write_all(entry.replace('\\', "\\\\").replace('\n', "\\n").as_bytes())?;
         }
+        wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
         Ok(())
@@ -145,8 +151,26 @@ impl History {
 
         let file = File::open(&path)?;
         let rdr = BufReader::new(file);
-        for line in rdr.lines() {
-            self.add(line?); // TODO truncate to MAX_LINE
+        let mut lines = rdr.lines();
+        let mut v2 = false;
+        if let Some(first) = lines.next() {
+            let line = first?;
+            if line == Self::FILE_VERSION_V2 {
+                v2 = true;
+            } else {
+                self.add(line);
+            }
+        }
+        for line in lines {
+            let line = if v2 {
+                line?.replace("\\n", "\n").replace("\\\\", "\\")
+            } else {
+                line?
+            };
+            if line.is_empty() {
+                continue;
+            }
+            self.add(line); // TODO truncate to MAX_LINE
         }
         Ok(())
     }
@@ -315,11 +339,41 @@ mod tests {
     #[test]
     fn save() {
         let mut history = init();
+        assert!(history.add("line\nfour \\ abc"));
         let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
         let history_path = td.path().join(".history");
 
         history.save(&history_path).unwrap();
+        let mut history2 = History::new();
+        history2.load(&history_path).unwrap();
+        for (a, b) in history.entries.iter().zip(history2.entries.iter()) {
+            assert_eq!(a, b);
+        }
+
+        td.close().unwrap();
+    }
+
+    #[test]
+    fn load_legacy() {
+        use std::io::Write;
+        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
+        let history_path = td.path().join(".history_v1");
+        {
+            let mut legacy = std::fs::File::create(&history_path).unwrap();
+            // Some data we'd accidentally corrupt if we got the version wrong
+            let data = b"\
+                test\\n \\abc \\123\n\
+                123\\n\\\\n\n\
+                abcde
+            ";
+            legacy.write_all(data).unwrap();
+            legacy.flush().unwrap();
+        }
+        let mut history = History::new();
         history.load(&history_path).unwrap();
+        assert_eq!(history.entries[0], "test\\n \\abc \\123");
+        assert_eq!(history.entries[1], "123\\n\\\\n");
+        assert_eq!(history.entries[2], "abcde");
         td.close().unwrap();
     }
 

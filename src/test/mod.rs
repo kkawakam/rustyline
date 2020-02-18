@@ -18,6 +18,7 @@ mod emacs;
 mod history;
 mod vi_cmd;
 mod vi_insert;
+mod highlight;
 
 fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
     let config = Config::builder().edit_mode(mode).build();

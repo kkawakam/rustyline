@@ -20,7 +20,7 @@ use utf8parse::{Parser, Receiver};
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptInfo, split_highlight};
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -564,17 +564,57 @@ impl Renderer for PosixRenderer {
         self.buffer.push_str("\r\x1b[0K");
 
         if let Some(highlighter) = highlighter {
-            // display the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            if &line[..] == "" {
+                // line.lines() is an empty iterator for empty line so
+                // we need to treat it as a special case
+                let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
+                    default: default_prompt,
+                    offset: 0,
+                    cursor: Some(0),
+                    input: "",
+                    line: "",
+                    line_no: 0,
+                });
+                self.buffer.push_str(&prompt);
+            } else {
+                let highlighted = highlighter.highlight(line, line.pos());
+                let orig_lines = line.split('\n');
+                let hl_lines = highlighted.split('\n');
+                let mut highlighted_left = highlighted.to_string();
+                let mut offset = 0;
+                for (line_no, (orig, hl)) in orig_lines.zip(hl_lines).enumerate() {
+                    let (hl, tail) = split_highlight(&highlighted_left,
+                        hl.len()+1);
+                    let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
+                        default: default_prompt,
+                        offset,
+                        cursor: if line.pos() > offset && line.pos() < orig.len() {
+                            Some(line.pos() - offset)
+                        } else {
+                            None
+                        },
+                        input: line,
+                        line: orig,
+                        line_no,
+                    });
+                    self.buffer.push_str(&prompt);
+                    self.buffer.push_str(&hl);
+                    highlighted_left = tail.to_string();
+                    offset += orig.len() + 1;
+                }
+            }
         } else {
-            // display the prompt
+            let mut lines = line.split("\n");
             self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
+            if let Some(line) = lines.next() {
+                self.buffer.push_str(line);
+            }
+            let next_prompt = format!("{:1$}", "", new_layout.prompt_size.col);
+            for line in lines {
+                self.buffer.push('\n');
+                self.buffer.push_str(&next_prompt);
+                self.buffer.push_str(line);
+            }
         }
         // display hint
         if let Some(hint) = hint {
@@ -584,10 +624,6 @@ impl Renderer for PosixRenderer {
                 self.buffer.push_str(hint);
             }
         }
-        // we have to generate our own newline on line wrap
-        if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
-            self.buffer.push_str("\n");
-        }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
@@ -595,11 +631,8 @@ impl Renderer for PosixRenderer {
             write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
         }
         // position the cursor within the line
-        if cursor.col > 0 {
-            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
-        } else {
-            self.buffer.push('\r');
-        }
+        write!(self.buffer, "\r\x1b[{}C",
+            new_layout.prompt_size.col + cursor.col).unwrap();
 
         self.write_and_flush(self.buffer.as_bytes())?;
 

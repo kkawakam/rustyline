@@ -1,14 +1,11 @@
 //! Unix specific definitions
-use std;
 use std::cmp::Ordering;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
 use std::sync::atomic;
 
-use libc;
 use log::{debug, warn};
-use nix;
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios;

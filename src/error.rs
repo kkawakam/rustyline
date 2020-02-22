@@ -1,6 +1,4 @@
 //! Contains error type for handling I/O and Errno errors
-#[cfg(unix)]
-use nix;
 #[cfg(windows)]
 use std::char;
 use std::error;

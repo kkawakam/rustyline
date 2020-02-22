@@ -426,10 +426,7 @@ fn l() {
 
 #[test]
 fn j() {
-    for key in &[
-        KeyPress::Char('j'),
-        KeyPress::Char('+'),
-    ] {
+    for key in &[KeyPress::Char('j'), KeyPress::Char('+')] {
         assert_cursor(
             EditMode::Vi,
             ("Hel", "lo,\nworld!"),
@@ -455,10 +452,7 @@ fn j() {
 
 #[test]
 fn k() {
-    for key in &[
-        KeyPress::Char('k'),
-        KeyPress::Char('-'),
-    ] {
+    for key in &[KeyPress::Char('k'), KeyPress::Char('-')] {
         assert_cursor(
             EditMode::Vi,
             ("Hello,\nworl", "d!"),
@@ -491,9 +485,7 @@ fn k() {
 
 #[test]
 fn ctrl_n() {
-    for key in &[
-        KeyPress::Ctrl('N'),
-    ] {
+    for key in &[KeyPress::Ctrl('N')] {
         assert_history(
             EditMode::Vi,
             &["line1", "line2"],
@@ -512,9 +504,7 @@ fn ctrl_n() {
 
 #[test]
 fn ctrl_p() {
-    for key in &[
-        KeyPress::Ctrl('P'),
-    ] {
+    for key in &[KeyPress::Ctrl('P')] {
         assert_history(
             EditMode::Vi,
             &["line1"],

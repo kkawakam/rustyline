@@ -1,7 +1,5 @@
 //! History API
 
-#[cfg(unix)]
-use libc;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fs::File;

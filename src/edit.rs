@@ -225,9 +225,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
             let validated = match result {
-                ValidationResult::Incomplete => {
-                    false
-                }
+                ValidationResult::Incomplete => false,
                 ValidationResult::Valid(msg) => {
                     // Accept the line regardless of where the cursor is.
                     if corrected || self.has_hint() || msg.is_some() {

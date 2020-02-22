@@ -656,7 +656,7 @@ fn readline_edit<H: Helper>(
                 s.refresh_line()?;
                 continue;
             }
-            Cmd::Noop | _ => {
+            _ => {
                 // Ignore the character typed.
             }
         }

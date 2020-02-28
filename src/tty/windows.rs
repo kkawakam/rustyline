@@ -12,7 +12,7 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptInfo, split_highlight};
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -333,18 +333,57 @@ impl Renderer for ConsoleRenderer {
 
         self.buffer.clear();
         if let Some(highlighter) = highlighter {
-            // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // append the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // append the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            if &line[..] == "" {
+                // line.lines() is an empty iterator for empty line so
+                // we need to treat it as a special case
+                let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
+                    default: default_prompt,
+                    offset: 0,
+                    cursor: Some(0),
+                    input: "",
+                    line: "",
+                    line_no: 0,
+                });
+                self.buffer.push_str(&prompt);
+            } else {
+                let highlighted = highlighter.highlight(line, line.pos());
+                let orig_lines = line.split('\n');
+                let hl_lines = highlighted.split('\n');
+                let mut highlighted_left = highlighted.to_string();
+                let mut offset = 0;
+                for (line_no, (orig, hl)) in orig_lines.zip(hl_lines).enumerate() {
+                    let (hl, tail) = split_highlight(&highlighted_left,
+                        hl.len()+1);
+                    let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
+                        default: default_prompt,
+                        offset,
+                        cursor: if line.pos() > offset && line.pos() < orig.len() {
+                            Some(line.pos() - offset)
+                        } else {
+                            None
+                        },
+                        input: line,
+                        line: orig,
+                        line_no,
+                    });
+                    self.buffer.push_str(&prompt);
+                    self.buffer.push_str(&hl);
+                    highlighted_left = tail.to_string();
+                    offset += orig.len() + 1;
+                }
+            }
         } else {
-            // append the prompt
+            let mut lines = line.split("\n");
             self.buffer.push_str(prompt);
-            // append the input line
-            self.buffer.push_str(line);
+            if let Some(line) = lines.next() {
+                self.buffer.push_str(line);
+            }
+            let next_prompt = format!("{:1$}", "", new_layout.prompt_size.col);
+            for line in lines {
+                self.buffer.push('\n');
+                self.buffer.push_str(&next_prompt);
+                self.buffer.push_str(line);
+            }
         }
         // append hint
         if let Some(hint) = hint {

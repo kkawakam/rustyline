@@ -347,13 +347,12 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(&prompt);
             } else {
                 let highlighted = highlighter.highlight(line, line.pos());
-                let orig_lines = line.split('\n');
-                let hl_lines = highlighted.split('\n');
+                let lines = line.split('\n');
                 let mut highlighted_left = highlighted.to_string();
                 let mut offset = 0;
-                for (line_no, (orig, hl)) in orig_lines.zip(hl_lines).enumerate() {
+                for (line_no, orig) in lines.enumerate() {
                     let (hl, tail) = split_highlight(&highlighted_left,
-                        hl.len()+1);
+                        orig.len()+1);
                     let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
                         default: default_prompt,
                         offset,

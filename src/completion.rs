@@ -540,21 +540,21 @@ mod tests {
 
         let s = "User";
         let c1 = String::from(s);
-        candidates.push(c1.clone());
+        candidates.push(c1);
         {
             let lcp = super::longest_common_prefix(&candidates);
             assert_eq!(Some(s), lcp);
         }
 
         let c2 = String::from("Users");
-        candidates.push(c2.clone());
+        candidates.push(c2);
         {
             let lcp = super::longest_common_prefix(&candidates);
             assert_eq!(Some(s), lcp);
         }
 
         let c3 = String::from("");
-        candidates.push(c3.clone());
+        candidates.push(c3);
         {
             let lcp = super::longest_common_prefix(&candidates);
             assert!(lcp.is_none());

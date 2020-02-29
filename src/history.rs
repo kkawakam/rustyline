@@ -277,7 +277,6 @@ mod tests {
     use super::{Direction, History};
     use crate::config::Config;
     use std::path::Path;
-    use tempdir;
 
     fn init() -> History {
         let mut history = History::new();

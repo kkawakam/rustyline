@@ -1,4 +1,3 @@
-use env_logger;
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};

@@ -1217,16 +1217,16 @@ mod test {
         let ok = s.move_to_prev_word(Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(2, s.pos); // before 'ß'
-        assert!(true, ok);
+        assert!(ok);
 
         assert!(s.move_end()); // after 'c'
         assert_eq!(7, s.pos);
         let ok = s.move_to_prev_word(Word::Emacs, 1);
-        assert!(true, ok);
+        assert!(ok);
         assert_eq!(6, s.pos); // before 'c'
 
         let ok = s.move_to_prev_word(Word::Emacs, 2);
-        assert!(true, ok);
+        assert!(ok);
         assert_eq!(0, s.pos);
     }
 

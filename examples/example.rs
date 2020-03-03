@@ -55,6 +55,10 @@ impl Highlighter for MyHelper {
         }
     }
 
+    fn has_continuation_prompt(&self) -> bool {
+        return true;
+    }
+
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
         Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
     }

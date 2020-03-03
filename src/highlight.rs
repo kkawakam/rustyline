@@ -40,6 +40,13 @@ pub trait Highlighter {
         let _ = info;
         Borrowed(prompt)
     }
+
+    /// Returns `true` if prompt is rectangular rather than being present only
+    /// on the first line of input
+    fn has_continuation_prompt(&self) -> bool {
+        false
+    }
+
     /// Takes the `hint` and
     /// returns the highlighted version (with ANSI color).
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {

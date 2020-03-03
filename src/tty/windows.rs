@@ -12,11 +12,12 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::{Highlighter, PromptInfo, split_highlight};
+use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
+use crate::tty::add_prompt_and_highlight;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -326,64 +327,15 @@ impl Renderer for ConsoleRenderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
-        let cursor = new_layout.cursor;
+        let mut cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
 
         self.buffer.clear();
-        if let Some(highlighter) = highlighter {
-            if &line[..] == "" {
-                // line.lines() is an empty iterator for empty line so
-                // we need to treat it as a special case
-                let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
-                    default: default_prompt,
-                    offset: 0,
-                    cursor: Some(0),
-                    input: "",
-                    line: "",
-                    line_no: 0,
-                });
-                self.buffer.push_str(&prompt);
-            } else {
-                let highlighted = highlighter.highlight(line, line.pos());
-                let lines = line.split('\n');
-                let mut highlighted_left = highlighted.to_string();
-                let mut offset = 0;
-                for (line_no, orig) in lines.enumerate() {
-                    let (hl, tail) = split_highlight(&highlighted_left,
-                        orig.len()+1);
-                    let prompt = highlighter.highlight_prompt(prompt, PromptInfo {
-                        default: default_prompt,
-                        offset,
-                        cursor: if line.pos() > offset && line.pos() < orig.len() {
-                            Some(line.pos() - offset)
-                        } else {
-                            None
-                        },
-                        input: line,
-                        line: orig,
-                        line_no,
-                    });
-                    self.buffer.push_str(&prompt);
-                    self.buffer.push_str(&hl);
-                    highlighted_left = tail.to_string();
-                    offset += orig.len() + 1;
-                }
-            }
-        } else {
-            let mut lines = line.split("\n");
-            self.buffer.push_str(prompt);
-            if let Some(line) = lines.next() {
-                self.buffer.push_str(line);
-            }
-            let next_prompt = format!("{:1$}", "", new_layout.prompt_size.col);
-            for line in lines {
-                self.buffer.push('\n');
-                self.buffer.push_str(&next_prompt);
-                self.buffer.push_str(line);
-            }
-        }
+        add_prompt_and_highlight(&mut self.buffer, highlighter,
+            line, prompt, default_prompt, &new_layout, &mut cursor);
+
         // append hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {

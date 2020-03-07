@@ -3,10 +3,9 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
-use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
-use rustyline::highlight::{PromptInfo};
-use rustyline::validate::{self, Validator, MatchingBracketValidator};
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter, PromptInfo};
 use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::validate::{self, MatchingBracketValidator, Validator};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
 use rustyline_derive::Helper;
 
@@ -19,7 +18,6 @@ struct MyHelper {
     colored_prompt: String,
     continuation_prompt: String,
 }
-
 
 impl Completer for MyHelper {
     type Candidate = Pair;
@@ -58,7 +56,7 @@ impl Highlighter for MyHelper {
     }
 
     fn has_continuation_prompt(&self) -> bool {
-        return true;
+        true
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
@@ -75,7 +73,10 @@ impl Highlighter for MyHelper {
 }
 
 impl Validator for MyHelper {
-    fn validate(&self, ctx: &mut validate::ValidationContext) -> rustyline::Result<validate::ValidationResult> {
+    fn validate(
+        &self,
+        ctx: &mut validate::ValidationContext,
+    ) -> rustyline::Result<validate::ValidationResult> {
         self.validator.validate(ctx)
     }
 

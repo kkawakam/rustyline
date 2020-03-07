@@ -570,16 +570,13 @@ impl LineBuffer {
                         break;
                     }
                     dest_end = dest_start - 1;
-                    dest_start = self.buf[..dest_end].rfind('\n').map(|n| n + 1)
-                        .unwrap_or(0);
+                    dest_start = self.buf[..dest_end].rfind('\n').map(|n| n + 1).unwrap_or(0);
                 }
-                let gidx =self.buf[dest_start..dest_end]
+                let gidx = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
                     .nth(column);
 
-                self.pos = gidx
-                    .map(|(idx, _)| dest_start + idx)
-                    .unwrap_or(off); // if there's no enough columns
+                self.pos = gidx.map(|(idx, _)| dest_start + idx).unwrap_or(off); // if there's no enough columns
                 true
             }
             None => false,
@@ -635,13 +632,9 @@ impl LineBuffer {
     pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
         match self.buf[self.pos..].find('\n') {
             Some(off) => {
-                let line_start = self.buf[..self.pos]
-                    .rfind('\n')
-                    .map(|n| n + 1)
-                    .unwrap_or(0);
-                let column = self.buf[line_start..self.pos]
-                    .graphemes(true).count();
-                let mut dest_start = self.pos + off+1;
+                let line_start = self.buf[..self.pos].rfind('\n').map(|n| n + 1).unwrap_or(0);
+                let column = self.buf[line_start..self.pos].graphemes(true).count();
+                let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
                     .map(|v| dest_start + v)
@@ -912,7 +905,7 @@ impl LineBuffer {
                 } else {
                     Some(self.buf[start..self.pos].to_owned())
                 }
-            },
+            }
             Movement::BeginningOfLine => {
                 let start = self.start_of_line();
                 if self.pos == start {

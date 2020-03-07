@@ -152,7 +152,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
         // calculate the desired position of the cursor
         let pos = self.line.pos();
-        let cursor = self.out.calculate_position(&self.line[..pos], Position::default());
+        let cursor = self
+            .out
+            .calculate_position(&self.line[..pos], Position::default());
         // calculate the position of the end of the input line
         let mut end = if pos == self.line.len() {
             cursor

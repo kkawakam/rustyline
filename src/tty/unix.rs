@@ -21,8 +21,8 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
 use crate::tty::add_prompt_and_highlight;
+use crate::Result;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
@@ -561,8 +561,15 @@ impl Renderer for PosixRenderer {
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
 
-        add_prompt_and_highlight(&mut self.buffer, highlighter,
-            line, prompt, default_prompt, &new_layout, &mut cursor);
+        add_prompt_and_highlight(
+            &mut self.buffer,
+            highlighter,
+            line,
+            prompt,
+            default_prompt,
+            &new_layout,
+            &mut cursor,
+        );
         // display hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {

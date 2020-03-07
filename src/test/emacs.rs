@@ -178,7 +178,6 @@ fn ctrl_k() {
     );
 }
 
-
 #[test]
 fn ctrl_u() {
     assert_cursor(

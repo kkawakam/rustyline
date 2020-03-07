@@ -690,8 +690,8 @@ impl InputState {
             // KeyPress::Char('U') => Cmd::???, // revert-line
             KeyPress::Char('w') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), /* vi-next-word */
             KeyPress::Char('W') => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), /* vi-next-word */
-            KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), /* vi-delete: TODO move
-                                                                          * backward if eol */
+            // TODO move backward if eol
+            KeyPress::Char('x') => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete
             KeyPress::Char('X') => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
             KeyPress::Char('y') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
                 Some(mvt) => Cmd::ViYankTo(mvt),

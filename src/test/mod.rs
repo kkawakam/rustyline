@@ -15,10 +15,10 @@ use crate::{Context, Editor, Helper, Result};
 
 mod common;
 mod emacs;
+mod highlight;
 mod history;
 mod vi_cmd;
 mod vi_insert;
-mod highlight;
 
 fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
     let config = Config::builder().edit_mode(mode).build();

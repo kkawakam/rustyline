@@ -246,9 +246,7 @@ fn is_close_bracket(bracket: u8) -> bool {
     memchr(bracket, CLOSES).is_some()
 }
 
-pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
-    -> (Cow<'a, str>, Cow<'a, str>)
-{
+pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize) -> (Cow<'a, str>, Cow<'a, str>) {
     let mut style_buffer = String::with_capacity(32);
     let mut iter = src.char_indices();
     let mut non_escape_idx = 0;
@@ -261,7 +259,7 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
             while let Some((end_idx, c)) = iter.next() {
                 match c {
                     'm' => {
-                        let slice = &src[idx..end_idx+1];
+                        let slice = &src[idx..end_idx + 1];
                         if slice == "\x1b[0m" {
                             style_buffer.clear();
                         } else {
@@ -270,7 +268,7 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
                         break;
                     }
                     ';' | '0'..='9' => continue,
-                    _ => break,  // unknown escape, skip
+                    _ => break, // unknown escape, skip
                 }
             }
             continue;
@@ -282,8 +280,7 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
                 let mut left = String::with_capacity(idx + 4);
                 left.push_str(&src[..idx]);
                 left.push_str("\x1b[0m");
-                let mut right = String::with_capacity(
-                    src.len() - idx + style_buffer.len());
+                let mut right = String::with_capacity(src.len() - idx + style_buffer.len());
                 right.push_str(&style_buffer);
                 right.push_str(&src[idx..]);
                 return (left.into(), right.into());
@@ -299,6 +296,7 @@ impl PromptInfo<'_> {
     pub fn default(&self) -> bool {
         self.default
     }
+
     /// Returns the byte offset where prompt is shown in the initial text
     ///
     /// This is a position right after the newline of the previous line

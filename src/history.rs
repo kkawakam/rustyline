@@ -27,6 +27,10 @@ pub struct History {
 }
 
 impl History {
+    // New multiline-aware history files start with `#V2\n` and have newlines
+    // and backslashes escaped in them.
+    const FILE_VERSION_V2: &'static str = "#V2";
+
     pub fn new() -> Self {
         Self::with_config(Config::default())
     }
@@ -109,10 +113,6 @@ impl History {
             self.entries.pop_front();
         }
     }
-
-    // New multiline-aware history files start with `#V2\n` and have newlines
-    // and backslashes escaped in them.
-    const FILE_VERSION_V2: &'static str = "#V2";
 
     /// Save the history in the specified file.
     // TODO append_history

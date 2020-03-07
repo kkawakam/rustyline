@@ -451,6 +451,24 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
+    /// Move cursor to the start of the buffer.
+    pub fn edit_move_buffer_start(&mut self) -> Result<()> {
+        if self.line.move_buffer_start() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Move cursor to the end of the buffer.
+    pub fn edit_move_buffer_end(&mut self) -> Result<()> {
+        if self.line.move_buffer_end() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn edit_kill(&mut self, mvt: &Movement) -> Result<()> {
         if self.line.kill(mvt) {
             self.refresh_line()

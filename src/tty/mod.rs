@@ -1,6 +1,6 @@
 //! This module implements and describes common TTY methods & traits
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::highlight::{split_highlight, Highlighter, PromptInfo};
+use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -156,6 +156,7 @@ pub trait Term {
     fn create_writer(&self) -> Self::Writer;
 }
 
+#[cfg(not(any(test, target_arch = "wasm32")))]
 fn add_prompt_and_highlight(
     buffer: &mut String,
     highlighter: Option<&dyn Highlighter>,
@@ -165,6 +166,8 @@ fn add_prompt_and_highlight(
     layout: &Layout,
     cursor: &mut Position,
 ) {
+    use crate::highlight::{split_highlight, PromptInfo};
+
     if let Some(highlighter) = highlighter {
         if highlighter.has_continuation_prompt() {
             if &line[..] == "" {
@@ -220,7 +223,7 @@ fn add_prompt_and_highlight(
                     offset: 0,
                     cursor: Some(line.pos()),
                     input: line,
-                    line: line,
+                    line,
                     line_no: 0,
                 },
             ));

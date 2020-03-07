@@ -246,7 +246,7 @@ fn is_close_bracket(bracket: u8) -> bool {
     memchr(bracket, CLOSES).is_some()
 }
 
-pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize) -> (Cow<'a, str>, Cow<'a, str>) {
+pub(crate) fn split_highlight(src: &str, offset: usize) -> (Cow<'_, str>, Cow<'_, str>) {
     let mut style_buffer = String::with_capacity(32);
     let mut iter = src.char_indices();
     let mut non_escape_idx = 0;
@@ -288,7 +288,7 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize) -> (Cow<'a, str>,
         }
         non_escape_idx += c.len_utf8();
     }
-    return (src.into(), "".into());
+    (src.into(), "".into())
 }
 
 impl PromptInfo<'_> {

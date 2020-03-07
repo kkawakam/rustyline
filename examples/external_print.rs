@@ -1,4 +1,3 @@
-use env_logger;
 use std::io::Write;
 use std::thread;
 use std::time::Duration;

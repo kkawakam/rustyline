@@ -4,7 +4,7 @@ Know issues
 
 We would like to introduce an incremental parsing phase (see `tree-sitter`).
 Because, when you have tokens (which may be as simple as words) or an AST,
-completion / suggestion / highlting / validation become easy.
+completion / suggestion / highlighting / validation become easy.
 So we need to send events to a lexer/parser, update `Document` accordingly.
 And fix `Completer` / `Hinter` / `Highlighter` API such as they have access to `Document`.
 
@@ -23,4 +23,3 @@ We would like to support user defined actions that interact nicely with undo man
 To do so, we need to refactor current key event dispatch.
 
 See `replxx` design (`ACTION_RESULT`, `action_trait_t`).
-

@@ -11,6 +11,12 @@ fn ctrl_a() {
         &[KeyPress::Ctrl('A'), KeyPress::Enter],
         ("", "Hi"),
     );
+    assert_cursor(
+        EditMode::Emacs,
+        ("test test\n123", "foo"),
+        &[KeyPress::Ctrl('A'), KeyPress::Enter],
+        ("test test\n", "123foo"),
+    );
 }
 
 #[test]
@@ -20,6 +26,12 @@ fn ctrl_e() {
         ("", "Hi"),
         &[KeyPress::Ctrl('E'), KeyPress::Enter],
         ("Hi", ""),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("foo", "test test\n123"),
+        &[KeyPress::Ctrl('E'), KeyPress::Enter],
+        ("footest test", "\n123"),
     );
 }
 
@@ -146,8 +158,65 @@ fn ctrl_k() {
         &[KeyPress::Ctrl('K'), KeyPress::Enter],
         ("B", ""),
     );
+    assert_cursor(
+        EditMode::Emacs,
+        ("Hi", "foo\nbar"),
+        &[KeyPress::Ctrl('K'), KeyPress::Enter],
+        ("Hi", "\nbar"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("Hi", "\nbar"),
+        &[KeyPress::Ctrl('K'), KeyPress::Enter],
+        ("Hi", "bar"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("Hi", "bar"),
+        &[KeyPress::Ctrl('K'), KeyPress::Enter],
+        ("Hi", ""),
+    );
 }
 
+#[test]
+fn ctrl_u() {
+    assert_cursor(
+        EditMode::Emacs,
+        ("", "Hi"),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("", "Hi"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("Hi", ""),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("", ""),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("B", "ye"),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("", "ye"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("foo\nbar", "Hi"),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("foo\n", "Hi"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("foo\n", "Hi"),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("foo", "Hi"),
+    );
+    assert_cursor(
+        EditMode::Emacs,
+        ("foo", "Hi"),
+        &[KeyPress::Ctrl('U'), KeyPress::Enter],
+        ("", "Hi"),
+    );
+}
 #[test]
 fn ctrl_n() {
     assert_history(

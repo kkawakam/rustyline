@@ -70,6 +70,9 @@ fn complete_line<H: Helper>(
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
+    #[cfg(all(unix, feature = "with-fuzzy"))]
+    use skim::{Skim, SkimOptionsBuilder};
+
     let completer = s.helper.unwrap();
     // get a list of completions
     let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
@@ -185,6 +188,44 @@ fn complete_line<H: Helper>(
             Ok(None)
         }
     } else {
+        // if fuzzy feature is enabled and on unix based systems check for the
+        // corresponding completion_type
+        #[cfg(all(unix, feature = "with-fuzzy"))]
+        {
+            if CompletionType::Fuzzy == config.completion_type() {
+                // skim takes input of candidates separated by new line
+                let input = candidates
+                    .iter()
+                    .map(|c| c.display())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                // setup skim and run with input options
+                // will display UI for fuzzy search and return selected results
+                // by default skim multi select is off so only expect one selection
+
+                let options = SkimOptionsBuilder::default()
+                    .height(Some("20%"))
+                    .prompt(Some("? "))
+                    .reverse(true)
+                    .build()
+                    .unwrap();
+
+                let selected_items =
+                    Skim::run_with(&options, Some(Box::new(std::io::Cursor::new(input))))
+                        .map(|out| out.selected_items)
+                        .unwrap_or_else(Vec::new);
+
+                // match the first (and only) returned option with the candidate and update the
+                // line otherwise only refresh line to clear the skim UI changes
+                if let Some(item) = selected_items.first() {
+                    if let Some(candidate) = candidates.get(item.get_index()) {
+                        completer.update(&mut s.line, start, candidate.replacement());
+                    }
+                }
+                s.refresh_line()?;
+            }
+        };
         Ok(None)
     }
 }
@@ -240,6 +281,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::SelfInsert(1, ' ')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
+                && cmd != Cmd::AcceptOrInsertLine
             {
                 cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
@@ -247,7 +289,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
-                Cmd::AcceptLine => {
+                Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -417,7 +459,7 @@ fn readline_edit<H: Helper>(
             }
         }
 
-        if let Cmd::CompleteHint = cmd {
+        if Cmd::CompleteHint == cmd {
             complete_hint_line(&mut s)?;
             continue;
         }
@@ -495,6 +537,16 @@ fn readline_edit<H: Helper>(
                 // Fetch the previous command from the history list.
                 s.edit_history_next(true)?
             }
+            Cmd::LineUpOrPreviousHistory => {
+                if !s.edit_move_line_up(1)? {
+                    s.edit_history_next(true)?
+                }
+            }
+            Cmd::LineDownOrNextHistory => {
+                if !s.edit_move_line_down(1)? {
+                    s.edit_history_next(false)?
+                }
+            }
             Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
             Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
             Cmd::TransposeChars => {
@@ -521,20 +573,21 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::AcceptLine => {
+            Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
                 #[cfg(test)]
                 {
                     editor.term.cursor = s.layout.cursor.col;
                 }
-                // Accept the line regardless of where the cursor is.
                 if s.has_hint() || !s.is_default_prompt() {
                     // Force a refresh without hints to leave the previous
                     // line as the user typed it after a newline.
                     s.refresh_line_with_msg(None)?;
                 }
-                s.edit_move_end()?;
-                if s.validate()? {
+                // Only accept value if cursor is at the end of the buffer
+                if s.validate()? && (cmd == Cmd::AcceptLine || s.line.is_end_of_input()) {
                     break;
+                } else {
+                    s.edit_insert('\n', 1)?;
                 }
                 continue;
             }
@@ -560,6 +613,20 @@ fn readline_edit<H: Helper>(
             Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
                 // move forwards one word
                 s.edit_move_to_next_word(at, word_def, n)?
+            }
+            Cmd::Move(Movement::LineUp(n)) => {
+                s.edit_move_line_up(n)?;
+            }
+            Cmd::Move(Movement::LineDown(n)) => {
+                s.edit_move_line_down(n)?;
+            }
+            Cmd::Move(Movement::BeginningOfBuffer) => {
+                // Move to the start of the buffer.
+                s.edit_move_buffer_start()?
+            }
+            Cmd::Move(Movement::EndOfBuffer) => {
+                // Move to the end of the buffer.
+                s.edit_move_buffer_end()?
             }
             Cmd::DowncaseWord => {
                 // lowercase word after point
@@ -597,7 +664,7 @@ fn readline_edit<H: Helper>(
                 s.refresh_line()?;
                 continue;
             }
-            Cmd::Noop | _ => {
+            _ => {
                 // Ignore the character typed.
             }
         }

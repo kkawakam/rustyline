@@ -244,7 +244,6 @@ impl EscapeBindings {
         self.bind(Key::Home, "\x1bOH", false);
         self.bind(Key::End, "\x1bOF", false);
 
-        // Present in the last version of this code, but I think i
         self.bind(Key::Up.ctrl(), "\x1bOa", false);
         self.bind(Key::Down.ctrl(), "\x1bOb", false);
         self.bind(Key::Right.ctrl(), "\x1bOc", false);
@@ -288,6 +287,8 @@ impl EscapeBindings {
         self.bind(Key::Down.ctrl(), "\x1b[Ob", false);
         self.bind(Key::Right.ctrl(), "\x1b[Oc", false);
         self.bind(Key::Left.ctrl(), "\x1b[Od", false);
+        self.bind(Key::PageUp.ctrl(), "\x1b[5^", false);
+        self.bind(Key::PageDown.ctrl(), "\x1b[6^", false);
         self.bind(Key::Home.ctrl(), "\x1b[7^", false);
         self.bind(Key::End.ctrl(), "\x1b[8^", false);
 
@@ -297,27 +298,57 @@ impl EscapeBindings {
         self.bind(Key::Left.shift(), "\x1b[d", false);
         self.bind(Key::Home.shift(), "\x1b[7$", false);
         self.bind(Key::End.shift(), "\x1b[8$", false);
+        self.bind(Key::PageUp.shift(), "\x1b[5$", false);
+        self.bind(Key::PageDown.shift(), "\x1b[6$", false);
+
+        // iTerm2, rxvt. The logic seems to be that it adds an additional `\x1b`
+        // for meta, which I guess makes sense, and is *sort of* documented.
+        self.bind(Key::Up.meta(), "\x1b\x1b[A", false);
+        self.bind(Key::Down.meta(), "\x1b\x1b[B", false);
+        self.bind(Key::Right.meta(), "\x1b\x1b[C", false);
+        self.bind(Key::Left.meta(), "\x1b\x1b[D", false);
+
+        // rxvt and similar (but not iTerm), same logic as above.
+        self.bind(Key::Delete.meta(), "\x1b\x1b[3~", false);
+        // nothing uses \x1b\x1b[4~ that I can find.
+        self.bind(Key::PageUp.meta(), "\x1b\x1b[5~", false);
+        self.bind(Key::PageDown.meta(), "\x1b\x1b[6~", false);
+        self.bind(Key::Home.meta(), "\x1b\x1b[7~", false);
+        self.bind(Key::End.meta(), "\x1b\x1b[8~", false);
+
+        self.bind(Key::Up.meta_shift(), "\x1b\x1b[a", false);
+        self.bind(Key::Down.meta_shift(), "\x1b\x1b[b", false);
+        self.bind(Key::Right.meta_shift(), "\x1b\x1b[c", false);
+        self.bind(Key::Left.meta_shift(), "\x1b\x1b[d", false);
+
+        self.bind(Key::Delete.meta_shift(), "\x1b\x1b[3$", false);
+        self.bind(Key::PageUp.meta_shift(), "\x1b\x1b[5$", false);
+        self.bind(Key::PageDown.meta_shift(), "\x1b\x1b[6$", false);
+        self.bind(Key::Home.meta_shift(), "\x1b\x1b[7$", false);
+        self.bind(Key::End.meta_shift(), "\x1b\x1b[8$", false);
+
+        self.bind(Key::Delete.ctrl_shift(), "\x1b[3@", false);
+        self.bind(Key::PageUp.ctrl_shift(), "\x1b[5@", false);
+        self.bind(Key::PageDown.ctrl_shift(), "\x1b[6@", false);
+        self.bind(Key::Home.ctrl_shift(), "\x1b[7@", false);
+        self.bind(Key::End.ctrl_shift(), "\x1b[8@", false);
+
+        self.bind(Key::Delete.ctrl_meta_shift(), "\x1b\x1b[3@", false);
+        self.bind(Key::PageUp.ctrl_meta_shift(), "\x1b\x1b[5@", false);
+        self.bind(Key::PageDown.ctrl_meta_shift(), "\x1b\x1b[6@", false);
+        self.bind(Key::Home.ctrl_meta_shift(), "\x1b\x1b[7@", false);
+        self.bind(Key::End.ctrl_meta_shift(), "\x1b\x1b[8@", false);
 
         if cfg!(target_os = "macos") {
-            // Ugh. These are annoying, since I like these terminals, but the
-            // codes they send are annoying special cases, so we actually check
-            // for them directly. Thankfully, they announce their presence via
-            // the `TERM_PROGRAM` var.
+            // Apple terminal is an annoying special case, since the codes it
+            // would otherwise parse as meta-f and meta-b. Test for it directly
+            // via the `TERM_PROGRAM` var.
             if let Ok(v) = std::env::var("TERM_PROGRAM") {
                 debug!(target: "rustyline", "term program: {}", v);
-                match v.as_str() {
-                    "Apple_Terminal" => {
-                        // Yep, really.
-                        self.bind(Key::Left.meta(), "\x1bb", false);
-                        self.bind(Key::Right.meta(), "\x1bf", false);
-                    }
-                    "iTerm.app" => {
-                        self.bind(Key::Up.meta(), "\x1b\x1b[A", false);
-                        self.bind(Key::Down.meta(), "\x1b\x1b[B", false);
-                        self.bind(Key::Right.meta(), "\x1b\x1b[C", false);
-                        self.bind(Key::Left.meta(), "\x1b\x1b[D", false);
-                    }
-                    _ => {}
+                if v.as_str() == "Apple_Terminal" {
+                    // Yep, really.
+                    self.bind(Key::Left.meta(), "\x1bb", false);
+                    self.bind(Key::Right.meta(), "\x1bf", false);
                 }
             }
         }
@@ -454,10 +485,11 @@ impl PosixRawReader {
                         // This is a bit cludgey, but works for now. Ideally we'd do
                         // this based on timing out on a read instead.
                         if c == '\x1b' {
-                            // ESC ESC
+                            // ESC ESC. Does anything actually emit this?
                             Ok(KeyPress::ESC)
                         } else {
                             // TODO ESC-R (r): Undo all changes made to this line.
+                            // (Is the above comment stale? Didn't want to delete a TODO)
                             Ok(KeyPress::meta(c))
                         }
                     } else {

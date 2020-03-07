@@ -55,6 +55,21 @@ impl Key {
     pub const fn meta(self) -> KeyPress {
         self.with_mods(KeyMods::META)
     }
+
+    #[inline]
+    pub const fn meta_shift(self) -> KeyPress {
+        self.with_mods(KeyMods::META_SHIFT)
+    }
+
+    #[inline]
+    pub const fn ctrl_shift(self) -> KeyPress {
+        self.with_mods(KeyMods::CTRL_SHIFT)
+    }
+
+    #[inline]
+    pub const fn ctrl_meta_shift(self) -> KeyPress {
+        self.with_mods(KeyMods::CTRL_META_SHIFT)
+    }
 }
 
 bitflags::bitflags! {

@@ -17,7 +17,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
         default: true
@@ -25,6 +25,6 @@ jobs:
         toolchain: stable
         override: true
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test

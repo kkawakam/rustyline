@@ -112,7 +112,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         // calculate the desired position of the cursor
         let cursor = self
             .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+            .calculate_position(&self.line[..self.line.pos()], Position::default());
         if self.layout.cursor == cursor {
             return Ok(());
         }
@@ -123,7 +123,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.out.move_cursor(self.layout.cursor, cursor)?;
             self.layout.prompt_size = self.prompt_size;
             self.layout.cursor = cursor;
-            debug_assert!(self.layout.prompt_size <= self.layout.cursor);
             debug_assert!(self.layout.cursor <= self.layout.end);
         }
         Ok(())
@@ -142,7 +141,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     ) -> Result<()> {
         let info = match info {
             Info::NoHint => None,
-            Info::Hint => self.hint.as_ref().map(String::as_str),
+            Info::Hint => self.hint.as_deref(),
             Info::Msg(msg) => msg,
         };
         let highlighter = if self.out.colors_enabled() {
@@ -153,7 +152,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
         // calculate the desired position of the cursor
         let pos = self.line.pos();
-        let cursor = self.out.calculate_position(&self.line[..pos], prompt_size);
+        let cursor = self
+            .out
+            .calculate_position(&self.line[..pos], Position::default());
         // calculate the position of the end of the input line
         let mut end = if pos == self.line.len() {
             cursor
@@ -170,7 +171,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             cursor,
             end,
         };
-        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
@@ -225,14 +225,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
             let validated = match result {
-                ValidationResult::Incomplete => {
-                    self.edit_move_end()?;
-                    self.edit_insert('\n', 1)?;
-                    false
-                }
+                ValidationResult::Incomplete => false,
                 ValidationResult::Valid(msg) => {
                     // Accept the line regardless of where the cursor is.
-                    self.edit_move_end()?;
                     if corrected || self.has_hint() || msg.is_some() {
                         // Force a refresh without hints to leave the previous
                         // line as the user typed it after a newline.
@@ -272,12 +267,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
-        self.refresh(
-            self.prompt,
-            prompt_size,
-            true,
-            Info::Msg(msg.as_ref().map(String::as_str)),
-        )
+        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg.as_deref()))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
@@ -354,7 +344,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     // Avoid a full update of the line in the trivial case.
                     self.layout.cursor.col += width;
                     self.layout.end.col += width;
-                    debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     let bits = bits.as_bytes();
@@ -472,6 +461,24 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
+    /// Move cursor to the start of the buffer.
+    pub fn edit_move_buffer_start(&mut self) -> Result<()> {
+        if self.line.move_buffer_start() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Move cursor to the end of the buffer.
+    pub fn edit_move_buffer_end(&mut self) -> Result<()> {
+        if self.line.move_buffer_end() {
+            self.move_cursor()
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn edit_kill(&mut self, mvt: &Movement) -> Result<()> {
         if self.line.kill(mvt) {
             self.refresh_line()
@@ -522,6 +529,26 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.move_cursor()
         } else {
             Ok(())
+        }
+    }
+
+    /// Moves the cursor to the same column in the line above
+    pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
+        if self.line.move_to_line_up(n) {
+            self.move_cursor()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Moves the cursor to the same column in the line above
+    pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
+        if self.line.move_to_line_down(n) {
+            self.move_cursor()?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 

@@ -5,6 +5,15 @@ use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
+pub struct PromptInfo<'a> {
+    pub(crate) default: bool,
+    pub(crate) offset: usize,
+    pub(crate) cursor: Option<usize>,
+    pub(crate) input: &'a str,
+    pub(crate) line: &'a str,
+    pub(crate) line_no: usize,
+}
+
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
 /// when not supported natively (windows <10).
@@ -26,11 +35,18 @@ pub trait Highlighter {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        info: PromptInfo<'_>,
     ) -> Cow<'b, str> {
-        let _ = default;
+        let _ = info;
         Borrowed(prompt)
     }
+
+    /// Returns `true` if prompt is rectangular rather than being present only
+    /// on the first line of input
+    fn has_continuation_prompt(&self) -> bool {
+        false
+    }
+
     /// Takes the `hint` and
     /// returns the highlighted version (with ANSI color).
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
@@ -69,9 +85,9 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        info: PromptInfo<'_>,
     ) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt, default)
+        (**self).highlight_prompt(prompt, info)
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
@@ -228,6 +244,86 @@ fn is_open_bracket(bracket: u8) -> bool {
 }
 fn is_close_bracket(bracket: u8) -> bool {
     memchr(bracket, CLOSES).is_some()
+}
+
+pub(crate) fn split_highlight(src: &str, offset: usize) -> (Cow<'_, str>, Cow<'_, str>) {
+    let mut style_buffer = String::with_capacity(32);
+    let mut iter = src.char_indices();
+    let mut non_escape_idx = 0;
+    while let Some((idx, c)) = iter.next() {
+        if c == '\x1b' {
+            match iter.next() {
+                Some((_, '[')) => {}
+                _ => continue, // unknown escape, skip
+            }
+            while let Some((end_idx, c)) = iter.next() {
+                match c {
+                    'm' => {
+                        let slice = &src[idx..end_idx + 1];
+                        if slice == "\x1b[0m" {
+                            style_buffer.clear();
+                        } else {
+                            style_buffer.push_str(slice);
+                        }
+                        break;
+                    }
+                    ';' | '0'..='9' => continue,
+                    _ => break, // unknown escape, skip
+                }
+            }
+            continue;
+        }
+        if non_escape_idx >= offset {
+            if style_buffer.is_empty() {
+                return (src[..idx].into(), src[idx..].into());
+            } else {
+                let mut left = String::with_capacity(idx + 4);
+                left.push_str(&src[..idx]);
+                left.push_str("\x1b[0m");
+                let mut right = String::with_capacity(src.len() - idx + style_buffer.len());
+                right.push_str(&style_buffer);
+                right.push_str(&src[idx..]);
+                return (left.into(), right.into());
+            }
+        }
+        non_escape_idx += c.len_utf8();
+    }
+    (src.into(), "".into())
+}
+
+impl PromptInfo<'_> {
+    /// Returns true if this is the default prompt
+    pub fn default(&self) -> bool {
+        self.default
+    }
+
+    /// Returns the byte offset where prompt is shown in the initial text
+    ///
+    /// This is a position right after the newline of the previous line
+    pub fn line_offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Returns the byte position of the cursor relative to `line_offset` if
+    /// the cursor is in the current line
+    pub fn cursor(&self) -> Option<usize> {
+        self.cursor
+    }
+
+    /// Returns the zero-based line number of the current prompt line
+    pub fn line_no(&self) -> usize {
+        self.line_no
+    }
+
+    /// Returns the line contents shown after the prompt
+    pub fn line(&self) -> &str {
+        self.line
+    }
+
+    /// Returns the whole input (equal to `line` if input is the single line)
+    pub fn input(&self) -> &str {
+        self.input
+    }
 }
 
 #[cfg(test)]

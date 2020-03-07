@@ -1,14 +1,11 @@
 //! Unix specific definitions
-use std;
 use std::cmp::Ordering;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
 use std::sync::atomic;
 
-use libc;
 use log::{debug, warn};
-use nix;
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios;
@@ -24,6 +21,7 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
+use crate::tty::add_prompt_and_highlight;
 use crate::Result;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
@@ -544,7 +542,7 @@ impl Renderer for PosixRenderer {
         self.buffer.clear();
 
         let default_prompt = new_layout.default_prompt;
-        let cursor = new_layout.cursor;
+        let mut cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
@@ -563,19 +561,15 @@ impl Renderer for PosixRenderer {
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
 
-        if let Some(highlighter) = highlighter {
-            // display the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
-        } else {
-            // display the prompt
-            self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
-        }
+        add_prompt_and_highlight(
+            &mut self.buffer,
+            highlighter,
+            line,
+            prompt,
+            default_prompt,
+            &new_layout,
+            &mut cursor,
+        );
         // display hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
@@ -584,10 +578,6 @@ impl Renderer for PosixRenderer {
                 self.buffer.push_str(hint);
             }
         }
-        // we have to generate our own newline on line wrap
-        if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
-            self.buffer.push_str("\n");
-        }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
@@ -595,10 +585,10 @@ impl Renderer for PosixRenderer {
             write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
         }
         // position the cursor within the line
-        if cursor.col > 0 {
-            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
-        } else {
+        if cursor.col == 0 {
             self.buffer.push('\r');
+        } else {
+            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
         }
 
         self.write_and_flush(self.buffer.as_bytes())?;

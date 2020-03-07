@@ -188,6 +188,13 @@ pub enum CompletionType {
     /// When more than one match, list all matches
     /// (like in Bash/Readline).
     List,
+
+    /// Complete the match using fuzzy search and selection
+    /// (like fzf and plugins)
+    /// Currently only available for unix platforms as dependency on
+    /// skim->tuikit Compile with `--features=fuzzy` to enable
+    #[cfg(all(unix, feature = "with-fuzzy"))]
+    Fuzzy,
 }
 
 /// Style of editing / Standard keymaps
@@ -214,7 +221,7 @@ pub enum OutputStreamType {
 }
 
 /// Configuration builder
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Builder {
     p: Config,
 }

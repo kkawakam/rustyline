@@ -327,7 +327,7 @@ pub fn char_to_key_press(c: char) -> KeyPress {
         '\x07' => KeyPress::ctrl('G'),
         '\x08' => KeyPress::BACKSPACE, // '\b'
         '\x09' => KeyPress::TAB,       // '\t'
-        '\x0a' => KeyPress::ctrl('J'), // '\n' (1)
+        '\x0a' => KeyPress::ctrl('J'), // '\n' (10)
         '\x0b' => KeyPress::ctrl('K'),
         '\x0c' => KeyPress::ctrl('L'),
         '\x0d' => KeyPress::ENTER, // '\r' (13)

@@ -25,6 +25,8 @@ jobs:
         toolchain: stable
         override: true
     - name: Build
-      run: cargo build
+      run: cargo build --workspace --all-targets
     - name: Run tests
-      run: cargo test
+      run: cargo test --workspace --all-targets
+    - name: Run doctests
+      run: cargo test --workspace --doc

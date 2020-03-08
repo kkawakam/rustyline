@@ -28,6 +28,7 @@ unicode-segmentation = "1.0"
 memchr = "2.0"
 bitflags = "1.2"
 smallvec = "1.2"
+qp-trie = "0.7"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.17"

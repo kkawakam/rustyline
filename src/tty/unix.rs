@@ -1,6 +1,5 @@
 //! Unix specific definitions
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
@@ -14,6 +13,8 @@ use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use utf8parse::{Parser, Receiver};
+use qp_trie::Trie;
+
 
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
@@ -134,30 +135,20 @@ type EscapeSeq = smallvec::SmallVec<[u8; 12]>;
 /// Basically a dictionary from escape sequences to keys. It can also tell us if
 /// a sequence cannot possibly result in
 struct EscapeBindings {
-    bindings: HashMap<EscapeSeq, KeyPress>,
-    // Stores each prefix of a binding in bindings. For example: if we have
-    // b"\x1b[18;2~" as a binding, `prefixes` will store `\x1b`, `\x1b[`,
-    // `\x1b[1`, `\x1b[18`, `\x1b[18;`, and so on. We also use it to detect if
-    // there's an ambiguous binding during startup.
-    //
-    // In an ideal world we'd use some prefix tree structure, but I surprisingly
-    // couldn't find one that actually supported an `item_with_prefix_exists`
-    // (or similar) function.
-    //
-    // This exists so we know when to emit an "unknown escape code" complaint.
-    prefixes: HashSet<EscapeSeq>,
-    max_len: usize,
+    bindings: Trie<EscapeSeq, KeyPress>
 }
 
 impl EscapeBindings {
     pub fn common_unix() -> Self {
         let mut res = Self {
-            bindings: HashMap::new(),
-            prefixes: HashSet::new(),
-            max_len: 0,
+            bindings: Trie::new()
         };
         res.add_common_unix();
         res
+    }
+
+    fn is_prefix<B: ?Sized + AsRef<[u8]>>(&self, invalid_sequence: &B) -> bool {
+        !self.bindings.subtrie(invalid_sequence.as_ref()).is_empty()
     }
 
     // Note: the overwrite flag is always false during initialization. It means
@@ -173,24 +164,18 @@ impl EscapeBindings {
         let binding = binding.into();
         let seq = seq_str.as_bytes();
         assert!(!seq.is_empty());
-        assert!(overwrite || !self.prefixes.contains(seq), "{:?}", seq_str);
+        assert!(overwrite || !self.is_prefix(seq), "{:?}", seq_str);
         assert!(
             overwrite || !self.bindings.contains_key(seq),
             "{:?}",
             seq_str
         );
-        if seq.len() > 1 {
-            // Go in reverse so that we don't add the same prefixes again and
-            // again --
-            for i in (1..seq.len()).rev() {
-                let existed = self.prefixes.insert(seq[..i].into());
-                if existed {
-                    break;
-                }
-                // Check if the thing we're adding is already blocked because it
-                // has a prefix.
+        if seq.len() > 1 && !overwrite {
+            // Check if the thing we're adding is already blocked because it
+            // has a prefix which already exists in the trie
+            for i in 1..seq.len() {
                 assert!(
-                    overwrite || !self.bindings.contains_key(&seq[..i]),
+                    !self.bindings.contains_key(&seq[..i]),
                     "{:?} is prefix of {:?}: {:?}",
                     &seq_str[..i],
                     seq_str,
@@ -201,9 +186,6 @@ impl EscapeBindings {
         let existed = self.bindings.insert(seq.into(), binding);
         if !overwrite {
             assert_eq!(existed, None, "{:?} {:?}", seq_str, binding);
-        }
-        if seq.len() >= self.max_len {
-            self.max_len = seq.len();
         }
     }
 
@@ -402,7 +384,7 @@ impl EscapeBindings {
     pub fn lookup(&self, v: &[u8]) -> EscapeSearchResult {
         if let Some(k) = self.bindings.get(v) {
             EscapeSearchResult::Matched(*k)
-        } else if self.prefixes.contains(v) {
+        } else if self.is_prefix(v) {
             EscapeSearchResult::IsPrefix
         } else {
             EscapeSearchResult::NoMatch

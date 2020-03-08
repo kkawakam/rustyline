@@ -6,7 +6,7 @@ use rustyline_derive::{Completer, Helper, Highlighter, Validator};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct DIYHinter {
-    // It's simple example of rustyline, for more effecient, please use ** radix trie ** (thanks @gwenn's idea)
+    // It's simple example of rustyline, for more effecient, please use ** radix trie **
     hints: HashSet<String>,
 }
 
@@ -19,7 +19,8 @@ impl Hinter for DIYHinter {
         self.hints
             .iter()
             .filter_map(|hint| {
-                // expect hint after word complete, like redis cli, add condition: line.ends_with(" ")
+                // expect hint after word complete, like redis cli, add condition:
+                // line.ends_with(" ")
                 if pos > 0 && hint.starts_with(&line[..pos]) {
                     Some(hint[pos..].to_owned())
                 } else {
@@ -43,7 +44,7 @@ fn diy_hints() -> HashSet<String> {
 fn main() -> rustyline::Result<()> {
     println!("This is a DIY hint hack of rustyline");
     let h = DIYHinter { hints: diy_hints() };
-    
+
     let mut rl: Editor<DIYHinter> = Editor::new();
     rl.set_helper(Some(h));
 

@@ -30,3 +30,6 @@ jobs:
       run: cargo test --workspace --all-targets
     - name: Run doctests
       run: cargo test --workspace --doc
+
+    env:
+      RUST_BACKTRACE: 1

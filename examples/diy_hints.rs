@@ -27,7 +27,7 @@ impl Hinter for DIYHinter {
                     None
                 }
             })
-            .nth(0)
+            .next()
     }
 }
 

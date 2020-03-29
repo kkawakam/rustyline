@@ -41,6 +41,39 @@ pub trait Renderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()>;
 
+    /// Compute layout for rendering prompt + line + some info (either hint,
+    /// validation msg, ...). on the screen. Depending on screen width, line
+    /// wrapping may be applied.
+    fn compute_layout(
+        &self,
+        prompt_size: Position,
+        default_prompt: bool,
+        line: &LineBuffer,
+        info: Option<&str>,
+    ) -> Layout {
+        // calculate the desired position of the cursor
+        let pos = line.pos();
+        let cursor = self.calculate_position(&line[..pos], Position::default());
+        // calculate the position of the end of the input line
+        let mut end = if pos == line.len() {
+            cursor
+        } else {
+            self.calculate_position(&line[pos..], cursor)
+        };
+        if let Some(info) = info {
+            end = self.calculate_position(&info, end);
+        }
+
+        let new_layout = Layout {
+            prompt_size,
+            default_prompt,
+            cursor,
+            end,
+        };
+        debug_assert!(new_layout.cursor <= new_layout.end);
+        new_layout
+    }
+
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;

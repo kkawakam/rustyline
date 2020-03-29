@@ -150,28 +150,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             None
         };
 
-        // calculate the desired position of the cursor
-        let pos = self.line.pos();
-        let cursor = self
+        let new_layout = self
             .out
-            .calculate_position(&self.line[..pos], Position::default());
-        // calculate the position of the end of the input line
-        let mut end = if pos == self.line.len() {
-            cursor
-        } else {
-            self.out.calculate_position(&self.line[pos..], cursor)
-        };
-        if let Some(info) = info {
-            end = self.out.calculate_position(&info, end);
-        }
-
-        let new_layout = Layout {
-            prompt_size,
-            default_prompt,
-            cursor,
-            end,
-        };
-        debug_assert!(new_layout.cursor <= new_layout.end);
+            .compute_layout(prompt_size, default_prompt, &self.line, info);
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
         debug!(target: "rustyline", "new layout: {:?}", new_layout);

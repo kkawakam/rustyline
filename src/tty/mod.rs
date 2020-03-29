@@ -156,7 +156,7 @@ pub trait Term {
     fn create_writer(&self) -> Self::Writer;
 }
 
-#[cfg(not(any(test, target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn add_prompt_and_highlight(
     buffer: &mut String,
     highlighter: Option<&dyn Highlighter>,
@@ -252,19 +252,21 @@ fn add_prompt_and_highlight(
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(any(test, target_arch = "wasm32"))] {
-        mod test;
-        pub use self::test::*;
-    } else if #[cfg(windows)] {
-        // If on Windows platform import Windows TTY module
-        // and re-export into mod.rs scope
-        mod windows;
-        pub use self::windows::*;
-    } else if #[cfg(unix)] {
-        // If on Unix platform import Unix TTY module
-        // and re-export into mod.rs scope
-        mod unix;
-        pub use self::unix::*;
-    }
-}
+// If on Windows platform import Windows TTY module
+// and re-export into mod.rs scope
+#[cfg(all(windows, not(target_arch = "wasm32")))]
+mod windows;
+#[cfg(all(windows, not(target_arch = "wasm32")))]
+pub use self::windows::*;
+
+// If on Unix platform import Unix TTY module
+// and re-export into mod.rs scope
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+mod unix;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use self::unix::*;
+
+#[cfg(any(test, target_arch = "wasm32"))]
+mod test;
+#[cfg(any(test, target_arch = "wasm32"))]
+pub use self::test::*;

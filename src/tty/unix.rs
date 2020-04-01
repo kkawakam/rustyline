@@ -21,7 +21,6 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::tty::add_prompt_and_highlight;
 use crate::Result;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
@@ -546,7 +545,7 @@ impl Renderer for PosixRenderer {
         self.buffer.clear();
 
         let default_prompt = new_layout.default_prompt;
-        let mut cursor = new_layout.cursor;
+        let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
@@ -565,15 +564,19 @@ impl Renderer for PosixRenderer {
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
 
-        add_prompt_and_highlight(
-            &mut self.buffer,
-            highlighter,
-            line,
-            prompt,
-            default_prompt,
-            &new_layout,
-            &mut cursor,
-        );
+        if let Some(highlighter) = highlighter {
+            // display the prompt
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            // display the input line
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // display the prompt
+            self.buffer.push_str(prompt);
+            // display the input line
+            self.buffer.push_str(line);
+        }
         // display hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
@@ -582,6 +585,10 @@ impl Renderer for PosixRenderer {
                 self.buffer.push_str(hint);
             }
         }
+        // we have to generate our own newline on line wrap
+        if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
+            self.buffer.push_str("\n");
+        }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
@@ -589,10 +596,10 @@ impl Renderer for PosixRenderer {
             write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
         }
         // position the cursor within the line
-        if cursor.col == 0 {
-            self.buffer.push('\r');
-        } else {
+        if cursor.col > 0 {
             write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
+        } else {
+            self.buffer.push('\r');
         }
 
         self.write_and_flush(self.buffer.as_bytes())?;
@@ -958,18 +965,18 @@ mod test {
 
         let mut line = LineBuffer::init("", 0, None);
         let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
-        assert_eq!(Position { col: 0, row: 0 }, old_layout.cursor);
+        assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
         assert_eq!(Some(true), line.insert('a', out.cols - prompt_size.col + 1));
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
-        assert_eq!(Position { col: 79, row: 0 }, new_layout.cursor);
+        assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
         out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(
-            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[81C",
+            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
     }

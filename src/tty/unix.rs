@@ -46,6 +46,10 @@ nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
+    if cfg!(test) {
+        return (80, 24);
+    }
+
     unsafe {
         let mut size: libc::winsize = zeroed();
         match win_size(fileno.as_raw_fd(), &mut size) {
@@ -920,6 +924,7 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::{BellStyle, OutputStreamType};
+    use crate::line_buffer::LineBuffer;
 
     #[test]
     #[ignore]
@@ -949,5 +954,30 @@ mod test {
     fn test_sync() {
         fn assert_sync<T: Sync>() {}
         assert_sync::<PosixTerminal>();
+    }
+
+    #[test]
+    fn test_line_wrap() {
+        let mut out = PosixRenderer::new(OutputStreamType::Stdout, 4, true, BellStyle::default());
+        let prompt = "> ";
+        let default_prompt = true;
+        let prompt_size = out.calculate_position(prompt, Position::default());
+
+        let mut line = LineBuffer::init("", 0, None);
+        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
+        assert_eq!(old_layout.cursor, old_layout.end);
+
+        assert_eq!(Some(true), line.insert('a', out.cols - prompt_size.col + 1));
+        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
+        assert_eq!(new_layout.cursor, new_layout.end);
+        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+            .unwrap();
+        #[rustfmt::skip]
+        assert_eq!(
+            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
+            out.buffer
+        );
     }
 }

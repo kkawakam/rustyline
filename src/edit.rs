@@ -112,7 +112,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         // calculate the desired position of the cursor
         let cursor = self
             .out
-            .calculate_position(&self.line[..self.line.pos()], Position::default());
+            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
         if self.layout.cursor == cursor {
             return Ok(());
         }
@@ -123,6 +123,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.out.move_cursor(self.layout.cursor, cursor)?;
             self.layout.prompt_size = self.prompt_size;
             self.layout.cursor = cursor;
+            debug_assert!(self.layout.prompt_size <= self.layout.cursor);
             debug_assert!(self.layout.cursor <= self.layout.end);
         }
         Ok(())
@@ -152,9 +153,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
         // calculate the desired position of the cursor
         let pos = self.line.pos();
-        let cursor = self
-            .out
-            .calculate_position(&self.line[..pos], Position::default());
+        let cursor = self.out.calculate_position(&self.line[..pos], prompt_size);
         // calculate the position of the end of the input line
         let mut end = if pos == self.line.len() {
             cursor
@@ -171,6 +170,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             cursor,
             end,
         };
+        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
@@ -336,6 +336,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     // Avoid a full update of the line in the trivial case.
                     self.layout.cursor.col += width;
                     self.layout.end.col += width;
+                    debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     let bits = bits.as_bytes();

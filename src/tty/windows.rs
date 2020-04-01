@@ -16,7 +16,6 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::tty::add_prompt_and_highlight;
 use crate::Result;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
@@ -327,22 +326,26 @@ impl Renderer for ConsoleRenderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
-        let mut cursor = new_layout.cursor;
+        let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
 
         self.buffer.clear();
-        add_prompt_and_highlight(
-            &mut self.buffer,
-            highlighter,
-            line,
-            prompt,
-            default_prompt,
-            &new_layout,
-            &mut cursor,
-        );
-
+        if let Some(highlighter) = highlighter {
+            // TODO handle ansi escape code (SetConsoleTextAttribute)
+            // append the prompt
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            // append the input line
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // append the prompt
+            self.buffer.push_str(prompt);
+            // append the input line
+            self.buffer.push_str(line);
+        }
         // append hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {

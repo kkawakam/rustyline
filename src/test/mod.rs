@@ -15,7 +15,6 @@ use crate::{Context, Editor, Helper, Result};
 
 mod common;
 mod emacs;
-mod highlight;
 mod history;
 mod vi_cmd;
 mod vi_insert;

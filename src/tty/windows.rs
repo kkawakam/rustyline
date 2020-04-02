@@ -1,4 +1,6 @@
 //! Windows specific definitions
+#![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
+
 use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
@@ -586,16 +588,33 @@ impl Term for Console {
 
         let original_stdstream_mode = if self.stdstream_isatty {
             let original_stdstream_mode = get_console_mode(self.stdstream_handle)?;
+
+            let mut mode = original_stdstream_mode;
+            if mode & wincon::ENABLE_WRAP_AT_EOL_OUTPUT == 0 {
+                mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
+                debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
+                unsafe {
+                    assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                }
+            }
             // To enable ANSI colors (Windows 10 only):
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-            if original_stdstream_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
-                let raw = original_stdstream_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            self.ansi_colors_supported = mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0;
+            if self.ansi_colors_supported {
+                if self.color_mode == ColorMode::Disabled {
+                    mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                    debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
+                    unsafe {
+                        assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                    }
+                } else {
+                    debug!(target: "rustyline", "ANSI colors already enabled");
+                }
+            } else if self.color_mode != ColorMode::Disabled {
+                mode |= wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, raw) != 0 };
+                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0 };
                 debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
-            } else {
-                debug!(target: "rustyline", "ANSI colors already enabled");
-                self.ansi_colors_supported = true;
             }
             Some(original_stdstream_mode)
         } else {

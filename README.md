@@ -19,8 +19,6 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 
 ## Example
 ```rust
-extern crate rustyline;
-
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 

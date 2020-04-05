@@ -1,4 +1,6 @@
 //! Windows specific definitions
+#![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
+
 use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
@@ -16,7 +18,6 @@ use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::tty::add_prompt_and_highlight;
 use crate::Result;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
@@ -327,22 +328,26 @@ impl Renderer for ConsoleRenderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
-        let mut cursor = new_layout.cursor;
+        let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
         let old_rows = old_layout.end.row;
 
         self.buffer.clear();
-        add_prompt_and_highlight(
-            &mut self.buffer,
-            highlighter,
-            line,
-            prompt,
-            default_prompt,
-            &new_layout,
-            &mut cursor,
-        );
-
+        if let Some(highlighter) = highlighter {
+            // TODO handle ansi escape code (SetConsoleTextAttribute)
+            // append the prompt
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            // append the input line
+            self.buffer
+                .push_str(&highlighter.highlight(line, line.pos()));
+        } else {
+            // append the prompt
+            self.buffer.push_str(prompt);
+            // append the input line
+            self.buffer.push_str(line);
+        }
         // append hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
@@ -583,16 +588,33 @@ impl Term for Console {
 
         let original_stdstream_mode = if self.stdstream_isatty {
             let original_stdstream_mode = get_console_mode(self.stdstream_handle)?;
+
+            let mut mode = original_stdstream_mode;
+            if mode & wincon::ENABLE_WRAP_AT_EOL_OUTPUT == 0 {
+                mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
+                debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
+                unsafe {
+                    assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                }
+            }
             // To enable ANSI colors (Windows 10 only):
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-            if original_stdstream_mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0 {
-                let raw = original_stdstream_mode | wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            self.ansi_colors_supported = mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0;
+            if self.ansi_colors_supported {
+                if self.color_mode == ColorMode::Disabled {
+                    mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                    debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
+                    unsafe {
+                        assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                    }
+                } else {
+                    debug!(target: "rustyline", "ANSI colors already enabled");
+                }
+            } else if self.color_mode != ColorMode::Disabled {
+                mode |= wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, raw) != 0 };
+                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0 };
                 debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
-            } else {
-                debug!(target: "rustyline", "ANSI colors already enabled");
-                self.ansi_colors_supported = true;
             }
             Some(original_stdstream_mode)
         } else {

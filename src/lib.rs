@@ -997,3 +997,6 @@ impl<'a, H: Helper> Iterator for Iter<'a, H> {
 extern crate assert_matches;
 #[cfg(test)]
 mod test;
+
+#[cfg(doctest)]
+doc_comment::doctest!("../README.md");

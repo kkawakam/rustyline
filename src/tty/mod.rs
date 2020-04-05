@@ -51,6 +51,40 @@ pub trait Renderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()>;
 
+    /// Compute layout for rendering prompt + line + some info (either hint,
+    /// validation msg, ...). on the screen. Depending on screen width, line
+    /// wrapping may be applied.
+    fn compute_layout(
+        &self,
+        prompt_size: Position,
+        default_prompt: bool,
+        line: &LineBuffer,
+        info: Option<&str>,
+    ) -> Layout {
+        // calculate the desired position of the cursor
+        let pos = line.pos();
+        let cursor = self.calculate_position(&line[..pos], prompt_size);
+        // calculate the position of the end of the input line
+        let mut end = if pos == line.len() {
+            cursor
+        } else {
+            self.calculate_position(&line[pos..], cursor)
+        };
+        if let Some(info) = info {
+            end = self.calculate_position(&info, end);
+        }
+
+        let new_layout = Layout {
+            prompt_size,
+            default_prompt,
+            cursor,
+            end,
+        };
+        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
+        debug_assert!(new_layout.cursor <= new_layout.end);
+        new_layout
+    }
+
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
@@ -175,115 +209,21 @@ pub trait Term {
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }
 
-#[cfg(not(any(test, target_arch = "wasm32")))]
-fn add_prompt_and_highlight(
-    buffer: &mut String,
-    highlighter: Option<&dyn Highlighter>,
-    line: &LineBuffer,
-    prompt: &str,
-    default_prompt: bool,
-    layout: &Layout,
-    cursor: &mut Position,
-) {
-    use crate::highlight::{split_highlight, PromptInfo};
+// If on Windows platform import Windows TTY module
+// and re-export into mod.rs scope
+#[cfg(all(windows, not(target_arch = "wasm32")))]
+mod windows;
+#[cfg(all(windows, not(target_arch = "wasm32")))]
+pub use self::windows::*;
 
-    if let Some(highlighter) = highlighter {
-        if highlighter.has_continuation_prompt() {
-            if &line[..] == "" {
-                // line.lines() is an empty iterator for empty line so
-                // we need to treat it as a special case
-                let prompt = highlighter.highlight_prompt(
-                    prompt,
-                    PromptInfo {
-                        default: default_prompt,
-                        offset: 0,
-                        cursor: Some(0),
-                        input: "",
-                        line: "",
-                        line_no: 0,
-                    },
-                );
-                buffer.push_str(&prompt);
-            } else {
-                let highlighted = highlighter.highlight(line, line.pos());
-                let lines = line.split('\n');
-                let mut highlighted_left = highlighted.to_string();
-                let mut offset = 0;
-                for (line_no, orig) in lines.enumerate() {
-                    let (hl, tail) = split_highlight(&highlighted_left, orig.len() + 1);
-                    let prompt = highlighter.highlight_prompt(
-                        prompt,
-                        PromptInfo {
-                            default: default_prompt,
-                            offset,
-                            cursor: if line.pos() > offset && line.pos() < orig.len() {
-                                Some(line.pos() - offset)
-                            } else {
-                                None
-                            },
-                            input: line,
-                            line: orig,
-                            line_no,
-                        },
-                    );
-                    buffer.push_str(&prompt);
-                    buffer.push_str(&hl);
-                    highlighted_left = tail.to_string();
-                    offset += orig.len() + 1;
-                }
-            }
-            cursor.col += layout.prompt_size.col;
-        } else {
-            // display the prompt
-            buffer.push_str(&highlighter.highlight_prompt(
-                prompt,
-                PromptInfo {
-                    default: default_prompt,
-                    offset: 0,
-                    cursor: Some(line.pos()),
-                    input: line,
-                    line,
-                    line_no: 0,
-                },
-            ));
-            // display the input line
-            buffer.push_str(&highlighter.highlight(line, line.pos()));
-            // we have to generate our own newline on line wrap
-            if layout.end.col == 0 && layout.end.row > 0 && !buffer.ends_with('\n') {
-                buffer.push_str("\n");
-            }
-            if cursor.row == 0 {
-                cursor.col += layout.prompt_size.col;
-            }
-        }
-    } else {
-        // display the prompt
-        buffer.push_str(prompt);
-        // display the input line
-        buffer.push_str(line);
-        // we have to generate our own newline on line wrap
-        if layout.end.col == 0 && layout.end.row > 0 && !buffer.ends_with('\n') {
-            buffer.push_str("\n");
-        }
-        if cursor.row == 0 {
-            cursor.col += layout.prompt_size.col;
-        }
-    }
-}
+// If on Unix platform import Unix TTY module
+// and re-export into mod.rs scope
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+mod unix;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use self::unix::*;
 
-cfg_if::cfg_if! {
-    if #[cfg(any(test, target_arch = "wasm32"))] {
-        mod test;
-        pub use self::test::*;
-    } else if #[cfg(windows)] {
-        // If on Windows platform import Windows TTY module
-        // and re-export into mod.rs scope
-        mod windows;
-        pub use self::windows::*;
-    } else if #[cfg(unix)] {
-        // If on Unix platform import Unix TTY module
-        // and re-export into mod.rs scope
-        mod unix;
-        pub use self::unix::*;
-    }
-}
+#[cfg(any(test, target_arch = "wasm32"))]
+mod test;
+#[cfg(any(test, target_arch = "wasm32"))]
+pub use self::test::*;

@@ -283,7 +283,11 @@ impl ConsoleRenderer {
     }
 
     fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
-        check!(wincon::SetConsoleCursorPosition(self.handle, pos));
+        let result = unsafe {wincon::SetConsoleCursorPosition(self.handle, pos)};
+
+        if result == 0 {
+            println!("");
+        }
         Ok(())
     }
 

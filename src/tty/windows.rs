@@ -1,11 +1,11 @@
 //! Windows specific definitions
 #![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
-use std::io::{self, Write};
+use std::io::{self, ErrorKind, Write};
 use std::mem;
 use std::sync::atomic;
 
-use log::debug;
+use log::{debug, warn};
 use unicode_width::UnicodeWidthChar;
 use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
@@ -470,7 +470,15 @@ impl Renderer for ConsoleRenderer {
         debug!(target: "rustyline", "initial cursor location: {:?}, {:?}", info.dwCursorPosition.X, info.dwCursorPosition.Y);
         info.dwCursorPosition.X = 0;
         info.dwCursorPosition.Y += 1;
-        self.set_console_cursor_position(info.dwCursorPosition)
+        let res = self.set_console_cursor_position(info.dwCursorPosition);
+        if let Err(error::ReadlineError::Io(ref e)) = res {
+            if e.kind() == ErrorKind::Other && e.raw_os_error() == Some(87) {
+                warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", info.dwCursorPosition.X, info.dwCursorPosition.Y, info.dwSize.X, info.dwSize.Y);
+                println!("");
+                return Ok(());
+            }
+        }
+        res
     }
 }
 

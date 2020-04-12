@@ -472,7 +472,7 @@ impl Renderer for ConsoleRenderer {
         info.dwCursorPosition.Y += 1;
         let res = self.set_console_cursor_position(info.dwCursorPosition);
         if let Err(error::ReadlineError::Io(ref e)) = res {
-            if e.kind() == ErrorKind::InvalidInput && e.raw_os_error() == Some(87) {
+            if e.kind() == ErrorKind::Other && e.raw_os_error() == Some(87) {
                 warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", info.dwCursorPosition.X, info.dwCursorPosition.Y, info.dwSize.X, info.dwSize.Y);
                 println!("");
                 return Ok(());

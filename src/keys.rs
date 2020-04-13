@@ -1,7 +1,7 @@
 //! Key constants
 
-// #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum KeyPress {
     UnknownEscSeq,
     Backspace, // Ctrl('H')

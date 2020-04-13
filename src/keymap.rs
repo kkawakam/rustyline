@@ -14,8 +14,8 @@ use crate::tty::{RawReader, Term, Terminal};
 pub type RepeatCount = usize;
 
 /// Commands
-// #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Cmd {
     /// abort
     Abort, // Miscellaneous Command
@@ -233,6 +233,7 @@ impl CharSearch {
 
 /// Where to move
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Movement {
     WholeLine, // not really a movement
     /// beginning-of-line

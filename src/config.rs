@@ -181,6 +181,7 @@ pub enum HistoryDuplicates {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CompletionType {
     /// Complete the next full match (like in Vim by default)
     Circular,
@@ -199,6 +200,7 @@ pub enum CompletionType {
 
 /// Style of editing / Standard keymaps
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EditMode {
     Emacs,
     Vi,
@@ -206,6 +208,7 @@ pub enum EditMode {
 
 /// Colorization mode
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ColorMode {
     Enabled,
     Forced,
@@ -215,6 +218,7 @@ pub enum ColorMode {
 /// Should the editor use stdout or stderr
 // TODO console term::TermTarget
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum OutputStreamType {
     Stderr,
     Stdout,

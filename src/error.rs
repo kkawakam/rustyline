@@ -10,6 +10,7 @@ use std::io;
 // #[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),

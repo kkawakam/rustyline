@@ -6,7 +6,8 @@ use std::mem;
 use std::sync::atomic;
 
 use log::{debug, warn};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
@@ -298,6 +299,30 @@ impl ConsoleRenderer {
         ));
         Ok(())
     }
+
+    // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
+    // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
+    fn wrap_at_eol(&mut self, s: &str, col: usize) -> usize {
+        for c in s.graphemes(true) {
+            if c == "\n" {
+                col = 0;
+                self.buffer.push(c);
+            } else {
+                let cw = c.width();
+                col += cw;
+                if col > self.cols {
+                    self.buffer.push('\r');
+                    col = cw;
+                }
+                self.buffer.push(c);
+            }
+        }
+        if col == self.cols {
+            self.buffer.push('\r');
+            col = 0;
+        }
+        col
+    }
 }
 
 impl Renderer for ConsoleRenderer {
@@ -334,14 +359,13 @@ impl Renderer for ConsoleRenderer {
         let old_rows = old_layout.end.row;
 
         self.buffer.clear();
+        let mut col = 0;
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
             // append the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
         } else {
             // append the prompt
             self.buffer.push_str(prompt);
@@ -351,7 +375,7 @@ impl Renderer for ConsoleRenderer {
         // append hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(hint));
+                self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
             } else {
                 self.buffer.push_str(hint);
             }
@@ -392,15 +416,12 @@ impl Renderer for ConsoleRenderer {
     /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
-        for c in s.chars() {
-            let cw = if c == '\n' {
+        for c in s.graphemes(true) {
+            if c == "\n" {
                 pos.col = 0;
                 pos.row += 1;
-                None
             } else {
-                c.width()
-            };
-            if let Some(cw) = cw {
+                let cw = c.width();
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;

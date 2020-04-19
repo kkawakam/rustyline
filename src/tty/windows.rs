@@ -301,7 +301,7 @@ impl ConsoleRenderer {
             attr,
             length,
             pos,
-            &mut _count
+            &mut _count,
         ));
         Ok(())
     }

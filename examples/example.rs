@@ -15,7 +15,6 @@ struct MyHelper {
     highlighter: MatchingBracketHighlighter,
     validator: MatchingBracketValidator,
     hinter: HistoryHinter,
-    colored_prompt: String,
 }
 
 impl Completer for MyHelper {
@@ -44,7 +43,7 @@ impl Highlighter for MyHelper {
         default: bool,
     ) -> Cow<'b, str> {
         if default {
-            Borrowed(&self.colored_prompt)
+            Owned(format!("\x1b[1;32m{}\x1b[0m", prompt))
         } else {
             Borrowed(prompt)
         }
@@ -83,14 +82,13 @@ fn main() -> rustyline::Result<()> {
     let config = Config::builder()
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
-        .edit_mode(EditMode::Emacs)
+        .edit_mode(EditMode::Vi)
         .output_stream(OutputStreamType::Stdout)
         .build();
     let h = MyHelper {
         completer: FilenameCompleter::new(),
         highlighter: MatchingBracketHighlighter::new(),
         hinter: HistoryHinter {},
-        colored_prompt: "".to_owned(),
         validator: MatchingBracketValidator::new(),
     };
     let mut rl = Editor::with_config(config);
@@ -103,7 +101,6 @@ fn main() -> rustyline::Result<()> {
     let mut count = 1;
     loop {
         let p = format!("{}> ", count);
-        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {

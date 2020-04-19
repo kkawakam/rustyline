@@ -20,7 +20,12 @@ mod vi_cmd;
 mod vi_insert;
 
 fn init_editor(mode: EditMode, keys: &[KeyPress]) -> Editor<()> {
-    let config = Config::builder().edit_mode(mode).build();
+    let config = Config::builder()
+        .edit_mode(mode)
+        .vi_command_indicator("")
+        .vi_insert_indicator("")
+        .vi_replace_indicator("")
+        .build();
     let mut editor = Editor::<()>::with_config(config);
     editor.term.keys.extend(keys.iter().cloned());
     editor

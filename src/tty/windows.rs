@@ -326,6 +326,7 @@ impl Renderer for ConsoleRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        mode_indicator: Option<&str>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;

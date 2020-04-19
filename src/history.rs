@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn add() {
         let config = Config::builder().history_ignore_space(true).build();
-        let mut history = History::with_config(config);
+        let mut history = History::with_config(config.clone());
         assert_eq!(config.max_history_size(), history.max_len);
         assert!(history.add("line1"));
         assert!(history.add("line2"));

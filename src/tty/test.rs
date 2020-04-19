@@ -83,6 +83,7 @@ impl Renderer for Sink {
         _old_layout: &Layout,
         _new_layout: &Layout,
         _highlighter: Option<&dyn Highlighter>,
+        _indicator: Option<&str>,
     ) -> Result<()> {
         Ok(())
     }

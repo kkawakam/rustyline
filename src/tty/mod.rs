@@ -39,6 +39,7 @@ pub trait Renderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        mode_indicator: Option<&str>,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -118,8 +119,17 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        mode_indicator: Option<&str>,
     ) -> Result<()> {
-        (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
+        (**self).refresh_line(
+            prompt,
+            line,
+            hint,
+            old_layout,
+            new_layout,
+            highlighter,
+            mode_indicator,
+        )
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

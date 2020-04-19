@@ -424,7 +424,7 @@ fn readline_edit<H: Helper>(
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
-    let mut s = State::new(&mut stdout, prompt, helper, ctx);
+    let mut s = State::new(&mut stdout, prompt, helper, ctx, &editor.config);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -784,7 +784,7 @@ impl<H: Helper> Editor<H> {
         );
         Self {
             term,
-            history: History::with_config(config),
+            history: History::with_config(config.clone()),
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,

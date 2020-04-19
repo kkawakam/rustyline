@@ -302,11 +302,11 @@ impl ConsoleRenderer {
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, col: usize) -> usize {
+    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
         for c in s.graphemes(true) {
             if c == "\n" {
                 col = 0;
-                self.buffer.push(c);
+                self.buffer.push_str(c);
             } else {
                 let cw = c.width();
                 col += cw;
@@ -314,7 +314,7 @@ impl ConsoleRenderer {
                     self.buffer.push('\r');
                     col = cw;
                 }
-                self.buffer.push(c);
+                self.buffer.push_str(c);
             }
         }
         if col == self.cols {

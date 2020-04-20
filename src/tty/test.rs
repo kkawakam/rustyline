@@ -7,6 +7,7 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
+use crate::keymap::InputMode;
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -83,7 +84,7 @@ impl Renderer for Sink {
         _old_layout: &Layout,
         _new_layout: &Layout,
         _highlighter: Option<&dyn Highlighter>,
-        _indicator: Option<&str>,
+        _indicator: Option<InputMode>,
     ) -> Result<()> {
         Ok(())
     }

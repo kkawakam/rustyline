@@ -291,8 +291,9 @@ impl Movement {
     }
 }
 
-#[derive(PartialEq)]
-pub(crate) enum InputMode {
+/// Vi input mode.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InputMode {
     /// Vi Command/Alternate
     Command,
     /// Insert/Input mode

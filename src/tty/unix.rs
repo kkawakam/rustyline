@@ -17,7 +17,8 @@ use utf8parse::{Parser, Receiver};
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
+use crate::keymap::InputMode;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -540,7 +541,7 @@ impl Renderer for PosixRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-        mode_indicator: Option<&str>,
+        vi_mode: Option<InputMode>,
     ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
@@ -565,14 +566,11 @@ impl Renderer for PosixRenderer {
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
 
-        if let Some(indicator) = mode_indicator {
-            self.buffer.push_str(indicator);
-        }
-
         if let Some(highlighter) = highlighter {
             // display the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            self.buffer.push_str(
+                &highlighter.highlight_prompt(prompt, PromptState::new(default_prompt, vi_mode)),
+            );
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));

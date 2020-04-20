@@ -19,10 +19,6 @@ use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 
-const DEFAULT_INSERT_INDICATOR: &str = "+";
-const DEFAULT_COMMAND_INDICATOR: &str = ":";
-const DEFAULT_REPLACE_INDICATOR: &str = "R";
-
 /// Represent the state during line editing.
 /// Implement rendering.
 pub struct State<'out, 'prompt, H: Helper> {
@@ -39,23 +35,6 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub hint: Option<String>, // last hint displayed
     highlight_char: bool,     // `true` if a char has been highlighted
     input_mode: Option<InputMode>,
-    mode_indicators: ModeIndicators<'prompt>,
-}
-
-struct ModeIndicators<'a> {
-    command: &'a str,
-    insert: &'a str,
-    replace: &'a str,
-}
-
-impl<'a> Default for ModeIndicators<'a> {
-    fn default() -> Self {
-        Self {
-            command: DEFAULT_COMMAND_INDICATOR,
-            insert: DEFAULT_INSERT_INDICATOR,
-            replace: DEFAULT_REPLACE_INDICATOR,
-        }
-    }
 }
 
 enum Info<'m> {
@@ -72,10 +51,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ctx: Context<'out>,
         config: &'prompt Config,
     ) -> State<'out, 'prompt, H> {
-        let mut state = State {
+        let prompt_size = out.calculate_position(prompt, Position::default());
+        State {
             out,
             prompt,
-            prompt_size: Position::default(),
+            prompt_size,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             layout: Layout::default(),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
@@ -89,20 +69,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 EditMode::Vi => Some(InputMode::Insert),
                 EditMode::Emacs => None,
             },
-            mode_indicators: ModeIndicators {
-                command: config
-                    .vi_command_indicator()
-                    .unwrap_or(DEFAULT_COMMAND_INDICATOR),
-                insert: config
-                    .vi_insert_indicator()
-                    .unwrap_or(DEFAULT_INSERT_INDICATOR),
-                replace: config
-                    .vi_replace_indicator()
-                    .unwrap_or(DEFAULT_REPLACE_INDICATOR),
-            },
-        };
-        state.prompt_size = state.calculate_prompt_size();
-        state
+        }
     }
 
     pub fn highlighter(&self) -> Option<&dyn Highlighter> {
@@ -123,10 +90,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
-                self.calculate_prompt_size();
-                // self.prompt_size = self
-                //     .out
-                //     .calculate_position(self.prompt, Position::default());
+                self.prompt_size = self
+                    .out
+                    .calculate_position(self.prompt, Position::default());
                 self.refresh_line()?;
                 continue;
             }
@@ -205,7 +171,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.layout,
             &new_layout,
             highlighter,
-            self.input_mode_indicator(),
+            self.input_mode,
         )?;
         self.layout = new_layout;
 
@@ -272,38 +238,18 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    fn calculate_prompt_size(&mut self) -> Position {
-        let prompt = self.prompt;
-        self.calculate_custom_prompt_size(prompt)
-    }
+    //fn calculate_prompt_size(&mut self) -> Position {
+    //    let prompt = self.prompt;
+    //    self.calculate_custom_prompt_size(prompt)
+    //}
 
-    fn calculate_custom_prompt_size(&mut self, prompt: &str) -> Position {
-        let indicator_size = self.out.calculate_position(
-            self.input_mode_indicator().unwrap_or(""),
-            Position::default(),
-        );
-        self.out.calculate_position(prompt, indicator_size)
-    }
-
-    fn input_mode_indicator(&self) -> Option<&'prompt str> {
-        self.input_mode.as_ref().map(|mode| match mode {
-            InputMode::Command => self.command_indicator(),
-            InputMode::Insert => self.insert_indicator(),
-            InputMode::Replace => self.replace_indicator(),
-        })
-    }
-
-    fn command_indicator(&self) -> &'prompt str {
-        self.mode_indicators.command
-    }
-
-    fn insert_indicator(&self) -> &'prompt str {
-        self.mode_indicators.insert
-    }
-
-    fn replace_indicator(&self) -> &'prompt str {
-        self.mode_indicators.replace
-    }
+    //fn calculate_custom_prompt_size(&mut self, prompt: &str) -> Position {
+    //    let indicator_size = self.out.calculate_position(
+    //        self.input_mode_indicator().unwrap_or(""),
+    //        Position::default(),
+    //    );
+    //    self.out.calculate_position(prompt, indicator_size)
+    //}
 }
 
 impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
@@ -328,7 +274,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.calculate_custom_prompt_size(prompt);
+        let prompt_size = self.out.calculate_position(prompt, Position::default());
         self.hint();
         self.highlight_char();
         self.refresh(prompt, prompt_size, false, Info::Hint)
@@ -766,7 +712,6 @@ pub fn init_state<'out, H: Helper>(
         hint: Some("hint".to_owned()),
         highlight_char: false,
         input_mode: None,
-        mode_indicators: ModeIndicators::default(),
     }
 }
 

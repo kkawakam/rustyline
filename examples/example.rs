@@ -3,10 +3,10 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
-use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter, PromptState};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, InputMode, KeyPress};
 use rustyline_derive::Helper;
 
 #[derive(Helper)]
@@ -40,10 +40,16 @@ impl Highlighter for MyHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        prompt_state: PromptState,
     ) -> Cow<'b, str> {
-        if default {
-            Owned(format!("\x1b[1;32m{}\x1b[0m", prompt))
+        if prompt_state.default {
+            let indicator = match prompt_state.mode {
+                Some(InputMode::Command) => ":",
+                Some(InputMode::Insert) => "+",
+                Some(InputMode::Replace) => "#",
+                _ => " ",
+            };
+            Owned(format!("\x1b[1;32m{}{}\x1b[0m", indicator, &prompt[1..]))
         } else {
             Borrowed(prompt)
         }
@@ -100,7 +106,7 @@ fn main() -> rustyline::Result<()> {
     }
     let mut count = 1;
     loop {
-        let p = format!("{}> ", count);
+        let p = format!(" {}> ", count);
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {

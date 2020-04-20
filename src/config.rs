@@ -17,8 +17,6 @@ pub struct Config {
     keyseq_timeout: i32,
     /// Emacs or Vi mode
     edit_mode: EditMode,
-    /// Vi mode indicators.
-    vi_mode_indicators: ViModeIndicators,
     /// If true, each nonblank line returned by `readline` will be
     /// automatically added to the history.
     auto_add_history: bool,
@@ -129,18 +127,6 @@ impl Config {
     pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
         self.tab_stop = tab_stop;
     }
-
-    pub(crate) fn vi_command_indicator(&self) -> Option<&str> {
-        self.vi_mode_indicators.command.as_ref().map(|s| s.as_ref())
-    }
-
-    pub(crate) fn vi_insert_indicator(&self) -> Option<&str> {
-        self.vi_mode_indicators.insert.as_ref().map(|s| s.as_ref())
-    }
-
-    pub(crate) fn vi_replace_indicator(&self) -> Option<&str> {
-        self.vi_mode_indicators.replace.as_ref().map(|s| s.as_ref())
-    }
 }
 
 impl Default for Config {
@@ -153,7 +139,6 @@ impl Default for Config {
             completion_prompt_limit: 100,
             keyseq_timeout: -1,
             edit_mode: EditMode::Emacs,
-            vi_mode_indicators: ViModeIndicators::default(),
             auto_add_history: false,
             bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
@@ -363,21 +348,6 @@ impl Builder {
 
     pub fn build(self) -> Config {
         self.p
-    }
-
-    pub fn vi_command_indicator<T: Into<String>>(mut self, indicator: T) -> Self {
-        self.p.vi_mode_indicators.command = Some(indicator.into());
-        self
-    }
-
-    pub fn vi_insert_indicator<T: Into<String>>(mut self, indicator: T) -> Self {
-        self.p.vi_mode_indicators.insert = Some(indicator.into());
-        self
-    }
-
-    pub fn vi_replace_indicator<T: Into<String>>(mut self, indicator: T) -> Self {
-        self.p.vi_mode_indicators.replace = Some(indicator.into());
-        self
     }
 }
 

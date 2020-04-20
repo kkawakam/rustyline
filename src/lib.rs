@@ -53,7 +53,7 @@ use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{Direction, History};
-pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::KeyPress;
 use crate::kill_ring::{KillRing, Mode};

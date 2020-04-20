@@ -14,7 +14,8 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
+use crate::keymap::InputMode;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -333,7 +334,7 @@ impl Renderer for ConsoleRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-        mode_indicator: Option<&str>,
+        vi_mode: Option<InputMode>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;

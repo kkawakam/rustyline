@@ -346,8 +346,9 @@ impl Renderer for ConsoleRenderer {
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            self.buffer.push_str(
+                &highlighter.highlight_prompt(prompt, PromptState::new(default_prompt, vi_mode)),
+            );
             // append the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));

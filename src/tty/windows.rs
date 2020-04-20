@@ -12,7 +12,7 @@ use winapi::shared::minwindef::{DWORD, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{RawMode, RawReader, Renderer, Term};
+use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -310,22 +310,23 @@ impl ConsoleRenderer {
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
     fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
+        let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
                 col = 0;
                 self.buffer.push_str(c);
             } else {
-                let cw = c.width();
+                let cw = width(c, &mut esc_seq);
                 col += cw;
                 if col > self.cols {
-                    self.buffer.push('\r');
+                    self.buffer.push('\n');
                     col = cw;
                 }
                 self.buffer.push_str(c);
             }
         }
         if col == self.cols {
-            self.buffer.push('\r');
+            self.buffer.push('\n');
             col = 0;
         }
         col

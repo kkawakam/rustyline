@@ -288,11 +288,18 @@ impl ConsoleRenderer {
         Ok(())
     }
 
-    fn clear(&mut self, length: DWORD, pos: wincon::COORD) -> Result<()> {
+    fn clear(&mut self, length: DWORD, pos: wincon::COORD, attr: WORD) -> Result<()> {
         let mut _count = 0;
         check!(wincon::FillConsoleOutputCharacterA(
             self.handle,
             ' ' as CHAR,
+            length,
+            pos,
+            &mut _count,
+        ));
+        check!(wincon::FillConsoleOutputAttribute(
+            self.handle,
+            attr,
             length,
             pos,
             &mut _count,
@@ -386,7 +393,11 @@ impl Renderer for ConsoleRenderer {
         coord.X = 0;
         coord.Y -= current_row as i16;
         self.set_console_cursor_position(coord)?;
-        self.clear((info.dwSize.X * (old_rows as i16 + 1)) as DWORD, coord)?;
+        self.clear(
+            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
+            coord,
+            info.wAttributes,
+        )?;
         // display prompt, input line and hint
         self.write_and_flush(self.buffer.as_bytes())?;
 
@@ -453,7 +464,7 @@ impl Renderer for ConsoleRenderer {
         let coord = wincon::COORD { X: 0, Y: 0 };
         check!(wincon::SetConsoleCursorPosition(self.handle, coord));
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
-        self.clear(n, coord)
+        self.clear(n, coord, info.wAttributes)
     }
 
     fn sigwinch(&self) -> bool {

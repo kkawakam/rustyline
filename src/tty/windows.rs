@@ -15,7 +15,6 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::{Highlighter, PromptState};
-use crate::keymap::InputMode;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -334,9 +333,8 @@ impl Renderer for ConsoleRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-        vi_mode: Option<InputMode>,
+        prompt_state: PromptState,
     ) -> Result<()> {
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
         let current_row = old_layout.cursor.row;
@@ -346,9 +344,8 @@ impl Renderer for ConsoleRenderer {
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
-            self.buffer.push_str(
-                &highlighter.highlight_prompt(prompt, PromptState::new(default_prompt, vi_mode)),
-            );
+            self.buffer
+                .push_str(&highlighter.highlight_prompt(prompt, prompt_state));
             // append the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));

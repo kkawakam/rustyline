@@ -1,7 +1,6 @@
 //! This module implements and describes common TTY methods & traits
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::highlight::Highlighter;
-use crate::keymap::InputMode;
+use crate::highlight::{Highlighter, PromptState};
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -40,7 +39,7 @@ pub trait Renderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-        vi_mode: Option<InputMode>,
+        prompt_state: PromptState,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -120,7 +119,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
-        vi_mode: Option<InputMode>,
+        prompt_state: PromptState,
     ) -> Result<()> {
         (**self).refresh_line(
             prompt,
@@ -129,7 +128,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
             old_layout,
             new_layout,
             highlighter,
-            vi_mode,
+            prompt_state,
         )
     }
 

@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthChar;
 
 use super::{Context, EditMode, Helper, Result};
 use crate::config::Config;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputMode, InputState, Invoke, Refresher};
@@ -171,7 +171,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.layout,
             &new_layout,
             highlighter,
-            self.input_mode,
+            PromptState::new(default_prompt, self.input_mode),
         )?;
         self.layout = new_layout;
 
@@ -237,19 +237,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             Ok(true)
         }
     }
-
-    //fn calculate_prompt_size(&mut self) -> Position {
-    //    let prompt = self.prompt;
-    //    self.calculate_custom_prompt_size(prompt)
-    //}
-
-    //fn calculate_custom_prompt_size(&mut self, prompt: &str) -> Position {
-    //    let indicator_size = self.out.calculate_position(
-    //        self.input_mode_indicator().unwrap_or(""),
-    //        Position::default(),
-    //    );
-    //    self.out.calculate_position(prompt, indicator_size)
-    //}
 }
 
 impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {

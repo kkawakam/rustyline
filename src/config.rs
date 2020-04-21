@@ -206,24 +206,6 @@ pub enum EditMode {
     Vi,
 }
 
-/// Vi mode indicators printed before prompt.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ViModeIndicators {
-    pub command: Option<String>,
-    pub insert: Option<String>,
-    pub replace: Option<String>,
-}
-
-impl Default for ViModeIndicators {
-    fn default() -> Self {
-        Self {
-            command: None,
-            insert: None,
-            replace: None,
-        }
-    }
-}
-
 /// Colorization mode
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]

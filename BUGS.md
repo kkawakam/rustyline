@@ -28,7 +28,7 @@ See `replxx` design (`ACTION_RESULT`, `action_trait_t`).
 
 On Unix platform, we assume that `auto_right_margin` (`am`) is enabled.
 And on Windows, we activate `ENABLE_WRAP_AT_EOL_OUTPUT`.
-But on Windows 10, `ENABLE_WRAP_AT_EOL_OUTPUT` and `ENABLE_VIRTUAL_TERMINAL_PROCESSING` seems to be imcompatible.
+But on Windows 10, `ENABLE_WRAP_AT_EOL_OUTPUT` and `ENABLE_VIRTUAL_TERMINAL_PROCESSING` seems to be incompatible.
 
 ## Colors
 

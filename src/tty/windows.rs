@@ -7,7 +7,7 @@ use std::sync::atomic;
 
 use log::{debug, warn};
 use unicode_width::UnicodeWidthChar;
-use winapi::shared::minwindef::{DWORD, WORD};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
@@ -305,6 +305,17 @@ impl ConsoleRenderer {
         ));
         Ok(())
     }
+
+    fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
+        let mut info = unsafe { mem::zeroed() };
+        check!(wincon::GetConsoleCursorInfo(self.handle, &mut info));
+        if info.bVisible == visible {
+            return Ok(());
+        }
+        info.bVisible = visible;
+        check!(wincon::SetConsoleCursorInfo(self.handle, &info));
+        Ok(())
+    }
 }
 
 impl Renderer for ConsoleRenderer {
@@ -368,6 +379,7 @@ impl Renderer for ConsoleRenderer {
         let mut coord = info.dwCursorPosition;
         coord.X = 0;
         coord.Y -= current_row as i16;
+        self.set_cursor_visible(FALSE)?; // just to avoid flickering
         self.set_console_cursor_position(coord)?;
         self.clear(
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
@@ -382,6 +394,7 @@ impl Renderer for ConsoleRenderer {
         coord.X = cursor.col as i16;
         coord.Y -= (end_pos.row - cursor.row) as i16;
         self.set_console_cursor_position(coord)?;
+        self.set_cursor_visible(TRUE)?;
 
         Ok(())
     }

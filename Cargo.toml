@@ -34,6 +34,7 @@ skim = { version = "0.7", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
+scopeguard = "1.1"
 
 [dev-dependencies]
 doc-comment = "0.3"

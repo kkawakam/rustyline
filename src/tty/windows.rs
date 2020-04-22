@@ -14,12 +14,14 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::edit::Prompt;
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
+use crate::tty::add_prompt_and_highlight;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -293,27 +295,26 @@ impl ConsoleRenderer {
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
+    fn wrap_at_eol(&mut self, s: &str, col: &mut usize) {
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
-                col = 0;
+                *col = 0;
                 self.buffer.push_str(c);
             } else {
                 let cw = width(c, &mut esc_seq);
-                col += cw;
-                if col > self.cols {
+                *col += cw;
+                if *col > self.cols {
                     self.buffer.push('\n');
-                    col = cw;
+                    *col = cw;
                 }
                 self.buffer.push_str(c);
             }
         }
-        if col == self.cols {
+        if *col == self.cols {
             self.buffer.push('\n');
-            col = 0;
+            *col = 0;
         }
-        col
     }
 
     // position at the start of the prompt, clear to end of previous input
@@ -366,35 +367,25 @@ impl Renderer for ConsoleRenderer {
 
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
         self.buffer.clear();
         let mut col = 0;
-        if let Some(highlighter) = highlighter {
-            // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // append the prompt
-            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
-            // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
-        } else {
-            // append the prompt
-            self.buffer.push_str(prompt);
-            // append the input line
-            self.buffer.push_str(line);
-        }
+        add_prompt_and_highlight(|s| { self.wrap_at_eol(s, &mut col); },
+            highlighter, line, prompt);
+
         // append hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
-                self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
+                self.wrap_at_eol(&highlighter.highlight_hint(hint), &mut col);
             } else {
                 self.buffer.push_str(hint);
             }
@@ -434,11 +425,13 @@ impl Renderer for ConsoleRenderer {
     }
 
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
+        -> Position
+    {
         let mut pos = orig;
         for c in s.graphemes(true) {
             if c == "\n" {
-                pos.col = 0;
+                pos.col = left_margin;
                 pos.row += 1;
             } else {
                 let cw = c.width();

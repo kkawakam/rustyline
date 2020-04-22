@@ -6,6 +6,7 @@ use std::vec::IntoIter;
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
+use crate::edit::Prompt;
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
@@ -77,7 +78,7 @@ impl Renderer for Sink {
 
     fn refresh_line(
         &mut self,
-        _prompt: &str,
+        _prompt: &Prompt,
         _line: &LineBuffer,
         _hint: Option<&str>,
         _old_layout: &Layout,
@@ -87,7 +88,9 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, _left_margin: usize)
+        -> Position
+    {
         let mut pos = orig;
         pos.col += s.len();
         pos

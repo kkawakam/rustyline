@@ -1,4 +1,7 @@
 //! This module implements and describes common TTY methods & traits
+
+use unicode_width::UnicodeWidthStr;
+
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::{Highlighter, PromptState};
 use crate::keys::KeyPress;
@@ -170,6 +173,37 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut R::Reader) -> Result<()> {
         (**self).move_cursor_at_leftmost(rdr)
+    }
+}
+
+// ignore ANSI escape sequence
+fn width(s: &str, esc_seq: &mut u8) -> usize {
+    if *esc_seq == 1 {
+        if s == "[" {
+            // CSI
+            *esc_seq = 2;
+        } else {
+            // two-character sequence
+            *esc_seq = 0;
+        }
+        0
+    } else if *esc_seq == 2 {
+        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
+            /*} else if s == "m" {
+            // last
+             *esc_seq = 0;*/
+        } else {
+            // not supported
+            *esc_seq = 0;
+        }
+        0
+    } else if s == "\x1b" {
+        *esc_seq = 1;
+        0
+    } else if s == "\n" {
+        0
+    } else {
+        s.width()
     }
 }
 

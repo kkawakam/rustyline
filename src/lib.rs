@@ -784,7 +784,7 @@ impl<H: Helper> Editor<H> {
         );
         Self {
             term,
-            history: History::with_config(config.clone()),
+            history: History::with_config(config),
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,

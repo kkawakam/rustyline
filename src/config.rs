@@ -2,7 +2,7 @@
 use std::default::Default;
 
 /// User preferences
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
     /// Maximum number of entries in History.
     max_history_size: usize, // history_max_entries

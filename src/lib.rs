@@ -537,13 +537,13 @@ fn readline_edit<H: Helper>(
                 // Fetch the previous command from the history list.
                 s.edit_history_next(true)?
             }
-            Cmd::LineUpOrPreviousHistory => {
-                if !s.edit_move_line_up(1)? {
+            Cmd::LineUpOrPreviousHistory(n) => {
+                if !s.edit_move_line_up(n)? {
                     s.edit_history_next(true)?
                 }
             }
-            Cmd::LineDownOrNextHistory => {
-                if !s.edit_move_line_down(1)? {
+            Cmd::LineDownOrNextHistory(n) => {
+                if !s.edit_move_line_down(n)? {
                     s.edit_history_next(false)?
                 }
             }

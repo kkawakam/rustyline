@@ -128,17 +128,16 @@ impl ConsoleRawReader {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 + 0 {
                 let mut count = 0;
-                check!(consoleapi::GetNumberOfConsoleInputEvents(
-                    self.handle,
-                    &mut count
-                ));
+                check(unsafe {
+                    consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count)
+                })?;
                 match read_input(self.handle, count)? {
                     KeyPress::UnknownEscSeq => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
                 };
             } else if rc == WAIT_OBJECT_0 + 1 {
                 debug!(target: "rustyline", "ExternalPrinter::receive");
-                check!(ResetEvent(pipe_reader.event.0));
+                check(unsafe { ResetEvent(pipe_reader.event.0) })?;
                 match pipe_reader.receiver.recv() {
                     Ok(msg) => return Ok(Event::ExternalPrint(msg)),
                     Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
@@ -865,8 +864,7 @@ impl Write for ExternalPrinter {
             if let Err(err) = self.sender.send(self.buf.split_off(0)) {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
             }
-            check!(SetEvent(self.event));
-            Ok(())
+            check(unsafe { SetEvent(self.event) })
         }
     }
 }

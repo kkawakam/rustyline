@@ -49,9 +49,9 @@ fn check_handle(handle: HANDLE) -> Result<HANDLE> {
     Ok(handle)
 }
 
-fn check(rc: BOOL) -> Result<()> {
+fn check(rc: BOOL) -> io::Result<()> {
     if rc == FALSE {
-        Err(io::Error::last_os_error())?
+        Err(io::Error::last_os_error())
     } else {
         Ok(())
     }
@@ -337,7 +337,9 @@ impl ConsoleRenderer {
     }
 
     fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
-        check(unsafe { wincon::SetConsoleCursorPosition(self.handle, pos) })
+        Ok(check(unsafe {
+            wincon::SetConsoleCursorPosition(self.handle, pos)
+        })?)
     }
 
     fn clear(&mut self, length: DWORD, pos: wincon::COORD, attr: WORD) -> Result<()> {
@@ -345,9 +347,9 @@ impl ConsoleRenderer {
         check(unsafe {
             wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
         })?;
-        check(unsafe {
+        Ok(check(unsafe {
             wincon::FillConsoleOutputAttribute(self.handle, attr, length, pos, &mut _count)
-        })
+        })?)
     }
 
     fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
@@ -405,7 +407,9 @@ fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
         return Ok(());
     }
     info.bVisible = visible;
-    check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })
+    Ok(check(unsafe {
+        wincon::SetConsoleCursorInfo(handle, &info)
+    })?)
 }
 
 impl Renderer for ConsoleRenderer {

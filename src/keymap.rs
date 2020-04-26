@@ -67,8 +67,8 @@ impl<'r> ActionContext<'r> {
 }
 
 /// Commands
-// #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Cmd {
     /// abort
     Abort, // Miscellaneous Command
@@ -145,10 +145,10 @@ pub enum Cmd {
     YankPop,
     /// moves cursor to the line above or switches to prev history entry if
     /// the cursor is already on the first line
-    LineUpOrPreviousHistory,
+    LineUpOrPreviousHistory(RepeatCount),
     /// moves cursor to the line below or switches to next history entry if
     /// the cursor is already on the last line
-    LineDownOrNextHistory,
+    LineDownOrNextHistory(RepeatCount),
     /// accepts the line when cursor is at the end of the text (non including
     /// trailing whitespace), inserts newline character otherwise
     AcceptOrInsertLine,
@@ -288,6 +288,7 @@ impl CharSearch {
 
 /// Where to move
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Movement {
     WholeLine, // not really a movement
     /// beginning-of-line
@@ -771,10 +772,10 @@ impl InputState {
             KeyPress::Ctrl('G') => Cmd::Abort,
             KeyPress::Char('l') | KeyPress::Char(' ') => Cmd::Move(Movement::ForwardChar(n)),
             KeyPress::Ctrl('L') => Cmd::ClearScreen,
-            KeyPress::Char('+') | KeyPress::Char('j') => Cmd::Move(Movement::LineDown(n)),
+            KeyPress::Char('+') | KeyPress::Char('j') => Cmd::LineDownOrNextHistory(n),
             // TODO: move to the start of the line.
             KeyPress::Ctrl('N') => Cmd::NextHistory,
-            KeyPress::Char('-') | KeyPress::Char('k') => Cmd::Move(Movement::LineUp(n)),
+            KeyPress::Char('-') | KeyPress::Char('k') => Cmd::LineUpOrPreviousHistory(n),
             // TODO: move to the start of the line.
             KeyPress::Ctrl('P') => Cmd::PreviousHistory,
             KeyPress::Ctrl('R') => {
@@ -961,8 +962,8 @@ impl InputState {
             }
             KeyPress::Ctrl('J') |
             KeyPress::Enter => Cmd::AcceptLine,
-            KeyPress::Down => Cmd::LineDownOrNextHistory,
-            KeyPress::Up => Cmd::LineUpOrPreviousHistory,
+            KeyPress::Down => Cmd::LineDownOrNextHistory(1),
+            KeyPress::Up => Cmd::LineUpOrPreviousHistory(1),
             KeyPress::Ctrl('R') => Cmd::ReverseSearchHistory,
             KeyPress::Ctrl('S') => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
             KeyPress::Ctrl('T') => Cmd::TransposeChars,

@@ -88,14 +88,6 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn calculate_position(&self, s: &str, orig: Position, _left_margin: usize)
-        -> Position
-    {
-        let mut pos = orig;
-        pos.col += s.len();
-        pos
-    }
-
     fn write_and_flush(&self, _: &[u8]) -> Result<()> {
         Ok(())
     }
@@ -116,6 +108,10 @@ impl Renderer for Sink {
 
     fn get_columns(&self) -> usize {
         80
+    }
+
+    fn get_tab_stop(&self) -> usize {
+        8
     }
 
     fn get_rows(&self) -> usize {

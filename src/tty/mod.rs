@@ -1,14 +1,12 @@
 //! This module implements and describes common TTY methods & traits
-
-use unicode_width::UnicodeWidthStr;
-
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::edit::Prompt;
 use crate::highlight::{Highlighter, PromptInfo, split_highlight};
 use crate::keys::KeyPress;
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Meter};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
+
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -56,38 +54,32 @@ pub trait Renderer {
     ) -> Layout {
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let left_margin = if prompt.has_continuation {
-            prompt.size.col
-        } else {
-            0
+        let mut meter = self.meter();
+        meter.set_position(prompt.size);
+        if prompt.has_continuation {
+            meter.left_margin(prompt.size.col);
         };
-        let cursor = self.calculate_position(&line[..pos],
-            prompt.size, left_margin);
+        let cursor = meter.update(&line[..pos]);
         // calculate the position of the end of the input line
-        let mut end = if pos == line.len() {
-            cursor
-        } else {
-            self.calculate_position(&line[pos..], cursor, left_margin)
-        };
+        meter.update(&line[pos..]);
         if let Some(info) = info {
-            end = self.calculate_position(&info, end, left_margin);
+            meter.left_margin(0);
+            meter.update(&info);
         }
 
         let new_layout = Layout {
             prompt_size: prompt.size,
-            left_margin,
             default_prompt: prompt.is_default,
             cursor,
-            end,
+            end: meter.get_position(),
         };
         debug_assert!(new_layout.cursor <= new_layout.end);
         new_layout
     }
 
-    /// Calculate the number of columns and rows used to display `s` on a
-    /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
-        -> Position;
+    fn meter(&self) -> Meter {
+        Meter::new(self.get_columns(), self.get_tab_stop())
+    }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
 
@@ -104,6 +96,8 @@ pub trait Renderer {
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
     fn get_columns(&self) -> usize;
+    /// Get the tab stop in the current terminal.
+    fn get_tab_stop(&self) -> usize;
     /// Get the number of rows in the current terminal.
     fn get_rows(&self) -> usize;
     /// Check if output supports colors.
@@ -132,12 +126,6 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 
-    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
-        -> Position
-    {
-        (**self).calculate_position(s, orig, left_margin)
-    }
-
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
         (**self).write_and_flush(buf)
     }
@@ -162,6 +150,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).get_columns()
     }
 
+    fn get_tab_stop(&self) -> usize {
+        (**self).get_tab_stop()
+    }
+
     fn get_rows(&self) -> usize {
         (**self).get_rows()
     }
@@ -176,7 +168,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 }
 
 // ignore ANSI escape sequence
+#[cfg(windows)]
 fn width(s: &str, esc_seq: &mut u8) -> usize {
+    use unicode_width::UnicodeWidthStr;
+
     if *esc_seq == 1 {
         if s == "[" {
             // CSI

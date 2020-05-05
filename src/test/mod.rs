@@ -9,6 +9,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::KeyPress;
+use crate::layout::Meter;
 use crate::tty::Sink;
 use crate::validate::Validator;
 use crate::{Context, Editor, Helper, Result};
@@ -91,7 +92,8 @@ fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyPress], expec
     let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline_with_initial("", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    assert_eq!(expected.0.len(), editor.term.cursor);
+    let expected_cursor = Meter::new(80, 8).update(expected.0);
+    assert_eq!(expected_cursor.col, editor.term.cursor);
 }
 
 // `entries`: history entries before `keys` pressed

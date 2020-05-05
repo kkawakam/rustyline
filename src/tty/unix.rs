@@ -10,10 +10,9 @@ use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
-use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::edit::Prompt;
@@ -621,37 +620,6 @@ impl Renderer for PosixRenderer {
         write_and_flush(self.out, buf)
     }
 
-    /// Control characters are treated as having zero width.
-    /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
-        -> Position
-    {
-        let mut pos = orig;
-        let mut esc_seq = 0;
-        for c in s.graphemes(true) {
-            if c == "\n" {
-                pos.row += 1;
-                pos.col = left_margin;
-                continue;
-            }
-            let cw = if c == "\t" {
-                self.tab_stop - (pos.col % self.tab_stop)
-            } else {
-                width(c, &mut esc_seq)
-            };
-            pos.col += cw;
-            if pos.col > self.cols {
-                pos.row += 1;
-                pos.col = cw;
-            }
-        }
-        if pos.col == self.cols {
-            pos.col = 0;
-            pos.row += 1;
-        }
-        pos
-    }
-
     fn beep(&mut self) -> Result<()> {
         match self.bell_style {
             BellStyle::Audible => {
@@ -681,6 +649,10 @@ impl Renderer for PosixRenderer {
 
     fn get_columns(&self) -> usize {
         self.cols
+    }
+
+    fn get_tab_stop(&self) -> usize {
+        self.tab_stop
     }
 
     /// Try to get the number of rows in the current terminal,
@@ -909,14 +881,6 @@ mod test {
     use crate::line_buffer::LineBuffer;
     use crate::edit::Prompt;
 
-    #[test]
-    #[ignore]
-    fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(OutputStreamType::Stdout, 4, true, BellStyle::default());
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 0);
-        assert_eq!(3, pos.col);
-        assert_eq!(0, pos.row);
-    }
 
     #[test]
     fn test_unsupported_term() {
@@ -945,7 +909,7 @@ mod test {
         let prompt = Prompt {
             text: "> ",
             is_default: true,
-            size: out.calculate_position("> ", Position::default(), 0),
+            size: Position { col: 2, row: 0 },
             has_continuation: false,
         };
 

@@ -128,11 +128,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
         let new_layout = self.out.compute_layout(
-            &self.prompt, &self.line, None);
+            &self.prompt, &self.line, None, self.layout.scroll_top);
         if new_layout.cursor == self.layout.cursor {
             return Ok(());
         }
-        if self.highlight_char() {
+        let scroll_changed = new_layout.scroll_top != self.layout.scroll_top;
+        if scroll_changed || self.highlight_char() {
             self.refresh_default(Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, new_layout.cursor)?;
@@ -168,7 +169,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             None
         };
 
-        let new_layout = self.out.compute_layout(prompt, &self.line, info);
+        let new_layout = self.out.compute_layout(prompt, &self.line, info,
+            self.layout.scroll_top);
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
         debug!(target: "rustyline", "new layout: {:?}", new_layout);
         self.out.refresh_line(

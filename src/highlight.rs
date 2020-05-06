@@ -5,6 +5,7 @@ use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
+/// Auxilliary structure that contains various data about prompt
 pub struct PromptInfo<'a> {
     pub(crate) is_default: bool,
     pub(crate) offset: usize,
@@ -251,9 +252,11 @@ fn is_close_bracket(bracket: u8) -> bool {
 pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
     -> (Cow<'a, str>, Cow<'a, str>)
 {
+    if offset == src.len() {
+        return (src.into(), "".into());
+    }
     let mut style_buffer = String::with_capacity(32);
     let mut iter = src.char_indices();
-    let mut non_escape_idx = 0;
     while let Some((idx, c)) = iter.next() {
         if c == '\x1b' {
             match iter.next() {
@@ -277,7 +280,7 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
             }
             continue;
         }
-        if non_escape_idx >= offset {
+        if idx >= offset {
             if style_buffer.is_empty() {
                 return (src[..idx].into(), src[idx..].into());
             } else {
@@ -291,7 +294,6 @@ pub(crate) fn split_highlight<'a>(src: &'a str, offset: usize)
                 return (left.into(), right.into());
             }
         }
-        non_escape_idx += c.len_utf8();
     }
     return (src.into(), "".into());
 }

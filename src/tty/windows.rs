@@ -6,12 +6,11 @@ use std::mem;
 use std::sync::atomic;
 
 use log::{debug, warn};
-use unicode_segmentation::UnicodeSegmentation;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::edit::Prompt;
 use crate::error;
@@ -20,7 +19,6 @@ use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
-use crate::tty::add_prompt_and_highlight;
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -294,30 +292,6 @@ impl ConsoleRenderer {
         set_cursor_visible(self.handle, visible)
     }
 
-    // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
-    // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, col: &mut usize) {
-        let mut esc_seq = 0;
-        for c in s.graphemes(true) {
-            if c == "\n" {
-                *col = 0;
-                self.buffer.push_str(c);
-            } else {
-                let cw = width(c, &mut esc_seq);
-                *col += cw;
-                if *col > self.cols {
-                    self.buffer.push('\n');
-                    *col = cw;
-                }
-                self.buffer.push_str(c);
-            }
-        }
-        if *col == self.cols {
-            self.buffer.push('\n');
-            *col = 0;
-        }
-    }
-
     // position at the start of the prompt, clear to end of previous input
     fn clear_old_rows(
         &mut self,
@@ -348,6 +322,7 @@ fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
     check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })
 }
 
+
 impl Renderer for ConsoleRenderer {
     type Reader = ConsoleRawReader;
 
@@ -376,21 +351,10 @@ impl Renderer for ConsoleRenderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         let cursor = new_layout.cursor;
-        let end_pos = new_layout.end;
 
         self.buffer.clear();
-        let mut col = 0;
-        add_prompt_and_highlight(|s| { self.wrap_at_eol(s, &mut col); },
-            highlighter, line, prompt);
+        self.render_screen(prompt, line, hint, new_layout, highlighter);
 
-        // append hint
-        if let Some(hint) = hint {
-            if let Some(highlighter) = highlighter {
-                self.wrap_at_eol(&highlighter.highlight_hint(hint), &mut col);
-            } else {
-                self.buffer.push_str(hint);
-            }
-        }
         let info = self.get_console_screen_buffer_info()?;
         self.set_cursor_visible(FALSE)?; // just to avoid flickering
         let handle = self.handle;
@@ -405,7 +369,7 @@ impl Renderer for ConsoleRenderer {
         // position the cursor
         let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
         coord.X = cursor.col as i16;
-        coord.Y -= (end_pos.row - cursor.row) as i16;
+        coord.Y -= new_layout.lines_below_cursor() as i16;
         self.set_console_cursor_position(coord)?;
 
         Ok(())
@@ -469,6 +433,10 @@ impl Renderer for ConsoleRenderer {
     fn get_rows(&self) -> usize {
         let (_, rows) = get_win_size(self.handle);
         rows
+    }
+
+    fn get_buffer(&mut self) -> &mut String {
+        &mut self.buffer
     }
 
     fn colors_enabled(&self) -> bool {

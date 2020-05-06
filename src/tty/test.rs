@@ -61,11 +61,13 @@ impl RawReader for IntoIter<KeyPress> {
     }
 }
 
-pub struct Sink {}
+pub struct Sink {
+    buffer: String
+}
 
 impl Sink {
     pub fn new() -> Sink {
-        Sink {}
+        Sink { buffer: String::new() }
     }
 }
 
@@ -116,6 +118,9 @@ impl Renderer for Sink {
 
     fn get_rows(&self) -> usize {
         24
+    }
+    fn get_buffer(&mut self) -> &mut String {
+        &mut self.buffer
     }
 
     fn colors_enabled(&self) -> bool {

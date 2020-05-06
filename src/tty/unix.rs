@@ -21,7 +21,6 @@ use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
-use crate::tty::add_prompt_and_highlight;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
@@ -583,23 +582,14 @@ impl Renderer for PosixRenderer {
         let end_pos = new_layout.end;
 
         self.clear_old_rows(old_layout);
+        self.render_screen(prompt, line, hint, new_layout, highlighter);
 
-        add_prompt_and_highlight(|s| self.buffer.push_str(s),
-            highlighter, line, prompt);
-        // display hint
-        if let Some(hint) = hint {
-            if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(hint));
-            } else {
-                self.buffer.push_str(hint);
-            }
-        }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
             self.buffer.push_str("\n");
         }
         // position the cursor
-        let new_cursor_row_movement = end_pos.row - cursor.row;
+        let new_cursor_row_movement = new_layout.lines_below_cursor();
         // move the cursor up as required
         if new_cursor_row_movement > 0 {
             write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
@@ -660,6 +650,10 @@ impl Renderer for PosixRenderer {
     fn get_rows(&self) -> usize {
         let (_, rows) = get_win_size(&self.out);
         rows
+    }
+
+    fn get_buffer(&mut self) -> &mut String {
+        &mut self.buffer
     }
 
     fn colors_enabled(&self) -> bool {
@@ -914,19 +908,19 @@ mod test {
         };
 
         let mut line = LineBuffer::init("", 0, None);
-        let old_layout = out.compute_layout(&prompt, &line, None);
+        let old_layout = out.compute_layout(&prompt, &line, None, 0);
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
         assert_eq!(Some(true), line.insert('a', out.cols - prompt.size.col + 1));
-        let new_layout = out.compute_layout(&prompt, &line, None);
+        let new_layout = out.compute_layout(&prompt, &line, None, 0);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
         out.refresh_line(&prompt, &line, None, &old_layout, &new_layout, None)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(
-            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
+            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\na\r\u{1b}[1C",
             out.buffer
         );
     }

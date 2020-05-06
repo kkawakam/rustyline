@@ -1,6 +1,7 @@
+use std::cmp::{Ord, Ordering, PartialOrd};
+
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use std::cmp::{Ord, Ordering, PartialOrd};
 
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -49,6 +50,10 @@ pub struct Layout {
     pub cursor: Position,
     /// Number of rows used so far (from end of prompt to end of input)
     pub end: Position,
+    /// Number of first visible row
+    pub scroll_top: usize,
+    /// Number of visitble rows (not hidden by scroll)
+    pub screen_rows: usize,
 }
 
 impl Meter {
@@ -69,8 +74,11 @@ impl Meter {
     pub fn set_position(&mut self, pos: Position) {
         self.position = pos;
     }
-    pub fn get_position(&mut self) -> Position {
+    pub fn get_position(&self) -> Position {
         self.position
+    }
+    pub fn get_row(&self) -> usize {
+        self.position.row
     }
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
@@ -104,6 +112,37 @@ impl Meter {
         self.position = pos;
         pos
     }
+    /// Same as update, but only updates up to a visual line be it
+    /// the number of columns filled or a newline character
+    ///
+    /// Returns the index of the newline character or the first character
+    /// that doesn't fit a line or None if whole text fits.
+    pub fn update_line(&mut self, text: &str) -> Option<usize> {
+        for (idx, c) in text.grapheme_indices(true) {
+            if c == "\n" {
+                return Some(idx);
+            }
+            let cw = if c == "\t" {
+                self.tab_stop - (self.position.col % self.tab_stop)
+            } else {
+                self.char_width(c)
+            };
+            if self.position.col + cw > self.cols {
+                return Some(idx);
+            }
+            self.position.col += cw;
+        }
+        if self.escape_seq_state != EscapeSeqState::Initial {
+            log::warn!("unfinished escape sequence in {:?}", text);
+            self.escape_seq_state = EscapeSeqState::Initial;
+        }
+        return None;
+    }
+    /// A faster equivalent of self.update("\n");
+    pub fn update_newline(&mut self) {
+        self.position.row += 1;
+        self.position.col = self.left_margin;
+    }
     // ignore ANSI escape sequence
     fn char_width(&mut self, s: &str) -> usize {
         use EscapeSeqState::*;
@@ -135,6 +174,17 @@ impl Meter {
             0
         } else {
             s.width()
+        }
+    }
+}
+
+impl Layout {
+    /// Returns number of visible on the screen below the cursor
+    pub fn lines_below_cursor(&self) -> usize {
+        if self.end.row < self.screen_rows || self.screen_rows == 0 {
+            self.end.row - self.cursor.row
+        } else {
+            self.scroll_top + self.screen_rows - self.cursor.row - 1
         }
     }
 }

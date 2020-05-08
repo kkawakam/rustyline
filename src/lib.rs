@@ -281,7 +281,8 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::SelfInsert(1, ' ')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
-                && cmd != Cmd::AcceptOrInsertLine
+                && cmd != Cmd::Newline
+                && matches!(cmd, Cmd::AcceptOrInsertLine { .. })
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -289,7 +290,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
-                Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
+                Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. } => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -427,6 +428,7 @@ fn readline_edit<H: Helper>(
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
     let mut s = State::new(&mut stdout, prompt, helper, ctx);
+
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -510,9 +512,12 @@ fn readline_edit<H: Helper>(
             }
             Cmd::EndOfFile => {
                 if !input_state.is_emacs_mode() && !s.line.is_empty() {
-                    s.edit_move_end()?;
                     break;
                 } else if s.line.is_empty() {
+                    // Move to end, in case cursor was in the middle of the
+                    // line, so that next thing application prints goes after
+                    // the input
+                    s.edit_move_buffer_end()?;
                     return Err(error::ReadlineError::Eof);
                 } else {
                     s.edit_delete(1)?
@@ -575,7 +580,7 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
+            Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {
                 #[cfg(test)]
                 {
                     editor.term.cursor = s.layout.cursor.col;
@@ -585,13 +590,23 @@ fn readline_edit<H: Helper>(
                     // line as the user typed it after a newline.
                     s.refresh_line_with_msg(None)?;
                 }
-                // Only accept value if cursor is at the end of the buffer
-                if s.validate()? && (cmd == Cmd::AcceptLine || s.line.is_end_of_input()) {
-                    break;
-                } else {
-                    s.edit_insert('\n', 1)?;
+                let valid = s.validate()?;
+                let end = s.line.is_end_of_input();
+                match (cmd, valid, end) {
+                    | (Cmd::AcceptLine, _, _)
+                    | (Cmd::AcceptOrInsertLine { .. }, true, true)
+                    | (Cmd::AcceptOrInsertLine { accept_in_the_middle: true }, true, _)
+                    => {
+                        break;
+                    }
+                    | (Cmd::Newline, _, _)
+                    | (Cmd::AcceptOrInsertLine { .. }, false, _)
+                    | (Cmd::AcceptOrInsertLine { .. }, true, false)
+                    => {
+                        s.edit_insert('\n', 1)?;
+                    }
+                    _ => unreachable!(),
                 }
-                continue;
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -656,6 +671,10 @@ fn readline_edit<H: Helper>(
                 }
             }
             Cmd::Interrupt => {
+                // Move to end, in case cursor was in the middle of the
+                // line, so that next thing application prints goes after
+                // the input
+                s.edit_move_end()?;
                 return Err(error::ReadlineError::Interrupted);
             }
             #[cfg(unix)]
@@ -671,6 +690,11 @@ fn readline_edit<H: Helper>(
             }
         }
     }
+
+    // Move to end, in case cursor was in the middle of the line, so that
+    // next thing application prints goes after the input
+    s.edit_move_buffer_end()?;
+
     if cfg!(windows) {
         let _ = original_mode; // silent warning
     }

@@ -24,7 +24,7 @@ To do so, we need to refactor current key event dispatch.
 
 See `replxx` design (`ACTION_RESULT`, `action_trait_t`).
 
-## Line wrapping
+## Line wrapping (should be fixed with verions >= 6.1.2)
 
 On Unix platform, we assume that `auto_right_margin` (`am`) is enabled.
 And on Windows, we activate `ENABLE_WRAP_AT_EOL_OUTPUT`.

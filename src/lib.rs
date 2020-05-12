@@ -511,13 +511,14 @@ fn readline_edit<H: Helper>(
                 s.edit_overwrite_char(c)?;
             }
             Cmd::EndOfFile => {
+                if s.has_hint() || !s.is_default_prompt() {
+                    // Force a refresh without hints to leave the previous
+                    // line as the user typed it after a newline.
+                    s.refresh_line_with_msg(None)?;
+                }
                 if !input_state.is_emacs_mode() && !s.line.is_empty() {
                     break;
                 } else if s.line.is_empty() {
-                    // Move to end, in case cursor was in the middle of the
-                    // line, so that next thing application prints goes after
-                    // the input
-                    s.edit_move_buffer_end()?;
                     return Err(error::ReadlineError::Eof);
                 } else {
                     s.edit_delete(1)?

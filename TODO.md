@@ -16,7 +16,7 @@ Color
 
 Completion
 - [X] Quoted path
-- [ ] Windows escape/unescape space in path
+- [X] Windows escape/unescape space in path
 - [ ] file completion & escape/unescape (#106)
 - [ ] file completion & tilde (#62)
 - [X] display versus replacement

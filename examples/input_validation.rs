@@ -8,15 +8,16 @@ struct InputValidator {}
 
 impl Validator for InputValidator {
     fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult, ReadlineError> {
+        use ValidationResult::{Incomplete, Invalid, Valid};
         let input = ctx.input();
-        if !input.starts_with("SELECT") {
-            return Ok(ValidationResult::Invalid(Some(
-                " --< Expect: SELECT stmt".to_owned(),
-            )));
+        let result = if !input.starts_with("SELECT") {
+            Invalid(Some(" --< Expect: SELECT stmt".to_owned()))
         } else if !input.ends_with(';') {
-            return Ok(ValidationResult::Incomplete);
-        }
-        Ok(ValidationResult::Valid(None))
+            Incomplete
+        } else {
+            Valid(None)
+        };
+        Ok(result)
     }
 }
 

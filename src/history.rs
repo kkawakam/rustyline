@@ -337,6 +337,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn save() {
         let mut history = init();
         assert!(history.add("line\nfour \\ abc"));
@@ -354,6 +355,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn load_legacy() {
         use std::io::Write;
         let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();

@@ -106,10 +106,10 @@ impl Cmd {
             Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
             Cmd::ClearScreen
             | Cmd::Kill(_)
-            | Cmd::Replace(_, _)
+            | Cmd::Replace(..)
             | Cmd::Noop
             | Cmd::Suspend
-            | Cmd::Yank(_, _)
+            | Cmd::Yank(..)
             | Cmd::YankPop => false,
             _ => true,
         }
@@ -117,13 +117,13 @@ impl Cmd {
 
     fn is_repeatable_change(&self) -> bool {
         match *self {
-            Cmd::Insert(_, _)
+            Cmd::Insert(..)
             | Cmd::Kill(_)
-            | Cmd::ReplaceChar(_, _)
-            | Cmd::Replace(_, _)
-            | Cmd::SelfInsert(_, _)
+            | Cmd::ReplaceChar(..)
+            | Cmd::Replace(..)
+            | Cmd::SelfInsert(..)
             | Cmd::ViYankTo(_)
-            | Cmd::Yank(_, _) => true,
+            | Cmd::Yank(..) => true,
             // Cmd::TransposeChars | TODO Validate
             _ => false,
         }
@@ -765,9 +765,9 @@ impl InputState {
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
-            if let (Cmd::Replace(_, _), Cmd::SelfInsert(_, _)) = (&self.last_cmd, &cmd) {
+            if let (Cmd::Replace(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
                 // replacing...
-            } else if let (Cmd::SelfInsert(_, _), Cmd::SelfInsert(_, _)) = (&self.last_cmd, &cmd) {
+            } else if let (Cmd::SelfInsert(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
                 // inserting...
             } else {
                 self.last_cmd = cmd.clone();

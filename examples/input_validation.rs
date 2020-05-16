@@ -8,7 +8,7 @@ struct InputValidator {}
 
 impl Validator for InputValidator {
     fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult, ReadlineError> {
-        use ValidationResult::{Incomplete,Invalid, Valid};
+        use ValidationResult::{Incomplete, Invalid, Valid};
         let input = ctx.input();
         let result = if !input.starts_with("SELECT") {
             Invalid(Some(" --< Expect: SELECT stmt".to_owned()))

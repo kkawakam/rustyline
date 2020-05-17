@@ -31,6 +31,7 @@ pub struct Config {
 }
 
 impl Config {
+    /// Returns a `Config` builder.
     pub fn builder() -> Builder {
         Builder::new()
     }
@@ -72,18 +73,28 @@ impl Config {
         self.history_ignore_space = yes;
     }
 
+    /// Completion behaviour.
+    ///
+    /// By default, `CompletionType::Circular`.
     pub fn completion_type(&self) -> CompletionType {
         self.completion_type
     }
 
+    /// When listing completion alternatives, only display
+    /// one screen of possibilities at a time (used for `CompletionType::List` mode).
     pub fn completion_prompt_limit(&self) -> usize {
         self.completion_prompt_limit
     }
 
+    /// Duration (milliseconds) Rustyline will wait for a character when
+    /// reading an ambiguous key sequence (used for `EditMode::Vi` mode on unix platform).
+    ///
+    /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
     pub fn keyseq_timeout(&self) -> i32 {
         self.keyseq_timeout
     }
 
+    /// Emacs or Vi mode
     pub fn edit_mode(&self) -> EditMode {
         self.edit_mode
     }
@@ -111,6 +122,9 @@ impl Config {
         self.color_mode = color_mode;
     }
 
+    /// Tell which output stream should be used: stdout or stderr.
+    ///
+    /// By default, stdout is used.
     pub fn output_stream(&self) -> OutputStreamType {
         self.output_stream
     }
@@ -120,6 +134,8 @@ impl Config {
     }
 
     /// Horizontal space taken by a tab.
+    ///
+    /// By default, 8.
     pub fn tab_stop(&self) -> usize {
         self.tab_stop
     }
@@ -173,13 +189,16 @@ impl Default for BellStyle {
     }
 }
 
+/// History filter
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryDuplicates {
+    /// No filter
     AlwaysAdd,
     /// a line will not be added to the history if it matches the previous entry
     IgnoreConsecutive,
 }
 
+/// Tab completion style
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CompletionType {
@@ -202,7 +221,9 @@ pub enum CompletionType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum EditMode {
+    /// Emacs keymap
     Emacs,
+    /// Vi keymap
     Vi,
 }
 
@@ -210,8 +231,11 @@ pub enum EditMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ColorMode {
+    /// Activate highlighting if platform/terminal is supported.
     Enabled,
+    /// Activate highlighting even if platform is not supported (windows < 10).
     Forced,
+    /// Deactivate highlighting even if platform/terminal is supported.
     Disabled,
 }
 
@@ -220,7 +244,9 @@ pub enum ColorMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum OutputStreamType {
+    /// Use stderr
     Stderr,
+    /// Use stdout
     Stdout,
 }
 
@@ -231,6 +257,7 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Returns a `Config` builder.
     pub fn new() -> Self {
         Self {
             p: Config::default(),
@@ -328,6 +355,7 @@ impl Builder {
         self
     }
 
+    /// Builds a `Config` with the settings specified so far.
     pub fn build(self) -> Config {
         self.p
     }
@@ -339,7 +367,9 @@ impl Configurer for Builder {
     }
 }
 
+/// Trait for component that holds a `Config`.
 pub trait Configurer {
+    /// `Config` accessor.
     fn config_mut(&mut self) -> &mut Config;
 
     /// Set the maximum length for the history.

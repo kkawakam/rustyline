@@ -13,7 +13,9 @@ use crate::config::{Config, HistoryDuplicates};
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
+    /// Search history forward
     Forward,
+    /// Search history backward
     Reverse,
 }
 
@@ -31,10 +33,15 @@ impl History {
     // and backslashes escaped in them.
     const FILE_VERSION_V2: &'static str = "#V2";
 
+    /// Default constructor
     pub fn new() -> Self {
         Self::with_config(Config::default())
     }
 
+    /// Customized constructor with:
+    /// - `Config::max_history_size()`,
+    /// - `Config::history_ignore_space()`,
+    /// - `Config::history_duplicates()`.
     pub fn with_config(config: Config) -> Self {
         Self {
             entries: VecDeque::new(),

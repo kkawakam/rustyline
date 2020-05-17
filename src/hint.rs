@@ -23,6 +23,7 @@ impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
     }
 }
 
+/// Add suggestion based on previous history entries matching current user input.
 pub struct HistoryHinter {}
 
 impl Hinter for HistoryHinter {

@@ -15,8 +15,11 @@ pub(crate) const MAX_LINE: usize = 4096;
 /// Word's case change
 #[derive(Clone, Copy)]
 pub enum WordAction {
+    /// Capitalize word
     CAPITALIZE,
+    /// lowercase word
     LOWERCASE,
+    /// uppercase word
     UPPERCASE,
 }
 
@@ -731,6 +734,7 @@ impl LineBuffer {
         }
     }
 
+    /// Delete range specified by `cs` search.
     pub fn delete_to(&mut self, cs: CharSearch, n: RepeatCount) -> bool {
         let search_result = match cs {
             CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
@@ -1014,6 +1018,7 @@ impl LineBuffer {
         }
     }
 
+    /// Kill range specified by `mvt`.
     pub fn kill(&mut self, mvt: &Movement) -> bool {
         let notify = match *mvt {
             Movement::ForwardChar(_) | Movement::BackwardChar(_) => false,

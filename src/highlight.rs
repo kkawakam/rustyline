@@ -94,12 +94,14 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
 const OPENS: &[u8; 3] = b"{[(";
 const CLOSES: &[u8; 3] = b"}])";
 
+/// Highlight matching bracket when typed or cursor moved on.
 #[derive(Default)]
 pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
 }
 
 impl MatchingBracketHighlighter {
+    /// Constructor
     pub fn new() -> Self {
         Self {
             bracket: Cell::new(None),

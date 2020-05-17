@@ -15,6 +15,7 @@ pub enum ValidationResult {
     Valid(Option<String>),
 }
 
+/// Give access to user input.
 pub struct ValidationContext<'i> {
     i: &'i mut dyn Invoke,
 }
@@ -24,6 +25,7 @@ impl<'i> ValidationContext<'i> {
         ValidationContext { i }
     }
 
+    /// Returns user input.
     pub fn input(&self) -> &str {
         self.i.input()
     }
@@ -87,6 +89,7 @@ pub struct MatchingBracketValidator {
 }
 
 impl MatchingBracketValidator {
+    /// Constructor
     pub fn new() -> Self {
         Self { _priv: () }
     }

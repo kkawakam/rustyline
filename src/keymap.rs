@@ -45,7 +45,9 @@ pub enum Cmd {
     HistorySearchBackward,
     /// history-search-forward
     HistorySearchForward,
+    /// Insert text
     Insert(RepeatCount, String),
+    /// Interrupt signal (Ctrl-C)
     Interrupt,
     /// backward-delete-char, backward-kill-line, backward-kill-word
     /// delete-char, kill-line, kill-word, unix-line-discard, unix-word-rubout,
@@ -57,6 +59,7 @@ pub enum Cmd {
     Move(Movement),
     /// next-history
     NextHistory,
+    /// No action
     Noop,
     /// vi-replace
     Overwrite(char),
@@ -72,6 +75,7 @@ pub enum Cmd {
     ReverseSearchHistory,
     /// self-insert
     SelfInsert(RepeatCount, char),
+    /// Suspend signal (Ctrl-Z on unix platform)
     Suspend,
     /// transpose-chars
     TransposeChars,
@@ -79,6 +83,7 @@ pub enum Cmd {
     TransposeWords(RepeatCount),
     /// undo
     Undo(RepeatCount),
+    /// Unsupported / unexpected
     Unknown,
     /// upcase-word
     UpcaseWord,
@@ -100,6 +105,7 @@ pub enum Cmd {
 }
 
 impl Cmd {
+    /// Tells if current command should reset kill ring.
     pub fn should_reset_kill_ring(&self) -> bool {
         #[allow(clippy::match_same_arms)]
         match *self {
@@ -197,26 +203,33 @@ pub enum Word {
 /// Where to move with respect to word boundary
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum At {
+    /// Start of word.
     Start,
+    /// Before end of word.
     BeforeEnd,
+    /// After end of word.
     AfterEnd,
 }
 
 /// Where to paste (relative to cursor position)
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Anchor {
+    /// After cursor
     After,
+    /// Before cursor
     Before,
 }
 
 /// Vi character search
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CharSearch {
+    /// Forward search
     Forward(char),
-    // until
+    /// Forward search until
     ForwardBefore(char),
+    /// Backward search
     Backward(char),
-    // until
+    /// Backward search until
     BackwardAfter(char),
 }
 
@@ -235,7 +248,8 @@ impl CharSearch {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Movement {
-    WholeLine, // not really a movement
+    /// Whole current line (not really a movement but a range)
+    WholeLine,
     /// beginning-of-line
     BeginningOfLine,
     /// end-of-line
@@ -256,7 +270,8 @@ pub enum Movement {
     LineUp(RepeatCount),
     /// move to the same column on the next line
     LineDown(RepeatCount),
-    WholeBuffer, // not really a movement
+    /// Whole user input (not really a movement but a range)
+    WholeBuffer,
     /// beginning-of-buffer
     BeginningOfBuffer,
     /// end-of-buffer

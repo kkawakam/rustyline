@@ -24,8 +24,10 @@ pub enum ReadlineError {
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
+    /// Error generated on WINDOW_BUFFER_SIZE_EVENT to mimic unix SIGWINCH signal
     #[cfg(windows)]
     WindowResize,
+    /// Like Utf8Error on unix
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
 }

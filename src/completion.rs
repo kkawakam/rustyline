@@ -342,7 +342,6 @@ fn filename_complete(
         return Ok(entries);
     }
 
-    if cfg!(unix) {}
     // if any of the below IO operations have errors, just ignore them
     if let Ok(read_dir) = dir.read_dir() {
         for entry in read_dir {

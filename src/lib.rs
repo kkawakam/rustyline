@@ -15,7 +15,7 @@
 //!     Err(_) => println!("No input"),
 //! }
 //! ```
-// #![feature(non_exhaustive)]
+#![warn(missing_docs)]
 
 pub mod completion;
 pub mod config;

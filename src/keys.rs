@@ -1,38 +1,70 @@
 //! Key constants
 
+/// Input key pressed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum KeyPress {
+    /// Unsupported escape sequence (on unix platform)
     UnknownEscSeq,
-    Backspace, // Ctrl('H')
+    /// ⌫ or `KeyPress::Ctrl('H')`
+    Backspace,
+    /// ⇤ (usually Shift-Tab)
     BackTab,
+    /// Paste (on unix platform)
     BracketedPasteStart,
+    /// Paste (on unix platform)
     BracketedPasteEnd,
+    /// Single char
     Char(char),
+    /// Ctrl-↓
     ControlDown,
+    /// Ctrl-←
     ControlLeft,
+    /// Ctrl-→
     ControlRight,
+    /// Ctrl-↑
     ControlUp,
+    /// Ctrl-char
     Ctrl(char),
+    /// ⌦
     Delete,
+    /// ↓ arrow key
     Down,
+    /// ⇲
     End,
-    Enter, // Ctrl('M')
-    Esc,   // Ctrl('[')
+    /// ↵ or `KeyPress::Ctrl('M')`
+    Enter,
+    /// Escape or `KeyPress::Ctrl('[')`
+    Esc,
+    /// Function key
     F(u8),
+    /// ⇱
     Home,
+    /// Insert key
     Insert,
+    /// ← arrow key
     Left,
+    /// Escape-char or Alt-char
     Meta(char),
+    /// `KeyPress::Char('\0')`
     Null,
+    /// ⇟
     PageDown,
+    /// ⇞
     PageUp,
+    /// → arrow key
     Right,
+    /// Shift-↓
     ShiftDown,
+    /// Shift-←
     ShiftLeft,
+    /// Shift-→
     ShiftRight,
+    /// Shift-↑
     ShiftUp,
-    Tab, // Ctrl('I')
+    /// ⇥ or `KeyPress::Ctrl('I')`
+    Tab,
+    /// ↑ arrow key
     Up,
 }
 

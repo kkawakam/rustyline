@@ -6,7 +6,6 @@ use std::mem;
 use std::sync::atomic;
 
 use log::{debug, warn};
-use scopeguard;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};

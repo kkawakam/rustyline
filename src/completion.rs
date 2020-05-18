@@ -342,22 +342,40 @@ fn filename_complete(
         return Ok(entries);
     }
 
+    if cfg!(unix) {}
     // if any of the below IO operations have errors, just ignore them
     if let Ok(read_dir) = dir.read_dir() {
         for entry in read_dir {
             if let Ok(entry) = entry {
                 if let Some(s) = entry.file_name().to_str() {
-                    if s.starts_with(file_name) {
-                        if let Ok(metadata) = fs::metadata(entry.path()) {
-                            let mut path = String::from(dir_name) + s;
-                            if metadata.is_dir() {
-                                path.push(sep);
-                            }
-                            entries.push(Pair {
-                                display: String::from(s),
-                                replacement: escape(path, esc_char, break_chars, quote),
-                            });
-                        } // else ignore PermissionDenied
+                    if cfg!(unix) {
+                        if s.starts_with(file_name) {
+                            if let Ok(metadata) = fs::metadata(entry.path()) {
+                                let mut path = String::from(dir_name) + s;
+                                if metadata.is_dir() {
+                                    path.push(sep);
+                                }
+                                entries.push(Pair {
+                                    display: String::from(s),
+                                    replacement: escape(path, esc_char, break_chars, quote),
+                                });
+                            } // else ignore PermissionDenied
+                        }
+                    } else {
+                        // Let's do a case insesitive comparison for mac and windows
+                        // For full unicode paths, we may have to use something like `caseless`
+                        if s.to_lowercase().starts_with(&file_name.to_lowercase()) {
+                            if let Ok(metadata) = fs::metadata(entry.path()) {
+                                let mut path = String::from(dir_name) + s;
+                                if metadata.is_dir() {
+                                    path.push(sep);
+                                }
+                                entries.push(Pair {
+                                    display: String::from(s),
+                                    replacement: escape(path, esc_char, break_chars, quote),
+                                });
+                            } // else ignore PermissionDenied
+                        }
                     }
                 }
             }

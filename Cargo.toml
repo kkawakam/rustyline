@@ -20,7 +20,7 @@ members = ["rustyline-derive"]
 
 [dependencies]
 cfg-if = "0.1.6"
-dirs = { version = "2.0", optional = true }
+dirs-next = { version = "1.0", optional = true }
 libc = "0.2"
 log = "0.4"
 unicode-width = "0.1"
@@ -45,7 +45,7 @@ rustyline-derive = { version = "0.3.1", path = "rustyline-derive" }
 
 [features]
 default = ["with-dirs"]
-with-dirs = ["dirs"]
+with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 
 [package.metadata.docs.rs]

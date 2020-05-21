@@ -317,7 +317,11 @@ impl ConsoleRenderer {
     }
 
     // position at the start of the prompt, clear to end of previous input
-    fn clear_old_rows(&mut self, info: &wincon::CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
+    fn clear_old_rows(
+        &mut self,
+        info: &wincon::CONSOLE_SCREEN_BUFFER_INFO,
+        layout: &Layout,
+    ) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
         let mut coord = info.dwCursorPosition;

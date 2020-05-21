@@ -202,7 +202,8 @@ impl FilenameCompleter {
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
-        let matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        let mut matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
     }
 }

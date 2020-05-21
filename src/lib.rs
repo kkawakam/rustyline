@@ -319,6 +319,8 @@ fn page_completions<C: Candidate, H: Helper>(
         s.out.write_and_flush(ab.as_bytes())?;
     }
     s.out.write_and_flush(b"\n")?;
+    s.layout.end.row = 0; // dirty way to make clear_old_rows do nothing
+    s.layout.cursor.row = 0;
     s.refresh_line()?;
     Ok(None)
 }

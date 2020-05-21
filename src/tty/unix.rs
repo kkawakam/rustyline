@@ -544,16 +544,16 @@ impl PosixRenderer {
         }
     }
 
-    fn clear_old_rows(&mut self, layout: &Layout) -> Result<()> {
+    fn clear_old_rows(&mut self, layout: &Layout) {
         use std::fmt::Write;
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
-        // self.old_rows < self.cursor.row if the prompt spans multiple lines and if
+        // old_rows < cursor_row if the prompt spans multiple lines and if
         // this is the default State.
         let cursor_row_movement = old_rows.saturating_sub(current_row);
         // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}B", cursor_row_movement)?;
+            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
         }
         // clear old rows
         for _ in 0..old_rows {
@@ -561,7 +561,6 @@ impl PosixRenderer {
         }
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
-        Ok(())
     }
 }
 

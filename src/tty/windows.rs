@@ -380,20 +380,21 @@ impl ConsoleRenderer {
         col
     }
 
+    // position at the start of the prompt, clear to end of previous input
     fn clear_old_rows(
         &mut self,
-        info: &mut CONSOLE_SCREEN_BUFFER_INFO,
+        info: &CONSOLE_SCREEN_BUFFER_INFO,
         layout: &Layout,
     ) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
-        // position at the start of the prompt, clear to end of previous input
-        info.dwCursorPosition.X = 0;
-        info.dwCursorPosition.Y -= current_row as i16;
-        self.set_console_cursor_position(info.dwCursorPosition)?;
+        let mut coord = info.dwCursorPosition;
+        coord.X = 0;
+        coord.Y -= current_row as i16;
+        self.set_console_cursor_position(coord)?;
         self.clear(
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
-            info.dwCursorPosition,
+            coord,
             info.wAttributes,
         )
     }
@@ -471,7 +472,7 @@ impl Renderer for ConsoleRenderer {
             let _ = set_cursor_visible(handle, TRUE);
         }
         // position at the start of the prompt, clear to end of previous input
-        self.clear_old_rows(&mut info, old_layout)?;
+        self.clear_old_rows(&info, old_layout)?;
         // display prompt, input line and hint
         self.write_and_flush(self.buffer.as_bytes())?;
 

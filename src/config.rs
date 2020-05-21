@@ -81,13 +81,15 @@ impl Config {
     }
 
     /// When listing completion alternatives, only display
-    /// one screen of possibilities at a time (used for `CompletionType::List` mode).
+    /// one screen of possibilities at a time (used for `CompletionType::List`
+    /// mode).
     pub fn completion_prompt_limit(&self) -> usize {
         self.completion_prompt_limit
     }
 
     /// Duration (milliseconds) Rustyline will wait for a character when
-    /// reading an ambiguous key sequence (used for `EditMode::Vi` mode on unix platform).
+    /// reading an ambiguous key sequence (used for `EditMode::Vi` mode on unix
+    /// platform).
     ///
     /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
     pub fn keyseq_timeout(&self) -> i32 {

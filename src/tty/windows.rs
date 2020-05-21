@@ -315,6 +315,25 @@ impl ConsoleRenderer {
         }
         col
     }
+
+    // position at the start of the prompt, clear to end of previous input
+    fn clear_old_rows(
+        &mut self,
+        info: &wincon::CONSOLE_SCREEN_BUFFER_INFO,
+        layout: &Layout,
+    ) -> Result<()> {
+        let current_row = layout.cursor.row;
+        let old_rows = layout.end.row;
+        let mut coord = info.dwCursorPosition;
+        coord.X = 0;
+        coord.Y -= current_row as i16;
+        self.set_console_cursor_position(coord)?;
+        self.clear(
+            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
+            coord,
+            info.wAttributes,
+        )
+    }
 }
 
 fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
@@ -357,8 +376,6 @@ impl Renderer for ConsoleRenderer {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
-        let current_row = old_layout.cursor.row;
-        let old_rows = old_layout.end.row;
 
         self.buffer.clear();
         let mut col = 0;
@@ -382,22 +399,14 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(hint);
             }
         }
-        // position at the start of the prompt, clear to end of previous input
         let info = self.get_console_screen_buffer_info()?;
-        let mut coord = info.dwCursorPosition;
-        coord.X = 0;
-        coord.Y -= current_row as i16;
         self.set_cursor_visible(FALSE)?; // just to avoid flickering
         let handle = self.handle;
         scopeguard::defer! {
             let _ = set_cursor_visible(handle, TRUE);
         }
-        self.set_console_cursor_position(coord)?;
-        self.clear(
-            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
-            coord,
-            info.wAttributes,
-        )?;
+        // position at the start of the prompt, clear to end of previous input
+        self.clear_old_rows(&info, old_layout)?;
         // display prompt, input line and hint
         self.write_and_flush(self.buffer.as_bytes())?;
 

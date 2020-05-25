@@ -895,6 +895,7 @@ impl<H: Helper> Editor<H> {
         }
     }
 
+    /// Returns an iterator over edited lines
     /// ```
     /// let mut rl = rustyline::Editor::<()>::new();
     /// for readline in rl.iter("> ") {
@@ -909,7 +910,7 @@ impl<H: Helper> Editor<H> {
     ///     }
     /// }
     /// ```
-    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> Iter<'_, H> {
+    pub fn iter<'a>(&'a mut self, prompt: &'a str) -> impl Iterator<Item = Result<String>> + 'a {
         Iter {
             editor: self,
             prompt,
@@ -973,8 +974,7 @@ impl<H: Helper> fmt::Debug for Editor<H> {
     }
 }
 
-/// Edited lines iterator
-pub struct Iter<'a, H: Helper> {
+struct Iter<'a, H: Helper> {
     editor: &'a mut Editor<H>,
     prompt: &'a str,
 }

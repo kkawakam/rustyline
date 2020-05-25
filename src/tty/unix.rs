@@ -625,7 +625,7 @@ impl Renderer for PosixRenderer {
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
-        self.clear_old_rows(old_layout)?;
+        self.clear_old_rows(old_layout);
 
         if let Some(highlighter) = highlighter {
             // display the prompt
@@ -721,7 +721,7 @@ impl Renderer for PosixRenderer {
 
     fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
         self.buffer.clear();
-        self.clear_old_rows(layout)?;
+        self.clear_old_rows(layout);
         self.write_and_flush(self.buffer.as_bytes())
     }
 

@@ -52,7 +52,23 @@ fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     unsafe {
         let mut size: libc::winsize = zeroed();
         match win_size(fileno.as_raw_fd(), &mut size) {
-            Ok(0) => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
+            Ok(0) => {
+                // In linux pseudo-terminals are created with dimensions of
+                // zero. If host application didn't initialize the correct
+                // size before start we treat zero size as 80 columns and
+                // inifinite rows
+                let cols = if size.ws_col == 0 {
+                    80
+                } else {
+                    size.ws_col as usize
+                };
+                let rows = if size.ws_row == 0 {
+                    0
+                } else {
+                    usize::max_value()
+                };
+                (cols, rows)
+            }
             _ => (80, 24),
         }
     }

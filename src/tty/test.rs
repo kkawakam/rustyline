@@ -159,8 +159,14 @@ impl Term for DummyTerminal {
 
     // Init checks:
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn is_unsupported(&self) -> bool {
         false
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn is_unsupported(&self) -> bool {
+        true
     }
 
     fn is_stdin_tty(&self) -> bool {

@@ -468,6 +468,7 @@ impl InputState {
                     Cmd::Move(Movement::ForwardChar(n))
                 }
             }
+            KeyPress::Ctrl('E') if wrt.has_hint() => Cmd::CompleteHint,
             KeyPress::Ctrl('E') => Cmd::Move(Movement::EndOfLine),
             KeyPress::Ctrl('F') => {
                 if positive {

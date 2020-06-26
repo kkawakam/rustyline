@@ -41,7 +41,7 @@ impl AsRawFd for OutputStreamType {
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-#[allow(clippy::identity_conversion)]
+#[allow(clippy::useless_conversion)]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 

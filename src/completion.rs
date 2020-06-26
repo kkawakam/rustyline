@@ -203,6 +203,7 @@ impl FilenameCompleter {
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
         let mut matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        #[allow(clippy::unnecessary_sort_by)]
         matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
     }

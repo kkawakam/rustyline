@@ -202,7 +202,9 @@ impl FilenameCompleter {
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
-        let matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        let mut matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        #[allow(clippy::unnecessary_sort_by)]
+        matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
     }
 }
@@ -297,7 +299,7 @@ fn filename_complete(
     quote: Quote,
 ) -> Result<Vec<Pair>> {
     #[cfg(feature = "with-dirs")]
-    use dirs::home_dir;
+    use dirs_next::home_dir;
     use std::env::current_dir;
 
     let sep = path::MAIN_SEPARATOR;
@@ -344,43 +346,39 @@ fn filename_complete(
 
     // if any of the below IO operations have errors, just ignore them
     if let Ok(read_dir) = dir.read_dir() {
+        let file_name = normalize(file_name);
         for entry in read_dir {
             if let Ok(entry) = entry {
                 if let Some(s) = entry.file_name().to_str() {
-                    if cfg!(unix) {
-                        if s.starts_with(file_name) {
-                            if let Ok(metadata) = fs::metadata(entry.path()) {
-                                let mut path = String::from(dir_name) + s;
-                                if metadata.is_dir() {
-                                    path.push(sep);
-                                }
-                                entries.push(Pair {
-                                    display: String::from(s),
-                                    replacement: escape(path, esc_char, break_chars, quote),
-                                });
-                            } // else ignore PermissionDenied
-                        }
-                    } else {
-                        // Let's do a case insesitive comparison for mac and windows
-                        // For full unicode paths, we may have to use something like `caseless`
-                        if s.to_lowercase().starts_with(&file_name.to_lowercase()) {
-                            if let Ok(metadata) = fs::metadata(entry.path()) {
-                                let mut path = String::from(dir_name) + s;
-                                if metadata.is_dir() {
-                                    path.push(sep);
-                                }
-                                entries.push(Pair {
-                                    display: String::from(s),
-                                    replacement: escape(path, esc_char, break_chars, quote),
-                                });
-                            } // else ignore PermissionDenied
-                        }
+                    let ns = normalize(s);
+                    if ns.starts_with(file_name.as_ref()) {
+                        if let Ok(metadata) = fs::metadata(entry.path()) {
+                            let mut path = String::from(dir_name) + s;
+                            if metadata.is_dir() {
+                                path.push(sep);
+                            }
+                            entries.push(Pair {
+                                display: String::from(s),
+                                replacement: escape(path, esc_char, break_chars, quote),
+                            });
+                        } // else ignore PermissionDenied
                     }
                 }
             }
         }
     }
     Ok(entries)
+}
+
+#[cfg(any(windows, target_os = "macos"))]
+fn normalize(s: &str) -> Cow<str> {
+    // case insensitive
+    Cow::Owned(s.to_lowercase())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn normalize(s: &str) -> Cow<str> {
+    Cow::Borrowed(s)
 }
 
 /// Given a `line` and a cursor `pos`ition,
@@ -610,5 +608,11 @@ mod tests {
             Some((0, super::Quote::Double)),
             super::find_unclosed_quote("\"c:\\users\\All Users\\")
         )
+    }
+
+    #[cfg(windows)]
+    #[test]
+    pub fn normalize() {
+        assert_eq!(super::normalize("Windows"), "windows")
     }
 }

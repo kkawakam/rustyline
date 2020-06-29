@@ -41,7 +41,7 @@ impl AsRawFd for OutputStreamType {
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-#[allow(clippy::identity_conversion)]
+#[allow(clippy::useless_conversion)]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -52,7 +52,23 @@ fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     unsafe {
         let mut size: libc::winsize = zeroed();
         match win_size(fileno.as_raw_fd(), &mut size) {
-            Ok(0) => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
+            Ok(0) => {
+                // In linux pseudo-terminals are created with dimensions of
+                // zero. If host application didn't initialize the correct
+                // size before start we treat zero size as 80 columns and
+                // inifinite rows
+                let cols = if size.ws_col == 0 {
+                    80
+                } else {
+                    size.ws_col as usize
+                };
+                let rows = if size.ws_row == 0 {
+                    usize::max_value()
+                } else {
+                    size.ws_row as usize
+                };
+                (cols, rows)
+            }
             _ => (80, 24),
         }
     }
@@ -484,6 +500,25 @@ impl PosixRenderer {
             bell_style,
         }
     }
+
+    fn clear_old_rows(&mut self, layout: &Layout) {
+        use std::fmt::Write;
+        let current_row = layout.cursor.row;
+        let old_rows = layout.end.row;
+        // old_rows < cursor_row if the prompt spans multiple lines and if
+        // this is the default State.
+        let cursor_row_movement = old_rows.saturating_sub(current_row);
+        // move the cursor down as required
+        if cursor_row_movement > 0 {
+            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
+        }
+        // clear old rows
+        for _ in 0..old_rows {
+            self.buffer.push_str("\r\x1b[0K\x1b[A");
+        }
+        // clear the line
+        self.buffer.push_str("\r\x1b[0K");
+    }
 }
 
 impl Renderer for PosixRenderer {
@@ -546,22 +581,8 @@ impl Renderer for PosixRenderer {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
-        let current_row = old_layout.cursor.row;
-        let old_rows = old_layout.end.row;
 
-        // old_rows < cursor.row if the prompt spans multiple lines and if
-        // this is the default State.
-        let cursor_row_movement = old_rows.saturating_sub(current_row);
-        // move the cursor down as required
-        if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
-        }
-        // clear old rows
-        for _ in 0..old_rows {
-            self.buffer.push_str("\r\x1b[0K\x1b[A");
-        }
-        // clear the line
-        self.buffer.push_str("\r\x1b[0K");
+        self.clear_old_rows(old_layout);
 
         if let Some(highlighter) = highlighter {
             // display the prompt

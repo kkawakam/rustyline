@@ -313,7 +313,7 @@ cfg_if::cfg_if! {
 mod tests {
     use super::{Direction, History};
     use crate::config::Config;
-    use std::path::Path;
+    use crate::Result;
 
     fn init() -> History {
         let mut history = History::new();
@@ -351,45 +351,50 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn save() {
-        let mut history = init();
-        assert!(history.add("line\nfour \\ abc"));
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history");
+    fn save() -> Result<()> {
+        check_save("line\nfour \\ abc")
+    }
 
-        history.save(&history_path).unwrap();
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn check_save(line: &str) -> Result<()> {
+        let mut history = init();
+        assert!(history.add(line));
+        let tf = tempfile::NamedTempFile::new()?;
+
+        history.save(tf.path())?;
         let mut history2 = History::new();
-        history2.load(&history_path).unwrap();
+        history2.load(tf.path())?;
         for (a, b) in history.entries.iter().zip(history2.entries.iter()) {
             assert_eq!(a, b);
         }
-
-        td.close().unwrap();
+        tf.close()?;
+        Ok(())
     }
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn load_legacy() {
+    fn load_legacy() -> Result<()> {
         use std::io::Write;
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history_v1");
+        let tf = tempfile::NamedTempFile::new()?;
         {
-            let mut legacy = std::fs::File::create(&history_path).unwrap();
+            let mut legacy = std::fs::File::create(tf.path())?;
             // Some data we'd accidentally corrupt if we got the version wrong
             let data = b"\
                 test\\n \\abc \\123\n\
                 123\\n\\\\n\n\
                 abcde
             ";
-            legacy.write_all(data).unwrap();
-            legacy.flush().unwrap();
+            legacy.write_all(data)?;
+            legacy.flush()?;
         }
         let mut history = History::new();
-        history.load(&history_path).unwrap();
+        history.load(tf.path())?;
         assert_eq!(history.entries[0], "test\\n \\abc \\123");
         assert_eq!(history.entries[1], "123\\n\\\\n");
         assert_eq!(history.entries[2], "abcde");
-        td.close().unwrap();
+
+        tf.close()?;
+        Ok(())
     }
 
     #[test]

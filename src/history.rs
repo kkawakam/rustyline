@@ -9,6 +9,7 @@ use std::path::Path;
 
 use super::Result;
 use crate::config::{Config, HistoryDuplicates};
+use snailquote::{escape, unescape};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,7 +142,8 @@ impl History {
         wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
             wtr.write_all(b"\n")?;
-            wtr.write_all(entry.replace('\\', "\\\\").replace('\n', "\\n").as_bytes())?;
+            let esc = escape(entry);
+            wtr.write_all(&esc.as_bytes())?;
         }
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
@@ -170,7 +172,11 @@ impl History {
         }
         for line in lines {
             let line = if v2 {
-                line?.replace("\\n", "\n").replace("\\\\", "\\")
+                let li = match unescape(&line.unwrap()) {
+                    Ok(s) => s,
+                    _ => "".to_string()
+                };
+                li
             } else {
                 line?
             };

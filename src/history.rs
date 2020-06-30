@@ -360,6 +360,12 @@ mod tests {
         check_save("line\nfour \\ abc")
     }
 
+    #[test]
+    fn save_windows_path() -> Result<()> {
+        let path = "cd source\\repos\\forks\\nushell\\";
+        check_save(path)
+    }
+
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn check_save(line: &str) -> Result<()> {
         let mut history = init();

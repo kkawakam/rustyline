@@ -141,7 +141,18 @@ impl History {
         wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
             wtr.write_all(b"\n")?;
-            wtr.write_all(entry.replace('\\', "\\\\").replace('\n', "\\n").as_bytes())?;
+            let mut bytes = entry.as_bytes();
+            while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
+                wtr.write_all(&bytes[..i])?;
+                if bytes[i] == b'\n' {
+                    wtr.write_all(b"\\n")?;
+                } else {
+                    debug_assert_eq!(bytes[i], b'\\');
+                    wtr.write_all(b"\\\\")?;
+                }
+                bytes = &bytes[i + 1..];
+            }
+            wtr.write_all(bytes)?; // remaining bytes
         }
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485

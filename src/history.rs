@@ -1,5 +1,6 @@
 //! History API
 
+use log::warn;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -180,13 +181,43 @@ impl History {
             }
         }
         for line in lines {
-            let line = if v2 {
-                line?.replace("\\n", "\n").replace("\\\\", "\\")
-            } else {
-                line?
-            };
+            let mut line = line?;
             if line.is_empty() {
                 continue;
+            }
+            if v2 {
+                let mut copy = None;
+                let bytes = line.as_bytes();
+                let mut i = 0;
+                while let Some(j) = memchr::memchr(b'\\', &bytes[i..]) {
+                    if copy.is_none() {
+                        copy = Some(String::with_capacity(line.len()));
+                    }
+                    let s = copy.as_mut().unwrap();
+                    s.push_str(&line[i..i + j]);
+                    let k = i + j + 1; // escaped char idx
+                    let bad = if k >= bytes.len() {
+                        true
+                    } else if bytes[k] == b'n' {
+                        s.push('\n');
+                        false
+                    } else if bytes[k] == b'\\' {
+                        s.push('\\');
+                        false
+                    } else {
+                        true
+                    };
+                    if bad {
+                        warn!(target: "rustyline", "bad escaped line: {}", line);
+                        copy = None;
+                        break;
+                    }
+                    i = k + 1;
+                }
+                if let Some(mut s) = copy {
+                    s.push_str(&line[i..]);
+                    line = s;
+                }
             }
             self.add(line); // TODO truncate to MAX_LINE
         }

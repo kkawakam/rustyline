@@ -146,14 +146,14 @@ impl History {
             while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
                 wtr.write_all(&bytes[..i])?;
                 if bytes[i] == b'\n' {
-                    wtr.write_all(b"\\n")?;
+                    wtr.write_all(b"\\n")?; // escaped line feed
                 } else {
                     debug_assert_eq!(bytes[i], b'\\');
-                    wtr.write_all(b"\\\\")?;
+                    wtr.write_all(b"\\\\")?; // escaped backslash
                 }
                 bytes = &bytes[i + 1..];
             }
-            wtr.write_all(bytes)?; // remaining bytes
+            wtr.write_all(bytes)?; // remaining bytes with no \n or \
         }
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
@@ -186,36 +186,38 @@ impl History {
                 continue;
             }
             if v2 {
-                let mut copy = None;
-                let bytes = line.as_bytes();
-                let mut i = 0;
-                while let Some(j) = memchr::memchr(b'\\', &bytes[i..]) {
+                let mut copy = None; // lazily copy line if unescaping is needed
+                let mut str = line.as_str();
+                while let Some(i) = str.find('\\') {
                     if copy.is_none() {
                         copy = Some(String::with_capacity(line.len()));
                     }
                     let s = copy.as_mut().unwrap();
-                    s.push_str(&line[i..i + j]);
-                    let k = i + j + 1; // escaped char idx
-                    let bad = if k >= bytes.len() {
-                        true
-                    } else if bytes[k] == b'n' {
-                        s.push('\n');
-                        false
-                    } else if bytes[k] == b'\\' {
-                        s.push('\\');
-                        false
+                    s.push_str(&str[..i]);
+                    let j = i + 1; // escaped char idx
+                    let b = if j < str.len() {
+                        str.as_bytes()[j]
                     } else {
-                        true
+                        0 // unexpected if History::save works properly
                     };
-                    if bad {
-                        warn!(target: "rustyline", "bad escaped line: {}", line);
-                        copy = None;
-                        break;
+                    match b {
+                        b'n' => {
+                            s.push('\n'); // unescaped line feed
+                        }
+                        b'\\' => {
+                            s.push('\\'); // unescaped back slash
+                        }
+                        _ => {
+                            // only line feed and back slash should have been escaped
+                            warn!(target: "rustyline", "bad escaped line: {}", line);
+                            copy = None;
+                            break;
+                        }
                     }
-                    i = k + 1;
+                    str = &str[j + 1..];
                 }
                 if let Some(mut s) = copy {
-                    s.push_str(&line[i..]);
+                    s.push_str(str); // remaining bytes with no escaped char
                     line = s;
                 }
             }

@@ -1,5 +1,6 @@
 //! History API
 
+use log::warn;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -141,7 +142,18 @@ impl History {
         wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
             wtr.write_all(b"\n")?;
-            wtr.write_all(entry.replace('\\', "\\\\").replace('\n', "\\n").as_bytes())?;
+            let mut bytes = entry.as_bytes();
+            while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
+                wtr.write_all(&bytes[..i])?;
+                if bytes[i] == b'\n' {
+                    wtr.write_all(b"\\n")?; // escaped line feed
+                } else {
+                    debug_assert_eq!(bytes[i], b'\\');
+                    wtr.write_all(b"\\\\")?; // escaped backslash
+                }
+                bytes = &bytes[i + 1..];
+            }
+            wtr.write_all(bytes)?; // remaining bytes with no \n or \
         }
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
@@ -169,13 +181,45 @@ impl History {
             }
         }
         for line in lines {
-            let line = if v2 {
-                line?.replace("\\n", "\n").replace("\\\\", "\\")
-            } else {
-                line?
-            };
+            let mut line = line?;
             if line.is_empty() {
                 continue;
+            }
+            if v2 {
+                let mut copy = None; // lazily copy line if unescaping is needed
+                let mut str = line.as_str();
+                while let Some(i) = str.find('\\') {
+                    if copy.is_none() {
+                        copy = Some(String::with_capacity(line.len()));
+                    }
+                    let s = copy.as_mut().unwrap();
+                    s.push_str(&str[..i]);
+                    let j = i + 1; // escaped char idx
+                    let b = if j < str.len() {
+                        str.as_bytes()[j]
+                    } else {
+                        0 // unexpected if History::save works properly
+                    };
+                    match b {
+                        b'n' => {
+                            s.push('\n'); // unescaped line feed
+                        }
+                        b'\\' => {
+                            s.push('\\'); // unescaped back slash
+                        }
+                        _ => {
+                            // only line feed and back slash should have been escaped
+                            warn!(target: "rustyline", "bad escaped line: {}", line);
+                            copy = None;
+                            break;
+                        }
+                    }
+                    str = &str[j + 1..];
+                }
+                if let Some(mut s) = copy {
+                    s.push_str(str); // remaining bytes with no escaped char
+                    line = s;
+                }
             }
             self.add(line); // TODO truncate to MAX_LINE
         }
@@ -307,7 +351,7 @@ cfg_if::cfg_if! {
 mod tests {
     use super::{Direction, History};
     use crate::config::Config;
-    use std::path::Path;
+    use crate::Result;
 
     fn init() -> History {
         let mut history = History::new();
@@ -345,45 +389,56 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn save() {
-        let mut history = init();
-        assert!(history.add("line\nfour \\ abc"));
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history");
+    fn save() -> Result<()> {
+        check_save("line\nfour \\ abc")
+    }
 
-        history.save(&history_path).unwrap();
+    #[test]
+    fn save_windows_path() -> Result<()> {
+        let path = "cd source\\repos\\forks\\nushell\\";
+        check_save(path)
+    }
+
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn check_save(line: &str) -> Result<()> {
+        let mut history = init();
+        assert!(history.add(line));
+        let tf = tempfile::NamedTempFile::new()?;
+
+        history.save(tf.path())?;
         let mut history2 = History::new();
-        history2.load(&history_path).unwrap();
+        history2.load(tf.path())?;
         for (a, b) in history.entries.iter().zip(history2.entries.iter()) {
             assert_eq!(a, b);
         }
-
-        td.close().unwrap();
+        tf.close()?;
+        Ok(())
     }
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn load_legacy() {
+    fn load_legacy() -> Result<()> {
         use std::io::Write;
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history_v1");
+        let tf = tempfile::NamedTempFile::new()?;
         {
-            let mut legacy = std::fs::File::create(&history_path).unwrap();
+            let mut legacy = std::fs::File::create(tf.path())?;
             // Some data we'd accidentally corrupt if we got the version wrong
             let data = b"\
                 test\\n \\abc \\123\n\
                 123\\n\\\\n\n\
                 abcde
             ";
-            legacy.write_all(data).unwrap();
-            legacy.flush().unwrap();
+            legacy.write_all(data)?;
+            legacy.flush()?;
         }
         let mut history = History::new();
-        history.load(&history_path).unwrap();
+        history.load(tf.path())?;
         assert_eq!(history.entries[0], "test\\n \\abc \\123");
         assert_eq!(history.entries[1], "123\\n\\\\n");
         assert_eq!(history.entries[2], "abcde");
-        td.close().unwrap();
+
+        tf.close()?;
+        Ok(())
     }
 
     #[test]

@@ -3,22 +3,47 @@
 use crate::history::Direction;
 use crate::Context;
 
+/// A hint returned by Hinter
+pub trait Hint {
+    /// Text to display when hint is active
+    fn display(&self) -> &str;
+    /// Text to insert in line when right arrow is pressed
+    fn completion(&self) -> Option<&str>;
+}
+
+impl Hint for String {
+    fn display(&self) -> &str {
+        self.as_str()
+    }
+
+    fn completion(&self) -> Option<&str> {
+        Some(self.as_str())
+    }
+}
+
 /// Hints provider
 pub trait Hinter {
+    /// Specific hint type
+    type Hint: Hint + 'static;
+
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the string that should be displayed or `None`
     /// if no hint is available for the text the user currently typed.
     // TODO Validate: called while editing line but not while moving cursor.
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
         let _ = (line, pos, ctx);
         None
     }
 }
 
-impl Hinter for () {}
+impl Hinter for () {
+    type Hint = String;
+}
 
 impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    type Hint = H::Hint;
+
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
         (**self).hint(line, pos, ctx)
     }
 }
@@ -28,6 +53,7 @@ impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
 pub struct HistoryHinter {}
 
 impl Hinter for HistoryHinter {
+    type Hint = String;
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         if pos < line.len() {
             return None;

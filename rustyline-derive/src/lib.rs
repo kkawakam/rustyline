@@ -50,6 +50,12 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
         impl #impl_generics rustyline::hint::Hinter for #name #ty_generics #where_clause {
+            type Hint = String;
+            fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>)
+                -> Option<Self::Hint>
+            {
+                None
+            }
         }
     };
     TokenStream::from(expanded)

@@ -1,17 +1,54 @@
 use std::collections::HashSet;
 
 use rustyline::Editor;
-use rustyline::{hint::Hinter, Context};
+use rustyline::Context;
+use rustyline::hint::{Hinter, Hint};
 use rustyline_derive::{Completer, Helper, Highlighter, Validator};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct DIYHinter {
     // It's simple example of rustyline, for more effecient, please use ** radix trie **
-    hints: HashSet<String>,
+    hints: HashSet<CommandHint>,
+}
+
+#[derive(Hash, Debug, PartialEq, Eq)]
+struct CommandHint {
+    display: String,
+    complete_up_to: usize,
+}
+
+impl Hint for CommandHint {
+    fn display(&self) -> &str {
+        &self.display
+    }
+    fn completion(&self) -> Option<&str> {
+        if self.complete_up_to > 0 {
+            Some(&self.display[..self.complete_up_to])
+        } else {
+            None
+        }
+    }
+}
+
+impl CommandHint {
+    fn new(text: &str, complete_up_to: &str) -> CommandHint {
+        assert!(text.starts_with(complete_up_to));
+        CommandHint {
+            display: text.into(),
+            complete_up_to: complete_up_to.len(),
+        }
+    }
+    fn suffix(&self, strip_chars: usize) -> CommandHint {
+        CommandHint {
+            display: self.display[strip_chars..].to_owned(),
+            complete_up_to: self.complete_up_to.saturating_sub(strip_chars),
+        }
+    }
 }
 
 impl Hinter for DIYHinter {
-    fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<String> {
+    type Hint = CommandHint;
+    fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
         if pos < line.len() {
             return None;
         }
@@ -21,8 +58,8 @@ impl Hinter for DIYHinter {
             .filter_map(|hint| {
                 // expect hint after word complete, like redis cli, add condition:
                 // line.ends_with(" ")
-                if pos > 0 && hint.starts_with(&line[..pos]) {
-                    Some(hint[pos..].to_owned())
+                if pos > 0 && hint.display.starts_with(&line[..pos]) {
+                    Some(hint.suffix(pos))
                 } else {
                     None
                 }
@@ -31,13 +68,13 @@ impl Hinter for DIYHinter {
     }
 }
 
-fn diy_hints() -> HashSet<String> {
+fn diy_hints() -> HashSet<CommandHint> {
     let mut set = HashSet::new();
-    set.insert(String::from("help"));
-    set.insert(String::from("get key"));
-    set.insert(String::from("set key value"));
-    set.insert(String::from("hget key field"));
-    set.insert(String::from("hset key field value"));
+    set.insert(CommandHint::new("help", "help"));
+    set.insert(CommandHint::new("get key", "get "));
+    set.insert(CommandHint::new("set key value", "set "));
+    set.insert(CommandHint::new("hget key field", "hget "));
+    set.insert(CommandHint::new("hset key field value", "hset "));
     set
 }
 

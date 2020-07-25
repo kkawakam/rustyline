@@ -110,8 +110,7 @@ impl History {
     /// just the latest `len` elements if the new history length value is
     /// smaller than the amount of items already inside the history.
     ///
-    /// Like [stifle_history](http://cnswww.cns.cwru.
-    /// edu/php/chet/readline/history.html#IDX11).
+    /// Like [stifle_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
         if self.len() > len {
@@ -122,9 +121,9 @@ impl History {
 
     /// Save the history in the specified file.
     // TODO append_history
-    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
+    // https://tiswww.case.edu/php/chet/readline/history.html#IDX30
     // TODO history_truncate_file
-    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
+    // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 

@@ -3,7 +3,8 @@
 use log::warn;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::SeekFrom;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
@@ -123,8 +124,6 @@ impl History {
     // TODO history_truncate_file
     // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use std::io::{BufWriter, Write};
-
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
         }
@@ -132,7 +131,13 @@ impl History {
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        fix_perm(&file);
+        self.save_to(&file)
+    }
+
+    fn save_to(&mut self, file: &File) -> Result<()> {
+        use std::io::{BufWriter, Write};
+
+        fix_perm(file);
         let mut wtr = BufWriter::new(file);
         wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
@@ -161,6 +166,7 @@ impl History {
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use fs2::FileExt;
+        use std::io::Seek;
 
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
@@ -169,7 +175,7 @@ impl History {
         if !path.exists() || self.new_entries == self.max_len {
             return self.save(path);
         }
-        let file = File::open(path)?;
+        let mut file = OpenOptions::new().write(true).read(true).open(path)?;
         file.lock_exclusive()?;
         // we may need to truncate file before appending new entries
         let mut other = Self {
@@ -179,12 +185,13 @@ impl History {
             ignore_dups: self.ignore_dups,
             new_entries: 0,
         };
-        other.load(path)?;
+        other.load_from(&file)?;
         let first_new_entry = self.entries.len() - self.new_entries;
         for entry in self.entries.iter().skip(first_new_entry) {
             other.add(entry);
         }
-        other.save(path)?;
+        file.seek(SeekFrom::Start(0))?;
+        other.save_to(&file)?;
         file.unlock()?;
         self.new_entries = 0;
         Ok(())
@@ -195,9 +202,13 @@ impl History {
     /// # Errors
     /// Will return `Err` if path does not already exist or could not be read.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        let file = File::open(&path)?;
+        self.load_from(&file)
+    }
+
+    fn load_from(&mut self, file: &File) -> Result<()> {
         use std::io::{BufRead, BufReader};
 
-        let file = File::open(&path)?;
         let rdr = BufReader::new(file);
         let mut lines = rdr.lines();
         let mut v2 = false;

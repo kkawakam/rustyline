@@ -843,6 +843,11 @@ impl<H: Helper> Editor<H> {
         self.history.save(path)
     }
 
+    /// Append new entries in the specified file.
+    pub fn append_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        self.history.append(path)
+    }
+
     /// Add a new entry in the history.
     pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
         self.history.add(line)

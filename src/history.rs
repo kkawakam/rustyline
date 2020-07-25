@@ -120,8 +120,6 @@ impl History {
     }
 
     /// Save the history in the specified file.
-    // TODO append_history
-    // https://tiswww.case.edu/php/chet/readline/history.html#IDX30
     // TODO history_truncate_file
     // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
     pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
@@ -155,6 +153,39 @@ impl History {
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
+        self.new_entries = 0;
+        Ok(())
+    }
+
+    /// Append new entries in the specified file.
+    // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
+    pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        use fs2::FileExt;
+
+        if self.is_empty() || self.new_entries == 0 {
+            return Ok(());
+        }
+        let path = path.as_ref();
+        if !path.exists() || self.new_entries == self.max_len {
+            return self.save(path);
+        }
+        let file = File::open(path)?;
+        file.lock_exclusive()?;
+        // we may need to truncate file before appending new entries
+        let mut other = Self {
+            entries: VecDeque::new(),
+            max_len: self.max_len,
+            ignore_space: self.ignore_space,
+            ignore_dups: self.ignore_dups,
+            new_entries: 0,
+        };
+        other.load(path)?;
+        let first_new_entry = self.entries.len() - self.new_entries;
+        for entry in self.entries.iter().skip(first_new_entry) {
+            other.add(entry);
+        }
+        other.save(path)?;
+        file.unlock()?;
         self.new_entries = 0;
         Ok(())
     }
@@ -436,6 +467,30 @@ mod tests {
         assert_eq!(history.entries[0], "test\\n \\abc \\123");
         assert_eq!(history.entries[1], "123\\n\\\\n");
         assert_eq!(history.entries[2], "abcde");
+
+        tf.close()?;
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn append() -> Result<()> {
+        let mut history = init();
+        let tf = tempfile::NamedTempFile::new()?;
+
+        history.append(tf.path())?;
+
+        let mut history2 = History::new();
+        history2.load(tf.path())?;
+        history2.add("line4");
+        history2.append(tf.path())?;
+
+        history.add("line5");
+        history.append(tf.path())?;
+
+        let mut history3 = History::new();
+        history3.load(tf.path())?;
+        assert_eq!(history3.len(), 5);
 
         tf.close()?;
         Ok(())

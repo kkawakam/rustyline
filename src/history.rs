@@ -27,6 +27,8 @@ pub struct History {
     max_len: usize,
     pub(crate) ignore_space: bool,
     pub(crate) ignore_dups: bool,
+    /// Number of entries inputed by user and not saved yet
+    new_entries: usize,
 }
 
 impl History {
@@ -49,6 +51,7 @@ impl History {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+            new_entries: 0,
         }
     }
 
@@ -88,6 +91,7 @@ impl History {
             self.entries.pop_front();
         }
         self.entries.push_back(line.into());
+        self.new_entries = (self.new_entries + 1).min(self.len());
         true
     }
 
@@ -110,15 +114,9 @@ impl History {
     /// edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
-        if len == 0 {
-            self.entries.clear();
-            return;
-        }
-        loop {
-            if self.entries.len() <= len {
-                break;
-            }
-            self.entries.pop_front();
+        if self.len() > len {
+            self.entries.drain(..self.len() - len);
+            self.new_entries = self.new_entries.min(len);
         }
     }
 
@@ -127,10 +125,10 @@ impl History {
     // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
     // TODO history_truncate_file
     // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
-    pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
+    pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::{BufWriter, Write};
 
-        if self.is_empty() {
+        if self.is_empty() || self.new_entries == 0 {
             return Ok(());
         }
         let old_umask = umask();
@@ -158,6 +156,7 @@ impl History {
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
+        self.new_entries = 0;
         Ok(())
     }
 
@@ -223,12 +222,14 @@ impl History {
             }
             self.add(line); // TODO truncate to MAX_LINE
         }
+        self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
         Ok(())
     }
 
     /// Clear history
     pub fn clear(&mut self) {
-        self.entries.clear()
+        self.entries.clear();
+        self.new_entries = 0;
     }
 
     /// Search history (start position inclusive [0, len-1]).

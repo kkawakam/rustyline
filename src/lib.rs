@@ -839,7 +839,7 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Save the history in the specified file.
-    pub fn save_history<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
+    pub fn save_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.save(path)
     }
 

@@ -439,7 +439,13 @@ fn readline_edit<H: Helper>(
 
     let mut rdr = editor.term.create_reader(&editor.config)?;
     if editor.term.is_output_tty() {
-        s.move_cursor_at_leftmost(&mut rdr)?;
+        if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
+            if s.out.sigwinch() {
+                s.out.update_size();
+            } else {
+                return Err(e);
+            }
+        }
     }
     s.refresh_line()?;
 

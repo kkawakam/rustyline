@@ -140,6 +140,7 @@ impl History {
         restore_umask(old_umask);
         let file = f?;
         self.save_to(&file, false)?;
+        self.new_entries = 0;
         self.update_path(path, self.len())
     }
 
@@ -172,7 +173,6 @@ impl History {
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
-        self.new_entries = 0;
         Ok(())
     }
 
@@ -191,7 +191,9 @@ impl History {
         } else if self.can_just_append(path)? {
             let file = OpenOptions::new().append(true).open(path)?;
             self.save_to(&file, true)?;
-            return self.update_path(path, self.path_info.as_ref().unwrap().2 + self.new_entries);
+            let size = self.path_info.as_ref().unwrap().2 + self.new_entries;
+            self.new_entries = 0;
+            return self.update_path(path, size);
         }
         let mut file = OpenOptions::new().write(true).read(true).open(path)?;
         file.lock_exclusive()?;

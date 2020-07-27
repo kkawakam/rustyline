@@ -1,6 +1,6 @@
 //! History API
 
-use log::warn;
+use log::{debug, warn};
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -311,6 +311,7 @@ impl History {
         } else {
             self.path_info = Some(PathInfo(path.to_owned(), modified, size));
         }
+        debug!(target: "rustyline", "PathInfo({:?}, {:?}, {})", path, modified, size);
         Ok(())
     }
 
@@ -319,6 +320,7 @@ impl History {
             self.path_info
         {
             if previous_path.as_path() != path {
+                debug!(target: "rustyline", "cannot append: {:?} <> {:?}", previous_path, path);
                 return Ok(false);
             }
             let modified = File::open(&path)?.metadata()?.modified()?;
@@ -326,6 +328,8 @@ impl History {
                 || self.max_len <= *previous_size
                 || self.max_len < *previous_size + self.new_entries
             {
+                debug!(target: "rustyline", "cannot append: {:?} < {:?} or {} < {} + {}",
+                       previous_modified, modified, self.max_len, previous_size, self.new_entries);
                 Ok(false)
             } else {
                 Ok(true)

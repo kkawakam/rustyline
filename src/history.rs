@@ -7,7 +7,8 @@ use std::fs::{File, OpenOptions};
 use std::io::SeekFrom;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use super::Result;
 use crate::config::{Config, HistoryDuplicates};
@@ -30,7 +31,12 @@ pub struct History {
     pub(crate) ignore_dups: bool,
     /// Number of entries inputed by user and not saved yet
     new_entries: usize,
+    /// last path used by either `load` or `save`
+    path_info: Option<PathInfo>,
 }
+
+/// Last histo path, modified timestamp and size
+struct PathInfo(PathBuf, SystemTime, usize);
 
 impl History {
     // New multiline-aware history files start with `#V2\n` and have newlines
@@ -53,6 +59,7 @@ impl History {
             ignore_space: config.history_ignore_space(),
             ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
             new_entries: 0,
+            path_info: None,
         }
     }
 
@@ -127,20 +134,27 @@ impl History {
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
         }
+        let path = path.as_ref();
         let old_umask = umask();
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        self.save_to(&file)
+        self.save_to(&file, false)?;
+        self.update_path(path, self.len())
     }
 
-    fn save_to(&mut self, file: &File) -> Result<()> {
+    fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
         use std::io::{BufWriter, Write};
 
         fix_perm(file);
         let mut wtr = BufWriter::new(file);
-        wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
-        for entry in &self.entries {
+        let first_new_entry = if append {
+            self.entries.len() - self.new_entries
+        } else {
+            wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
+            0
+        };
+        for entry in self.entries.iter().skip(first_new_entry) {
             wtr.write_all(b"\n")?;
             let mut bytes = entry.as_bytes();
             while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
@@ -174,6 +188,10 @@ impl History {
         let path = path.as_ref();
         if !path.exists() || self.new_entries == self.max_len {
             return self.save(path);
+        } else if self.can_just_append(path)? {
+            let file = OpenOptions::new().append(true).open(path)?;
+            self.save_to(&file, true)?;
+            return self.update_path(path, self.path_info.as_ref().unwrap().2 + self.new_entries);
         }
         let mut file = OpenOptions::new().write(true).read(true).open(path)?;
         file.lock_exclusive()?;
@@ -184,6 +202,7 @@ impl History {
             ignore_space: self.ignore_space,
             ignore_dups: self.ignore_dups,
             new_entries: 0,
+            path_info: None,
         };
         other.load_from(&file)?;
         let first_new_entry = self.entries.len() - self.new_entries;
@@ -191,8 +210,9 @@ impl History {
             other.add(entry);
         }
         file.seek(SeekFrom::Start(0))?;
-        other.save_to(&file)?;
+        other.save_to(&file, false)?;
         file.unlock()?;
+        self.path_info = other.path_info.take();
         self.new_entries = 0;
         Ok(())
     }
@@ -202,11 +222,19 @@ impl History {
     /// # Errors
     /// Will return `Err` if path does not already exist or could not be read.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        let file = File::open(&path)?;
-        self.load_from(&file)
+        let path = path.as_ref();
+        let file = File::open(path)?;
+        let len = self.len();
+        if self.load_from(&file)? {
+            self.update_path(path, self.len() - len)
+        } else {
+            // discard old version on next save
+            self.path_info = None;
+            Ok(())
+        }
     }
 
-    fn load_from(&mut self, file: &File) -> Result<()> {
+    fn load_from(&mut self, file: &File) -> Result<bool> {
         use std::io::{BufRead, BufReader};
 
         let rdr = BufReader::new(file);
@@ -264,7 +292,47 @@ impl History {
             self.add(line); // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
+        Ok(v2)
+    }
+
+    fn update_path(&mut self, path: &Path, size: usize) -> Result<()> {
+        let modified = File::open(&path)?.metadata()?.modified()?;
+        if let Some(PathInfo(
+            ref mut previous_path,
+            ref mut previous_modified,
+            ref mut previous_size,
+        )) = self.path_info
+        {
+            if previous_path.as_path() != path {
+                *previous_path = path.to_owned();
+            }
+            *previous_modified = modified;
+            *previous_size = size;
+        } else {
+            self.path_info = Some(PathInfo(path.to_owned(), modified, size));
+        }
         Ok(())
+    }
+
+    fn can_just_append(&self, path: &Path) -> Result<bool> {
+        if let Some(PathInfo(ref previous_path, ref previous_modified, ref previous_size)) =
+            self.path_info
+        {
+            if previous_path.as_path() != path {
+                return Ok(false);
+            }
+            let modified = File::open(&path)?.metadata()?.modified()?;
+            if *previous_modified != modified
+                || self.max_len <= *previous_size
+                || self.max_len < *previous_size + self.new_entries
+            {
+                Ok(false)
+            } else {
+                Ok(true)
+            }
+        } else {
+            Ok(false)
+        }
     }
 
     /// Clear history

@@ -1,5 +1,6 @@
 //! History API
 
+use log::warn;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -142,8 +143,18 @@ impl History {
         wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
         for entry in &self.entries {
             wtr.write_all(b"\n")?;
-            let esc = escape(entry);
-            wtr.write_all(&esc.as_bytes())?;
+            let mut bytes = entry.as_bytes();
+            while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
+                wtr.write_all(&bytes[..i])?;
+                if bytes[i] == b'\n' {
+                    wtr.write_all(b"\\n")?; // escaped line feed
+                } else {
+                    debug_assert_eq!(bytes[i], b'\\');
+                    wtr.write_all(b"\\\\")?; // escaped backslash
+                }
+                bytes = &bytes[i + 1..];
+            }
+            wtr.write_all(bytes)?; // remaining bytes with no \n or \
         }
         wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
@@ -171,17 +182,45 @@ impl History {
             }
         }
         for line in lines {
-            let line = if v2 {
-                let li = match unescape(&line.unwrap()) {
-                    Ok(s) => s,
-                    _ => "".to_string()
-                };
-                li
-            } else {
-                line?
-            };
+            let mut line = line?;
             if line.is_empty() {
                 continue;
+            }
+            if v2 {
+                let mut copy = None; // lazily copy line if unescaping is needed
+                let mut str = line.as_str();
+                while let Some(i) = str.find('\\') {
+                    if copy.is_none() {
+                        copy = Some(String::with_capacity(line.len()));
+                    }
+                    let s = copy.as_mut().unwrap();
+                    s.push_str(&str[..i]);
+                    let j = i + 1; // escaped char idx
+                    let b = if j < str.len() {
+                        str.as_bytes()[j]
+                    } else {
+                        0 // unexpected if History::save works properly
+                    };
+                    match b {
+                        b'n' => {
+                            s.push('\n'); // unescaped line feed
+                        }
+                        b'\\' => {
+                            s.push('\\'); // unescaped back slash
+                        }
+                        _ => {
+                            // only line feed and back slash should have been escaped
+                            warn!(target: "rustyline", "bad escaped line: {}", line);
+                            copy = None;
+                            break;
+                        }
+                    }
+                    str = &str[j + 1..];
+                }
+                if let Some(mut s) = copy {
+                    s.push_str(str); // remaining bytes with no escaped char
+                    line = s;
+                }
             }
             self.add(line); // TODO truncate to MAX_LINE
         }
@@ -353,6 +392,12 @@ mod tests {
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn save() -> Result<()> {
         check_save("line\nfour \\ abc")
+    }
+
+    #[test]
+    fn save_windows_path() -> Result<()> {
+        let path = "cd source\\repos\\forks\\nushell\\";
+        check_save(path)
     }
 
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled

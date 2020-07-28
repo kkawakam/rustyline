@@ -26,7 +26,6 @@ log = "0.4"
 unicode-width = "0.1"
 unicode-segmentation = "1.0"
 memchr = "2.0"
-snailquote = "0.3.0"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.17"

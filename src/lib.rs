@@ -40,7 +40,7 @@ use std::path::Path;
 use std::result;
 use std::sync::{Arc, Mutex, RwLock};
 
-use log::debug;
+use log::{warn, debug};
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
@@ -888,7 +888,22 @@ impl<H: Helper> Editor<H> {
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(key_seq, cmd)
+            let key = if let KeyPress::Char(ref c) = key_seq {
+                if c.is_control() {
+                    keys::char_to_key_press(*c)
+                } else {
+                    key_seq
+                }
+            } else if let KeyPress::Ctrl(ref c) = key_seq {
+                if c.is_control() {
+                    keys::char_to_key_press(*c);
+                    warn!(target: "rustyline", "KeyPress::Ctrl({:?}) may not work on unix", c)
+                }
+                key_seq
+            } else {
+                key_seq
+            };
+            bindings.insert(key, cmd)        
         } else {
             None
         }

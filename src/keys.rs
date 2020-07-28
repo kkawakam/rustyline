@@ -24,6 +24,8 @@ pub enum KeyPress {
     ControlRight,
     /// Ctrl-↑
     ControlUp,
+    /// Control Backspace
+    ControlBackspace,
     /// Ctrl-char
     Ctrl(char),
     /// ⌦
@@ -46,6 +48,8 @@ pub enum KeyPress {
     Left,
     /// Escape-char or Alt-char
     Meta(char),
+    /// Alt Backspace
+    MetaBackspace,
     /// `KeyPress::Char('\0')`
     Null,
     /// ⇟
@@ -54,6 +58,8 @@ pub enum KeyPress {
     PageUp,
     /// → arrow key
     Right,
+    /// Shift Backspace
+    ShiftBackspace,
     /// Shift-↓
     ShiftDown,
     /// Shift-←

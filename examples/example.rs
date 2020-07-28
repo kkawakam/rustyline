@@ -6,7 +6,7 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress, Movement, Word};
 use rustyline_derive::Helper;
 
 #[derive(Helper)]
@@ -83,7 +83,7 @@ fn main() -> rustyline::Result<()> {
     let config = Config::builder()
         .history_ignore_space(true)
         .completion_type(CompletionType::List)
-        .edit_mode(EditMode::Emacs)
+        .edit_mode(EditMode::Vi)
         .output_stream(OutputStreamType::Stdout)
         .build();
     let h = MyHelper {
@@ -97,6 +97,9 @@ fn main() -> rustyline::Result<()> {
     rl.set_helper(Some(h));
     rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
+    rl.bind_sequence(KeyPress::ControlBackspace, Cmd::Kill(Movement::BackwardWord(1, Word::Vi)));
+    rl.bind_sequence(KeyPress::MetaBackspace, Cmd::Kill(Movement::BackwardChar(1)));
+    rl.bind_sequence(KeyPress::ShiftBackspace, Cmd::Kill(Movement::BackwardChar(1)));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }

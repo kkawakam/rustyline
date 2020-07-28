@@ -179,6 +179,17 @@ impl RawReader for ConsoleRawReader {
                             KeyPress::Down
                         });
                     }
+                    winuser::VK_BACK => {
+                        return Ok(if ctrl {
+                            KeyPress::ControlBackspace
+                        } else if shift {
+                            KeyPress::ShiftBackspace
+                        } else if meta {
+                            KeyPress::MetaBackspace
+                        } else {
+                            KeyPress::Backspace
+                        });
+                    }
                     winuser::VK_DELETE => return Ok(KeyPress::Delete),
                     winuser::VK_HOME => return Ok(KeyPress::Home),
                     winuser::VK_END => return Ok(KeyPress::End),
@@ -220,13 +231,21 @@ impl RawReader for ConsoleRawReader {
                 };
                 let c = rc?;
                 if meta {
-                    return Ok(KeyPress::Meta(c));
+                    let mut key = keys::char_to_key_press(c);
+                    if key == KeyPress::Backspace && meta {
+                        key = KeyPress::MetaBackspace;
+                    } else {
+                        key = KeyPress::Meta(c);
+                    }
+                    return Ok(key);
                 } else {
                     let mut key = keys::char_to_key_press(c);
                     if key == KeyPress::Tab && shift {
                         key = KeyPress::BackTab;
                     } else if key == KeyPress::Char(' ') && ctrl {
                         key = KeyPress::Ctrl(' ');
+                    } else if key == KeyPress::Backspace && ctrl {
+                        key = KeyPress::ControlBackspace;
                     }
                     return Ok(key);
                 }

@@ -10,7 +10,6 @@ use std::path::Path;
 
 use super::Result;
 use crate::config::{Config, HistoryDuplicates};
-use snailquote::{escape, unescape};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

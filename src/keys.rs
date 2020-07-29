@@ -24,7 +24,7 @@ pub enum KeyPress {
     ControlRight,
     /// Ctrl-↑
     ControlUp,
-    /// Control Backspace
+    /// Control Backspace (may not be able to be used on unix)
     ControlBackspace,
     /// Ctrl-char
     Ctrl(char),
@@ -48,7 +48,7 @@ pub enum KeyPress {
     Left,
     /// Escape-char or Alt-char
     Meta(char),
-    /// Alt Backspace
+    /// Alt Backspace 
     MetaBackspace,
     /// `KeyPress::Char('\0')`
     Null,

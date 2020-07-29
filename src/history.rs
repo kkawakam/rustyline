@@ -99,7 +99,7 @@ impl History {
             self.entries.pop_front();
         }
         self.entries.push_back(line.into());
-        self.new_entries = (self.new_entries + 1).min(self.len());
+        self.new_entries = self.new_entries.saturating_add(1).min(self.len());
         true
     }
 
@@ -150,7 +150,7 @@ impl History {
         fix_perm(file);
         let mut wtr = BufWriter::new(file);
         let first_new_entry = if append {
-            self.entries.len() - self.new_entries
+            self.entries.len().saturating_sub(self.new_entries)
         } else {
             wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
             0
@@ -191,7 +191,7 @@ impl History {
         } else if self.can_just_append(path)? {
             let file = OpenOptions::new().append(true).open(path)?;
             self.save_to(&file, true)?;
-            let size = self.path_info.as_ref().unwrap().2 + self.new_entries;
+            let size = self.path_info.as_ref().unwrap().2.saturating_add(self.new_entries);
             self.new_entries = 0;
             return self.update_path(path, size);
         }
@@ -207,7 +207,7 @@ impl History {
             path_info: None,
         };
         other.load_from(&file)?;
-        let first_new_entry = self.entries.len() - self.new_entries;
+        let first_new_entry = self.entries.len().saturating_sub(self.new_entries);
         for entry in self.entries.iter().skip(first_new_entry) {
             other.add(entry);
         }
@@ -328,7 +328,7 @@ impl History {
             let modified = File::open(&path)?.metadata()?.modified()?;
             if *previous_modified != modified
                 || self.max_len <= *previous_size
-                || self.max_len < *previous_size + self.new_entries
+                || self.max_len < *previous_size.saturating_add(self.new_entries)
             {
                 debug!(target: "rustyline", "cannot append: {:?} < {:?} or {} < {} + {}",
                        previous_modified, modified, self.max_len, previous_size, self.new_entries);

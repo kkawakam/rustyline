@@ -234,6 +234,8 @@ impl RawReader for ConsoleRawReader {
                         key = KeyPress::Ctrl(' ');
                     } else if key == KeyPress::Backspace && ctrl {
                         key = KeyPress::ControlBackspace;
+                    } else if key == KeyPress::Backspace && shift {
+                        key = KeyPress::ShiftBackspace;
                     }
                     return Ok(key);
                 }

@@ -214,7 +214,7 @@ impl History {
         file.seek(SeekFrom::Start(0))?;
         other.save_to(&file, false)?;
         file.unlock()?;
-        self.path_info = other.path_info.take();
+        self.update_path(path, other.len())?;
         self.new_entries = 0;
         Ok(())
     }

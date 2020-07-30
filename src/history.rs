@@ -191,7 +191,12 @@ impl History {
         } else if self.can_just_append(path)? {
             let file = OpenOptions::new().append(true).open(path)?;
             self.save_to(&file, true)?;
-            let size = self.path_info.as_ref().unwrap().2.saturating_add(self.new_entries);
+            let size = self
+                .path_info
+                .as_ref()
+                .unwrap()
+                .2
+                .saturating_add(self.new_entries);
             self.new_entries = 0;
             return self.update_path(path, size);
         }
@@ -328,7 +333,7 @@ impl History {
             let modified = File::open(&path)?.metadata()?.modified()?;
             if *previous_modified != modified
                 || self.max_len <= *previous_size
-                || self.max_len < *previous_size.saturating_add(self.new_entries)
+                || self.max_len < (*previous_size).saturating_add(self.new_entries)
             {
                 debug!(target: "rustyline", "cannot append: {:?} < {:?} or {} < {} + {}",
                        previous_modified, modified, self.max_len, previous_size, self.new_entries);

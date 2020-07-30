@@ -221,7 +221,7 @@ impl RawReader for ConsoleRawReader {
                 let c = rc?;
                 let mut key = keys::char_to_key_press(c);
                 if meta {
-                    if key == KeyPress::Backspace && meta {
+                    if key == KeyPress::Backspace {
                         key = KeyPress::MetaBackspace;
                     } else {
                         key = KeyPress::Meta(c);

@@ -896,7 +896,7 @@ impl<H: Helper> Editor<H> {
                 }
             } else if let KeyPress::Ctrl(ref c) = key_seq {
                 if c.is_control() {
-                    warn!(target: "rustyline", "KeyPress::Ctrl({:?}) may not work on unix", c)
+                    warn!(target: "rustyline", "KeyPress::Ctrl({:?}) will not work on unix", c)
                 }
                 key_seq
             } else {

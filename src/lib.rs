@@ -448,7 +448,13 @@ fn readline_edit<H: Helper>(
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
-    let mut s = State::new(&mut stdout, prompt, editor.helper.as_ref(), ctx);
+    let mut s = State::new(
+        &mut stdout,
+        prompt,
+        editor.helper.as_ref(),
+        ctx,
+        editor.config.history_search_behaviour(),
+    );
 
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 

@@ -1,7 +1,7 @@
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
-use rustyline::config::OutputStreamType;
+use rustyline::config::{HistorySearchBehaviour, OutputStreamType};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
@@ -87,6 +87,7 @@ fn main() -> rustyline::Result<()> {
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
+        .history_search_behaviour(HistorySearchBehaviour::LineByLine)
         .build();
     let h = MyHelper {
         completer: FilenameCompleter::new(),

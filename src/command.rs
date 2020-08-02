@@ -104,8 +104,8 @@ pub fn execute<H: Helper>(
                 s.edit_history_next(false)?
             }
         }
-        Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
-        Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
+        Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse, false)?,
+        Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward, false)?,
         Cmd::TransposeChars => {
             // Exchange the char before cursor with the character at cursor.
             s.edit_transpose_chars()?

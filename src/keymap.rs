@@ -770,6 +770,14 @@ impl InputState {
             KeyPress::Tab => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
             KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            KeyPress::Meta(k) => {
+                debug!(target: "rustyline", "Vi fast command mode: {}", k);
+                self.input_mode = InputMode::Command;
+                wrt.done_inserting();
+
+                // TODO: Do k as command key
+                Cmd::Move(Movement::BeginningOfLine)
+            },
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;

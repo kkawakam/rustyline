@@ -125,5 +125,5 @@ fn main() -> rustyline::Result<()> {
         }
         count += 1;
     }
-    rl.save_history("history.txt")
+    rl.append_history("history.txt")
 }

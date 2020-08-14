@@ -503,6 +503,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if self.line.move_to_next_word(at, word_def, n) {
             self.move_cursor()
         } else {
+            if let Some(hint) = self.hint.as_ref() {
+                let mut hint_line = LineBuffer::with_capacity(hint.len());
+                hint_line.update(hint, 0);
+                if hint_line.move_to_next_word(at, word_def, n) {
+                    let pos = hint_line.pos();
+                    self.line.yank(&hint[..pos], 1);
+                    self.refresh_line()?;
+                }
+            }
             Ok(())
         }
     }

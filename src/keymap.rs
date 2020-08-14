@@ -381,9 +381,18 @@ impl InputState {
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         match self.mode {
-            EditMode::Emacs => self.emacs(rdr, wrt, single_esc_abort),
-            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt),
-            EditMode::Vi => self.vi_command(rdr, wrt),
+            EditMode::Emacs => {
+                let key = rdr.next_key(single_esc_abort)?;
+                self.emacs(rdr, wrt, key)
+            }
+            EditMode::Vi if self.input_mode != InputMode::Command => {
+                let key = rdr.next_key(false)?;
+                self.vi_insert(rdr, wrt, key)
+            }
+            EditMode::Vi => {
+                let key = rdr.next_key(false)?;
+                self.vi_command(rdr, wrt, key)
+            }
         }
     }
 
@@ -432,9 +441,8 @@ impl InputState {
         &mut self,
         rdr: &mut R,
         wrt: &mut dyn Refresher,
-        single_esc_abort: bool,
+        mut key: KeyPress,
     ) -> Result<Cmd> {
-        let mut key = rdr.next_key(single_esc_abort)?;
         if let KeyPress::Meta(digit @ '-') = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         } else if let KeyPress::Meta(digit @ '0'..='9') = key {
@@ -579,8 +587,12 @@ impl InputState {
         }
     }
 
-    fn vi_command<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
-        let mut key = rdr.next_key(false)?;
+    fn vi_command<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        mut key: KeyPress,
+    ) -> Result<Cmd> {
         if let KeyPress::Char(digit @ '1'..='9') = key {
             key = self.vi_arg_digit(rdr, wrt, digit)?;
         }
@@ -744,8 +756,12 @@ impl InputState {
         Ok(cmd)
     }
 
-    fn vi_insert<R: RawReader>(&mut self, rdr: &mut R, wrt: &mut dyn Refresher) -> Result<Cmd> {
-        let key = rdr.next_key(false)?;
+    fn vi_insert<R: RawReader>(
+        &mut self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: KeyPress,
+    ) -> Result<Cmd> {
         {
             let bindings = self.custom_bindings.read().unwrap();
             if let Some(cmd) = bindings.get(&key) {
@@ -770,6 +786,13 @@ impl InputState {
             KeyPress::Tab => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
             KeyPress::Right if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            KeyPress::Meta(k) => {
+                debug!(target: "rustyline", "Vi fast command mode: {}", k);
+                self.input_mode = InputMode::Command;
+                wrt.done_inserting();
+
+                self.vi_command(rdr, wrt, KeyPress::Char(k))?
+            }
             KeyPress::Esc => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;

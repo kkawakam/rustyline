@@ -306,8 +306,9 @@ impl Movement {
     }
 }
 
-#[derive(PartialEq)]
-enum InputMode {
+/// Vi input mode.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InputMode {
     /// Vi Command/Alternate
     Command,
     /// Insert/Input mode
@@ -347,6 +348,8 @@ pub trait Refresher {
     fn doing_insert(&mut self);
     /// Vi only, switch to command mode.
     fn done_inserting(&mut self);
+    /// Vi only, switch to replace mode.
+    fn doing_replace(&mut self);
     /// Vi only, last text inserted.
     fn last_insert(&self) -> Option<String>;
     /// Returns `true` if the cursor is currently at the end of the line.
@@ -644,12 +647,16 @@ impl InputState {
             KeyPress::Char('c') => {
                 self.input_mode = InputMode::Insert;
                 match self.vi_cmd_motion(rdr, wrt, key, n)? {
-                    Some(mvt) => Cmd::Replace(mvt, None),
+                    Some(mvt) => {
+                        wrt.doing_insert();
+                        Cmd::Replace(mvt, None)
+                    }
                     None => Cmd::Unknown,
                 }
             }
             KeyPress::Char('C') => {
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Replace(Movement::EndOfLine, None)
             }
             KeyPress::Char('d') => match self.vi_cmd_motion(rdr, wrt, key, n)? {
@@ -702,16 +709,19 @@ impl InputState {
             KeyPress::Char('R') => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
+                wrt.doing_replace();
                 Cmd::Replace(Movement::ForwardChar(0), None)
             }
             KeyPress::Char('s') => {
                 // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Replace(Movement::ForwardChar(n), None)
             }
             KeyPress::Char('S') => {
                 // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
                 Cmd::Replace(Movement::WholeLine, None)
             }
             KeyPress::Char('u') => Cmd::Undo(n),

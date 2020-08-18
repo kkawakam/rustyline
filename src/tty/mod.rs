@@ -3,7 +3,7 @@
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -42,6 +42,7 @@ pub trait Renderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        prompt_state: PromptState,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -121,8 +122,17 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        prompt_state: PromptState,
     ) -> Result<()> {
-        (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
+        (**self).refresh_line(
+            prompt,
+            line,
+            hint,
+            old_layout,
+            new_layout,
+            highlighter,
+            prompt_state,
+        )
     }
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {

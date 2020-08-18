@@ -16,7 +16,7 @@ use utf8parse::{Parser, Receiver};
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -574,11 +574,11 @@ impl Renderer for PosixRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        prompt_state: PromptState,
     ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
 
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
@@ -587,7 +587,7 @@ impl Renderer for PosixRenderer {
         if let Some(highlighter) = highlighter {
             // display the prompt
             self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+                .push_str(&highlighter.highlight_prompt(prompt, prompt_state));
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));
@@ -912,7 +912,7 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
+    use super::{Position, PosixRenderer, PosixTerminal, PromptState, Renderer};
     use crate::config::{BellStyle, OutputStreamType};
     use crate::line_buffer::LineBuffer;
 
@@ -962,8 +962,16 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
-            .unwrap();
+        out.refresh_line(
+            prompt,
+            &line,
+            None,
+            &old_layout,
+            &new_layout,
+            None,
+            PromptState::new(true, None),
+        )
+        .unwrap();
         #[rustfmt::skip]
         assert_eq!(
             "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",

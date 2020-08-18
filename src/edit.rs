@@ -7,11 +7,12 @@ use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
-use super::{Context, Helper, Result};
-use crate::highlight::Highlighter;
+use super::{Context, EditMode, Helper, Result};
+use crate::config::Config;
+use crate::highlight::{Highlighter, PromptState};
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Invoke, Refresher};
+use crate::keymap::{InputMode, InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use crate::tty::{Renderer, Term, Terminal};
@@ -33,6 +34,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub ctx: Context<'out>,   // Give access to history for `hinter`
     pub hint: Option<String>, // last hint displayed
     highlight_char: bool,     // `true` if a char has been highlighted
+    input_mode: Option<InputMode>,
 }
 
 enum Info<'m> {
@@ -47,6 +49,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
+        config: &'prompt Config,
     ) -> State<'out, 'prompt, H> {
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
@@ -62,6 +65,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
+            input_mode: match &config.edit_mode() {
+                EditMode::Vi => Some(InputMode::Insert),
+                EditMode::Emacs => None,
+            },
         }
     }
 
@@ -164,6 +171,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.layout,
             &new_layout,
             highlighter,
+            PromptState::new(default_prompt, self.input_mode),
         )?;
         self.layout = new_layout;
 
@@ -261,10 +269,25 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
 
     fn doing_insert(&mut self) {
         self.changes.borrow_mut().begin();
+        if let Some(mode) = &mut self.input_mode {
+            *mode = InputMode::Insert;
+            self.refresh_line().unwrap();
+        }
+    }
+
+    fn doing_replace(&mut self) {
+        if let Some(mode) = &mut self.input_mode {
+            *mode = InputMode::Replace;
+            self.refresh_line().unwrap();
+        }
     }
 
     fn done_inserting(&mut self) {
         self.changes.borrow_mut().end();
+        if let Some(mode) = &mut self.input_mode {
+            *mode = InputMode::Command;
+            self.refresh_line().unwrap();
+        }
     }
 
     fn last_insert(&self) -> Option<String> {
@@ -675,6 +698,7 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some("hint".to_owned()),
         highlight_char: false,
+        input_mode: None,
     }
 }
 

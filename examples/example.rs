@@ -3,7 +3,7 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
-use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter, PromptState};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
@@ -41,9 +41,9 @@ impl Highlighter for MyHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        prompt_state: PromptState,
     ) -> Cow<'b, str> {
-        if default {
+        if prompt_state.default {
             Borrowed(&self.colored_prompt)
         } else {
             Borrowed(prompt)

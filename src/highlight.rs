@@ -1,9 +1,26 @@
 //! Syntax highlighting
 
 use crate::config::CompletionType;
+use crate::keymap::InputMode;
 use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
+
+/// The current state of the prompt.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct PromptState {
+    /// Is it the default prompt.
+    pub default: bool,
+    /// Current Vi mode.
+    pub mode: Option<InputMode>,
+}
+
+impl PromptState {
+    /// Construct a new prompt state.
+    pub fn new(default: bool, mode: Option<InputMode>) -> Self {
+        Self { default, mode }
+    }
+}
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
@@ -26,9 +43,9 @@ pub trait Highlighter {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        prompt_state: PromptState,
     ) -> Cow<'b, str> {
-        let _ = default;
+        let _ = prompt_state;
         Borrowed(prompt)
     }
     /// Takes the `hint` and
@@ -69,9 +86,9 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        prompt_state: PromptState,
     ) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt, default)
+        (**self).highlight_prompt(prompt, prompt_state)
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {

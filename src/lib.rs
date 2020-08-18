@@ -53,7 +53,7 @@ use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{Direction, History};
-pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::KeyPress;
 use crate::kill_ring::{KillRing, Mode};
@@ -426,7 +426,7 @@ fn readline_edit<H: Helper>(
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
-    let mut s = State::new(&mut stdout, prompt, helper, ctx);
+    let mut s = State::new(&mut stdout, prompt, helper, ctx, &editor.config);
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());

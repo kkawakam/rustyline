@@ -15,7 +15,7 @@ use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
-use crate::highlight::Highlighter;
+use crate::highlight::{Highlighter, PromptState};
 use crate::keys::{self, KeyPress};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -372,8 +372,8 @@ impl Renderer for ConsoleRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        prompt_state: PromptState,
     ) -> Result<()> {
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
@@ -382,7 +382,7 @@ impl Renderer for ConsoleRenderer {
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
-            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
+            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, prompt_state), col);
             // append the input line
             col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
         } else {

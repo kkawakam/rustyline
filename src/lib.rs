@@ -237,7 +237,11 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
         None => return Ok(()),
     };
     s.line.move_end();
-    if s.line.yank(hint, 1).is_none() {
+    if let Some(text) = hint.completion() {
+        if s.line.yank(text, 1).is_none() {
+            s.out.beep()?;
+        }
+    } else {
         s.out.beep()?;
     }
     s.refresh_line_with_msg(None)?;

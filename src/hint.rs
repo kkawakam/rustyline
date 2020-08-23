@@ -54,6 +54,7 @@ pub struct HistoryHinter {}
 
 impl Hinter for HistoryHinter {
     type Hint = String;
+
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         if pos < line.len() {
             return None;

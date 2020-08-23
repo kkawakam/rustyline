@@ -33,6 +33,7 @@ impl Completer for MyHelper {
 
 impl Hinter for MyHelper {
     type Hint = String;
+
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.hinter.hint(line, pos, ctx)
     }

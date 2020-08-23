@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use rustyline::Editor;
+use rustyline::hint::{Hint, Hinter};
 use rustyline::Context;
-use rustyline::hint::{Hinter, Hint};
+use rustyline::Editor;
 use rustyline_derive::{Completer, Helper, Highlighter, Validator};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
@@ -21,6 +21,7 @@ impl Hint for CommandHint {
     fn display(&self) -> &str {
         &self.display
     }
+
     fn completion(&self) -> Option<&str> {
         if self.complete_up_to > 0 {
             Some(&self.display[..self.complete_up_to])
@@ -38,6 +39,7 @@ impl CommandHint {
             complete_up_to: complete_up_to.len(),
         }
     }
+
     fn suffix(&self, strip_chars: usize) -> CommandHint {
         CommandHint {
             display: self.display[strip_chars..].to_owned(),
@@ -48,6 +50,7 @@ impl CommandHint {
 
 impl Hinter for DIYHinter {
     type Hint = CommandHint;
+
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
         if pos < line.len() {
             return None;

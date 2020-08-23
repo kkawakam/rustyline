@@ -31,9 +31,9 @@ pub struct State<'out, 'prompt, H: Helper> {
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub helper: Option<&'out H>,
-    pub ctx: Context<'out>,   // Give access to history for `hinter`
+    pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
-    highlight_char: bool,     // `true` if a char has been highlighted
+    highlight_char: bool,            // `true` if a char has been highlighted
 }
 
 enum Info<'m> {

@@ -769,6 +769,8 @@ impl<'h> Context<'h> {
     }
 }
 
+pub type SimpleEditor = Editor<()>;
+
 /// Line editor
 pub struct Editor<H: Helper> {
     term: Terminal,

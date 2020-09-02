@@ -9,6 +9,7 @@ use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
+use winapi::shared::winerror;
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
@@ -513,7 +514,7 @@ impl Renderer for ConsoleRenderer {
         info.dwCursorPosition.Y += 1;
         let res = self.set_console_cursor_position(info.dwCursorPosition);
         if let Err(error::ReadlineError::Io(ref e)) = res {
-            if e.kind() == ErrorKind::Other && e.raw_os_error() == Some(87) {
+            if e.raw_os_error() == Some(winerror::ERROR_INVALID_PARAMETER as i32) {
                 warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", info.dwCursorPosition.X, info.dwCursorPosition.Y, info.dwSize.X, info.dwSize.Y);
                 println!();
                 return Ok(());

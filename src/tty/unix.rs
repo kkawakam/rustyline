@@ -616,7 +616,7 @@ impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
         let c = self.next_char()?;
 
-        let mut key = keys::char_to_key_press(c);
+        let mut key = keys::char_to_key_press(c, M::NONE);
         if key == (K::Esc, M::NONE) {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0

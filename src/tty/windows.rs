@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyEvent, KeyCode};
+use crate::keys::{self, KeyEvent, KeyCode as K, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -143,67 +143,53 @@ impl RawReader for ConsoleRawReader {
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
+                let mut mods = M::NONE;
+                if ctl {
+                    mods |= M::CTRL:
+                }
+                if meta {
+                    mods |= M::ALT:
+                }
+                if shift {
+                    mods |= M::SHIFT:
+                }
                 match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => {
-                        return Ok(if ctrl {
-                            (K::Left, M::CTRL)
-                        } else if shift {
-                            (K::Left, M::SHIFT)
-                        } else {
-                            KeyCode::Left
-                        });
+                        return Ok((K::Left, mods));
                     }
                     winuser::VK_RIGHT => {
-                        return Ok(if ctrl {
-                            (K::Right, M::CTRL)
-                        } else if shift {
-                            (K::Right, M::SHIFT)
-                        } else {
-                            KeyCode::Right
-                        });
+                        return Ok((K::Right, mods));
                     }
                     winuser::VK_UP => {
-                        return Ok(if ctrl {
-                            (K::Up, M::CTRL)
-                        } else if shift {
-                            (K::Up, M::SHIFT)
-                        } else {
-                            KeyCode::Up
-                        });
+                        return Ok((K::Up, mods));
                     }
                     winuser::VK_DOWN => {
-                        return Ok(if ctrl {
-                            (K::Down, M::CTRL)
-                        } else if shift {
-                            (K::Down, M::SHIFT)
-                        } else {
-                            KeyCode::Down
-                        });
+                        return Ok((K::Down, mods));
                     }
-                    winuser::VK_DELETE => return Ok(KeyCode::Delete),
-                    winuser::VK_HOME => return Ok(KeyCode::Home),
-                    winuser::VK_END => return Ok(KeyCode::End),
-                    winuser::VK_PRIOR => return Ok(KeyCode::PageUp),
-                    winuser::VK_NEXT => return Ok(KeyCode::PageDown),
-                    winuser::VK_INSERT => return Ok(KeyCode::Insert),
-                    winuser::VK_F1 => return Ok(KeyCode::F(1)),
-                    winuser::VK_F2 => return Ok(KeyCode::F(2)),
-                    winuser::VK_F3 => return Ok(KeyCode::F(3)),
-                    winuser::VK_F4 => return Ok(KeyCode::F(4)),
-                    winuser::VK_F5 => return Ok(KeyCode::F(5)),
-                    winuser::VK_F6 => return Ok(KeyCode::F(6)),
-                    winuser::VK_F7 => return Ok(KeyCode::F(7)),
-                    winuser::VK_F8 => return Ok(KeyCode::F(8)),
-                    winuser::VK_F9 => return Ok(KeyCode::F(9)),
-                    winuser::VK_F10 => return Ok(KeyCode::F(10)),
-                    winuser::VK_F11 => return Ok(KeyCode::F(11)),
-                    winuser::VK_F12 => return Ok(KeyCode::F(12)),
+                    winuser::VK_DELETE => return Ok((K::Delete, mods)),
+                    winuser::VK_HOME => return Ok((K::Home, mods)),
+                    winuser::VK_END => return Ok((K::End, mods)),
+                    winuser::VK_PRIOR => return Ok((K::PageUp, mods)),
+                    winuser::VK_NEXT => return Ok((K::PageDown, mods)),
+                    winuser::VK_INSERT => return Ok((K::Insert, mods)),
+                    winuser::VK_F1 => return Ok((K::F(1), mods)),
+                    winuser::VK_F2 => return Ok((K::F(2), mods)),
+                    winuser::VK_F3 => return Ok((K::F(3), mods)),
+                    winuser::VK_F4 => return Ok((K::F(4), mods)),
+                    winuser::VK_F5 => return Ok((K::F(5), mods)),
+                    winuser::VK_F6 => return Ok((K::F(6), mods)),
+                    winuser::VK_F7 => return Ok((K::F(7), mods)),
+                    winuser::VK_F8 => return Ok((K::F(8), mods)),
+                    winuser::VK_F9 => return Ok((K::F(9), mods)),
+                    winuser::VK_F10 => return Ok((K::F(10), mods)),
+                    winuser::VK_F11 => return Ok((K::F(11), mods)),
+                    winuser::VK_F12 => return Ok((K::F(12), mods)),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
                 };
             } else if utf16 == 27 {
-                return Ok(KeyCode::Esc);
+                return Ok((K::Esc, mods));
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -220,17 +206,9 @@ impl RawReader for ConsoleRawReader {
                     return Err(error::ReadlineError::Eof);
                 };
                 let c = rc?;
-                if meta {
-                    return Ok(KeyCode::Meta(c));
-                } else {
-                    let mut key = keys::char_to_key_press(c);
-                    if key == KeyCode::Tab && shift {
-                        key = KeyCode::BackTab;
-                    } else if key == KeyCode::Char(' ') && ctrl {
-                        key = KeyCode::Ctrl(' ');
-                    }
-                    return Ok(key);
-                }
+                // TODO Check Alt-A ...
+                let key = keys::char_to_key_press(c, mods);
+                return Ok(key);
             }
         }
     }

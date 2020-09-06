@@ -75,47 +75,60 @@ bitflags::bitflags! {
 }
 
 #[cfg(any(windows, unix))]
-pub fn char_to_key_press(c: char) -> KeyEvent {
+pub fn char_to_key_press(c: char, mut mods: Modifiers) -> KeyEvent {
     if !c.is_control() {
-        return (KeyCode::Char(c), Modifiers::NONE); // no SHIFT even if `c` is uppercase
+        if !mods.is_empty() {
+            if c.is_ascii_uppercase() { // no SHIFT even if `c` is uppercase
+                mods.remove(Modifiers::SHIFT);
+            // } else if c.is_ascii_lowercase() && mods.contains(Modifiers::SHIFT) { TODO possible ?
+            }
+        }
+        return (KeyCode::Char(c), mods);
     }
     #[allow(clippy::match_same_arms)]
     match c {
-        '\x00' => (KeyCode::Char(' '), Modifiers::CTRL),
-        '\x01' => (KeyCode::Char('A'), Modifiers::CTRL),
-        '\x02' => (KeyCode::Char('B'), Modifiers::CTRL),
-        '\x03' => (KeyCode::Char('C'), Modifiers::CTRL),
-        '\x04' => (KeyCode::Char('D'), Modifiers::CTRL),
-        '\x05' => (KeyCode::Char('E'), Modifiers::CTRL),
-        '\x06' => (KeyCode::Char('F'), Modifiers::CTRL),
-        '\x07' => (KeyCode::Char('G'), Modifiers::CTRL),
-        '\x08' => (KeyCode::Backspace, Modifiers::NONE), // '\b'
-        '\x09' => (KeyCode::Tab, Modifiers::NONE),       // '\t'
-        '\x0a' => (KeyCode::Char('J'), Modifiers::CTRL), // '\n' (10)
-        '\x0b' => (KeyCode::Char('K'), Modifiers::CTRL),
-        '\x0c' => (KeyCode::Char('L'), Modifiers::CTRL),
-        '\x0d' => (KeyCode::Enter, Modifiers::NONE), // '\r' (13)
-        '\x0e' => (KeyCode::Char('N'), Modifiers::CTRL),
-        '\x0f' => (KeyCode::Char('O'), Modifiers::CTRL),
-        '\x10' => (KeyCode::Char('P'), Modifiers::CTRL),
-        '\x11' => (KeyCode::Char('Q'), Modifiers::CTRL),
-        '\x12' => (KeyCode::Char('R'), Modifiers::CTRL),
-        '\x13' => (KeyCode::Char('S'), Modifiers::CTRL),
-        '\x14' => (KeyCode::Char('T'), Modifiers::CTRL),
-        '\x15' => (KeyCode::Char('U'), Modifiers::CTRL),
-        '\x16' => (KeyCode::Char('V'), Modifiers::CTRL),
-        '\x17' => (KeyCode::Char('W'), Modifiers::CTRL),
-        '\x18' => (KeyCode::Char('X'), Modifiers::CTRL),
-        '\x19' => (KeyCode::Char('Y'), Modifiers::CTRL),
-        '\x1a' => (KeyCode::Char('Z'), Modifiers::CTRL),
-        '\x1b' => (KeyCode::Esc, Modifiers::NONE), // Ctrl-[
-        '\x1c' => (KeyCode::Char('\\'), Modifiers::CTRL),
-        '\x1d' => (KeyCode::Char(']'), Modifiers::CTRL),
-        '\x1e' => (KeyCode::Char('^'), Modifiers::CTRL),
-        '\x1f' => (KeyCode::Char('_'), Modifiers::CTRL),
-        '\x7f' => (KeyCode::Backspace, Modifiers::NONE), // Rubout
-        '\u{9b}' => (KeyCode::Esc, Modifiers::SHIFT),
-        _ => (KeyCode::Null, Modifiers::NONE),
+        '\x00' => (KeyCode::Char(' '), mods | Modifiers::CTRL),
+        '\x01' => (KeyCode::Char('A'), mods | Modifiers::CTRL),
+        '\x02' => (KeyCode::Char('B'), mods | Modifiers::CTRL),
+        '\x03' => (KeyCode::Char('C'), mods | Modifiers::CTRL),
+        '\x04' => (KeyCode::Char('D'), mods | Modifiers::CTRL),
+        '\x05' => (KeyCode::Char('E'), mods | Modifiers::CTRL),
+        '\x06' => (KeyCode::Char('F'), mods | Modifiers::CTRL),
+        '\x07' => (KeyCode::Char('G'), mods | Modifiers::CTRL),
+        '\x08' => (KeyCode::Backspace, mods), // '\b'
+        '\x09' => { // '\t'
+            if mods.contains(Modifiers::SHIFT) {
+                mods.remove(Modifiers::SHIFT);
+                (KeyCode::BackTab, mods)
+            } else {
+                (KeyCode::Tab, mods)
+            }
+        },
+        '\x0a' => (KeyCode::Char('J'), mods | Modifiers::CTRL), // '\n' (10)
+        '\x0b' => (KeyCode::Char('K'), mods | Modifiers::CTRL),
+        '\x0c' => (KeyCode::Char('L'), mods | Modifiers::CTRL),
+        '\x0d' => (KeyCode::Enter, mods), // '\r' (13)
+        '\x0e' => (KeyCode::Char('N'), mods | Modifiers::CTRL),
+        '\x0f' => (KeyCode::Char('O'), mods | Modifiers::CTRL),
+        '\x10' => (KeyCode::Char('P'), mods | Modifiers::CTRL),
+        '\x11' => (KeyCode::Char('Q'), mods | Modifiers::CTRL),
+        '\x12' => (KeyCode::Char('R'), mods | Modifiers::CTRL),
+        '\x13' => (KeyCode::Char('S'), mods | Modifiers::CTRL),
+        '\x14' => (KeyCode::Char('T'), mods | Modifiers::CTRL),
+        '\x15' => (KeyCode::Char('U'), mods | Modifiers::CTRL),
+        '\x16' => (KeyCode::Char('V'), mods | Modifiers::CTRL),
+        '\x17' => (KeyCode::Char('W'), mods | Modifiers::CTRL),
+        '\x18' => (KeyCode::Char('X'), mods | Modifiers::CTRL),
+        '\x19' => (KeyCode::Char('Y'), mods | Modifiers::CTRL),
+        '\x1a' => (KeyCode::Char('Z'), mods | Modifiers::CTRL),
+        '\x1b' => (KeyCode::Esc, mods), // Ctrl-[
+        '\x1c' => (KeyCode::Char('\\'), mods | Modifiers::CTRL),
+        '\x1d' => (KeyCode::Char(']'), mods | Modifiers::CTRL),
+        '\x1e' => (KeyCode::Char('^'), mods | Modifiers::CTRL),
+        '\x1f' => (KeyCode::Char('_'), mods | Modifiers::CTRL),
+        '\x7f' => (KeyCode::Backspace, mods), // Rubout
+        '\u{9b}' => (KeyCode::Esc, mods | Modifiers::SHIFT),
+        _ => (KeyCode::Null, mods),
     }
 }
 
@@ -125,6 +138,6 @@ mod tests {
 
     #[test]
     fn char_to_key() {
-        assert_eq!((KeyCode::Esc, Modifiers::NONE), char_to_key_press('\x1b'));
+        assert_eq!((KeyCode::Esc, Modifiers::NONE), char_to_key_press('\x1b', Modifiers::NONE));
     }
 }

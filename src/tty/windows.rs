@@ -1,7 +1,7 @@
 //! Windows specific definitions
 #![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic;
 
@@ -140,19 +140,19 @@ impl RawReader for ConsoleRawReader {
             let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
             let meta = alt && !alt_gr;
             let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
+            let mut mods = M::NONE;
+            if ctrl {
+                mods |= M::CTRL;
+            }
+            if meta {
+                mods |= M::ALT;
+            }
+            if shift {
+                mods |= M::SHIFT;
+            }
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
-                let mut mods = M::NONE;
-                if ctl {
-                    mods |= M::CTRL:
-                }
-                if meta {
-                    mods |= M::ALT:
-                }
-                if shift {
-                    mods |= M::SHIFT:
-                }
                 match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => {
                         return Ok((K::Left, mods));

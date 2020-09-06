@@ -153,41 +153,33 @@ impl RawReader for ConsoleRawReader {
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
             if utf16 == 0 {
-                match i32::from(key_event.wVirtualKeyCode) {
-                    winuser::VK_LEFT => {
-                        return Ok((K::Left, mods));
-                    }
-                    winuser::VK_RIGHT => {
-                        return Ok((K::Right, mods));
-                    }
-                    winuser::VK_UP => {
-                        return Ok((K::Up, mods));
-                    }
-                    winuser::VK_DOWN => {
-                        return Ok((K::Down, mods));
-                    }
-                    winuser::VK_DELETE => return Ok((K::Delete, mods)),
-                    winuser::VK_HOME => return Ok((K::Home, mods)),
-                    winuser::VK_END => return Ok((K::End, mods)),
-                    winuser::VK_PRIOR => return Ok((K::PageUp, mods)),
-                    winuser::VK_NEXT => return Ok((K::PageDown, mods)),
-                    winuser::VK_INSERT => return Ok((K::Insert, mods)),
-                    winuser::VK_F1 => return Ok((K::F(1), mods)),
-                    winuser::VK_F2 => return Ok((K::F(2), mods)),
-                    winuser::VK_F3 => return Ok((K::F(3), mods)),
-                    winuser::VK_F4 => return Ok((K::F(4), mods)),
-                    winuser::VK_F5 => return Ok((K::F(5), mods)),
-                    winuser::VK_F6 => return Ok((K::F(6), mods)),
-                    winuser::VK_F7 => return Ok((K::F(7), mods)),
-                    winuser::VK_F8 => return Ok((K::F(8), mods)),
-                    winuser::VK_F9 => return Ok((K::F(9), mods)),
-                    winuser::VK_F10 => return Ok((K::F(10), mods)),
-                    winuser::VK_F11 => return Ok((K::F(11), mods)),
-                    winuser::VK_F12 => return Ok((K::F(12), mods)),
+                return Ok((match i32::from(key_event.wVirtualKeyCode) {
+                    winuser::VK_LEFT => K::Left,
+                    winuser::VK_RIGHT => K::Right,
+                    winuser::VK_UP => K::Up,
+                    winuser::VK_DOWN => K::Down,
+                    winuser::VK_DELETE => K::Delete,
+                    winuser::VK_HOME => K::Home,
+                    winuser::VK_END => K::End,
+                    winuser::VK_PRIOR => K::PageUp,
+                    winuser::VK_NEXT => K::PageDown,
+                    winuser::VK_INSERT => K::Insert,
+                    winuser::VK_F1 => K::F(1),
+                    winuser::VK_F2 => K::F(2),
+                    winuser::VK_F3 => K::F(3),
+                    winuser::VK_F4 => K::F(4),
+                    winuser::VK_F5 => K::F(5),
+                    winuser::VK_F6 => K::F(6),
+                    winuser::VK_F7 => K::F(7),
+                    winuser::VK_F8 => K::F(8),
+                    winuser::VK_F9 => K::F(9),
+                    winuser::VK_F10 => K::F(10),
+                    winuser::VK_F11 => K::F(11),
+                    winuser::VK_F12 => K::F(12),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
-                };
+                }, mods);
             } else if utf16 == 27 {
                 return Ok((K::Esc, mods));
             } else {

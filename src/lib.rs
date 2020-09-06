@@ -55,7 +55,7 @@ use crate::hint::Hinter;
 use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
-pub use crate::keys::KeyPress;
+pub use crate::keys::{KeyEvent, KeyCode, Modifiers};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::validate::Validator;
@@ -776,7 +776,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
+    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -895,7 +895,7 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Bind a sequence to a command.
-    pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
+    pub fn bind_sequence(&mut self, key_seq: KeyEvent, cmd: Cmd) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
             bindings.insert(key_seq, cmd)
         } else {
@@ -904,7 +904,7 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Remove a binding for the given sequence.
-    pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
+    pub fn unbind_sequence(&mut self, key_seq: KeyEvent) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
             bindings.remove(&key_seq)
         } else {

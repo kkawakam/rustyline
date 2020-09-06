@@ -7,7 +7,7 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
-use crate::keys::KeyPress;
+use crate::keys::{KeyEvent, KeyCode as K, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -20,8 +20,8 @@ impl RawMode for Mode {
     }
 }
 
-impl<'a> RawReader for Iter<'a, KeyPress> {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+impl<'a> RawReader for Iter<'a, KeyEvent> {
+    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         match self.next() {
             Some(key) => Ok(*key),
             None => Err(ReadlineError::Eof),
@@ -38,8 +38,8 @@ impl<'a> RawReader for Iter<'a, KeyPress> {
     }
 }
 
-impl RawReader for IntoIter<KeyPress> {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+impl RawReader for IntoIter<KeyEvent> {
+    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         match self.next() {
             Some(key) => Ok(key),
             None => Err(ReadlineError::Eof),
@@ -49,7 +49,7 @@ impl RawReader for IntoIter<KeyPress> {
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
         match self.next() {
-            Some(KeyPress::Char(c)) => Ok(c),
+            Some((K::Char(c), M::NONE)) => Ok(c),
             None => Err(ReadlineError::Eof),
             _ => unimplemented!(),
         }
@@ -69,7 +69,7 @@ impl Sink {
 }
 
 impl Renderer for Sink {
-    type Reader = IntoIter<KeyPress>;
+    type Reader = IntoIter<KeyEvent>;
 
     fn move_cursor(&mut self, _: Position, _: Position) -> Result<()> {
         Ok(())
@@ -123,7 +123,7 @@ impl Renderer for Sink {
         false
     }
 
-    fn move_cursor_at_leftmost(&mut self, _: &mut IntoIter<KeyPress>) -> Result<()> {
+    fn move_cursor_at_leftmost(&mut self, _: &mut IntoIter<KeyEvent>) -> Result<()> {
         Ok(())
     }
 }
@@ -132,7 +132,7 @@ pub type Terminal = DummyTerminal;
 
 #[derive(Clone, Debug)]
 pub struct DummyTerminal {
-    pub keys: Vec<KeyPress>,
+    pub keys: Vec<KeyEvent>,
     pub cursor: usize, // cursor position before last command
     pub color_mode: ColorMode,
     pub bell_style: BellStyle,
@@ -140,7 +140,7 @@ pub struct DummyTerminal {
 
 impl Term for DummyTerminal {
     type Mode = Mode;
-    type Reader = IntoIter<KeyPress>;
+    type Reader = IntoIter<KeyEvent>;
     type Writer = Sink;
 
     fn new(
@@ -183,7 +183,7 @@ impl Term for DummyTerminal {
         Ok(())
     }
 
-    fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyPress>> {
+    fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyEvent>> {
         Ok(self.keys.clone().into_iter())
     }
 

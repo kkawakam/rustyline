@@ -1,14 +1,14 @@
 //! Vi insert mode specific key bindings
 use super::assert_cursor;
 use crate::config::EditMode;
-use crate::keys::KeyPress;
+use crate::keys::{KeyCode as K, Modifiers as M};
 
 #[test]
 fn insert_mode_by_default() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Char('a'), KeyPress::Enter],
+        &[(K::Char('a'), M::NONE), (K::Enter, M::NONE)],
         ("a", ""),
     );
 }
@@ -18,7 +18,7 @@ fn ctrl_h() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Ctrl('H'), KeyPress::Enter],
+        &[(K::Char('H'), M::CTRL), (K::Enter, M::NONE)],
         ("H", ""),
     );
 }
@@ -28,19 +28,19 @@ fn backspace() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[(K::Backspace, M::NONE), (K::Enter, M::NONE)],
         ("", ""),
     );
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[(K::Backspace, M::NONE), (K::Enter, M::NONE)],
         ("H", ""),
     );
     assert_cursor(
         EditMode::Vi,
         ("", "Hi"),
-        &[KeyPress::Backspace, KeyPress::Enter],
+        &[(K::Backspace, M::NONE), (K::Enter, M::NONE)],
         ("", "Hi"),
     );
 }
@@ -50,7 +50,7 @@ fn esc() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Enter],
+        &[(K::Char('a'), M::NONE), (K::Esc, M::NONE), (K::Enter, M::NONE)],
         ("", "a"),
     );
 }

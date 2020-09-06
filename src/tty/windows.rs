@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyPress};
+use crate::keys::{self, KeyEvent, KeyCode};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -101,7 +101,7 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         use std::char::decode_utf16;
         use winapi::um::wincon::{
             LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
@@ -146,64 +146,64 @@ impl RawReader for ConsoleRawReader {
                 match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => {
                         return Ok(if ctrl {
-                            KeyPress::ControlLeft
+                            (K::Left, M::CTRL)
                         } else if shift {
-                            KeyPress::ShiftLeft
+                            (K::Left, M::SHIFT)
                         } else {
-                            KeyPress::Left
+                            KeyCode::Left
                         });
                     }
                     winuser::VK_RIGHT => {
                         return Ok(if ctrl {
-                            KeyPress::ControlRight
+                            (K::Right, M::CTRL)
                         } else if shift {
-                            KeyPress::ShiftRight
+                            (K::Right, M::SHIFT)
                         } else {
-                            KeyPress::Right
+                            KeyCode::Right
                         });
                     }
                     winuser::VK_UP => {
                         return Ok(if ctrl {
-                            KeyPress::ControlUp
+                            (K::Up, M::CTRL)
                         } else if shift {
-                            KeyPress::ShiftUp
+                            (K::Up, M::SHIFT)
                         } else {
-                            KeyPress::Up
+                            KeyCode::Up
                         });
                     }
                     winuser::VK_DOWN => {
                         return Ok(if ctrl {
-                            KeyPress::ControlDown
+                            (K::Down, M::CTRL)
                         } else if shift {
-                            KeyPress::ShiftDown
+                            (K::Down, M::SHIFT)
                         } else {
-                            KeyPress::Down
+                            KeyCode::Down
                         });
                     }
-                    winuser::VK_DELETE => return Ok(KeyPress::Delete),
-                    winuser::VK_HOME => return Ok(KeyPress::Home),
-                    winuser::VK_END => return Ok(KeyPress::End),
-                    winuser::VK_PRIOR => return Ok(KeyPress::PageUp),
-                    winuser::VK_NEXT => return Ok(KeyPress::PageDown),
-                    winuser::VK_INSERT => return Ok(KeyPress::Insert),
-                    winuser::VK_F1 => return Ok(KeyPress::F(1)),
-                    winuser::VK_F2 => return Ok(KeyPress::F(2)),
-                    winuser::VK_F3 => return Ok(KeyPress::F(3)),
-                    winuser::VK_F4 => return Ok(KeyPress::F(4)),
-                    winuser::VK_F5 => return Ok(KeyPress::F(5)),
-                    winuser::VK_F6 => return Ok(KeyPress::F(6)),
-                    winuser::VK_F7 => return Ok(KeyPress::F(7)),
-                    winuser::VK_F8 => return Ok(KeyPress::F(8)),
-                    winuser::VK_F9 => return Ok(KeyPress::F(9)),
-                    winuser::VK_F10 => return Ok(KeyPress::F(10)),
-                    winuser::VK_F11 => return Ok(KeyPress::F(11)),
-                    winuser::VK_F12 => return Ok(KeyPress::F(12)),
+                    winuser::VK_DELETE => return Ok(KeyCode::Delete),
+                    winuser::VK_HOME => return Ok(KeyCode::Home),
+                    winuser::VK_END => return Ok(KeyCode::End),
+                    winuser::VK_PRIOR => return Ok(KeyCode::PageUp),
+                    winuser::VK_NEXT => return Ok(KeyCode::PageDown),
+                    winuser::VK_INSERT => return Ok(KeyCode::Insert),
+                    winuser::VK_F1 => return Ok(KeyCode::F(1)),
+                    winuser::VK_F2 => return Ok(KeyCode::F(2)),
+                    winuser::VK_F3 => return Ok(KeyCode::F(3)),
+                    winuser::VK_F4 => return Ok(KeyCode::F(4)),
+                    winuser::VK_F5 => return Ok(KeyCode::F(5)),
+                    winuser::VK_F6 => return Ok(KeyCode::F(6)),
+                    winuser::VK_F7 => return Ok(KeyCode::F(7)),
+                    winuser::VK_F8 => return Ok(KeyCode::F(8)),
+                    winuser::VK_F9 => return Ok(KeyCode::F(9)),
+                    winuser::VK_F10 => return Ok(KeyCode::F(10)),
+                    winuser::VK_F11 => return Ok(KeyCode::F(11)),
+                    winuser::VK_F12 => return Ok(KeyCode::F(12)),
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
                 };
             } else if utf16 == 27 {
-                return Ok(KeyPress::Esc);
+                return Ok(KeyCode::Esc);
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -221,13 +221,13 @@ impl RawReader for ConsoleRawReader {
                 };
                 let c = rc?;
                 if meta {
-                    return Ok(KeyPress::Meta(c));
+                    return Ok(KeyCode::Meta(c));
                 } else {
                     let mut key = keys::char_to_key_press(c);
-                    if key == KeyPress::Tab && shift {
-                        key = KeyPress::BackTab;
-                    } else if key == KeyPress::Char(' ') && ctrl {
-                        key = KeyPress::Ctrl(' ');
+                    if key == KeyCode::Tab && shift {
+                        key = KeyCode::BackTab;
+                    } else if key == KeyCode::Char(' ') && ctrl {
+                        key = KeyCode::Ctrl(' ');
                     }
                     return Ok(key);
                 }

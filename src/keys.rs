@@ -1,12 +1,15 @@
 //! Key constants
 
+/// Input key pressed and modifiers
+pub type KeyEvent = (KeyCode, Modifiers);
+
 /// Input key pressed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum KeyPress {
+pub enum KeyCode {
     /// Unsupported escape sequence (on unix platform)
     UnknownEscSeq,
-    /// ⌫ or `KeyPress::Ctrl('H')`
+    /// ⌫ or Ctrl-H
     Backspace,
     /// ⇤ (usually Shift-Tab)
     BackTab,
@@ -16,25 +19,15 @@ pub enum KeyPress {
     BracketedPasteEnd,
     /// Single char
     Char(char),
-    /// Ctrl-↓
-    ControlDown,
-    /// Ctrl-←
-    ControlLeft,
-    /// Ctrl-→
-    ControlRight,
-    /// Ctrl-↑
-    ControlUp,
-    /// Ctrl-char
-    Ctrl(char),
     /// ⌦
     Delete,
     /// ↓ arrow key
     Down,
     /// ⇲
     End,
-    /// ↵ or `KeyPress::Ctrl('M')`
+    /// ↵ or Ctrl-M
     Enter,
-    /// Escape or `KeyPress::Ctrl('[')`
+    /// Escape or Ctrl-[
     Esc,
     /// Function key
     F(u8),
@@ -44,9 +37,7 @@ pub enum KeyPress {
     Insert,
     /// ← arrow key
     Left,
-    /// Escape-char or Alt-char
-    Meta(char),
-    /// `KeyPress::Char('\0')`
+    /// \0
     Null,
     /// ⇟
     PageDown,
@@ -54,69 +45,86 @@ pub enum KeyPress {
     PageUp,
     /// → arrow key
     Right,
-    /// Shift-↓
-    ShiftDown,
-    /// Shift-←
-    ShiftLeft,
-    /// Shift-→
-    ShiftRight,
-    /// Shift-↑
-    ShiftUp,
-    /// ⇥ or `KeyPress::Ctrl('I')`
+    /// ⇥ or Ctrl-I
     Tab,
     /// ↑ arrow key
     Up,
 }
 
+bitflags::bitflags! {
+    /// The set of modifier keys that were triggered along with a key press.
+    pub struct Modifiers: u8 {
+        /// Control modifier
+        const CTRL  = 1<<3;
+        /// Escape or Alt modifier
+        const ALT  = 1<<2;
+        /// Shift modifier
+        const SHIFT = 1<<1;
+
+        /// No modifier
+        const NONE = 0;
+        /// Ctrl + Shift
+        const CTRL_SHIFT = Self::CTRL.bits | Self::SHIFT.bits;
+        /// Alt + Shift
+        const ALT_SHIFT = Self::ALT.bits | Self::SHIFT.bits;
+        /// Ctrl + Alt
+        const CTRL_ALT = Self::CTRL.bits | Self::ALT.bits;
+        /// Ctrl + Alt + Shift
+        const CTRL_ALT_SHIFT = Self::CTRL.bits | Self::ALT.bits | Self::SHIFT.bits;
+    }
+}
+
 #[cfg(any(windows, unix))]
-pub fn char_to_key_press(c: char) -> KeyPress {
+pub fn char_to_key_press(c: char) -> KeyEvent {
     if !c.is_control() {
-        return KeyPress::Char(c);
+        return (KeyCode::Char(c), Modifiers::NONE); // no SHIFT even if `c` is uppercase
     }
     #[allow(clippy::match_same_arms)]
     match c {
-        '\x00' => KeyPress::Ctrl(' '),
-        '\x01' => KeyPress::Ctrl('A'),
-        '\x02' => KeyPress::Ctrl('B'),
-        '\x03' => KeyPress::Ctrl('C'),
-        '\x04' => KeyPress::Ctrl('D'),
-        '\x05' => KeyPress::Ctrl('E'),
-        '\x06' => KeyPress::Ctrl('F'),
-        '\x07' => KeyPress::Ctrl('G'),
-        '\x08' => KeyPress::Backspace, // '\b'
-        '\x09' => KeyPress::Tab,       // '\t'
-        '\x0a' => KeyPress::Ctrl('J'), // '\n' (10)
-        '\x0b' => KeyPress::Ctrl('K'),
-        '\x0c' => KeyPress::Ctrl('L'),
-        '\x0d' => KeyPress::Enter, // '\r' (13)
-        '\x0e' => KeyPress::Ctrl('N'),
-        '\x0f' => KeyPress::Ctrl('O'),
-        '\x10' => KeyPress::Ctrl('P'),
-        '\x12' => KeyPress::Ctrl('R'),
-        '\x13' => KeyPress::Ctrl('S'),
-        '\x14' => KeyPress::Ctrl('T'),
-        '\x15' => KeyPress::Ctrl('U'),
-        '\x16' => KeyPress::Ctrl('V'),
-        '\x17' => KeyPress::Ctrl('W'),
-        '\x18' => KeyPress::Ctrl('X'),
-        '\x19' => KeyPress::Ctrl('Y'),
-        '\x1a' => KeyPress::Ctrl('Z'),
-        '\x1b' => KeyPress::Esc, // Ctrl-[
-        '\x1c' => KeyPress::Ctrl('\\'),
-        '\x1d' => KeyPress::Ctrl(']'),
-        '\x1e' => KeyPress::Ctrl('^'),
-        '\x1f' => KeyPress::Ctrl('_'),
-        '\x7f' => KeyPress::Backspace, // Rubout
-        _ => KeyPress::Null,
+        '\x00' => (KeyCode::Char(' '), Modifiers::CTRL),
+        '\x01' => (KeyCode::Char('A'), Modifiers::CTRL),
+        '\x02' => (KeyCode::Char('B'), Modifiers::CTRL),
+        '\x03' => (KeyCode::Char('C'), Modifiers::CTRL),
+        '\x04' => (KeyCode::Char('D'), Modifiers::CTRL),
+        '\x05' => (KeyCode::Char('E'), Modifiers::CTRL),
+        '\x06' => (KeyCode::Char('F'), Modifiers::CTRL),
+        '\x07' => (KeyCode::Char('G'), Modifiers::CTRL),
+        '\x08' => (KeyCode::Backspace, Modifiers::NONE), // '\b'
+        '\x09' => (KeyCode::Tab, Modifiers::NONE),       // '\t'
+        '\x0a' => (KeyCode::Char('J'), Modifiers::CTRL), // '\n' (10)
+        '\x0b' => (KeyCode::Char('K'), Modifiers::CTRL),
+        '\x0c' => (KeyCode::Char('L'), Modifiers::CTRL),
+        '\x0d' => (KeyCode::Enter, Modifiers::NONE), // '\r' (13)
+        '\x0e' => (KeyCode::Char('N'), Modifiers::CTRL),
+        '\x0f' => (KeyCode::Char('O'), Modifiers::CTRL),
+        '\x10' => (KeyCode::Char('P'), Modifiers::CTRL),
+        '\x11' => (KeyCode::Char('Q'), Modifiers::CTRL),
+        '\x12' => (KeyCode::Char('R'), Modifiers::CTRL),
+        '\x13' => (KeyCode::Char('S'), Modifiers::CTRL),
+        '\x14' => (KeyCode::Char('T'), Modifiers::CTRL),
+        '\x15' => (KeyCode::Char('U'), Modifiers::CTRL),
+        '\x16' => (KeyCode::Char('V'), Modifiers::CTRL),
+        '\x17' => (KeyCode::Char('W'), Modifiers::CTRL),
+        '\x18' => (KeyCode::Char('X'), Modifiers::CTRL),
+        '\x19' => (KeyCode::Char('Y'), Modifiers::CTRL),
+        '\x1a' => (KeyCode::Char('Z'), Modifiers::CTRL),
+        '\x1b' => (KeyCode::Esc, Modifiers::NONE), // Ctrl-[
+        '\x1c' => (KeyCode::Char('\\'), Modifiers::CTRL),
+        '\x1d' => (KeyCode::Char(']'), Modifiers::CTRL),
+        '\x1e' => (KeyCode::Char('^'), Modifiers::CTRL),
+        '\x1f' => (KeyCode::Char('_'), Modifiers::CTRL),
+        '\x7f' => (KeyCode::Backspace, Modifiers::NONE), // Rubout
+        '\u{9b}' => (KeyCode::Esc, Modifiers::SHIFT),
+        _ => (KeyCode::Null, Modifiers::NONE),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{char_to_key_press, KeyPress};
+    use super::{char_to_key_press, KeyCode, Modifiers};
 
     #[test]
     fn char_to_key() {
-        assert_eq!(KeyPress::Esc, char_to_key_press('\x1b'));
+        assert_eq!((KeyCode::Esc, Modifiers::NONE), char_to_key_press('\x1b'));
     }
 }

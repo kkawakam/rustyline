@@ -137,17 +137,14 @@ impl RawReader for ConsoleRawReader {
             let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
                 == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
-            let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
-            let meta = alt && !alt_gr;
-            let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
             let mut mods = M::NONE;
-            if ctrl {
+            if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
                 mods |= M::CTRL;
             }
-            if meta {
+            if alt && !alt_gr {
                 mods |= M::ALT;
             }
-            if shift {
+            if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
                 mods |= M::SHIFT;
             }
 
@@ -179,7 +176,7 @@ impl RawReader for ConsoleRawReader {
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
-                }, mods);
+                }, mods));
             } else if utf16 == 27 {
                 return Ok((K::Esc, mods));
             } else {

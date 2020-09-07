@@ -7,7 +7,7 @@ use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
-use crate::keys::{KeyEvent, KeyCode as K, Modifiers as M};
+use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -48,6 +48,7 @@ impl RawReader for IntoIter<KeyEvent> {
 
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
+        use crate::keys::{KeyCode as K, Modifiers as M};
         match self.next() {
             Some((K::Char(c), M::NONE)) => Ok(c),
             None => Err(ReadlineError::Eof),

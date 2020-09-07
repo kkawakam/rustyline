@@ -78,10 +78,7 @@ bitflags::bitflags! {
 pub fn char_to_key_press(c: char, mut mods: Modifiers) -> KeyEvent {
     if !c.is_control() {
         if !mods.is_empty() {
-            if c.is_ascii_uppercase() { // no SHIFT even if `c` is uppercase
-                mods.remove(Modifiers::SHIFT);
-            // } else if c.is_ascii_lowercase() && mods.contains(Modifiers::SHIFT) { TODO possible ?
-            }
+            mods.remove(Modifiers::SHIFT); // TODO Validate: no SHIFT even if `c` is uppercase
         }
         return (KeyCode::Char(c), mods);
     }

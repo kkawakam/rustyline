@@ -149,8 +149,8 @@ impl RawReader for ConsoleRawReader {
             }
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-            if utf16 == 0 {
-                return Ok((match i32::from(key_event.wVirtualKeyCode) {
+            let key = if utf16 == 0 {
+                (match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => K::Left,
                     winuser::VK_RIGHT => K::Right,
                     winuser::VK_UP => K::Up,
@@ -176,9 +176,9 @@ impl RawReader for ConsoleRawReader {
                     // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
                     // also set.
                     _ => continue,
-                }, mods));
+                }, mods)
             } else if utf16 == 27 {
-                return Ok((K::Esc, mods));
+                (K::Esc, mods)
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -196,9 +196,10 @@ impl RawReader for ConsoleRawReader {
                 };
                 let c = rc?;
                 // TODO Check Alt-A ...
-                let key = keys::char_to_key_press(c, mods);
-                return Ok(key);
-            }
+                keys::char_to_key_press(c, mods)
+            };
+            debug!(target: "rustyline", "key: {:?}", key);
+            return Ok(key);
         }
     }
 

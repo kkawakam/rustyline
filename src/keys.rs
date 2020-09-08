@@ -78,7 +78,8 @@ bitflags::bitflags! {
 pub fn char_to_key_press(c: char, mut mods: Modifiers) -> KeyEvent {
     if !c.is_control() {
         if !mods.is_empty() {
-            mods.remove(Modifiers::SHIFT); // TODO Validate: no SHIFT even if `c` is uppercase
+            mods.remove(Modifiers::SHIFT); // TODO Validate: no SHIFT even if
+                                           // `c` is uppercase
         }
         return (KeyCode::Char(c), mods);
     }
@@ -93,14 +94,15 @@ pub fn char_to_key_press(c: char, mut mods: Modifiers) -> KeyEvent {
         '\x06' => (KeyCode::Char('F'), mods | Modifiers::CTRL),
         '\x07' => (KeyCode::Char('G'), mods | Modifiers::CTRL),
         '\x08' => (KeyCode::Backspace, mods), // '\b'
-        '\x09' => { // '\t'
+        '\x09' => {
+            // '\t'
             if mods.contains(Modifiers::SHIFT) {
                 mods.remove(Modifiers::SHIFT);
                 (KeyCode::BackTab, mods)
             } else {
                 (KeyCode::Tab, mods)
             }
-        },
+        }
         '\x0a' => (KeyCode::Char('J'), mods | Modifiers::CTRL), // '\n' (10)
         '\x0b' => (KeyCode::Char('K'), mods | Modifiers::CTRL),
         '\x0c' => (KeyCode::Char('L'), mods | Modifiers::CTRL),
@@ -135,6 +137,9 @@ mod tests {
 
     #[test]
     fn char_to_key() {
-        assert_eq!((KeyCode::Esc, Modifiers::NONE), char_to_key_press('\x1b', Modifiers::NONE));
+        assert_eq!(
+            (KeyCode::Esc, Modifiers::NONE),
+            char_to_key_press('\x1b', Modifiers::NONE)
+        );
     }
 }

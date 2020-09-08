@@ -50,7 +50,11 @@ fn esc() {
     assert_cursor(
         EditMode::Vi,
         ("", ""),
-        &[(K::Char('a'), M::NONE), (K::Esc, M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Char('a'), M::NONE),
+            (K::Esc, M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("", "a"),
     );
 }

@@ -46,7 +46,11 @@ fn ctrl_b() {
     assert_cursor(
         EditMode::Emacs,
         ("Hi", ""),
-        &[(K::Char('2'), M::ALT), (K::Char('B'), M::CTRL), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('B'), M::CTRL),
+            (K::Enter, M::NONE),
+        ],
         ("", "Hi"),
     );
     assert_cursor(
@@ -73,7 +77,11 @@ fn ctrl_f() {
     assert_cursor(
         EditMode::Emacs,
         ("", "Hi"),
-        &[(K::Char('2'), M::ALT), (K::Char('F'), M::CTRL), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('F'), M::CTRL),
+            (K::Enter, M::NONE),
+        ],
         ("Hi", ""),
     );
     assert_cursor(
@@ -100,7 +108,11 @@ fn ctrl_h() {
     assert_cursor(
         EditMode::Emacs,
         ("Hi", ""),
-        &[(K::Char('2'), M::ALT), (K::Char('H'), M::CTRL), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('H'), M::CTRL),
+            (K::Enter, M::NONE),
+        ],
         ("", ""),
     );
     assert_cursor(
@@ -280,13 +292,21 @@ fn meta_b() {
     assert_cursor(
         EditMode::Emacs,
         ("Hello, world!", ""),
-        &[(K::Char('2'), M::ALT), (K::Char('B'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('B'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         ("", "Hello, world!"),
     );
     assert_cursor(
         EditMode::Emacs,
         ("", "Hello, world!"),
-        &[(K::Char('-'), M::ALT), (K::Char('B'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('-'), M::ALT),
+            (K::Char('B'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         ("Hello", ", world!"),
     );
 }
@@ -302,13 +322,21 @@ fn meta_f() {
     assert_cursor(
         EditMode::Emacs,
         ("", "Hello, world!"),
-        &[(K::Char('2'), M::ALT), (K::Char('F'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('F'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         ("Hello, world", "!"),
     );
     assert_cursor(
         EditMode::Emacs,
         ("Hello, world!", ""),
-        &[(K::Char('-'), M::ALT), (K::Char('F'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('-'), M::ALT),
+            (K::Char('F'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         ("Hello, ", "world!"),
     );
 }
@@ -390,7 +418,11 @@ fn meta_d() {
     assert_cursor(
         EditMode::Emacs,
         ("Hello", ", world!"),
-        &[(K::Char('2'), M::ALT), (K::Char('D'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('2'), M::ALT),
+            (K::Char('D'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         ("Hello", ""),
     );
 }
@@ -443,7 +475,11 @@ fn meta_digit() {
     assert_cursor(
         EditMode::Emacs,
         ("", ""),
-        &[(K::Char('3'), M::ALT), (K::Char('h'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Char('3'), M::ALT),
+            (K::Char('h'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("hhh", ""),
     );
 }

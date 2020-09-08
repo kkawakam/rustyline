@@ -6,7 +6,9 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyCode as K, Modifiers as M};
+use rustyline::{
+    Cmd, CompletionType, Config, Context, EditMode, Editor, KeyCode as K, Modifiers as M,
+};
 use rustyline_derive::Helper;
 
 #[derive(Helper)]

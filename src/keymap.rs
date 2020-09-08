@@ -7,7 +7,7 @@ use log::debug;
 use super::Result;
 use crate::config::Config;
 use crate::config::EditMode;
-use crate::keys::{KeyEvent, KeyCode as K, Modifiers as M};
+use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::tty::{RawReader, Term, Terminal};
 
 /// The number of times one command should be repeated.
@@ -639,7 +639,7 @@ impl InputState {
                 wrt.doing_insert();
                 Cmd::Move(Movement::EndOfLine)
             }
-            (K::Char('b'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), // vi-prev-word
+            (K::Char('b'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), /* vi-prev-word */
             (K::Char('B'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
             (K::Char('c'), M::NONE) => {
                 self.input_mode = InputMode::Insert;
@@ -658,7 +658,9 @@ impl InputState {
             },
             (K::Char('D'), M::NONE) | (K::Char('K'), M::CTRL) => Cmd::Kill(Movement::EndOfLine),
             (K::Char('e'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Vi)),
-            (K::Char('E'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big)),
+            (K::Char('E'), M::NONE) => {
+                Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big))
+            }
             (K::Char('i'), M::NONE) => {
                 // vi-insertion-mode
                 self.input_mode = InputMode::Insert;
@@ -730,7 +732,9 @@ impl InputState {
                 Cmd::Move(Movement::BackwardChar(n))
             }
             (K::Char('G'), M::CTRL) => Cmd::Abort,
-            (K::Char('l'), M::NONE) | (K::Char(' '), M::NONE) => Cmd::Move(Movement::ForwardChar(n)),
+            (K::Char('l'), M::NONE) | (K::Char(' '), M::NONE) => {
+                Cmd::Move(Movement::ForwardChar(n))
+            }
             (K::Char('L'), M::CTRL) => Cmd::ClearScreen,
             (K::Char('+'), M::NONE) | (K::Char('j'), M::NONE) => Cmd::LineDownOrNextHistory(n),
             // TODO: move to the start of the line.
@@ -781,7 +785,9 @@ impl InputState {
                     Cmd::SelfInsert(1, c)
                 }
             }
-            (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => Cmd::Kill(Movement::BackwardChar(1)),
+            (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => {
+                Cmd::Kill(Movement::BackwardChar(1))
+            }
             (K::BackTab, M::NONE) => Cmd::CompleteBackward,
             (K::Tab, M::NONE) => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line

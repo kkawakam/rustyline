@@ -8,7 +8,7 @@ use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
-use crate::keys::{KeyEvent, KeyCode as K, Modifiers as M};
+use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
 use crate::{Context, Editor, Helper, Result};
@@ -123,7 +123,11 @@ fn assert_history(
 #[test]
 fn unknown_esc_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_line(*mode, &[(K::UnknownEscSeq, M::NONE), (K::Enter, M::NONE)], "");
+        assert_line(
+            *mode,
+            &[(K::UnknownEscSeq, M::NONE), (K::Enter, M::NONE)],
+            "",
+        );
     }
 }
 

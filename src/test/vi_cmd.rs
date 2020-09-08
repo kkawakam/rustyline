@@ -8,7 +8,11 @@ fn dollar() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hi"),
-        &[(K::Esc, M::NONE), (K::Char('$'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('$'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hi", ""), // FIXME
     );
 }
@@ -55,7 +59,11 @@ fn zero() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[(K::Esc, M::NONE), (K::Char('0'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('0'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("", "Hi"),
     );
 }
@@ -65,7 +73,11 @@ fn caret() {
     assert_cursor(
         EditMode::Vi,
         (" Hi", ""),
-        &[(K::Esc, M::NONE), (K::Char('^'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('^'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         (" ", "Hi"),
     );
 }
@@ -105,7 +117,11 @@ fn b() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
-        &[(K::Esc, M::NONE), (K::Char('b'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('b'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hello, ", "world!"),
     );
     assert_cursor(
@@ -126,7 +142,11 @@ fn uppercase_b() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, world!", ""),
-        &[(K::Esc, M::NONE), (K::Char('B'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('B'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hello, ", "world!"),
     );
     assert_cursor(
@@ -186,7 +206,11 @@ fn e() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[(K::Esc, M::NONE), (K::Char('e'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('e'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hell", "o, world!"),
     );
     assert_cursor(
@@ -207,7 +231,11 @@ fn uppercase_e() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[(K::Esc, M::NONE), (K::Char('E'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('E'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hello", ", world!"),
     );
     assert_cursor(
@@ -327,7 +355,11 @@ fn w() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[(K::Esc, M::NONE), (K::Char('w'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('w'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hello", ", world!"),
     );
     assert_cursor(
@@ -348,7 +380,11 @@ fn uppercase_w() {
     assert_cursor(
         EditMode::Vi,
         ("", "Hello, world!"),
-        &[(K::Esc, M::NONE), (K::Char('W'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('W'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("Hello, ", "world!"),
     );
     assert_cursor(
@@ -369,7 +405,11 @@ fn x() {
     assert_cursor(
         EditMode::Vi,
         ("", "a"),
-        &[(K::Esc, M::NONE), (K::Char('x'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('x'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("", ""),
     );
 }
@@ -379,7 +419,11 @@ fn uppercase_x() {
     assert_cursor(
         EditMode::Vi,
         ("Hi", ""),
-        &[(K::Esc, M::NONE), (K::Char('X'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('X'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("", "i"),
     );
 }
@@ -400,7 +444,12 @@ fn h() {
         assert_cursor(
             EditMode::Vi,
             ("Bye", ""),
-            &[(K::Esc, M::NONE), (K::Char('2'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('2'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("", "Bye"),
         );
     }
@@ -418,7 +467,12 @@ fn l() {
         assert_cursor(
             EditMode::Vi,
             ("", "Hi"),
-            &[(K::Esc, M::NONE), (K::Char('2'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('2'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("Hi", ""),
         );
     }
@@ -437,14 +491,24 @@ fn j() {
         assert_cursor(
             EditMode::Vi,
             ("", "One\nTwo\nThree"),
-            &[(K::Esc, M::NONE), (K::Char('2'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('2'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("One\nTwo\n", "Three"),
         );
         assert_cursor(
             EditMode::Vi,
             ("Hel", "lo,\nworld!"),
             // NOTE: escape moves backwards on char
-            &[(K::Esc, M::NONE), (K::Char('7'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('7'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("Hello,\nwo", "rld!"),
         );
     }
@@ -464,14 +528,24 @@ fn k() {
             EditMode::Vi,
             ("One\nTwo\nT", "hree"),
             // NOTE: escape moves backwards on char
-            &[(K::Esc, M::NONE), (K::Char('2'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('2'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("", "One\nTwo\nThree"),
         );
         assert_cursor(
             EditMode::Vi,
             ("Hello,\nworl", "d!"),
             // NOTE: escape moves backwards on char
-            &[(K::Esc, M::NONE), (K::Char('5'), M::NONE), *key, (K::Enter, M::NONE)],
+            &[
+                (K::Esc, M::NONE),
+                (K::Char('5'), M::NONE),
+                *key,
+                (K::Enter, M::NONE),
+            ],
             ("Hel", "lo,\nworld!"),
         );
         assert_cursor(
@@ -604,7 +678,11 @@ fn uppercase_s() {
     assert_cursor(
         EditMode::Vi,
         ("Hello, ", "world"),
-        &[(K::Esc, M::NONE), (K::Char('S'), M::NONE), (K::Enter, M::NONE)],
+        &[
+            (K::Esc, M::NONE),
+            (K::Char('S'), M::NONE),
+            (K::Enter, M::NONE),
+        ],
         ("", ""),
     );
 }

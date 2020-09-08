@@ -34,7 +34,12 @@ fn home_key() {
 #[test]
 fn end_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_cursor(*mode, ("", ""), &[(K::End, M::NONE), (K::Enter, M::NONE)], ("", ""));
+        assert_cursor(
+            *mode,
+            ("", ""),
+            &[(K::End, M::NONE), (K::Enter, M::NONE)],
+            ("", ""),
+        );
         assert_cursor(
             *mode,
             ("H", "i"),
@@ -144,12 +149,31 @@ fn enter_key() {
             assert_line(*mode, &[(K::Esc, M::NONE), (K::Enter, M::NONE)], "");
             assert_line(
                 *mode,
-                &[(K::Char('a'), M::NONE), (K::Esc, M::NONE), (K::Enter, M::NONE)],
+                &[
+                    (K::Char('a'), M::NONE),
+                    (K::Esc, M::NONE),
+                    (K::Enter, M::NONE),
+                ],
                 "a",
             );
-            assert_line_with_initial(*mode, ("Hi", ""), &[(K::Esc, M::NONE), (K::Enter, M::NONE)], "Hi");
-            assert_line_with_initial(*mode, ("", "Hi"), &[(K::Esc, M::NONE), (K::Enter, M::NONE)], "Hi");
-            assert_line_with_initial(*mode, ("H", "i"), &[(K::Esc, M::NONE), (K::Enter, M::NONE)], "Hi");
+            assert_line_with_initial(
+                *mode,
+                ("Hi", ""),
+                &[(K::Esc, M::NONE), (K::Enter, M::NONE)],
+                "Hi",
+            );
+            assert_line_with_initial(
+                *mode,
+                ("", "Hi"),
+                &[(K::Esc, M::NONE), (K::Enter, M::NONE)],
+                "Hi",
+            );
+            assert_line_with_initial(
+                *mode,
+                ("H", "i"),
+                &[(K::Esc, M::NONE), (K::Enter, M::NONE)],
+                "Hi",
+            );
         }
     }
 }
@@ -158,13 +182,21 @@ fn enter_key() {
 fn newline_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         assert_line(*mode, &[(K::Char('J'), M::CTRL)], "");
-        assert_line(*mode, &[(K::Char('a'), M::NONE), (K::Char('J'), M::CTRL)], "a");
+        assert_line(
+            *mode,
+            &[(K::Char('a'), M::NONE), (K::Char('J'), M::CTRL)],
+            "a",
+        );
         if *mode == EditMode::Vi {
             // vi command mode
             assert_line(*mode, &[(K::Esc, M::NONE), (K::Char('J'), M::CTRL)], "");
             assert_line(
                 *mode,
-                &[(K::Char('a'), M::NONE), (K::Esc, M::NONE), (K::Char('J'), M::CTRL)],
+                &[
+                    (K::Char('a'), M::NONE),
+                    (K::Esc, M::NONE),
+                    (K::Char('J'), M::CTRL),
+                ],
                 "a",
             );
         }
@@ -180,7 +212,11 @@ fn eof_key() {
     }
     assert_line(
         EditMode::Emacs,
-        &[(K::Char('a'), M::NONE), (K::Char('D'), M::CTRL), (K::Enter, M::NONE)],
+        &[
+            (K::Char('a'), M::NONE),
+            (K::Char('D'), M::CTRL),
+            (K::Enter, M::NONE),
+        ],
         "a",
     );
     assert_line(
@@ -190,7 +226,11 @@ fn eof_key() {
     );
     assert_line(
         EditMode::Vi,
-        &[(K::Char('a'), M::NONE), (K::Esc, M::NONE), (K::Char('D'), M::CTRL)],
+        &[
+            (K::Char('a'), M::NONE),
+            (K::Esc, M::NONE),
+            (K::Char('D'), M::CTRL),
+        ],
         "a",
     );
     assert_line_with_initial(
@@ -274,7 +314,11 @@ fn ctrl_t() {
             assert_cursor(
                 *mode,
                 ("ab", ""),
-                &[(K::Esc, M::NONE), (K::Char('T'), M::CTRL), (K::Enter, M::NONE)],
+                &[
+                    (K::Esc, M::NONE),
+                    (K::Char('T'), M::CTRL),
+                    (K::Enter, M::NONE),
+                ],
                 ("ba", ""),
             );
         }
@@ -301,7 +345,11 @@ fn ctrl_u() {
             assert_cursor(
                 *mode,
                 ("start of line ", "end"),
-                &[(K::Esc, M::NONE), (K::Char('U'), M::CTRL), (K::Enter, M::NONE)],
+                &[
+                    (K::Esc, M::NONE),
+                    (K::Char('U'), M::CTRL),
+                    (K::Enter, M::NONE),
+                ],
                 ("", " end"),
             );
         }
@@ -315,7 +363,11 @@ fn ctrl_v() {
         assert_cursor(
             *mode,
             ("", ""),
-            &[(K::Char('V'), M::CTRL), (K::Char('\t'), M::NONE), (K::Enter, M::NONE)],
+            &[
+                (K::Char('V'), M::CTRL),
+                (K::Char('\t'), M::NONE),
+                (K::Enter, M::NONE),
+            ],
             ("\t", ""),
         );
         if *mode == EditMode::Vi {
@@ -355,7 +407,11 @@ fn ctrl_w() {
             assert_cursor(
                 *mode,
                 ("Hello, world.", ""),
-                &[(K::Esc, M::NONE), (K::Char('W'), M::CTRL), (K::Enter, M::NONE)],
+                &[
+                    (K::Esc, M::NONE),
+                    (K::Char('W'), M::CTRL),
+                    (K::Enter, M::NONE),
+                ],
                 ("Hello, ", "."),
             );
         }
@@ -368,7 +424,11 @@ fn ctrl_y() {
         assert_cursor(
             *mode,
             ("Hello, ", "world"),
-            &[(K::Char('W'), M::CTRL), (K::Char('Y'), M::CTRL), (K::Enter, M::NONE)],
+            &[
+                (K::Char('W'), M::CTRL),
+                (K::Char('Y'), M::CTRL),
+                (K::Enter, M::NONE),
+            ],
             ("Hello, ", "world"),
         );
     }
@@ -380,7 +440,11 @@ fn ctrl__() {
         assert_cursor(
             *mode,
             ("Hello, ", "world"),
-            &[(K::Char('W'), M::CTRL), (K::Char('_'), M::CTRL), (K::Enter, M::NONE)],
+            &[
+                (K::Char('W'), M::CTRL),
+                (K::Char('_'), M::CTRL),
+                (K::Enter, M::NONE),
+            ],
             ("Hello, ", "world"),
         );
         if *mode == EditMode::Vi {

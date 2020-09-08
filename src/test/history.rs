@@ -16,7 +16,12 @@ fn down_key() {
         assert_history(
             *mode,
             &["line1", "line2"],
-            &[(K::Up, M::NONE), (K::Up, M::NONE), (K::Down, M::NONE), (K::Enter, M::NONE)],
+            &[
+                (K::Up, M::NONE),
+                (K::Up, M::NONE),
+                (K::Down, M::NONE),
+                (K::Enter, M::NONE),
+            ],
             "",
             ("line2", ""),
         );
@@ -49,7 +54,13 @@ fn down_key() {
 #[test]
 fn up_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_history(*mode, &[], &[(K::Up, M::NONE), (K::Enter, M::NONE)], "", ("", ""));
+        assert_history(
+            *mode,
+            &[],
+            &[(K::Up, M::NONE), (K::Enter, M::NONE)],
+            "",
+            ("", ""),
+        );
         assert_history(
             *mode,
             &["line1"],
@@ -73,7 +84,11 @@ fn ctrl_r() {
         assert_history(
             *mode,
             &[],
-            &[(K::Char('R'), M::CTRL), (K::Char('o'), M::NONE), (K::Enter, M::NONE)],
+            &[
+                (K::Char('R'), M::CTRL),
+                (K::Char('o'), M::NONE),
+                (K::Enter, M::NONE),
+            ],
             "",
             ("o", ""),
         );
@@ -162,7 +177,11 @@ fn ctrl_r_with_long_prompt() {
         assert_history(
             *mode,
             &["rustc", "cargo"],
-            &[(K::Char('R'), M::CTRL), (K::Char('o'), M::NONE), (K::Enter, M::NONE)],
+            &[
+                (K::Char('R'), M::CTRL),
+                (K::Char('o'), M::NONE),
+                (K::Enter, M::NONE),
+            ],
             ">>>>>>>>>>>>>>>>>>>>>>>>>>> ",
             ("cargo", ""),
         );
@@ -219,7 +238,11 @@ fn meta_gt() {
     assert_history(
         EditMode::Emacs,
         &["rustc", "cargo"],
-        &[(K::Char('<'), M::ALT), (K::Char('>'), M::ALT), (K::Enter, M::NONE)],
+        &[
+            (K::Char('<'), M::ALT),
+            (K::Char('>'), M::ALT),
+            (K::Enter, M::NONE),
+        ],
         "",
         ("", ""),
     );

@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyEvent, KeyCode as K, Modifiers as M};
+use crate::keys::{self, KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -269,10 +269,10 @@ impl PosixRawReader {
                 //'M' => (K::, M::), // kmous
                 //'P' => (K::Delete, M::NONE), // dch1
                 'Z' => (K::BackTab, M::NONE),
-                'a' => (K::Up, M::SHIFT), // rxvt: kind or kUP
-                'b' => (K::Down, M::SHIFT), // rxvt: kri or kDN
+                'a' => (K::Up, M::SHIFT),    // rxvt: kind or kUP
+                'b' => (K::Down, M::SHIFT),  // rxvt: kri or kDN
                 'c' => (K::Right, M::SHIFT), // rxvt
-                'd' => (K::Left, M::SHIFT), // rxvt
+                'd' => (K::Left, M::SHIFT),  // rxvt
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
                     (K::UnknownEscSeq, M::NONE)
@@ -393,11 +393,11 @@ impl PosixRawReader {
                 let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
                     self.next_char()?; // 'R' expected
-                    //('1', '0', UP) => (K::, M::), // Alt + Shift + Up
+                                       //('1', '0', UP) => (K::, M::), // Alt + Shift + Up
                     Ok((K::UnknownEscSeq, M::NONE))
                 } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
-                        (SHIFT, UP) => (K::Up, M::SHIFT), // ~ key_sr
+                        (SHIFT, UP) => (K::Up, M::SHIFT),     // ~ key_sr
                         (SHIFT, DOWN) => (K::Down, M::SHIFT), // ~ key_sf
                         (SHIFT, RIGHT) => (K::Right, M::SHIFT),
                         (SHIFT, LEFT) => (K::Left, M::SHIFT),
@@ -488,7 +488,8 @@ impl PosixRawReader {
                         (CTRL_ALT_SHIFT, 'w') => (K::Char('7'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'x') => (K::Char('8'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'y') => (K::Char('9'), M::CTRL_ALT_SHIFT),
-                        ('9', UP) => (K::Up, M::ALT), // Meta + arrow on (some?) Macs when using iTerm defaults
+                        ('9', UP) => (K::Up, M::ALT), /* Meta + arrow on (some?) Macs when using
+                                                        * iTerm defaults */
                         ('9', DOWN) => (K::Down, M::ALT),
                         ('9', RIGHT) => (K::Right, M::ALT),
                         ('9', LEFT) => (K::Left, M::ALT),
@@ -498,7 +499,7 @@ impl PosixRawReader {
                             (K::UnknownEscSeq, M::NONE)
                         }
                     })
-                } else if seq5 == '~'{
+                } else if seq5 == '~' {
                     Ok(match (seq2, seq4) {
                         (INSERT, SHIFT) => (K::Insert, M::SHIFT),
                         (INSERT, ALT) => (K::Insert, M::ALT),
@@ -583,8 +584,8 @@ impl PosixRawReader {
             LEFT => (K::Left, M::NONE),
             //'E' => (K::, M::),// key_b2, kb2
             END => (K::End, M::NONE),   // kend
-            HOME => (K::Home, M::NONE),  // khome
-            'M' => (K::Enter, M::NONE),  // kent
+            HOME => (K::Home, M::NONE), // khome
+            'M' => (K::Enter, M::NONE), // kent
             'P' => (K::F(1), M::NONE),  // kf1
             'Q' => (K::F(2), M::NONE),  // kf2
             'R' => (K::F(3), M::NONE),  // kf3
@@ -597,7 +598,7 @@ impl PosixRawReader {
             't' => (K::F(5), M::NONE),  // kf5 or kb1
             'u' => (K::F(6), M::NONE),  // kf6 or kb2
             'v' => (K::F(7), M::NONE),  // kf7 or kb3
-            'w' => (K::F(9), M::NONE), // kf9 or ka1
+            'w' => (K::F(9), M::NONE),  // kf9 or ka1
             'x' => (K::F(10), M::NONE), // kf10 or ka2
             _ => {
                 debug!(target: "rustyline", "unsupported esc sequence: \\EO{:?}", seq2);

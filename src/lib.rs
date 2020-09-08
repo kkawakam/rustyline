@@ -55,7 +55,7 @@ use crate::hint::Hinter;
 use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
-pub use crate::keys::{KeyEvent, KeyCode, Modifiers};
+pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::validate::Validator;

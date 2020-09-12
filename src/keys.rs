@@ -3,6 +3,25 @@
 /// Input key pressed and modifiers
 pub type KeyEvent = (KeyCode, Modifiers);
 
+/// ctrl-a => ctrl-A
+/// shift-A => A
+/// shift-Tab => BackTab
+pub fn normalize(e: KeyEvent) -> KeyEvent {
+    use {KeyCode as K, Modifiers as M};
+
+    match e {
+        (K::Char(c), m) if c.is_ascii_control() => char_to_key_press(c, m),
+        (K::Char(c), m) if c.is_ascii_lowercase() && m.contains(M::CTRL) => {
+            (K::Char(c.to_ascii_uppercase()), m)
+        }
+        (K::Char(c), m) if c.is_ascii_uppercase() && m.contains(M::SHIFT) => {
+            (K::Char(c), m ^ M::SHIFT)
+        }
+        (K::Tab, m) if m.contains(M::SHIFT) => (K::BackTab, m ^ M::SHIFT),
+        _ => e,
+    }
+}
+
 /// Input key pressed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -133,13 +152,27 @@ pub fn char_to_key_press(c: char, mut mods: Modifiers) -> KeyEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::{char_to_key_press, KeyCode, Modifiers};
+    use super::{KeyCode as K, Modifiers as M};
 
     #[test]
-    fn char_to_key() {
+    fn char_to_key_press() {
+        assert_eq!((K::Esc, M::NONE), super::char_to_key_press('\x1b', M::NONE));
+    }
+
+    #[test]
+    fn normalize() {
         assert_eq!(
-            (KeyCode::Esc, Modifiers::NONE),
-            char_to_key_press('\x1b', Modifiers::NONE)
+            (K::Char('A'), M::CTRL),
+            super::normalize((K::Char('\x01'), M::NONE))
         );
+        assert_eq!(
+            (K::Char('A'), M::CTRL),
+            super::normalize((K::Char('a'), M::CTRL))
+        );
+        assert_eq!(
+            (K::Char('A'), M::NONE),
+            super::normalize((K::Char('A'), M::SHIFT))
+        );
+        assert_eq!((K::BackTab, M::NONE), super::normalize((K::Tab, M::SHIFT)));
     }
 }

@@ -897,7 +897,7 @@ impl<H: Helper> Editor<H> {
     /// Bind a sequence to a command.
     pub fn bind_sequence(&mut self, key_seq: KeyEvent, cmd: Cmd) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(key_seq, cmd)
+            bindings.insert(keys::normalize(key_seq), cmd)
         } else {
             None
         }
@@ -906,7 +906,7 @@ impl<H: Helper> Editor<H> {
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence(&mut self, key_seq: KeyEvent) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.remove(&key_seq)
+            bindings.remove(&keys::normalize(key_seq))
         } else {
             None
         }

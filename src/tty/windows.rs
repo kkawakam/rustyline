@@ -198,7 +198,6 @@ impl RawReader for ConsoleRawReader {
                     return Err(error::ReadlineError::Eof);
                 };
                 let c = rc?;
-                // TODO Check Alt-A ...
                 keys::char_to_key_press(c, mods)
             };
             debug!(target: "rustyline", "key: {:?}", key);

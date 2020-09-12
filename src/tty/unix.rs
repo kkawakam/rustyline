@@ -488,8 +488,8 @@ impl PosixRawReader {
                         (CTRL_ALT_SHIFT, 'w') => (K::Char('7'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'x') => (K::Char('8'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'y') => (K::Char('9'), M::CTRL_ALT_SHIFT),
-                        ('9', UP) => (K::Up, M::ALT), /* Meta + arrow on (some?) Macs when using
-                                                        * iTerm defaults */
+                        // Meta + arrow on (some?) Macs when using iTerm defaults
+                        ('9', UP) => (K::Up, M::ALT),
                         ('9', DOWN) => (K::Down, M::ALT),
                         ('9', RIGHT) => (K::Right, M::ALT),
                         ('9', LEFT) => (K::Left, M::ALT),

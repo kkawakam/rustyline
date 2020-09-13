@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
+use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -617,7 +617,7 @@ impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
         let c = self.next_char()?;
 
-        let mut key = keys::char_to_key_event(c, M::NONE);
+        let mut key = KeyEvent::new(c, M::NONE);
         if key == E::ESC {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0

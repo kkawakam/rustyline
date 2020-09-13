@@ -12,14 +12,73 @@ impl KeyEvent {
     /// Constant value representing an unmodified press of `KeyCode::Esc`.
     pub(crate) const ESC: Self = Self(KeyCode::Esc, Modifiers::NONE);
 
+    /// Constructor from `char` and modifiers
+    pub fn new(c: char, mut mods: Modifiers) -> Self {
+        use {KeyCode as K, KeyEvent as E, Modifiers as M};
+
+        if !c.is_control() {
+            if !mods.is_empty() {
+                mods.remove(M::SHIFT); // TODO Validate: no SHIFT even if
+                                       // `c` is uppercase
+            }
+            return E(K::Char(c), mods);
+        }
+        #[allow(clippy::match_same_arms)]
+        match c {
+            '\x00' => E(K::Char(' '), mods | M::CTRL),
+            '\x01' => E(K::Char('A'), mods | M::CTRL),
+            '\x02' => E(K::Char('B'), mods | M::CTRL),
+            '\x03' => E(K::Char('C'), mods | M::CTRL),
+            '\x04' => E(K::Char('D'), mods | M::CTRL),
+            '\x05' => E(K::Char('E'), mods | M::CTRL),
+            '\x06' => E(K::Char('F'), mods | M::CTRL),
+            '\x07' => E(K::Char('G'), mods | M::CTRL),
+            '\x08' => E(K::Backspace, mods), // '\b'
+            '\x09' => {
+                // '\t'
+                if mods.contains(M::SHIFT) {
+                    mods.remove(M::SHIFT);
+                    E(K::BackTab, mods)
+                } else {
+                    E(K::Tab, mods)
+                }
+            }
+            '\x0a' => E(K::Char('J'), mods | M::CTRL), // '\n' (10)
+            '\x0b' => E(K::Char('K'), mods | M::CTRL),
+            '\x0c' => E(K::Char('L'), mods | M::CTRL),
+            '\x0d' => E(K::Enter, mods), // '\r' (13)
+            '\x0e' => E(K::Char('N'), mods | M::CTRL),
+            '\x0f' => E(K::Char('O'), mods | M::CTRL),
+            '\x10' => E(K::Char('P'), mods | M::CTRL),
+            '\x11' => E(K::Char('Q'), mods | M::CTRL),
+            '\x12' => E(K::Char('R'), mods | M::CTRL),
+            '\x13' => E(K::Char('S'), mods | M::CTRL),
+            '\x14' => E(K::Char('T'), mods | M::CTRL),
+            '\x15' => E(K::Char('U'), mods | M::CTRL),
+            '\x16' => E(K::Char('V'), mods | M::CTRL),
+            '\x17' => E(K::Char('W'), mods | M::CTRL),
+            '\x18' => E(K::Char('X'), mods | M::CTRL),
+            '\x19' => E(K::Char('Y'), mods | M::CTRL),
+            '\x1a' => E(K::Char('Z'), mods | M::CTRL),
+            '\x1b' => E(K::Esc, mods), // Ctrl-[
+            '\x1c' => E(K::Char('\\'), mods | M::CTRL),
+            '\x1d' => E(K::Char(']'), mods | M::CTRL),
+            '\x1e' => E(K::Char('^'), mods | M::CTRL),
+            '\x1f' => E(K::Char('_'), mods | M::CTRL),
+            '\x7f' => E(K::Backspace, mods), // Rubout
+            '\u{9b}' => E(K::Esc, mods | M::SHIFT),
+            _ => E(K::Null, mods),
+        }
+    }
+
     /// Constructor from `char` with Ctrl modifier
     pub fn ctrl(c: char) -> Self {
-        char_to_key_event(c, Modifiers::CTRL)
+        Self::new(c, Modifiers::CTRL)
     }
 
     /// Constructor from `char` with Alt modifier
     pub fn alt(c: char) -> Self {
-        char_to_key_event(c, Modifiers::ALT)
+        Self::new(c, Modifiers::ALT)
     }
 
     /// ctrl-a => ctrl-A (uppercase)
@@ -29,7 +88,7 @@ impl KeyEvent {
         use {KeyCode as K, KeyEvent as E, Modifiers as M};
 
         match e {
-            E(K::Char(c), m) if c.is_ascii_control() => char_to_key_event(c, m),
+            E(K::Char(c), m) if c.is_ascii_control() => Self::new(c, m),
             E(K::Char(c), m) if c.is_ascii_lowercase() && m.contains(M::CTRL) => {
                 E(K::Char(c.to_ascii_uppercase()), m)
             }
@@ -44,7 +103,7 @@ impl KeyEvent {
 
 impl From<char> for KeyEvent {
     fn from(c: char) -> Self {
-        char_to_key_event(c, Modifiers::NONE)
+        Self::new(c, Modifiers::NONE)
     }
 }
 
@@ -119,72 +178,13 @@ bitflags::bitflags! {
     }
 }
 
-#[cfg(any(windows, unix))]
-pub fn char_to_key_event(c: char, mut mods: Modifiers) -> KeyEvent {
-    use {KeyCode as K, KeyEvent as E, Modifiers as M};
-
-    if !c.is_control() {
-        if !mods.is_empty() {
-            mods.remove(M::SHIFT); // TODO Validate: no SHIFT even if
-                                   // `c` is uppercase
-        }
-        return E(K::Char(c), mods);
-    }
-    #[allow(clippy::match_same_arms)]
-    match c {
-        '\x00' => E(K::Char(' '), mods | M::CTRL),
-        '\x01' => E(K::Char('A'), mods | M::CTRL),
-        '\x02' => E(K::Char('B'), mods | M::CTRL),
-        '\x03' => E(K::Char('C'), mods | M::CTRL),
-        '\x04' => E(K::Char('D'), mods | M::CTRL),
-        '\x05' => E(K::Char('E'), mods | M::CTRL),
-        '\x06' => E(K::Char('F'), mods | M::CTRL),
-        '\x07' => E(K::Char('G'), mods | M::CTRL),
-        '\x08' => E(K::Backspace, mods), // '\b'
-        '\x09' => {
-            // '\t'
-            if mods.contains(M::SHIFT) {
-                mods.remove(M::SHIFT);
-                E(K::BackTab, mods)
-            } else {
-                E(K::Tab, mods)
-            }
-        }
-        '\x0a' => E(K::Char('J'), mods | M::CTRL), // '\n' (10)
-        '\x0b' => E(K::Char('K'), mods | M::CTRL),
-        '\x0c' => E(K::Char('L'), mods | M::CTRL),
-        '\x0d' => E(K::Enter, mods), // '\r' (13)
-        '\x0e' => E(K::Char('N'), mods | M::CTRL),
-        '\x0f' => E(K::Char('O'), mods | M::CTRL),
-        '\x10' => E(K::Char('P'), mods | M::CTRL),
-        '\x11' => E(K::Char('Q'), mods | M::CTRL),
-        '\x12' => E(K::Char('R'), mods | M::CTRL),
-        '\x13' => E(K::Char('S'), mods | M::CTRL),
-        '\x14' => E(K::Char('T'), mods | M::CTRL),
-        '\x15' => E(K::Char('U'), mods | M::CTRL),
-        '\x16' => E(K::Char('V'), mods | M::CTRL),
-        '\x17' => E(K::Char('W'), mods | M::CTRL),
-        '\x18' => E(K::Char('X'), mods | M::CTRL),
-        '\x19' => E(K::Char('Y'), mods | M::CTRL),
-        '\x1a' => E(K::Char('Z'), mods | M::CTRL),
-        '\x1b' => E(K::Esc, mods), // Ctrl-[
-        '\x1c' => E(K::Char('\\'), mods | M::CTRL),
-        '\x1d' => E(K::Char(']'), mods | M::CTRL),
-        '\x1e' => E(K::Char('^'), mods | M::CTRL),
-        '\x1f' => E(K::Char('_'), mods | M::CTRL),
-        '\x7f' => E(K::Backspace, mods), // Rubout
-        '\u{9b}' => E(K::Esc, mods | M::SHIFT),
-        _ => E(K::Null, mods),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{KeyCode as K, KeyEvent as E, Modifiers as M};
 
     #[test]
-    fn char_to_key_press() {
-        assert_eq!(E::ESC, super::char_to_key_event('\x1b', M::NONE));
+    fn new() {
+        assert_eq!(E::ESC, E::new('\x1b', M::NONE));
     }
 
     #[test]

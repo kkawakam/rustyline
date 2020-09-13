@@ -219,8 +219,7 @@ impl PosixRawReader {
             // ...
             Ok(E::ESC)
         } else {
-            // TODO ESC-R (r): Undo all changes made to this line.
-            Ok(E(K::Char(seq1), M::ALT))
+            Ok(E::alt(seq1))
         }
     }
 

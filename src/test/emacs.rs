@@ -408,7 +408,7 @@ fn meta_backspace() {
     assert_cursor(
         EditMode::Emacs,
         ("Hello, wor", "ld!"),
-        &[E(K::Char('\x08'), M::ALT), E::ENTER],
+        &[E(K::Backspace, M::ALT), E::ENTER],
         ("Hello, ", "ld!"),
     );
 }

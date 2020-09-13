@@ -520,7 +520,7 @@ impl InputState {
                     _ => Cmd::Unknown,
                 }
             }
-            E(K::Char('\x08'), M::ALT) | E(K::Char('\x7f'), M::ALT) => {
+            E(K::Backspace, M::ALT) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 } else {
@@ -553,6 +553,7 @@ impl InputState {
             }
             E(K::Char('L'), M::ALT) | E(K::Char('l'), M::ALT) => Cmd::DowncaseWord,
             E(K::Char('T'), M::ALT) | E(K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
+            // TODO ESC-R (r): Undo all changes made to this line.
             E(K::Char('U'), M::ALT) | E(K::Char('u'), M::ALT) => Cmd::UpcaseWord,
             E(K::Char('Y'), M::ALT) | E(K::Char('y'), M::ALT) => Cmd::YankPop,
             _ => self.common(rdr, key, n, positive)?,

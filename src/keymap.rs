@@ -7,7 +7,7 @@ use log::debug;
 use super::Result;
 use crate::config::Config;
 use crate::config::EditMode;
-use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
+use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::{RawReader, Term, Terminal};
 
 /// The number of times one command should be repeated.
@@ -417,7 +417,7 @@ impl InputState {
             let key = rdr.next_key(true)?;
             #[allow(clippy::cast_possible_truncation)]
             match key {
-                (K::Char(digit @ '0'..='9'), m) if m == M::NONE || m == M::ALT => {
+                E(K::Char(digit @ '0'..='9'), m) if m == M::NONE || m == M::ALT => {
                     if self.num_args == -1 {
                         self.num_args *= digit.to_digit(10).unwrap() as i16;
                     } else if self.num_args.abs() < 1000 {
@@ -428,7 +428,7 @@ impl InputState {
                             .saturating_add(digit.to_digit(10).unwrap() as i16);
                     }
                 }
-                (K::Char('-'), m) if m == M::NONE || m == M::ALT => {}
+                E(K::Char('-'), m) if m == M::NONE || m == M::ALT => {}
                 _ => {
                     wrt.refresh_line()?;
                     return Ok(key);
@@ -443,9 +443,9 @@ impl InputState {
         wrt: &mut dyn Refresher,
         mut key: KeyEvent,
     ) -> Result<Cmd> {
-        if let (K::Char(digit @ '-'), M::ALT) = key {
+        if let E(K::Char(digit @ '-'), M::ALT) = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        } else if let (K::Char(digit @ '0'..='9'), M::ALT) = key {
+        } else if let E(K::Char(digit @ '0'..='9'), M::ALT) = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
@@ -461,39 +461,39 @@ impl InputState {
             }
         }
         let cmd = match key {
-            (K::Char(c), M::NONE) => {
+            E(K::Char(c), M::NONE) => {
                 if positive {
                     Cmd::SelfInsert(n, c)
                 } else {
                     Cmd::Unknown
                 }
             }
-            (K::Char('A'), M::CTRL) => Cmd::Move(Movement::BeginningOfLine),
-            (K::Char('B'), M::CTRL) => {
+            E(K::Char('A'), M::CTRL) => Cmd::Move(Movement::BeginningOfLine),
+            E(K::Char('B'), M::CTRL) => {
                 if positive {
                     Cmd::Move(Movement::BackwardChar(n))
                 } else {
                     Cmd::Move(Movement::ForwardChar(n))
                 }
             }
-            (K::Char('E'), M::CTRL) => Cmd::Move(Movement::EndOfLine),
-            (K::Char('F'), M::CTRL) => {
+            E(K::Char('E'), M::CTRL) => Cmd::Move(Movement::EndOfLine),
+            E(K::Char('F'), M::CTRL) => {
                 if positive {
                     Cmd::Move(Movement::ForwardChar(n))
                 } else {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            (K::Char('G'), M::CTRL) | (K::Esc, M::NONE) | (K::Char('\x07'), M::ALT) => Cmd::Abort,
-            (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => {
+            E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('\x07'), M::ALT) => Cmd::Abort,
+            E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 if positive {
                     Cmd::Kill(Movement::BackwardChar(n))
                 } else {
                     Cmd::Kill(Movement::ForwardChar(n))
                 }
             }
-            (K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            (K::Tab, M::NONE) => {
+            E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
+            E(K::Tab, M::NONE) => {
                 if positive {
                     Cmd::Complete
                 } else {
@@ -501,60 +501,60 @@ impl InputState {
                 }
             }
             // Don't complete hints when the cursor is not at the end of a line
-            (K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
-            (K::Char('K'), M::CTRL) => {
+            E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            E(K::Char('K'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::EndOfLine)
                 } else {
                     Cmd::Kill(Movement::BeginningOfLine)
                 }
             }
-            (K::Char('L'), M::CTRL) => Cmd::ClearScreen,
-            (K::Char('N'), M::CTRL) => Cmd::NextHistory,
-            (K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
-            (K::Char('X'), M::CTRL) => {
+            E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
+            E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
+            E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
+            E(K::Char('X'), M::CTRL) => {
                 let snd_key = rdr.next_key(true)?;
                 match snd_key {
-                    (K::Char('G'), M::CTRL) | (K::Esc, M::NONE) => Cmd::Abort,
-                    (K::Char('U'), M::CTRL) => Cmd::Undo(n),
+                    E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
+                    E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
                     _ => Cmd::Unknown,
                 }
             }
-            (K::Char('\x08'), M::ALT) | (K::Char('\x7f'), M::ALT) => {
+            E(K::Char('\x08'), M::ALT) | E(K::Char('\x7f'), M::ALT) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
-            (K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
-            (K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            (K::Char('B'), M::ALT) | (K::Char('b'), M::ALT) => {
+            E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
+            E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
+            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 }
             }
-            (K::Char('C'), M::ALT) | (K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            (K::Char('D'), M::ALT) | (K::Char('d'), M::ALT) => {
+            E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
+            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            (K::Char('F'), M::ALT) | (K::Char('f'), M::ALT) => {
+            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            (K::Char('L'), M::ALT) | (K::Char('l'), M::ALT) => Cmd::DowncaseWord,
-            (K::Char('T'), M::ALT) | (K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
-            (K::Char('U'), M::ALT) | (K::Char('u'), M::ALT) => Cmd::UpcaseWord,
-            (K::Char('Y'), M::ALT) | (K::Char('y'), M::ALT) => Cmd::YankPop,
+            E(K::Char('L'), M::ALT) | E(K::Char('l'), M::ALT) => Cmd::DowncaseWord,
+            E(K::Char('T'), M::ALT) | E(K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
+            E(K::Char('U'), M::ALT) | E(K::Char('u'), M::ALT) => Cmd::UpcaseWord,
+            E(K::Char('Y'), M::ALT) | E(K::Char('y'), M::ALT) => Cmd::YankPop,
             _ => self.common(rdr, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
@@ -572,7 +572,7 @@ impl InputState {
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(false)?;
-            if let (K::Char(digit @ '0'..='9'), M::NONE) = key {
+            if let E(K::Char(digit @ '0'..='9'), M::NONE) = key {
                 if self.num_args.abs() < 1000 {
                     // shouldn't ever need more than 4 digits
                     self.num_args = self
@@ -593,7 +593,7 @@ impl InputState {
         wrt: &mut dyn Refresher,
         mut key: KeyEvent,
     ) -> Result<Cmd> {
-        if let (K::Char(digit @ '1'..='9'), M::NONE) = key {
+        if let E(K::Char(digit @ '1'..='9'), M::NONE) = key {
             key = self.vi_arg_digit(rdr, wrt, digit)?;
         }
         let no_num_args = self.num_args == 0;
@@ -614,8 +614,8 @@ impl InputState {
             }
         }
         let cmd = match key {
-            (K::Char('$'), M::NONE) | (K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
-            (K::Char('.'), M::NONE) => {
+            E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
+            E(K::Char('.'), M::NONE) => {
                 // vi-redo (repeat last command)
                 if no_num_args {
                     self.last_cmd.redo(None, wrt)
@@ -623,57 +623,59 @@ impl InputState {
                     self.last_cmd.redo(Some(n), wrt)
                 }
             }
-            // TODO (K::Char('%'), M::NONE) => Cmd::???, Move to the corresponding opening/closing
+            // TODO E(K::Char('%'), M::NONE) => Cmd::???, Move to the corresponding opening/closing
             // bracket
-            (K::Char('0'), M::NONE) => Cmd::Move(Movement::BeginningOfLine),
-            (K::Char('^'), M::NONE) => Cmd::Move(Movement::ViFirstPrint),
-            (K::Char('a'), M::NONE) => {
+            E(K::Char('0'), M::NONE) => Cmd::Move(Movement::BeginningOfLine),
+            E(K::Char('^'), M::NONE) => Cmd::Move(Movement::ViFirstPrint),
+            E(K::Char('a'), M::NONE) => {
                 // vi-append-mode
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::ForwardChar(n))
             }
-            (K::Char('A'), M::NONE) => {
+            E(K::Char('A'), M::NONE) => {
                 // vi-append-eol
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::EndOfLine)
             }
-            (K::Char('b'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), /* vi-prev-word */
-            (K::Char('B'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
-            (K::Char('c'), M::NONE) => {
+            E(K::Char('b'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), /* vi-prev-word */
+            E(K::Char('B'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Big)),
+            E(K::Char('c'), M::NONE) => {
                 self.input_mode = InputMode::Insert;
                 match self.vi_cmd_motion(rdr, wrt, key, n)? {
                     Some(mvt) => Cmd::Replace(mvt, None),
                     None => Cmd::Unknown,
                 }
             }
-            (K::Char('C'), M::NONE) => {
+            E(K::Char('C'), M::NONE) => {
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::EndOfLine, None)
             }
-            (K::Char('d'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+            E(K::Char('d'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
                 Some(mvt) => Cmd::Kill(mvt),
                 None => Cmd::Unknown,
             },
-            (K::Char('D'), M::NONE) | (K::Char('K'), M::CTRL) => Cmd::Kill(Movement::EndOfLine),
-            (K::Char('e'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Vi)),
-            (K::Char('E'), M::NONE) => {
+            E(K::Char('D'), M::NONE) | E(K::Char('K'), M::CTRL) => Cmd::Kill(Movement::EndOfLine),
+            E(K::Char('e'), M::NONE) => {
+                Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Vi))
+            }
+            E(K::Char('E'), M::NONE) => {
                 Cmd::Move(Movement::ForwardWord(n, At::BeforeEnd, Word::Big))
             }
-            (K::Char('i'), M::NONE) => {
+            E(K::Char('i'), M::NONE) => {
                 // vi-insertion-mode
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Noop
             }
-            (K::Char('I'), M::NONE) => {
+            E(K::Char('I'), M::NONE) => {
                 // vi-insert-beg
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::BeginningOfLine)
             }
-            (K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
+            E(K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 // vi-char-search
                 let cs = self.vi_char_search(rdr, c)?;
                 match cs {
@@ -681,76 +683,76 @@ impl InputState {
                     None => Cmd::Unknown,
                 }
             }
-            (K::Char(';'), M::NONE) => match self.last_char_search {
+            E(K::Char(';'), M::NONE) => match self.last_char_search {
                 Some(cs) => Cmd::Move(Movement::ViCharSearch(n, cs)),
                 None => Cmd::Noop,
             },
-            (K::Char(','), M::NONE) => match self.last_char_search {
+            E(K::Char(','), M::NONE) => match self.last_char_search {
                 Some(ref cs) => Cmd::Move(Movement::ViCharSearch(n, cs.opposite())),
                 None => Cmd::Noop,
             },
-            // TODO (K::Char('G'), M::NONE) => Cmd::???, Move to the history line n
-            (K::Char('p'), M::NONE) => Cmd::Yank(n, Anchor::After), // vi-put
-            (K::Char('P'), M::NONE) => Cmd::Yank(n, Anchor::Before), // vi-put
-            (K::Char('r'), M::NONE) => {
+            // TODO E(K::Char('G'), M::NONE) => Cmd::???, Move to the history line n
+            E(K::Char('p'), M::NONE) => Cmd::Yank(n, Anchor::After), // vi-put
+            E(K::Char('P'), M::NONE) => Cmd::Yank(n, Anchor::Before), // vi-put
+            E(K::Char('r'), M::NONE) => {
                 // vi-replace-char:
                 let ch = rdr.next_key(false)?;
                 match ch {
-                    (K::Char(c), M::NONE) => Cmd::ReplaceChar(n, c),
-                    (K::Esc, M::NONE) => Cmd::Noop,
+                    E(K::Char(c), M::NONE) => Cmd::ReplaceChar(n, c),
+                    E::ESC => Cmd::Noop,
                     _ => Cmd::Unknown,
                 }
             }
-            (K::Char('R'), M::NONE) => {
+            E(K::Char('R'), M::NONE) => {
                 //  vi-replace-mode (overwrite-mode)
                 self.input_mode = InputMode::Replace;
                 Cmd::Replace(Movement::ForwardChar(0), None)
             }
-            (K::Char('s'), M::NONE) => {
+            E(K::Char('s'), M::NONE) => {
                 // vi-substitute-char:
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::ForwardChar(n), None)
             }
-            (K::Char('S'), M::NONE) => {
+            E(K::Char('S'), M::NONE) => {
                 // vi-substitute-line:
                 self.input_mode = InputMode::Insert;
                 Cmd::Replace(Movement::WholeLine, None)
             }
-            (K::Char('u'), M::NONE) => Cmd::Undo(n),
-            // (K::Char('U'), M::NONE) => Cmd::???, // revert-line
-            (K::Char('w'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), /* vi-next-word */
-            (K::Char('W'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), /* vi-next-word */
+            E(K::Char('u'), M::NONE) => Cmd::Undo(n),
+            // E(K::Char('U'), M::NONE) => Cmd::???, // revert-line
+            E(K::Char('w'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Vi)), /* vi-next-word */
+            E(K::Char('W'), M::NONE) => Cmd::Move(Movement::ForwardWord(n, At::Start, Word::Big)), /* vi-next-word */
             // TODO move backward if eol
-            (K::Char('x'), M::NONE) => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete
-            (K::Char('X'), M::NONE) => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
-            (K::Char('y'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+            E(K::Char('x'), M::NONE) => Cmd::Kill(Movement::ForwardChar(n)), // vi-delete
+            E(K::Char('X'), M::NONE) => Cmd::Kill(Movement::BackwardChar(n)), // vi-rubout
+            E(K::Char('y'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
                 Some(mvt) => Cmd::ViYankTo(mvt),
                 None => Cmd::Unknown,
             },
-            // (K::Char('Y'), M::NONE) => Cmd::???, // vi-yank-to
-            (K::Char('h'), M::NONE) | (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => {
+            // E(K::Char('Y'), M::NONE) => Cmd::???, // vi-yank-to
+            E(K::Char('h'), M::NONE) | E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 Cmd::Move(Movement::BackwardChar(n))
             }
-            (K::Char('G'), M::CTRL) => Cmd::Abort,
-            (K::Char('l'), M::NONE) | (K::Char(' '), M::NONE) => {
+            E(K::Char('G'), M::CTRL) => Cmd::Abort,
+            E(K::Char('l'), M::NONE) | E(K::Char(' '), M::NONE) => {
                 Cmd::Move(Movement::ForwardChar(n))
             }
-            (K::Char('L'), M::CTRL) => Cmd::ClearScreen,
-            (K::Char('+'), M::NONE) | (K::Char('j'), M::NONE) => Cmd::LineDownOrNextHistory(n),
+            E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
+            E(K::Char('+'), M::NONE) | E(K::Char('j'), M::NONE) => Cmd::LineDownOrNextHistory(n),
             // TODO: move to the start of the line.
-            (K::Char('N'), M::CTRL) => Cmd::NextHistory,
-            (K::Char('-'), M::NONE) | (K::Char('k'), M::NONE) => Cmd::LineUpOrPreviousHistory(n),
+            E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
+            E(K::Char('-'), M::NONE) | E(K::Char('k'), M::NONE) => Cmd::LineUpOrPreviousHistory(n),
             // TODO: move to the start of the line.
-            (K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
-            (K::Char('R'), M::CTRL) => {
+            E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
+            E(K::Char('R'), M::CTRL) => {
                 self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ReverseSearchHistory
             }
-            (K::Char('S'), M::CTRL) => {
+            E(K::Char('S'), M::CTRL) => {
                 self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ForwardSearchHistory
             }
-            (K::Esc, M::NONE) => Cmd::Noop,
+            E::ESC => Cmd::Noop,
             _ => self.common(rdr, key, n, true)?,
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
@@ -778,28 +780,26 @@ impl InputState {
             }
         }
         let cmd = match key {
-            (K::Char(c), M::NONE) => {
+            E(K::Char(c), M::NONE) => {
                 if self.input_mode == InputMode::Replace {
                     Cmd::Overwrite(c)
                 } else {
                     Cmd::SelfInsert(1, c)
                 }
             }
-            (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => {
-                Cmd::Kill(Movement::BackwardChar(1))
-            }
-            (K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            (K::Tab, M::NONE) => Cmd::Complete,
+            E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(Movement::BackwardChar(1)),
+            E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
+            E(K::Tab, M::NONE) => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
-            (K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
-            (K::Char(k), M::ALT) => {
+            E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            E(K::Char(k), M::ALT) => {
                 debug!(target: "rustyline", "Vi fast command mode: {}", k);
                 self.input_mode = InputMode::Command;
                 wrt.done_inserting();
 
-                self.vi_command(rdr, wrt, (K::Char(k), M::NONE))?
+                self.vi_command(rdr, wrt, E(K::Char(k), M::NONE))?
             }
-            (K::Esc, M::NONE) => {
+            E::ESC => {
                 // vi-movement-mode/vi-command-mode
                 self.input_mode = InputMode::Command;
                 wrt.done_inserting();
@@ -832,51 +832,51 @@ impl InputState {
             return Ok(Some(Movement::WholeLine));
         }
         let mut n = n;
-        if let (K::Char(digit @ '1'..='9'), M::NONE) = mvt {
+        if let E(K::Char(digit @ '1'..='9'), M::NONE) = mvt {
             // vi-arg-digit
             mvt = self.vi_arg_digit(rdr, wrt, digit)?;
             n = self.vi_num_args().saturating_mul(n);
         }
         Ok(match mvt {
-            (K::Char('$'), M::NONE) => Some(Movement::EndOfLine),
-            (K::Char('0'), M::NONE) => Some(Movement::BeginningOfLine),
-            (K::Char('^'), M::NONE) => Some(Movement::ViFirstPrint),
-            (K::Char('b'), M::NONE) => Some(Movement::BackwardWord(n, Word::Vi)),
-            (K::Char('B'), M::NONE) => Some(Movement::BackwardWord(n, Word::Big)),
-            (K::Char('e'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
-            (K::Char('E'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
-            (K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
+            E(K::Char('$'), M::NONE) => Some(Movement::EndOfLine),
+            E(K::Char('0'), M::NONE) => Some(Movement::BeginningOfLine),
+            E(K::Char('^'), M::NONE) => Some(Movement::ViFirstPrint),
+            E(K::Char('b'), M::NONE) => Some(Movement::BackwardWord(n, Word::Vi)),
+            E(K::Char('B'), M::NONE) => Some(Movement::BackwardWord(n, Word::Big)),
+            E(K::Char('e'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi)),
+            E(K::Char('E'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
+            E(K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = self.vi_char_search(rdr, c)?;
                 match cs {
                     Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                     None => None,
                 }
             }
-            (K::Char(';'), M::NONE) => match self.last_char_search {
+            E(K::Char(';'), M::NONE) => match self.last_char_search {
                 Some(cs) => Some(Movement::ViCharSearch(n, cs)),
                 None => None,
             },
-            (K::Char(','), M::NONE) => match self.last_char_search {
+            E(K::Char(','), M::NONE) => match self.last_char_search {
                 Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
                 None => None,
             },
-            (K::Char('h'), M::NONE) | (K::Char('H'), M::CTRL) | (K::Backspace, M::NONE) => {
+            E(K::Char('h'), M::NONE) | E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 Some(Movement::BackwardChar(n))
             }
-            (K::Char('l'), M::NONE) | (K::Char(' '), M::NONE) => Some(Movement::ForwardChar(n)),
-            (K::Char('j'), M::NONE) | (K::Char('+'), M::NONE) => Some(Movement::LineDown(n)),
-            (K::Char('k'), M::NONE) | (K::Char('-'), M::NONE) => Some(Movement::LineUp(n)),
-            (K::Char('w'), M::NONE) => {
+            E(K::Char('l'), M::NONE) | E(K::Char(' '), M::NONE) => Some(Movement::ForwardChar(n)),
+            E(K::Char('j'), M::NONE) | E(K::Char('+'), M::NONE) => Some(Movement::LineDown(n)),
+            E(K::Char('k'), M::NONE) | E(K::Char('-'), M::NONE) => Some(Movement::LineUp(n)),
+            E(K::Char('w'), M::NONE) => {
                 // 'cw' is 'ce'
-                if key == (K::Char('c'), M::NONE) {
+                if key == E(K::Char('c'), M::NONE) {
                     Some(Movement::ForwardWord(n, At::AfterEnd, Word::Vi))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Vi))
                 }
             }
-            (K::Char('W'), M::NONE) => {
+            E(K::Char('W'), M::NONE) => {
                 // 'cW' is 'cE'
-                if key == (K::Char('c'), M::NONE) {
+                if key == E(K::Char('c'), M::NONE) {
                     Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 } else {
                     Some(Movement::ForwardWord(n, At::Start, Word::Big))
@@ -893,7 +893,7 @@ impl InputState {
     ) -> Result<Option<CharSearch>> {
         let ch = rdr.next_key(false)?;
         Ok(match ch {
-            (K::Char(ch), M::NONE) => {
+            E(K::Char(ch), M::NONE) => {
                 let cs = match cmd {
                     'f' => CharSearch::Forward(ch),
                     't' => CharSearch::ForwardBefore(ch),
@@ -916,65 +916,65 @@ impl InputState {
         positive: bool,
     ) -> Result<Cmd> {
         Ok(match key {
-            (K::Home, M::NONE) => Cmd::Move(Movement::BeginningOfLine),
-            (K::Left, M::NONE) => {
+            E(K::Home, M::NONE) => Cmd::Move(Movement::BeginningOfLine),
+            E(K::Left, M::NONE) => {
                 if positive {
                     Cmd::Move(Movement::BackwardChar(n))
                 } else {
                     Cmd::Move(Movement::ForwardChar(n))
                 }
             }
-            (K::Char('C'), M::CTRL) => Cmd::Interrupt,
-            (K::Char('D'), M::CTRL) => Cmd::EndOfFile,
-            (K::Delete, M::NONE) => {
+            E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
+            E(K::Char('D'), M::CTRL) => Cmd::EndOfFile,
+            E(K::Delete, M::NONE) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardChar(n))
                 } else {
                     Cmd::Kill(Movement::BackwardChar(n))
                 }
             }
-            (K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
-            (K::Right, M::NONE) => {
+            E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
+            E(K::Right, M::NONE) => {
                 if positive {
                     Cmd::Move(Movement::ForwardChar(n))
                 } else {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            (K::Char('J'), M::CTRL) |
-            (K::Enter, M::NONE) => Cmd::AcceptLine,
-            (K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
-            (K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
-            (K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
-            (K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
-            (K::Char('T'), M::CTRL) => Cmd::TransposeChars,
-            (K::Char('U'), M::CTRL) => {
+            E(K::Char('J'), M::CTRL) |
+            E::ENTER => Cmd::AcceptLine,
+            E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
+            E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
+            E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
+            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            E(K::Char('T'), M::CTRL) => Cmd::TransposeChars,
+            E(K::Char('U'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BeginningOfLine)
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
             },
-            (K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
-            (K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
-            (K::Char('W'), M::CTRL) => {
+            E(K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
+            E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
+            E(K::Char('W'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
                 } else {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
                 }
             }
-            (K::Char('Y'), M::CTRL) => {
+            E(K::Char('Y'), M::CTRL) => {
                 if positive {
                     Cmd::Yank(n, Anchor::Before)
                 } else {
                     Cmd::Unknown // TODO Validate
                 }
             }
-            (K::Char('Z'), M::CTRL) => Cmd::Suspend,
-            (K::Char('_'), M::CTRL) => Cmd::Undo(n),
-            (K::UnknownEscSeq, M::NONE) => Cmd::Noop,
-            (K::BracketedPasteStart, M::NONE) => {
+            E(K::Char('Z'), M::CTRL) => Cmd::Suspend,
+            E(K::Char('_'), M::CTRL) => Cmd::Undo(n),
+            E(K::UnknownEscSeq, M::NONE) => Cmd::Noop,
+            E(K::BracketedPasteStart, M::NONE) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
             },

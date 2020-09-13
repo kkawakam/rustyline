@@ -8,7 +8,7 @@ use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
-use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
+use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
 use crate::{Context, Editor, Helper, Result};
@@ -59,7 +59,7 @@ fn complete_line() {
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
     let mut input_state = InputState::new(&config, Arc::new(RwLock::new(HashMap::new())));
-    let keys = vec![(K::Enter, M::NONE)];
+    let keys = vec![E::ENTER];
     let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
     let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();
     assert_eq!(Some(Cmd::AcceptLine), cmd);
@@ -123,11 +123,7 @@ fn assert_history(
 #[test]
 fn unknown_esc_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_line(
-            *mode,
-            &[(K::UnknownEscSeq, M::NONE), (K::Enter, M::NONE)],
-            "",
-        );
+        assert_line(*mode, &[E(K::UnknownEscSeq, M::NONE), E::ENTER], "");
     }
 }
 

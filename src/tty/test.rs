@@ -48,9 +48,9 @@ impl RawReader for IntoIter<KeyEvent> {
 
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char> {
-        use crate::keys::{KeyCode as K, Modifiers as M};
+        use crate::keys::{KeyCode as K, KeyEvent as E, Modifiers as M};
         match self.next() {
-            Some((K::Char(c), M::NONE)) => Ok(c),
+            Some(E(K::Char(c), M::NONE)) => Ok(c),
             None => Err(ReadlineError::Eof),
             _ => unimplemented!(),
         }

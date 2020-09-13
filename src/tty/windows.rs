@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyCode as K, KeyEvent, Modifiers as M};
+use crate::keys::{self, KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -181,7 +181,7 @@ impl RawReader for ConsoleRawReader {
                     mods,
                 )
             } else if utf16 == 27 {
-                (K::Esc, mods)
+                E(K::Esc, mods)
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -198,7 +198,7 @@ impl RawReader for ConsoleRawReader {
                     return Err(error::ReadlineError::Eof);
                 };
                 let c = rc?;
-                keys::char_to_key_press(c, mods)
+                keys::char_to_key_event(c, mods)
             };
             debug!(target: "rustyline", "key: {:?}", key);
             return Ok(key);

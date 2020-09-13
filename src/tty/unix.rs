@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyCode as K, KeyEvent, Modifiers as M};
+use crate::keys::{self, KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -217,10 +217,10 @@ impl PosixRawReader {
             // \E\E[C => Alt-Right
             // \E\E[D => Alt-Left
             // ...
-            Ok((K::Esc, M::NONE))
+            Ok(E::ESC)
         } else {
             // TODO ESC-R (r): Undo all changes made to this line.
-            Ok((K::Char(seq1), M::ALT))
+            Ok(E(K::Char(seq1), M::ALT))
         }
     }
 
@@ -231,7 +231,7 @@ impl PosixRawReader {
             match seq2 {
                 '0' | '9' => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
-                    Ok((K::UnknownEscSeq, M::NONE))
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
                 _ => {
                     // Extended escape, read additional byte.
@@ -242,40 +242,40 @@ impl PosixRawReader {
             let seq3 = self.next_char()?;
             // Linux console
             Ok(match seq3 {
-                'A' => (K::F(1), M::NONE),
-                'B' => (K::F(2), M::NONE),
-                'C' => (K::F(3), M::NONE),
-                'D' => (K::F(4), M::NONE),
-                'E' => (K::F(5), M::NONE),
+                'A' => E(K::F(1), M::NONE),
+                'B' => E(K::F(2), M::NONE),
+                'C' => E(K::F(3), M::NONE),
+                'D' => E(K::F(4), M::NONE),
+                'E' => E(K::F(5), M::NONE),
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[[{:?}", seq3);
-                    (K::UnknownEscSeq, M::NONE)
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         } else {
             // ANSI
             Ok(match seq2 {
-                UP => (K::Up, M::NONE),
-                DOWN => (K::Down, M::NONE),
-                RIGHT => (K::Right, M::NONE),
-                LEFT => (K::Left, M::NONE),
-                //'E' => (K::, M::), // Ignore
-                END => (K::End, M::NONE),
-                //'G' => (K::, M::), // Ignore
-                HOME => (K::Home, M::NONE), // khome
-                //'J' => (K::, M::), // clr_eos
-                //'K' => (K::, M::), // clr_eol
-                //'L' => (K::, M::), // il1
-                //'M' => (K::, M::), // kmous
-                //'P' => (K::Delete, M::NONE), // dch1
-                'Z' => (K::BackTab, M::NONE),
-                'a' => (K::Up, M::SHIFT),    // rxvt: kind or kUP
-                'b' => (K::Down, M::SHIFT),  // rxvt: kri or kDN
-                'c' => (K::Right, M::SHIFT), // rxvt
-                'd' => (K::Left, M::SHIFT),  // rxvt
+                UP => E(K::Up, M::NONE),
+                DOWN => E(K::Down, M::NONE),
+                RIGHT => E(K::Right, M::NONE),
+                LEFT => E(K::Left, M::NONE),
+                //'E' => E(K::, M::), // Ignore
+                END => E(K::End, M::NONE),
+                //'G' => E(K::, M::), // Ignore
+                HOME => E(K::Home, M::NONE), // khome
+                //'J' => E(K::, M::), // clr_eos
+                //'K' => E(K::, M::), // clr_eol
+                //'L' => E(K::, M::), // il1
+                //'M' => E(K::, M::), // kmous
+                //'P' => E(K::Delete, M::NONE), // dch1
+                'Z' => E(K::BackTab, M::NONE),
+                'a' => E(K::Up, M::SHIFT),    // rxvt: kind or kUP
+                'b' => E(K::Down, M::SHIFT),  // rxvt: kri or kDN
+                'c' => E(K::Right, M::SHIFT), // rxvt
+                'd' => E(K::Left, M::SHIFT),  // rxvt
                 _ => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
-                    (K::UnknownEscSeq, M::NONE)
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         }
@@ -287,40 +287,40 @@ impl PosixRawReader {
         let seq3 = self.next_char()?;
         if seq3 == '~' {
             Ok(match seq2 {
-                '1' | RXVT_HOME => (K::Home, M::NONE), // tmux, xrvt
-                INSERT => (K::Insert, M::NONE),
-                DELETE => (K::Delete, M::NONE),
-                '4' | RXVT_END => (K::End, M::NONE), // tmux, xrvt
-                PAGE_UP => (K::PageUp, M::NONE),
-                PAGE_DOWN => (K::PageDown, M::NONE),
+                '1' | RXVT_HOME => E(K::Home, M::NONE), // tmux, xrvt
+                INSERT => E(K::Insert, M::NONE),
+                DELETE => E(K::Delete, M::NONE),
+                '4' | RXVT_END => E(K::End, M::NONE), // tmux, xrvt
+                PAGE_UP => E(K::PageUp, M::NONE),
+                PAGE_DOWN => E(K::PageDown, M::NONE),
                 _ => {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}~", seq2);
-                    (K::UnknownEscSeq, M::NONE)
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         } else if seq3.is_digit(10) {
             let seq4 = self.next_char()?;
             if seq4 == '~' {
                 Ok(match (seq2, seq3) {
-                    ('1', '1') => (K::F(1), M::NONE),  // rxvt-unicode
-                    ('1', '2') => (K::F(2), M::NONE),  // rxvt-unicode
-                    ('1', '3') => (K::F(3), M::NONE),  // rxvt-unicode
-                    ('1', '4') => (K::F(4), M::NONE),  // rxvt-unicode
-                    ('1', '5') => (K::F(5), M::NONE),  // kf5
-                    ('1', '7') => (K::F(6), M::NONE),  // kf6
-                    ('1', '8') => (K::F(7), M::NONE),  // kf7
-                    ('1', '9') => (K::F(8), M::NONE),  // kf8
-                    ('2', '0') => (K::F(9), M::NONE),  // kf9
-                    ('2', '1') => (K::F(10), M::NONE), // kf10
-                    ('2', '3') => (K::F(11), M::NONE), // kf11
-                    ('2', '4') => (K::F(12), M::NONE), // kf12
+                    ('1', '1') => E(K::F(1), M::NONE),  // rxvt-unicode
+                    ('1', '2') => E(K::F(2), M::NONE),  // rxvt-unicode
+                    ('1', '3') => E(K::F(3), M::NONE),  // rxvt-unicode
+                    ('1', '4') => E(K::F(4), M::NONE),  // rxvt-unicode
+                    ('1', '5') => E(K::F(5), M::NONE),  // kf5
+                    ('1', '7') => E(K::F(6), M::NONE),  // kf6
+                    ('1', '8') => E(K::F(7), M::NONE),  // kf7
+                    ('1', '9') => E(K::F(8), M::NONE),  // kf8
+                    ('2', '0') => E(K::F(9), M::NONE),  // kf9
+                    ('2', '1') => E(K::F(10), M::NONE), // kf10
+                    ('2', '3') => E(K::F(11), M::NONE), // kf11
+                    ('2', '4') => E(K::F(12), M::NONE), // kf12
                     //('6', '2') => KeyCode::ScrollUp,
                     //('6', '3') => KeyCode::ScrollDown,
                     _ => {
                         debug!(target: "rustyline",
                                "unsupported esc sequence: \\E[{}{}~", seq2, seq3);
-                        (K::UnknownEscSeq, M::NONE)
+                        E(K::UnknownEscSeq, M::NONE)
                     }
                 })
             } else if seq4 == ';' {
@@ -329,63 +329,63 @@ impl PosixRawReader {
                     let seq6 = self.next_char()?;
                     if seq6.is_digit(10) {
                         self.next_char()?; // 'R' expected
-                        Ok((K::UnknownEscSeq, M::NONE))
+                        Ok(E(K::UnknownEscSeq, M::NONE))
                     } else if seq6 == 'R' {
-                        Ok((K::UnknownEscSeq, M::NONE))
+                        Ok(E(K::UnknownEscSeq, M::NONE))
                     } else if seq6 == '~' {
                         Ok(match (seq2, seq3, seq5) {
-                            ('1', '5', CTRL) => (K::F(5), M::CTRL),
-                            //('1', '5', '6') => (K::F(17), M::CTRL),
-                            ('1', '7', CTRL) => (K::F(6), M::CTRL),
-                            //('1', '7', '6') => (K::F(18), M::CTRL),
-                            ('1', '8', CTRL) => (K::F(7), M::CTRL),
-                            ('1', '9', CTRL) => (K::F(8), M::CTRL),
-                            //('1', '9', '6') => (K::F(19), M::CTRL),
-                            ('2', '0', CTRL) => (K::F(9), M::CTRL),
-                            //('2', '0', '6') => (K::F(21), M::CTRL),
-                            ('2', '1', CTRL) => (K::F(10), M::CTRL),
-                            //('2', '1', '6') => (K::F(22), M::CTRL),
-                            ('2', '3', CTRL) => (K::F(11), M::CTRL),
-                            //('2', '3', '6') => (K::F(23), M::CTRL),
-                            ('2', '4', CTRL) => (K::F(12), M::CTRL),
-                            //('2', '4', '6') => (K::F(24), M::CTRL),
+                            ('1', '5', CTRL) => E(K::F(5), M::CTRL),
+                            //('1', '5', '6') => E(K::F(17), M::CTRL),
+                            ('1', '7', CTRL) => E(K::F(6), M::CTRL),
+                            //('1', '7', '6') => E(K::F(18), M::CTRL),
+                            ('1', '8', CTRL) => E(K::F(7), M::CTRL),
+                            ('1', '9', CTRL) => E(K::F(8), M::CTRL),
+                            //('1', '9', '6') => E(K::F(19), M::CTRL),
+                            ('2', '0', CTRL) => E(K::F(9), M::CTRL),
+                            //('2', '0', '6') => E(K::F(21), M::CTRL),
+                            ('2', '1', CTRL) => E(K::F(10), M::CTRL),
+                            //('2', '1', '6') => E(K::F(22), M::CTRL),
+                            ('2', '3', CTRL) => E(K::F(11), M::CTRL),
+                            //('2', '3', '6') => E(K::F(23), M::CTRL),
+                            ('2', '4', CTRL) => E(K::F(12), M::CTRL),
+                            //('2', '4', '6') => E(K::F(24), M::CTRL),
                             _ => {
                                 debug!(target: "rustyline",
                                        "unsupported esc sequence: \\E[{}{};{}~", seq2, seq3, seq5);
-                                (K::UnknownEscSeq, M::NONE)
+                                E(K::UnknownEscSeq, M::NONE)
                             }
                         })
                     } else {
                         debug!(target: "rustyline",
                                "unsupported esc sequence: \\E[{}{};{}{}", seq2, seq3, seq5, seq6);
-                        Ok((K::UnknownEscSeq, M::NONE))
+                        Ok(E(K::UnknownEscSeq, M::NONE))
                     }
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}{};{:?}", seq2, seq3, seq5);
-                    Ok((K::UnknownEscSeq, M::NONE))
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else if seq4.is_digit(10) {
                 let seq5 = self.next_char()?;
                 if seq5 == '~' {
                     Ok(match (seq2, seq3, seq4) {
-                        ('2', '0', '0') => (K::BracketedPasteStart, M::NONE),
-                        ('2', '0', '1') => (K::BracketedPasteEnd, M::NONE),
+                        ('2', '0', '0') => E(K::BracketedPasteStart, M::NONE),
+                        ('2', '0', '1') => E(K::BracketedPasteEnd, M::NONE),
                         _ => {
                             debug!(target: "rustyline",
                                    "unsupported esc sequence: \\E[{}{}{}~", seq2, seq3, seq4);
-                            (K::UnknownEscSeq, M::NONE)
+                            E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}{}{}{}", seq2, seq3, seq4, seq5);
-                    Ok((K::UnknownEscSeq, M::NONE))
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
                        "unsupported esc sequence: \\E[{}{}{:?}", seq2, seq3, seq4);
-                Ok((K::UnknownEscSeq, M::NONE))
+                Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else if seq3 == ';' {
             let seq4 = self.next_char()?;
@@ -393,182 +393,182 @@ impl PosixRawReader {
                 let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
                     self.next_char()?; // 'R' expected
-                                       //('1', '0', UP) => (K::, M::), // Alt + Shift + Up
-                    Ok((K::UnknownEscSeq, M::NONE))
+                                       //('1', '0', UP) => E(K::, M::), // Alt + Shift + Up
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
-                        (SHIFT, UP) => (K::Up, M::SHIFT),     // ~ key_sr
-                        (SHIFT, DOWN) => (K::Down, M::SHIFT), // ~ key_sf
-                        (SHIFT, RIGHT) => (K::Right, M::SHIFT),
-                        (SHIFT, LEFT) => (K::Left, M::SHIFT),
-                        (SHIFT, END) => (K::End, M::SHIFT), // kEND
-                        (SHIFT, HOME) => (K::Home, M::SHIFT), // kHOM
-                        //('2', 'P') => (K::F(13), M::NONE),
-                        //('2', 'Q') => (K::F(14), M::NONE),
-                        //('2', 'S') => (K::F(16), M::NONE),
-                        (ALT, UP) => (K::Up, M::ALT),
-                        (ALT, DOWN) => (K::Down, M::ALT),
-                        (ALT, RIGHT) => (K::Right, M::ALT),
-                        (ALT, LEFT) => (K::Left, M::ALT),
-                        (ALT, END) => (K::End, M::ALT),
-                        (ALT, HOME) => (K::Home, M::ALT),
-                        (ALT_SHIFT, UP) => (K::Up, M::ALT_SHIFT),
-                        (ALT_SHIFT, DOWN) => (K::Down, M::ALT_SHIFT),
-                        (ALT_SHIFT, RIGHT) => (K::Right, M::ALT_SHIFT),
-                        (ALT_SHIFT, LEFT) => (K::Left, M::ALT_SHIFT),
-                        (ALT_SHIFT, END) => (K::End, M::ALT_SHIFT),
-                        (ALT_SHIFT, HOME) => (K::Home, M::ALT_SHIFT),
-                        (CTRL, UP) => (K::Up, M::CTRL),
-                        (CTRL, DOWN) => (K::Down, M::CTRL),
-                        (CTRL, RIGHT) => (K::Right, M::CTRL),
-                        (CTRL, LEFT) => (K::Left, M::CTRL),
-                        (CTRL, END) => (K::End, M::CTRL),
-                        (CTRL, HOME) => (K::Home, M::CTRL),
-                        (CTRL, 'P') => (K::F(1), M::CTRL),
-                        (CTRL, 'Q') => (K::F(2), M::CTRL),
-                        (CTRL, 'S') => (K::F(4), M::CTRL),
-                        (CTRL, 'p') => (K::Char('0'), M::CTRL),
-                        (CTRL, 'q') => (K::Char('1'), M::CTRL),
-                        (CTRL, 'r') => (K::Char('2'), M::CTRL),
-                        (CTRL, 's') => (K::Char('3'), M::CTRL),
-                        (CTRL, 't') => (K::Char('4'), M::CTRL),
-                        (CTRL, 'u') => (K::Char('5'), M::CTRL),
-                        (CTRL, 'v') => (K::Char('6'), M::CTRL),
-                        (CTRL, 'w') => (K::Char('7'), M::CTRL),
-                        (CTRL, 'x') => (K::Char('8'), M::CTRL),
-                        (CTRL, 'y') => (K::Char('9'), M::CTRL),
-                        (CTRL_SHIFT, UP) => (K::Up, M::CTRL_SHIFT),
-                        (CTRL_SHIFT, DOWN) => (K::Down, M::CTRL_SHIFT),
-                        (CTRL_SHIFT, RIGHT) => (K::Right, M::CTRL_SHIFT),
-                        (CTRL_SHIFT, LEFT) => (K::Left, M::CTRL_SHIFT),
-                        (CTRL_SHIFT, END) => (K::End, M::CTRL_SHIFT),
-                        (CTRL_SHIFT, HOME) => (K::Home, M::CTRL_SHIFT),
-                        //('6', 'P') => (K::F(13), M::CTRL),
-                        //('6', 'Q') => (K::F(14), M::CTRL),
-                        //('6', 'S') => (K::F(16), M::CTRL),
-                        (CTRL_SHIFT, 'p') => (K::Char('0'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'q') => (K::Char('1'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'r') => (K::Char('2'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 's') => (K::Char('3'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 't') => (K::Char('4'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'u') => (K::Char('5'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'v') => (K::Char('6'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'w') => (K::Char('7'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'x') => (K::Char('8'), M::CTRL_SHIFT),
-                        (CTRL_SHIFT, 'y') => (K::Char('9'), M::CTRL_SHIFT),
-                        (CTRL_ALT, UP) => (K::Up, M::CTRL_ALT),
-                        (CTRL_ALT, DOWN) => (K::Down, M::CTRL_ALT),
-                        (CTRL_ALT, RIGHT) => (K::Right, M::CTRL_ALT),
-                        (CTRL_ALT, LEFT) => (K::Left, M::CTRL_ALT),
-                        (CTRL_ALT, END) => (K::End, M::CTRL_ALT),
-                        (CTRL_ALT, HOME) => (K::Home, M::CTRL_ALT),
-                        (CTRL_ALT, 'p') => (K::Char('0'), M::CTRL_ALT),
-                        (CTRL_ALT, 'q') => (K::Char('1'), M::CTRL_ALT),
-                        (CTRL_ALT, 'r') => (K::Char('2'), M::CTRL_ALT),
-                        (CTRL_ALT, 's') => (K::Char('3'), M::CTRL_ALT),
-                        (CTRL_ALT, 't') => (K::Char('4'), M::CTRL_ALT),
-                        (CTRL_ALT, 'u') => (K::Char('5'), M::CTRL_ALT),
-                        (CTRL_ALT, 'v') => (K::Char('6'), M::CTRL_ALT),
-                        (CTRL_ALT, 'w') => (K::Char('7'), M::CTRL_ALT),
-                        (CTRL_ALT, 'x') => (K::Char('8'), M::CTRL_ALT),
-                        (CTRL_ALT, 'y') => (K::Char('9'), M::CTRL_ALT),
-                        (CTRL_ALT_SHIFT, UP) => (K::Up, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, DOWN) => (K::Down, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, RIGHT) => (K::Right, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, LEFT) => (K::Left, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, END) => (K::End, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, HOME) => (K::Home, M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'p') => (K::Char('0'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'q') => (K::Char('1'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'r') => (K::Char('2'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 's') => (K::Char('3'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 't') => (K::Char('4'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'u') => (K::Char('5'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'v') => (K::Char('6'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'w') => (K::Char('7'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'x') => (K::Char('8'), M::CTRL_ALT_SHIFT),
-                        (CTRL_ALT_SHIFT, 'y') => (K::Char('9'), M::CTRL_ALT_SHIFT),
+                        (SHIFT, UP) => E(K::Up, M::SHIFT),     // ~ key_sr
+                        (SHIFT, DOWN) => E(K::Down, M::SHIFT), // ~ key_sf
+                        (SHIFT, RIGHT) => E(K::Right, M::SHIFT),
+                        (SHIFT, LEFT) => E(K::Left, M::SHIFT),
+                        (SHIFT, END) => E(K::End, M::SHIFT), // kEND
+                        (SHIFT, HOME) => E(K::Home, M::SHIFT), // kHOM
+                        //('2', 'P') => E(K::F(13), M::NONE),
+                        //('2', 'Q') => E(K::F(14), M::NONE),
+                        //('2', 'S') => E(K::F(16), M::NONE),
+                        (ALT, UP) => E(K::Up, M::ALT),
+                        (ALT, DOWN) => E(K::Down, M::ALT),
+                        (ALT, RIGHT) => E(K::Right, M::ALT),
+                        (ALT, LEFT) => E(K::Left, M::ALT),
+                        (ALT, END) => E(K::End, M::ALT),
+                        (ALT, HOME) => E(K::Home, M::ALT),
+                        (ALT_SHIFT, UP) => E(K::Up, M::ALT_SHIFT),
+                        (ALT_SHIFT, DOWN) => E(K::Down, M::ALT_SHIFT),
+                        (ALT_SHIFT, RIGHT) => E(K::Right, M::ALT_SHIFT),
+                        (ALT_SHIFT, LEFT) => E(K::Left, M::ALT_SHIFT),
+                        (ALT_SHIFT, END) => E(K::End, M::ALT_SHIFT),
+                        (ALT_SHIFT, HOME) => E(K::Home, M::ALT_SHIFT),
+                        (CTRL, UP) => E(K::Up, M::CTRL),
+                        (CTRL, DOWN) => E(K::Down, M::CTRL),
+                        (CTRL, RIGHT) => E(K::Right, M::CTRL),
+                        (CTRL, LEFT) => E(K::Left, M::CTRL),
+                        (CTRL, END) => E(K::End, M::CTRL),
+                        (CTRL, HOME) => E(K::Home, M::CTRL),
+                        (CTRL, 'P') => E(K::F(1), M::CTRL),
+                        (CTRL, 'Q') => E(K::F(2), M::CTRL),
+                        (CTRL, 'S') => E(K::F(4), M::CTRL),
+                        (CTRL, 'p') => E(K::Char('0'), M::CTRL),
+                        (CTRL, 'q') => E(K::Char('1'), M::CTRL),
+                        (CTRL, 'r') => E(K::Char('2'), M::CTRL),
+                        (CTRL, 's') => E(K::Char('3'), M::CTRL),
+                        (CTRL, 't') => E(K::Char('4'), M::CTRL),
+                        (CTRL, 'u') => E(K::Char('5'), M::CTRL),
+                        (CTRL, 'v') => E(K::Char('6'), M::CTRL),
+                        (CTRL, 'w') => E(K::Char('7'), M::CTRL),
+                        (CTRL, 'x') => E(K::Char('8'), M::CTRL),
+                        (CTRL, 'y') => E(K::Char('9'), M::CTRL),
+                        (CTRL_SHIFT, UP) => E(K::Up, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, DOWN) => E(K::Down, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, RIGHT) => E(K::Right, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, LEFT) => E(K::Left, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, END) => E(K::End, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, HOME) => E(K::Home, M::CTRL_SHIFT),
+                        //('6', 'P') => E(K::F(13), M::CTRL),
+                        //('6', 'Q') => E(K::F(14), M::CTRL),
+                        //('6', 'S') => E(K::F(16), M::CTRL),
+                        (CTRL_SHIFT, 'p') => E(K::Char('0'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'q') => E(K::Char('1'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'r') => E(K::Char('2'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 's') => E(K::Char('3'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 't') => E(K::Char('4'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'u') => E(K::Char('5'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'v') => E(K::Char('6'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'w') => E(K::Char('7'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'x') => E(K::Char('8'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'y') => E(K::Char('9'), M::CTRL_SHIFT),
+                        (CTRL_ALT, UP) => E(K::Up, M::CTRL_ALT),
+                        (CTRL_ALT, DOWN) => E(K::Down, M::CTRL_ALT),
+                        (CTRL_ALT, RIGHT) => E(K::Right, M::CTRL_ALT),
+                        (CTRL_ALT, LEFT) => E(K::Left, M::CTRL_ALT),
+                        (CTRL_ALT, END) => E(K::End, M::CTRL_ALT),
+                        (CTRL_ALT, HOME) => E(K::Home, M::CTRL_ALT),
+                        (CTRL_ALT, 'p') => E(K::Char('0'), M::CTRL_ALT),
+                        (CTRL_ALT, 'q') => E(K::Char('1'), M::CTRL_ALT),
+                        (CTRL_ALT, 'r') => E(K::Char('2'), M::CTRL_ALT),
+                        (CTRL_ALT, 's') => E(K::Char('3'), M::CTRL_ALT),
+                        (CTRL_ALT, 't') => E(K::Char('4'), M::CTRL_ALT),
+                        (CTRL_ALT, 'u') => E(K::Char('5'), M::CTRL_ALT),
+                        (CTRL_ALT, 'v') => E(K::Char('6'), M::CTRL_ALT),
+                        (CTRL_ALT, 'w') => E(K::Char('7'), M::CTRL_ALT),
+                        (CTRL_ALT, 'x') => E(K::Char('8'), M::CTRL_ALT),
+                        (CTRL_ALT, 'y') => E(K::Char('9'), M::CTRL_ALT),
+                        (CTRL_ALT_SHIFT, UP) => E(K::Up, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, DOWN) => E(K::Down, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, RIGHT) => E(K::Right, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, LEFT) => E(K::Left, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, END) => E(K::End, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, HOME) => E(K::Home, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'p') => E(K::Char('0'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'q') => E(K::Char('1'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'r') => E(K::Char('2'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 's') => E(K::Char('3'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 't') => E(K::Char('4'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'u') => E(K::Char('5'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'v') => E(K::Char('6'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'w') => E(K::Char('7'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'x') => E(K::Char('8'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'y') => E(K::Char('9'), M::CTRL_ALT_SHIFT),
                         // Meta + arrow on (some?) Macs when using iTerm defaults
-                        ('9', UP) => (K::Up, M::ALT),
-                        ('9', DOWN) => (K::Down, M::ALT),
-                        ('9', RIGHT) => (K::Right, M::ALT),
-                        ('9', LEFT) => (K::Left, M::ALT),
+                        ('9', UP) => E(K::Up, M::ALT),
+                        ('9', DOWN) => E(K::Down, M::ALT),
+                        ('9', RIGHT) => E(K::Right, M::ALT),
+                        ('9', LEFT) => E(K::Left, M::ALT),
                         _ => {
                             debug!(target: "rustyline",
                                    "unsupported esc sequence: \\E[1;{}{:?}", seq4, seq5);
-                            (K::UnknownEscSeq, M::NONE)
+                            E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else if seq5 == '~' {
                     Ok(match (seq2, seq4) {
-                        (INSERT, SHIFT) => (K::Insert, M::SHIFT),
-                        (INSERT, ALT) => (K::Insert, M::ALT),
-                        (INSERT, ALT_SHIFT) => (K::Insert, M::ALT_SHIFT),
-                        (INSERT, CTRL) => (K::Insert, M::CTRL),
-                        (INSERT, CTRL_SHIFT) => (K::Insert, M::CTRL_SHIFT),
-                        (INSERT, CTRL_ALT) => (K::Insert, M::CTRL_ALT),
-                        (INSERT, CTRL_ALT_SHIFT) => (K::Insert, M::CTRL_ALT_SHIFT),
-                        (DELETE, SHIFT) => (K::Delete, M::SHIFT),
-                        (DELETE, ALT) => (K::Delete, M::ALT),
-                        (DELETE, ALT_SHIFT) => (K::Delete, M::ALT_SHIFT),
-                        (DELETE, CTRL) => (K::Delete, M::CTRL),
-                        (DELETE, CTRL_SHIFT) => (K::Delete, M::CTRL_SHIFT),
-                        (DELETE, CTRL_ALT) => (K::Delete, M::CTRL_ALT),
-                        (DELETE, CTRL_ALT_SHIFT) => (K::Delete, M::CTRL_ALT_SHIFT),
-                        (PAGE_UP, SHIFT) => (K::PageUp, M::SHIFT),
-                        (PAGE_UP, ALT) => (K::PageUp, M::ALT),
-                        (PAGE_UP, ALT_SHIFT) => (K::PageUp, M::ALT_SHIFT),
-                        (PAGE_UP, CTRL) => (K::PageUp, M::CTRL),
-                        (PAGE_UP, CTRL_SHIFT) => (K::PageUp, M::CTRL_SHIFT),
-                        (PAGE_UP, CTRL_ALT) => (K::PageUp, M::CTRL_ALT),
-                        (PAGE_UP, CTRL_ALT_SHIFT) => (K::PageUp, M::CTRL_ALT_SHIFT),
-                        (PAGE_DOWN, SHIFT) => (K::PageDown, M::SHIFT),
-                        (PAGE_DOWN, ALT) => (K::PageDown, M::ALT),
-                        (PAGE_DOWN, ALT_SHIFT) => (K::PageDown, M::ALT_SHIFT),
-                        (PAGE_DOWN, CTRL) => (K::PageDown, M::CTRL),
-                        (PAGE_DOWN, CTRL_SHIFT) => (K::PageDown, M::CTRL_SHIFT),
-                        (PAGE_DOWN, CTRL_ALT) => (K::PageDown, M::CTRL_ALT),
-                        (PAGE_DOWN, CTRL_ALT_SHIFT) => (K::PageDown, M::CTRL_ALT_SHIFT),
+                        (INSERT, SHIFT) => E(K::Insert, M::SHIFT),
+                        (INSERT, ALT) => E(K::Insert, M::ALT),
+                        (INSERT, ALT_SHIFT) => E(K::Insert, M::ALT_SHIFT),
+                        (INSERT, CTRL) => E(K::Insert, M::CTRL),
+                        (INSERT, CTRL_SHIFT) => E(K::Insert, M::CTRL_SHIFT),
+                        (INSERT, CTRL_ALT) => E(K::Insert, M::CTRL_ALT),
+                        (INSERT, CTRL_ALT_SHIFT) => E(K::Insert, M::CTRL_ALT_SHIFT),
+                        (DELETE, SHIFT) => E(K::Delete, M::SHIFT),
+                        (DELETE, ALT) => E(K::Delete, M::ALT),
+                        (DELETE, ALT_SHIFT) => E(K::Delete, M::ALT_SHIFT),
+                        (DELETE, CTRL) => E(K::Delete, M::CTRL),
+                        (DELETE, CTRL_SHIFT) => E(K::Delete, M::CTRL_SHIFT),
+                        (DELETE, CTRL_ALT) => E(K::Delete, M::CTRL_ALT),
+                        (DELETE, CTRL_ALT_SHIFT) => E(K::Delete, M::CTRL_ALT_SHIFT),
+                        (PAGE_UP, SHIFT) => E(K::PageUp, M::SHIFT),
+                        (PAGE_UP, ALT) => E(K::PageUp, M::ALT),
+                        (PAGE_UP, ALT_SHIFT) => E(K::PageUp, M::ALT_SHIFT),
+                        (PAGE_UP, CTRL) => E(K::PageUp, M::CTRL),
+                        (PAGE_UP, CTRL_SHIFT) => E(K::PageUp, M::CTRL_SHIFT),
+                        (PAGE_UP, CTRL_ALT) => E(K::PageUp, M::CTRL_ALT),
+                        (PAGE_UP, CTRL_ALT_SHIFT) => E(K::PageUp, M::CTRL_ALT_SHIFT),
+                        (PAGE_DOWN, SHIFT) => E(K::PageDown, M::SHIFT),
+                        (PAGE_DOWN, ALT) => E(K::PageDown, M::ALT),
+                        (PAGE_DOWN, ALT_SHIFT) => E(K::PageDown, M::ALT_SHIFT),
+                        (PAGE_DOWN, CTRL) => E(K::PageDown, M::CTRL),
+                        (PAGE_DOWN, CTRL_SHIFT) => E(K::PageDown, M::CTRL_SHIFT),
+                        (PAGE_DOWN, CTRL_ALT) => E(K::PageDown, M::CTRL_ALT),
+                        (PAGE_DOWN, CTRL_ALT_SHIFT) => E(K::PageDown, M::CTRL_ALT_SHIFT),
                         _ => {
                             debug!(target: "rustyline",
                                    "unsupported esc sequence: \\E[{};{:?}~", seq2, seq4);
-                            (K::UnknownEscSeq, M::NONE)
+                            E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{};{}{:?}", seq2, seq4, seq5);
-                    Ok((K::UnknownEscSeq, M::NONE))
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
                        "unsupported esc sequence: \\E[{};{:?}", seq2, seq4);
-                Ok((K::UnknownEscSeq, M::NONE))
+                Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else {
             Ok(match (seq2, seq3) {
-                (DELETE, RXVT_CTRL) => (K::Delete, M::CTRL),
-                (DELETE, RXVT_CTRL_SHIFT) => (K::Delete, M::CTRL_SHIFT),
-                (CTRL, UP) => (K::Up, M::CTRL),
-                (CTRL, DOWN) => (K::Down, M::CTRL),
-                (CTRL, RIGHT) => (K::Right, M::CTRL),
-                (CTRL, LEFT) => (K::Left, M::CTRL),
-                (PAGE_UP, RXVT_CTRL) => (K::PageUp, M::CTRL),
-                (PAGE_UP, RXVT_SHIFT) => (K::PageUp, M::SHIFT),
-                (PAGE_UP, RXVT_CTRL_SHIFT) => (K::PageUp, M::CTRL_SHIFT),
-                (PAGE_DOWN, RXVT_CTRL) => (K::PageDown, M::CTRL),
-                (PAGE_DOWN, RXVT_SHIFT) => (K::PageDown, M::SHIFT),
-                (PAGE_DOWN, RXVT_CTRL_SHIFT) => (K::PageDown, M::CTRL_SHIFT),
-                (RXVT_HOME, RXVT_CTRL) => (K::Home, M::CTRL),
-                (RXVT_HOME, RXVT_SHIFT) => (K::Home, M::SHIFT),
-                (RXVT_HOME, RXVT_CTRL_SHIFT) => (K::Home, M::CTRL_SHIFT),
-                (RXVT_END, RXVT_CTRL) => (K::End, M::CTRL), // kEND5 or kel
-                (RXVT_END, RXVT_SHIFT) => (K::End, M::SHIFT),
-                (RXVT_END, RXVT_CTRL_SHIFT) => (K::End, M::CTRL_SHIFT),
+                (DELETE, RXVT_CTRL) => E(K::Delete, M::CTRL),
+                (DELETE, RXVT_CTRL_SHIFT) => E(K::Delete, M::CTRL_SHIFT),
+                (CTRL, UP) => E(K::Up, M::CTRL),
+                (CTRL, DOWN) => E(K::Down, M::CTRL),
+                (CTRL, RIGHT) => E(K::Right, M::CTRL),
+                (CTRL, LEFT) => E(K::Left, M::CTRL),
+                (PAGE_UP, RXVT_CTRL) => E(K::PageUp, M::CTRL),
+                (PAGE_UP, RXVT_SHIFT) => E(K::PageUp, M::SHIFT),
+                (PAGE_UP, RXVT_CTRL_SHIFT) => E(K::PageUp, M::CTRL_SHIFT),
+                (PAGE_DOWN, RXVT_CTRL) => E(K::PageDown, M::CTRL),
+                (PAGE_DOWN, RXVT_SHIFT) => E(K::PageDown, M::SHIFT),
+                (PAGE_DOWN, RXVT_CTRL_SHIFT) => E(K::PageDown, M::CTRL_SHIFT),
+                (RXVT_HOME, RXVT_CTRL) => E(K::Home, M::CTRL),
+                (RXVT_HOME, RXVT_SHIFT) => E(K::Home, M::SHIFT),
+                (RXVT_HOME, RXVT_CTRL_SHIFT) => E(K::Home, M::CTRL_SHIFT),
+                (RXVT_END, RXVT_CTRL) => E(K::End, M::CTRL), // kEND5 or kel
+                (RXVT_END, RXVT_SHIFT) => E(K::End, M::SHIFT),
+                (RXVT_END, RXVT_CTRL_SHIFT) => E(K::End, M::CTRL_SHIFT),
                 _ => {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}{:?}", seq2, seq3);
-                    (K::UnknownEscSeq, M::NONE)
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         }
@@ -578,31 +578,31 @@ impl PosixRawReader {
     fn escape_o(&mut self) -> Result<KeyEvent> {
         let seq2 = self.next_char()?;
         Ok(match seq2 {
-            UP => (K::Up, M::NONE),
-            DOWN => (K::Down, M::NONE),
-            RIGHT => (K::Right, M::NONE),
-            LEFT => (K::Left, M::NONE),
-            //'E' => (K::, M::),// key_b2, kb2
-            END => (K::End, M::NONE),   // kend
-            HOME => (K::Home, M::NONE), // khome
-            'M' => (K::Enter, M::NONE), // kent
-            'P' => (K::F(1), M::NONE),  // kf1
-            'Q' => (K::F(2), M::NONE),  // kf2
-            'R' => (K::F(3), M::NONE),  // kf3
-            'S' => (K::F(4), M::NONE),  // kf4
-            'a' => (K::Up, M::CTRL),
-            'b' => (K::Down, M::CTRL),
-            'c' => (K::Right, M::CTRL), // rxvt
-            'd' => (K::Left, M::CTRL),  // rxvt
-            'l' => (K::F(8), M::NONE),
-            't' => (K::F(5), M::NONE),  // kf5 or kb1
-            'u' => (K::F(6), M::NONE),  // kf6 or kb2
-            'v' => (K::F(7), M::NONE),  // kf7 or kb3
-            'w' => (K::F(9), M::NONE),  // kf9 or ka1
-            'x' => (K::F(10), M::NONE), // kf10 or ka2
+            UP => E(K::Up, M::NONE),
+            DOWN => E(K::Down, M::NONE),
+            RIGHT => E(K::Right, M::NONE),
+            LEFT => E(K::Left, M::NONE),
+            //'E' => E(K::, M::),// key_b2, kb2
+            END => E(K::End, M::NONE),   // kend
+            HOME => E(K::Home, M::NONE), // khome
+            'M' => E::ENTER,             // kent
+            'P' => E(K::F(1), M::NONE),  // kf1
+            'Q' => E(K::F(2), M::NONE),  // kf2
+            'R' => E(K::F(3), M::NONE),  // kf3
+            'S' => E(K::F(4), M::NONE),  // kf4
+            'a' => E(K::Up, M::CTRL),
+            'b' => E(K::Down, M::CTRL),
+            'c' => E(K::Right, M::CTRL), // rxvt
+            'd' => E(K::Left, M::CTRL),  // rxvt
+            'l' => E(K::F(8), M::NONE),
+            't' => E(K::F(5), M::NONE),  // kf5 or kb1
+            'u' => E(K::F(6), M::NONE),  // kf6 or kb2
+            'v' => E(K::F(7), M::NONE),  // kf7 or kb3
+            'w' => E(K::F(9), M::NONE),  // kf9 or ka1
+            'x' => E(K::F(10), M::NONE), // kf10 or ka2
             _ => {
                 debug!(target: "rustyline", "unsupported esc sequence: \\EO{:?}", seq2);
-                (K::UnknownEscSeq, M::NONE)
+                E(K::UnknownEscSeq, M::NONE)
             }
         })
     }
@@ -617,8 +617,8 @@ impl RawReader for PosixRawReader {
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
         let c = self.next_char()?;
 
-        let mut key = keys::char_to_key_press(c, M::NONE);
-        if key == (K::Esc, M::NONE) {
+        let mut key = keys::char_to_key_event(c, M::NONE);
+        if key == E::ESC {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
             } else {
@@ -662,7 +662,7 @@ impl RawReader for PosixRawReader {
             match self.next_char()? {
                 '\x1b' => {
                     let key = self.escape_sequence()?;
-                    if key == (K::BracketedPasteEnd, M::NONE) {
+                    if key == E(K::BracketedPasteEnd, M::NONE) {
                         break;
                     } else {
                         continue; // TODO validate

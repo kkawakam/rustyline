@@ -484,7 +484,7 @@ impl InputState {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('\x07'), M::ALT) => Cmd::Abort,
+            E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('G'), M::CTRL_ALT) => Cmd::Abort,
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 if positive {
                     Cmd::Kill(Movement::BackwardChar(n))

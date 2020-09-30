@@ -42,6 +42,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use log::debug;
 use unicode_width::UnicodeWidthStr;
+use matches::matches;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
@@ -154,7 +155,7 @@ fn complete_line<H: Helper>(
         // we can't complete any further, wait for second tab
         let mut cmd = s.next_cmd(input_state, rdr, true)?;
         // if any character other than tab, pass it to the main loop
-        if cmd != Cmd::Complete {
+        if !matches!(cmd, Cmd::Complete) {
             return Ok(Some(cmd));
         }
         // move cursor to EOL to avoid overwriting the command line
@@ -166,11 +167,12 @@ fn complete_line<H: Helper>(
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             s.out.write_and_flush(msg.as_bytes())?;
             s.layout.end.row += 1;
-            while cmd != Cmd::SelfInsert(1, 'y')
-                && cmd != Cmd::SelfInsert(1, 'Y')
-                && cmd != Cmd::SelfInsert(1, 'n')
-                && cmd != Cmd::SelfInsert(1, 'N')
-                && cmd != Cmd::Kill(Movement::BackwardChar(1))
+            while !matches!(cmd,
+                | Cmd::SelfInsert(1, 'y')
+                | Cmd::SelfInsert(1, 'Y')
+                | Cmd::SelfInsert(1, 'n')
+                | Cmd::SelfInsert(1, 'N')
+                | Cmd::Kill(Movement::BackwardChar(1)))
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -276,16 +278,17 @@ fn page_completions<C: Candidate, H: Helper>(
         if row == pause_row {
             s.out.write_and_flush(b"\n--More--")?;
             let mut cmd = Cmd::Noop;
-            while cmd != Cmd::SelfInsert(1, 'y')
-                && cmd != Cmd::SelfInsert(1, 'Y')
-                && cmd != Cmd::SelfInsert(1, 'n')
-                && cmd != Cmd::SelfInsert(1, 'N')
-                && cmd != Cmd::SelfInsert(1, 'q')
-                && cmd != Cmd::SelfInsert(1, 'Q')
-                && cmd != Cmd::SelfInsert(1, ' ')
-                && cmd != Cmd::Kill(Movement::BackwardChar(1))
-                && cmd != Cmd::AcceptLine
-                && cmd != Cmd::AcceptOrInsertLine
+            while !matches!(cmd,
+                | Cmd::SelfInsert(1, 'y')
+                | Cmd::SelfInsert(1, 'Y')
+                | Cmd::SelfInsert(1, 'n')
+                | Cmd::SelfInsert(1, 'N')
+                | Cmd::SelfInsert(1, 'q')
+                | Cmd::SelfInsert(1, 'Q')
+                | Cmd::SelfInsert(1, ' ')
+                | Cmd::Kill(Movement::BackwardChar(1))
+                | Cmd::AcceptLine
+                | Cmd::AcceptOrInsertLine)
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -462,7 +465,7 @@ fn readline_edit<H: Helper>(
         }
 
         // autocomplete
-        if cmd == Cmd::Complete && s.helper.is_some() {
+        if matches!(cmd, Cmd::Complete) && s.helper.is_some() {
             let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
             if let Some(next) = next {
                 cmd = next;
@@ -471,7 +474,7 @@ fn readline_edit<H: Helper>(
             }
         }
 
-        if Cmd::CompleteHint == cmd {
+        if matches!(cmd, Cmd::CompleteHint) {
             complete_hint_line(&mut s)?;
             continue;
         }
@@ -484,7 +487,7 @@ fn readline_edit<H: Helper>(
             continue;
         }
 
-        if cmd == Cmd::ReverseSearchHistory {
+        if matches!(cmd, Cmd::ReverseSearchHistory) {
             // Search history backward
             let next =
                 reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &editor.history)?;
@@ -596,7 +599,7 @@ fn readline_edit<H: Helper>(
                     s.refresh_line_with_msg(None)?;
                 }
                 // Only accept value if cursor is at the end of the buffer
-                if s.validate()? && (cmd == Cmd::AcceptLine || s.line.is_end_of_input()) {
+                if s.validate()? && (matches!(cmd, Cmd::AcceptLine) || s.line.is_end_of_input()) {
                     break;
                 } else {
                     s.edit_insert('\n', 1)?;
@@ -667,6 +670,13 @@ fn readline_edit<H: Helper>(
             }
             Cmd::Interrupt => {
                 return Err(error::ReadlineError::Interrupted);
+            }
+            Cmd::Yield(value) => {
+                return Err(error::ReadlineError::Yielded {
+                    input: s.line.to_string(),
+                    cursor: s.line.pos(),
+                    value: value.clone(),
+                });
             }
             #[cfg(unix)]
             Cmd::Suspend => {

@@ -1,9 +1,12 @@
 //! Contains error type for handling I/O and Errno errors
+use std::any::Any;
 #[cfg(windows)]
 use std::char;
 use std::error;
 use std::fmt;
 use std::io;
+use std::sync::Arc;
+
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
@@ -18,6 +21,15 @@ pub enum ReadlineError {
     Eof,
     /// Ctrl-C
     Interrupted,
+    /// Key bindinding yielded the special value
+    Yielded {
+        /// Current input buffer
+        input: String,
+        /// Cursor position as the offset inside the buffer
+        cursor: usize,
+        /// The value yielded by the keybinding
+        value: Arc<dyn Any+Send+Sync>,
+    },
     /// Chars Error
     #[cfg(unix)]
     Utf8Error,
@@ -39,6 +51,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
+            ReadlineError::Yielded { .. } => write!(f, "Yielded"),
             #[cfg(unix)]
             ReadlineError::Utf8Error => write!(f, "invalid utf-8: corrupt contents"),
             #[cfg(unix)]

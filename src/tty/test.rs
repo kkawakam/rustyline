@@ -6,6 +6,7 @@ use std::vec::IntoIter;
 use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
+use crate::edit::Prompt;
 use crate::highlight::Highlighter;
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
@@ -60,11 +61,13 @@ impl RawReader for IntoIter<KeyPress> {
     }
 }
 
-pub struct Sink {}
+pub struct Sink {
+    buffer: String
+}
 
 impl Sink {
     pub fn new() -> Sink {
-        Sink {}
+        Sink { buffer: String::new() }
     }
 }
 
@@ -77,7 +80,7 @@ impl Renderer for Sink {
 
     fn refresh_line(
         &mut self,
-        _prompt: &str,
+        _prompt: &Prompt,
         _line: &LineBuffer,
         _hint: Option<&str>,
         _old_layout: &Layout,
@@ -85,12 +88,6 @@ impl Renderer for Sink {
         _highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        let mut pos = orig;
-        pos.col += s.len();
-        pos
     }
 
     fn write_and_flush(&self, _: &[u8]) -> Result<()> {
@@ -115,8 +112,15 @@ impl Renderer for Sink {
         80
     }
 
+    fn get_tab_stop(&self) -> usize {
+        8
+    }
+
     fn get_rows(&self) -> usize {
         24
+    }
+    fn get_buffer(&mut self) -> &mut String {
+        &mut self.buffer
     }
 
     fn colors_enabled(&self) -> bool {

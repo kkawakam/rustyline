@@ -1,13 +1,15 @@
 //! This module implements and describes common TTY methods & traits
-
-use unicode_width::UnicodeWidthStr;
+use std::cmp::{min, max};
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::highlight::Highlighter;
+use crate::edit::Prompt;
+use crate::highlight::{Highlighter, PromptInfo, split_highlight};
 use crate::keys::KeyPress;
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Meter};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
+
+mod screen;
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -36,7 +38,7 @@ pub trait Renderer {
     #[allow(clippy::too_many_arguments)]
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
@@ -49,38 +51,131 @@ pub trait Renderer {
     /// wrapping may be applied.
     fn compute_layout(
         &self,
-        prompt_size: Position,
-        default_prompt: bool,
+        prompt: &Prompt,
         line: &LineBuffer,
         info: Option<&str>,
+        scroll_top: usize,
     ) -> Layout {
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let cursor = self.calculate_position(&line[..pos], prompt_size);
-        // calculate the position of the end of the input line
-        let mut end = if pos == line.len() {
-            cursor
-        } else {
-            self.calculate_position(&line[pos..], cursor)
+        let mut meter = self.meter();
+        meter.set_position(prompt.size);
+        if prompt.has_continuation {
+            meter.left_margin(prompt.size.col);
         };
+        let cursor = meter.update(&line[..pos]);
+        // calculate the position of the end of the input line
+        meter.update(&line[pos..]);
         if let Some(info) = info {
-            end = self.calculate_position(&info, end);
+            meter.left_margin(0);
+            meter.update(&info);
         }
+        let end = meter.get_position();
+
+        let screen_rows = self.get_rows();
+        let scroll_top = if screen_rows <= 1 {
+            // Single line visible, ugly case but possible
+            cursor.row
+        } else if screen_rows > end.row {
+            // Whole data fits screen
+            0
+        } else {
+            let min_scroll = cursor.row.saturating_sub(screen_rows - 1);
+            let max_scroll = min(cursor.row,
+                end.row.saturating_sub(screen_rows - 1));
+            max(min_scroll, min(max_scroll, scroll_top))
+        };
 
         let new_layout = Layout {
-            prompt_size,
-            default_prompt,
+            prompt_size: prompt.size,
+            default_prompt: prompt.is_default,
             cursor,
             end,
+            scroll_top,
+            screen_rows,
         };
-        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);
         new_layout
     }
 
-    /// Calculate the number of columns and rows used to display `s` on a
-    /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position) -> Position;
+    fn render_screen(&mut self,
+        prompt: &Prompt,
+        line: &LineBuffer,
+        hint: Option<&str>,
+        new_layout: &Layout,
+        highlighter: Option<&dyn Highlighter>)
+    {
+        let rows = self.get_rows();
+        let cols = self.get_columns();
+        let tab_stop = self.get_tab_stop();
+        let mut scr = screen::Screen::new(self.get_buffer(),
+            cols, rows, tab_stop, new_layout.scroll_top);
+        if let Some(highlighter) = highlighter {
+            if highlighter.has_continuation_prompt() {
+                let highlighted = highlighter.highlight(line, line.pos());
+                let lines = line.split("\n");
+                let mut highlighted_left = highlighted.to_string();
+                let mut offset = 0;
+                for (line_no, orig) in lines.enumerate() {
+                    let hl_line_len = highlighted_left.find('\n')
+                        .map(|p| p + 1)
+                        .unwrap_or(highlighted_left.len());
+                    let (hl, tail) = split_highlight(&highlighted_left,
+                        hl_line_len);
+                    let has_cursor =
+                        line.pos() > offset && line.pos() <= orig.len();
+                    let prompt = highlighter.highlight_prompt(prompt.text,
+                        PromptInfo {
+                            is_default: prompt.is_default,
+                            offset,
+                            cursor: if has_cursor {
+                                Some(line.pos() - offset)
+                            } else {
+                                None
+                            },
+                            input: line,
+                            line: orig,
+                            line_no,
+                        });
+                    scr.add_text(&prompt);
+                    scr.add_text(&hl);
+                    highlighted_left = tail.to_string();
+                    offset += orig.len() + 1;
+                }
+            } else {
+                scr.add_text(&highlighter.highlight_prompt(prompt.text,
+                    PromptInfo {
+                        is_default: prompt.is_default,
+                        offset: 0,
+                        cursor: Some(line.pos()),
+                        input: line,
+                        line: line,
+                        line_no: 0,
+                    }));
+                scr.add_text(&highlighter.highlight(line, line.pos()));
+            }
+        } else {
+            scr.add_text(prompt.text);
+            scr.add_text(line);
+        }
+        // append hint
+        if let Some(hint) = hint {
+            if let Some(highlighter) = highlighter {
+                scr.add_text(&highlighter.highlight_hint(hint));
+            } else {
+                scr.add_text(hint);
+            }
+        }
+        if new_layout.cursor == new_layout.end &&
+           new_layout.cursor.row > scr.get_position().row
+        {
+            scr.add_text("\n");
+        }
+    }
+
+    fn meter(&self) -> Meter {
+        Meter::new(self.get_columns(), self.get_tab_stop())
+    }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
 
@@ -97,10 +192,14 @@ pub trait Renderer {
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
     fn get_columns(&self) -> usize;
+    /// Get the tab stop in the current terminal.
+    fn get_tab_stop(&self) -> usize;
     /// Get the number of rows in the current terminal.
     fn get_rows(&self) -> usize;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
+    /// Returns rendering buffer. Internal.
+    fn get_buffer(&mut self) -> &mut String;
 
     /// Make sure prompt is at the leftmost edge of the screen
     fn move_cursor_at_leftmost(&mut self, rdr: &mut Self::Reader) -> Result<()>;
@@ -115,7 +214,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
@@ -123,10 +222,6 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
-    }
-
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        (**self).calculate_position(s, orig)
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
@@ -153,8 +248,16 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).get_columns()
     }
 
+    fn get_tab_stop(&self) -> usize {
+        (**self).get_tab_stop()
+    }
+
     fn get_rows(&self) -> usize {
         (**self).get_rows()
+    }
+
+    fn get_buffer(&mut self) -> &mut String {
+        (**self).get_buffer()
     }
 
     fn colors_enabled(&self) -> bool {
@@ -163,37 +266,6 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut R::Reader) -> Result<()> {
         (**self).move_cursor_at_leftmost(rdr)
-    }
-}
-
-// ignore ANSI escape sequence
-fn width(s: &str, esc_seq: &mut u8) -> usize {
-    if *esc_seq == 1 {
-        if s == "[" {
-            // CSI
-            *esc_seq = 2;
-        } else {
-            // two-character sequence
-            *esc_seq = 0;
-        }
-        0
-    } else if *esc_seq == 2 {
-        if s == ";" || (s.as_bytes()[0] >= b'0' && s.as_bytes()[0] <= b'9') {
-            /*} else if s == "m" {
-            // last
-             *esc_seq = 0;*/
-        } else {
-            // not supported
-            *esc_seq = 0;
-        }
-        0
-    } else if s == "\x1b" {
-        *esc_seq = 1;
-        0
-    } else if s == "\n" {
-        0
-    } else {
-        s.width()
     }
 }
 

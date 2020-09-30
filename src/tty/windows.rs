@@ -6,15 +6,14 @@ use std::mem;
 use std::sync::atomic;
 
 use log::{debug, warn};
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::edit::Prompt;
 use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{self, KeyPress};
@@ -247,6 +246,7 @@ pub struct ConsoleRenderer {
     buffer: String,
     colors_enabled: bool,
     bell_style: BellStyle,
+    tab_stop: usize,
 }
 
 impl ConsoleRenderer {
@@ -265,6 +265,7 @@ impl ConsoleRenderer {
             buffer: String::with_capacity(1024),
             colors_enabled,
             bell_style,
+            tab_stop: 8,
         }
     }
 
@@ -290,31 +291,6 @@ impl ConsoleRenderer {
 
     fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
         set_cursor_visible(self.handle, visible)
-    }
-
-    // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
-    // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
-        let mut esc_seq = 0;
-        for c in s.graphemes(true) {
-            if c == "\n" {
-                col = 0;
-                self.buffer.push_str(c);
-            } else {
-                let cw = width(c, &mut esc_seq);
-                col += cw;
-                if col > self.cols {
-                    self.buffer.push('\n');
-                    col = cw;
-                }
-                self.buffer.push_str(c);
-            }
-        }
-        if col == self.cols {
-            self.buffer.push('\n');
-            col = 0;
-        }
-        col
     }
 
     // position at the start of the prompt, clear to end of previous input
@@ -347,6 +323,7 @@ fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
     check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })
 }
 
+
 impl Renderer for ConsoleRenderer {
     type Reader = ConsoleRawReader;
 
@@ -367,39 +344,18 @@ impl Renderer for ConsoleRenderer {
 
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
-        let end_pos = new_layout.end;
 
         self.buffer.clear();
-        let mut col = 0;
-        if let Some(highlighter) = highlighter {
-            // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // append the prompt
-            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
-            // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
-        } else {
-            // append the prompt
-            self.buffer.push_str(prompt);
-            // append the input line
-            self.buffer.push_str(line);
-        }
-        // append hint
-        if let Some(hint) = hint {
-            if let Some(highlighter) = highlighter {
-                self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
-            } else {
-                self.buffer.push_str(hint);
-            }
-        }
+        self.render_screen(prompt, line, hint, new_layout, highlighter);
+
         let info = self.get_console_screen_buffer_info()?;
         self.set_cursor_visible(FALSE)?; // just to avoid flickering
         let handle = self.handle;
@@ -414,7 +370,7 @@ impl Renderer for ConsoleRenderer {
         // position the cursor
         let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
         coord.X = cursor.col as i16;
-        coord.Y -= (end_pos.row - cursor.row) as i16;
+        coord.Y -= new_layout.lines_below_cursor() as i16;
         self.set_console_cursor_position(coord)?;
 
         Ok(())
@@ -432,29 +388,6 @@ impl Renderer for ConsoleRenderer {
             }
         }
         Ok(())
-    }
-
-    /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        let mut pos = orig;
-        for c in s.graphemes(true) {
-            if c == "\n" {
-                pos.col = 0;
-                pos.row += 1;
-            } else {
-                let cw = c.width();
-                pos.col += cw;
-                if pos.col > self.cols {
-                    pos.row += 1;
-                    pos.col = cw;
-                }
-            }
-        }
-        if pos.col == self.cols {
-            pos.col = 0;
-            pos.row += 1;
-        }
-        pos
     }
 
     fn beep(&mut self) -> Result<()> {
@@ -492,11 +425,19 @@ impl Renderer for ConsoleRenderer {
         self.cols
     }
 
+    fn get_tab_stop(&self) -> usize {
+        self.tab_stop
+    }
+
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
         let (_, rows) = get_win_size(self.handle);
         rows
+    }
+
+    fn get_buffer(&mut self) -> &mut String {
+        &mut self.buffer
     }
 
     fn colors_enabled(&self) -> bool {
@@ -539,6 +480,7 @@ pub struct Console {
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
     bell_style: BellStyle,
+    tab_stop: usize,
 }
 
 impl Console {
@@ -560,7 +502,7 @@ impl Term for Console {
     fn new(
         color_mode: ColorMode,
         stream_type: OutputStreamType,
-        _tab_stop: usize,
+        tab_stop: usize,
         bell_style: BellStyle,
     ) -> Console {
         use std::ptr;
@@ -595,6 +537,7 @@ impl Term for Console {
             ansi_colors_supported: false,
             stream_type,
             bell_style,
+            tab_stop,
         }
     }
 

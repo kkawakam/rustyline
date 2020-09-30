@@ -282,7 +282,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
                 && cmd != Cmd::Newline
-                && matches!(cmd, Cmd::AcceptOrInsertLine { .. })
+                && !matches!(cmd, Cmd::AcceptOrInsertLine { .. })
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -511,17 +511,19 @@ fn readline_edit<H: Helper>(
                 s.edit_overwrite_char(c)?;
             }
             Cmd::EndOfFile => {
-                if s.has_hint() || !s.is_default_prompt() {
-                    // Force a refresh without hints to leave the previous
-                    // line as the user typed it after a newline.
-                    s.refresh_line_with_msg(None)?;
-                }
-                if !input_state.is_emacs_mode() && !s.line.is_empty() {
-                    break;
-                } else if s.line.is_empty() {
-                    return Err(error::ReadlineError::Eof);
-                } else {
+                if input_state.is_emacs_mode() && !s.line.is_empty() {
                     s.edit_delete(1)?
+                } else {
+                    if s.has_hint() || !s.is_default_prompt() {
+                        // Force a refresh without hints to leave the previous
+                        // line as the user typed it after a newline.
+                        s.refresh_line_with_msg(None)?;
+                    }
+                    if s.line.is_empty() {
+                        return Err(error::ReadlineError::Eof);
+                    } else if !input_state.is_emacs_mode() {
+                        break;
+                    }
                 }
             }
             Cmd::Move(Movement::EndOfLine) => {
@@ -581,7 +583,7 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {
+            Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
                 #[cfg(test)]
                 {
                     editor.term.cursor = s.layout.cursor.col;
@@ -675,7 +677,7 @@ fn readline_edit<H: Helper>(
                 // Move to end, in case cursor was in the middle of the
                 // line, so that next thing application prints goes after
                 // the input
-                s.edit_move_end()?;
+                s.edit_move_buffer_end()?;
                 return Err(error::ReadlineError::Interrupted);
             }
             #[cfg(unix)]

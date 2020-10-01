@@ -239,7 +239,7 @@ fn add_prompt_and_highlight<F>(
     where F: FnMut(&str),
 {
     if let Some(highlighter) = highlighter {
-        if highlighter.has_continuation_prompt() {
+        if prompt.has_continuation {
             if &line[..] == "" {
                 // line.lines() is an empty iterator for empty line so
                 // we need to treat it as a special case

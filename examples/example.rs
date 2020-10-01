@@ -4,6 +4,7 @@ use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::highlight::{PromptInfo};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
@@ -16,6 +17,7 @@ struct MyHelper {
     validator: MatchingBracketValidator,
     hinter: HistoryHinter,
     colored_prompt: String,
+    continuation_prompt: String,
 }
 
 impl Completer for MyHelper {
@@ -43,13 +45,21 @@ impl Highlighter for MyHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        info: PromptInfo<'_>,
     ) -> Cow<'b, str> {
-        if default {
-            Borrowed(&self.colored_prompt)
+        if info.is_default() {
+            if info.line_no() > 0 {
+                Borrowed(&self.continuation_prompt)
+            } else {
+                Borrowed(&self.colored_prompt)
+            }
         } else {
             Borrowed(prompt)
         }
+    }
+
+    fn has_continuation_prompt(&self) -> bool {
+        return true;
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
@@ -92,7 +102,8 @@ fn main() -> rustyline::Result<()> {
         completer: FilenameCompleter::new(),
         highlighter: MatchingBracketHighlighter::new(),
         hinter: HistoryHinter {},
-        colored_prompt: "".to_owned(),
+        colored_prompt: "  0> ".to_owned(),
+        continuation_prompt: "\x1b[1;32m...> \x1b[0m".to_owned(),
         validator: MatchingBracketValidator::new(),
     };
     let mut rl = Editor::with_config(config);
@@ -104,7 +115,7 @@ fn main() -> rustyline::Result<()> {
     }
     let mut count = 1;
     loop {
-        let p = format!("{}> ", count);
+        let p = format!("{:>3}> ", count);
         rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
         let readline = rl.readline(&p);
         match readline {

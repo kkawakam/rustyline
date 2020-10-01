@@ -3,7 +3,8 @@
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::highlight::Highlighter;
+use crate::edit::Prompt;
+use crate::highlight::{Highlighter, PromptInfo, split_highlight};
 use crate::keys::KeyPress;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -36,7 +37,7 @@ pub trait Renderer {
     #[allow(clippy::too_many_arguments)]
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
@@ -49,38 +50,44 @@ pub trait Renderer {
     /// wrapping may be applied.
     fn compute_layout(
         &self,
-        prompt_size: Position,
-        default_prompt: bool,
+        prompt: &Prompt,
         line: &LineBuffer,
         info: Option<&str>,
     ) -> Layout {
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let cursor = self.calculate_position(&line[..pos], prompt_size);
+        let left_margin = if prompt.has_continuation {
+            prompt.size.col
+        } else {
+            0
+        };
+        let cursor = self.calculate_position(&line[..pos],
+            prompt.size, left_margin);
         // calculate the position of the end of the input line
         let mut end = if pos == line.len() {
             cursor
         } else {
-            self.calculate_position(&line[pos..], cursor)
+            self.calculate_position(&line[pos..], cursor, left_margin)
         };
         if let Some(info) = info {
-            end = self.calculate_position(&info, end);
+            end = self.calculate_position(&info, end, left_margin);
         }
 
         let new_layout = Layout {
-            prompt_size,
-            default_prompt,
+            prompt_size: prompt.size,
+            left_margin,
+            default_prompt: prompt.is_default,
             cursor,
             end,
         };
-        debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);
         new_layout
     }
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position) -> Position;
+    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
+        -> Position;
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
 
@@ -115,7 +122,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn refresh_line(
         &mut self,
-        prompt: &str,
+        prompt: &Prompt,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
@@ -125,8 +132,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        (**self).calculate_position(s, orig)
+    fn calculate_position(&self, s: &str, orig: Position, left_margin: usize)
+        -> Position
+    {
+        (**self).calculate_position(s, orig, left_margin)
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
@@ -222,6 +231,77 @@ pub trait Term {
     fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+}
+
+fn add_prompt_and_highlight<F>(
+    mut push_str: F, highlighter: Option<&dyn Highlighter>,
+    line: &LineBuffer, prompt: &Prompt)
+    where F: FnMut(&str),
+{
+    if let Some(highlighter) = highlighter {
+        if prompt.has_continuation {
+            if &line[..] == "" {
+                // line.lines() is an empty iterator for empty line so
+                // we need to treat it as a special case
+                let prompt = highlighter.highlight_prompt(prompt.text,
+                    PromptInfo {
+                        is_default: prompt.is_default,
+                        offset: 0,
+                        cursor: Some(0),
+                        input: "",
+                        line: "",
+                        line_no: 0,
+                    });
+                push_str(&prompt);
+            } else {
+                let highlighted = highlighter.highlight(line, line.pos());
+                let lines = line.split('\n');
+                let mut highlighted_left = highlighted.to_string();
+                let mut offset = 0;
+                for (line_no, orig) in lines.enumerate() {
+                    let (hl, tail) = split_highlight(&highlighted_left,
+                        orig.len()+1);
+                    let has_cursor =
+                        line.pos() > offset && line.pos() < orig.len();
+                    let prompt = highlighter.highlight_prompt(prompt.text,
+                        PromptInfo {
+                            is_default: prompt.is_default,
+                            offset,
+                            cursor: if has_cursor {
+                                Some(line.pos() - offset)
+                            } else {
+                                None
+                            },
+                            input: line,
+                            line: orig,
+                            line_no,
+                        });
+                    push_str(&prompt);
+                    push_str(&hl);
+                    highlighted_left = tail.to_string();
+                    offset += orig.len() + 1;
+                }
+            }
+        } else {
+            // display the prompt
+            push_str(&highlighter.highlight_prompt(prompt.text,
+                PromptInfo {
+                    is_default: prompt.is_default,
+                    offset: 0,
+                    cursor: Some(line.pos()),
+                    input: line,
+                    line: line,
+                    line_no: 0,
+                }));
+            // display the input line
+            push_str(&highlighter.highlight(line, line.pos()));
+        }
+    } else {
+        // display the prompt
+        push_str(prompt.text);
+        // display the input line
+        push_str(line);
+    }
 }
 
 // If on Windows platform import Windows TTY module

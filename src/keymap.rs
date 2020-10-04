@@ -122,17 +122,15 @@ impl Cmd {
     }
 
     fn is_repeatable_change(&self) -> bool {
-        match *self {
-            Cmd::Insert(..)
-            | Cmd::Kill(_)
-            | Cmd::ReplaceChar(..)
-            | Cmd::Replace(..)
-            | Cmd::SelfInsert(..)
-            | Cmd::ViYankTo(_)
-            | Cmd::Yank(..) => true,
-            // Cmd::TransposeChars | TODO Validate
-            _ => false,
-        }
+        matches!(*self, Cmd::Insert(..)
+        | Cmd::Kill(_)
+        | Cmd::ReplaceChar(..)
+        | Cmd::Replace(..)
+        | Cmd::SelfInsert(..)
+        | Cmd::ViYankTo(_)
+        | Cmd::Yank(..)
+        // Cmd::TransposeChars | TODO Validate
+        )
     }
 
     fn is_repeatable(&self) -> bool {

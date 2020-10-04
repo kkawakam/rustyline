@@ -174,10 +174,7 @@ fn complete_line<H: Helper>(
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
-            match cmd {
-                Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
-                _ => false,
-            }
+            matches!(cmd, Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y'))
         } else {
             true
         };

@@ -109,14 +109,14 @@ pub enum Cmd {
     /// if cursor is in the middle of the text
     ///
     /// If you support multi-line input:
-    /// * Use `accept_in_the_middle: true` for mostly single-line cases,
-    ///   for example command-line.
-    /// * Use `accept_in_the_middle: false` for mostly multi-line cases,
-    ///   for example SQL or JSON input.
+    /// * Use `accept_in_the_middle: true` for mostly single-line cases, for
+    ///   example command-line.
+    /// * Use `accept_in_the_middle: false` for mostly multi-line cases, for
+    ///   example SQL or JSON input.
     AcceptOrInsertLine {
         /// Whether this commands accepts input if the cursor not at the end
         /// of the current input
-        accept_in_the_middle: bool
+        accept_in_the_middle: bool,
     },
 }
 

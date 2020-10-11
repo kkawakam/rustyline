@@ -62,7 +62,12 @@ fn complete_line() {
     let keys = vec![E::ENTER];
     let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
     let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();
-    assert_eq!(Some(Cmd::AcceptLine), cmd);
+    assert_eq!(
+        Some(Cmd::AcceptOrInsertLine {
+            accept_in_the_middle: true
+        }),
+        cmd
+    );
     assert_eq!("rust", s.line.as_str());
     assert_eq!(4, s.line.pos());
 }

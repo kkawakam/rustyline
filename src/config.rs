@@ -28,6 +28,8 @@ pub struct Config {
     output_stream: OutputStreamType,
     /// Horizontal space taken by a tab.
     tab_stop: usize,
+    /// Check if cursor position is at leftmost before displaying prompt
+    check_cursor_position: bool,
 }
 
 impl Config {
@@ -145,6 +147,13 @@ impl Config {
     pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
         self.tab_stop = tab_stop;
     }
+
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    pub fn check_cursor_position(&self) -> bool {
+        self.check_cursor_position
+    }
 }
 
 impl Default for Config {
@@ -162,6 +171,7 @@ impl Default for Config {
             color_mode: ColorMode::Enabled,
             output_stream: OutputStreamType::Stdout,
             tab_stop: 8,
+            check_cursor_position: false,
         }
     }
 }
@@ -357,6 +367,14 @@ impl Builder {
         self
     }
 
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    pub fn check_cursor_position(mut self, yes: bool) -> Self {
+        self.set_check_cursor_position(yes);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     pub fn build(self) -> Config {
         self.p
@@ -450,5 +468,12 @@ pub trait Configurer {
     /// By default, `8`
     fn set_tab_stop(&mut self, tab_stop: usize) {
         self.config_mut().set_tab_stop(tab_stop);
+    }
+
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    fn set_check_cursor_position(&mut self, yes: bool) {
+        self.config_mut().check_cursor_position = yes;
     }
 }

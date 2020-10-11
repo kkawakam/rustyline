@@ -1020,10 +1020,7 @@ impl LineBuffer {
 
     /// Kill range specified by `mvt`.
     pub fn kill(&mut self, mvt: &Movement) -> bool {
-        let notify = match *mvt {
-            Movement::ForwardChar(_) | Movement::BackwardChar(_) => false,
-            _ => true,
-        };
+        let notify = !matches!(*mvt, Movement::ForwardChar(_) | Movement::BackwardChar(_));
         if notify {
             if let Some(dl) = self.dl.as_ref() {
                 let mut dl = dl.lock().unwrap();

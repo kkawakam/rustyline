@@ -30,6 +30,16 @@ impl Candidate for String {
     }
 }
 
+impl Candidate for str {
+    fn display(&self) -> &str {
+        self
+    }
+
+    fn replacement(&self) -> &str {
+        self
+    }
+}
+
 /// Completion candidate pair
 pub struct Pair {
     /// Text to display when listing alternatives.

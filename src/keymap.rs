@@ -20,6 +20,8 @@ pub enum Cmd {
     /// abort
     Abort, // Miscellaneous Command
     /// accept-line
+    ///
+    /// See also AcceptOrInsertLine
     AcceptLine,
     /// beginning-of-history
     BeginningOfHistory,
@@ -99,9 +101,23 @@ pub enum Cmd {
     /// moves cursor to the line below or switches to next history entry if
     /// the cursor is already on the last line
     LineDownOrNextHistory(RepeatCount),
-    /// accepts the line when cursor is at the end of the text (non including
-    /// trailing whitespace), inserts newline character otherwise
-    AcceptOrInsertLine,
+    /// Inserts a newline
+    Newline,
+    /// Either accepts or inserts a newline
+    ///
+    /// Always inserts newline if input is non-valid. Can also insert newline
+    /// if cursor is in the middle of the text
+    ///
+    /// If you support multi-line input:
+    /// * Use `accept_in_the_middle: true` for mostly single-line cases, for
+    ///   example command-line.
+    /// * Use `accept_in_the_middle: false` for mostly multi-line cases, for
+    ///   example SQL or JSON input.
+    AcceptOrInsertLine {
+        /// Whether this commands accepts input if the cursor not at the end
+        /// of the current input
+        accept_in_the_middle: bool,
+    },
 }
 
 impl Cmd {
@@ -122,17 +138,15 @@ impl Cmd {
     }
 
     fn is_repeatable_change(&self) -> bool {
-        match *self {
-            Cmd::Insert(..)
-            | Cmd::Kill(_)
-            | Cmd::ReplaceChar(..)
-            | Cmd::Replace(..)
-            | Cmd::SelfInsert(..)
-            | Cmd::ViYankTo(_)
-            | Cmd::Yank(..) => true,
-            // Cmd::TransposeChars | TODO Validate
-            _ => false,
-        }
+        matches!(*self, Cmd::Insert(..)
+        | Cmd::Kill(_)
+        | Cmd::ReplaceChar(..)
+        | Cmd::Replace(..)
+        | Cmd::SelfInsert(..)
+        | Cmd::ViYankTo(_)
+        | Cmd::Yank(..)
+        // Cmd::TransposeChars | TODO Validate
+        )
     }
 
     fn is_repeatable(&self) -> bool {
@@ -943,7 +957,9 @@ impl InputState {
                 }
             }
             E(K::Char('J'), M::CTRL) |
-            E::ENTER => Cmd::AcceptLine,
+            E::ENTER => {
+                Cmd::AcceptOrInsertLine { accept_in_the_middle: true }
+            }
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,

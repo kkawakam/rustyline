@@ -824,7 +824,7 @@ impl Renderer for PosixRenderer {
         }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
-            self.buffer.push_str("\n");
+            self.buffer.push('\n');
         }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;

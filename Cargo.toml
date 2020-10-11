@@ -19,6 +19,7 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
+bitflags = "1.2"
 cfg-if = "0.1.6"
 dirs-next = { version = "1.0", optional = true }
 fs2 = "0.4"

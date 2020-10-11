@@ -2,21 +2,16 @@
 use super::{assert_cursor, assert_line, assert_line_with_initial, init_editor};
 use crate::config::EditMode;
 use crate::error::ReadlineError;
-use crate::keys::KeyPress;
+use crate::keys::{KeyCode as K, KeyEvent as E, Modifiers as M};
 
 #[test]
 fn home_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_cursor(
-            *mode,
-            ("", ""),
-            &[KeyPress::Home, KeyPress::Enter],
-            ("", ""),
-        );
+        assert_cursor(*mode, ("", ""), &[E(K::Home, M::NONE), E::ENTER], ("", ""));
         assert_cursor(
             *mode,
             ("Hi", ""),
-            &[KeyPress::Home, KeyPress::Enter],
+            &[E(K::Home, M::NONE), E::ENTER],
             ("", "Hi"),
         );
         if *mode == EditMode::Vi {
@@ -24,7 +19,7 @@ fn home_key() {
             assert_cursor(
                 *mode,
                 ("Hi", ""),
-                &[KeyPress::Esc, KeyPress::Home, KeyPress::Enter],
+                &[E::ESC, E(K::Home, M::NONE), E::ENTER],
                 ("", "Hi"),
             );
         }
@@ -34,17 +29,17 @@ fn home_key() {
 #[test]
 fn end_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_cursor(*mode, ("", ""), &[KeyPress::End, KeyPress::Enter], ("", ""));
+        assert_cursor(*mode, ("", ""), &[E(K::End, M::NONE), E::ENTER], ("", ""));
         assert_cursor(
             *mode,
             ("H", "i"),
-            &[KeyPress::End, KeyPress::Enter],
+            &[E(K::End, M::NONE), E::ENTER],
             ("Hi", ""),
         );
         assert_cursor(
             *mode,
             ("", "Hi"),
-            &[KeyPress::End, KeyPress::Enter],
+            &[E(K::End, M::NONE), E::ENTER],
             ("Hi", ""),
         );
         if *mode == EditMode::Vi {
@@ -52,7 +47,7 @@ fn end_key() {
             assert_cursor(
                 *mode,
                 ("", "Hi"),
-                &[KeyPress::Esc, KeyPress::End, KeyPress::Enter],
+                &[E::ESC, E(K::End, M::NONE), E::ENTER],
                 ("Hi", ""),
             );
         }
@@ -65,19 +60,19 @@ fn left_key() {
         assert_cursor(
             *mode,
             ("Hi", ""),
-            &[KeyPress::Left, KeyPress::Enter],
+            &[E(K::Left, M::NONE), E::ENTER],
             ("H", "i"),
         );
         assert_cursor(
             *mode,
             ("H", "i"),
-            &[KeyPress::Left, KeyPress::Enter],
+            &[E(K::Left, M::NONE), E::ENTER],
             ("", "Hi"),
         );
         assert_cursor(
             *mode,
             ("", "Hi"),
-            &[KeyPress::Left, KeyPress::Enter],
+            &[E(K::Left, M::NONE), E::ENTER],
             ("", "Hi"),
         );
         if *mode == EditMode::Vi {
@@ -85,7 +80,7 @@ fn left_key() {
             assert_cursor(
                 *mode,
                 ("Bye", ""),
-                &[KeyPress::Esc, KeyPress::Left, KeyPress::Enter],
+                &[E::ESC, E(K::Left, M::NONE), E::ENTER],
                 ("B", "ye"),
             );
         }
@@ -95,28 +90,23 @@ fn left_key() {
 #[test]
 fn right_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_cursor(
-            *mode,
-            ("", ""),
-            &[KeyPress::Right, KeyPress::Enter],
-            ("", ""),
-        );
+        assert_cursor(*mode, ("", ""), &[E(K::Right, M::NONE), E::ENTER], ("", ""));
         assert_cursor(
             *mode,
             ("", "Hi"),
-            &[KeyPress::Right, KeyPress::Enter],
+            &[E(K::Right, M::NONE), E::ENTER],
             ("H", "i"),
         );
         assert_cursor(
             *mode,
             ("B", "ye"),
-            &[KeyPress::Right, KeyPress::Enter],
+            &[E(K::Right, M::NONE), E::ENTER],
             ("By", "e"),
         );
         assert_cursor(
             *mode,
             ("H", "i"),
-            &[KeyPress::Right, KeyPress::Enter],
+            &[E(K::Right, M::NONE), E::ENTER],
             ("Hi", ""),
         );
         if *mode == EditMode::Vi {
@@ -124,7 +114,7 @@ fn right_key() {
             assert_cursor(
                 *mode,
                 ("", "Hi"),
-                &[KeyPress::Esc, KeyPress::Right, KeyPress::Enter],
+                &[E::ESC, E(K::Right, M::NONE), E::ENTER],
                 ("H", "i"),
             );
         }
@@ -134,22 +124,18 @@ fn right_key() {
 #[test]
 fn enter_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_line(*mode, &[KeyPress::Enter], "");
-        assert_line(*mode, &[KeyPress::Char('a'), KeyPress::Enter], "a");
-        assert_line_with_initial(*mode, ("Hi", ""), &[KeyPress::Enter], "Hi");
-        assert_line_with_initial(*mode, ("", "Hi"), &[KeyPress::Enter], "Hi");
-        assert_line_with_initial(*mode, ("H", "i"), &[KeyPress::Enter], "Hi");
+        assert_line(*mode, &[E::ENTER], "");
+        assert_line(*mode, &[E::from('a'), E::ENTER], "a");
+        assert_line_with_initial(*mode, ("Hi", ""), &[E::ENTER], "Hi");
+        assert_line_with_initial(*mode, ("", "Hi"), &[E::ENTER], "Hi");
+        assert_line_with_initial(*mode, ("H", "i"), &[E::ENTER], "Hi");
         if *mode == EditMode::Vi {
             // vi command mode
-            assert_line(*mode, &[KeyPress::Esc, KeyPress::Enter], "");
-            assert_line(
-                *mode,
-                &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Enter],
-                "a",
-            );
-            assert_line_with_initial(*mode, ("Hi", ""), &[KeyPress::Esc, KeyPress::Enter], "Hi");
-            assert_line_with_initial(*mode, ("", "Hi"), &[KeyPress::Esc, KeyPress::Enter], "Hi");
-            assert_line_with_initial(*mode, ("H", "i"), &[KeyPress::Esc, KeyPress::Enter], "Hi");
+            assert_line(*mode, &[E::ESC, E::ENTER], "");
+            assert_line(*mode, &[E::from('a'), E::ESC, E::ENTER], "a");
+            assert_line_with_initial(*mode, ("Hi", ""), &[E::ESC, E::ENTER], "Hi");
+            assert_line_with_initial(*mode, ("", "Hi"), &[E::ESC, E::ENTER], "Hi");
+            assert_line_with_initial(*mode, ("H", "i"), &[E::ESC, E::ENTER], "Hi");
         }
     }
 }
@@ -157,16 +143,12 @@ fn enter_key() {
 #[test]
 fn newline_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_line(*mode, &[KeyPress::Ctrl('J')], "");
-        assert_line(*mode, &[KeyPress::Char('a'), KeyPress::Ctrl('J')], "a");
+        assert_line(*mode, &[E::ctrl('J')], "");
+        assert_line(*mode, &[E::from('a'), E::ctrl('J')], "a");
         if *mode == EditMode::Vi {
             // vi command mode
-            assert_line(*mode, &[KeyPress::Esc, KeyPress::Ctrl('J')], "");
-            assert_line(
-                *mode,
-                &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Ctrl('J')],
-                "a",
-            );
+            assert_line(*mode, &[E::ESC, E::ctrl('J')], "");
+            assert_line(*mode, &[E::from('a'), E::ESC, E::ctrl('J')], "a");
         }
     }
 }
@@ -174,53 +156,35 @@ fn newline_key() {
 #[test]
 fn eof_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        let mut editor = init_editor(*mode, &[KeyPress::Ctrl('D')]);
+        let mut editor = init_editor(*mode, &[E::ctrl('D')]);
         let err = editor.readline(">>");
         assert_matches!(err, Err(ReadlineError::Eof));
     }
     assert_line(
         EditMode::Emacs,
-        &[KeyPress::Char('a'), KeyPress::Ctrl('D'), KeyPress::Enter],
+        &[E::from('a'), E::ctrl('D'), E::ENTER],
         "a",
     );
-    assert_line(
-        EditMode::Vi,
-        &[KeyPress::Char('a'), KeyPress::Ctrl('D')],
-        "a",
-    );
-    assert_line(
-        EditMode::Vi,
-        &[KeyPress::Char('a'), KeyPress::Esc, KeyPress::Ctrl('D')],
-        "a",
-    );
-    assert_line_with_initial(
-        EditMode::Emacs,
-        ("", "Hi"),
-        &[KeyPress::Ctrl('D'), KeyPress::Enter],
-        "i",
-    );
-    assert_line_with_initial(EditMode::Vi, ("", "Hi"), &[KeyPress::Ctrl('D')], "Hi");
-    assert_line_with_initial(
-        EditMode::Vi,
-        ("", "Hi"),
-        &[KeyPress::Esc, KeyPress::Ctrl('D')],
-        "Hi",
-    );
+    assert_line(EditMode::Vi, &[E::from('a'), E::ctrl('D')], "a");
+    assert_line(EditMode::Vi, &[E::from('a'), E::ESC, E::ctrl('D')], "a");
+    assert_line_with_initial(EditMode::Emacs, ("", "Hi"), &[E::ctrl('D'), E::ENTER], "i");
+    assert_line_with_initial(EditMode::Vi, ("", "Hi"), &[E::ctrl('D')], "Hi");
+    assert_line_with_initial(EditMode::Vi, ("", "Hi"), &[E::ESC, E::ctrl('D')], "Hi");
 }
 
 #[test]
 fn interrupt_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        let mut editor = init_editor(*mode, &[KeyPress::Ctrl('C')]);
+        let mut editor = init_editor(*mode, &[E::ctrl('C')]);
         let err = editor.readline(">>");
         assert_matches!(err, Err(ReadlineError::Interrupted));
 
-        let mut editor = init_editor(*mode, &[KeyPress::Ctrl('C')]);
+        let mut editor = init_editor(*mode, &[E::ctrl('C')]);
         let err = editor.readline_with_initial(">>", ("Hi", ""));
         assert_matches!(err, Err(ReadlineError::Interrupted));
         if *mode == EditMode::Vi {
             // vi command mode
-            let mut editor = init_editor(*mode, &[KeyPress::Esc, KeyPress::Ctrl('C')]);
+            let mut editor = init_editor(*mode, &[E::ESC, E::ctrl('C')]);
             let err = editor.readline_with_initial(">>", ("Hi", ""));
             assert_matches!(err, Err(ReadlineError::Interrupted));
         }
@@ -233,13 +197,13 @@ fn delete_key() {
         assert_cursor(
             *mode,
             ("a", ""),
-            &[KeyPress::Delete, KeyPress::Enter],
+            &[E(K::Delete, M::NONE), E::ENTER],
             ("a", ""),
         );
         assert_cursor(
             *mode,
             ("", "a"),
-            &[KeyPress::Delete, KeyPress::Enter],
+            &[E(K::Delete, M::NONE), E::ENTER],
             ("", ""),
         );
         if *mode == EditMode::Vi {
@@ -247,7 +211,7 @@ fn delete_key() {
             assert_cursor(
                 *mode,
                 ("", "a"),
-                &[KeyPress::Esc, KeyPress::Delete, KeyPress::Enter],
+                &[E::ESC, E(K::Delete, M::NONE), E::ENTER],
                 ("", ""),
             );
         }
@@ -257,24 +221,14 @@ fn delete_key() {
 #[test]
 fn ctrl_t() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
-        assert_cursor(
-            *mode,
-            ("a", "b"),
-            &[KeyPress::Ctrl('T'), KeyPress::Enter],
-            ("ba", ""),
-        );
-        assert_cursor(
-            *mode,
-            ("ab", "cd"),
-            &[KeyPress::Ctrl('T'), KeyPress::Enter],
-            ("acb", "d"),
-        );
+        assert_cursor(*mode, ("a", "b"), &[E::ctrl('T'), E::ENTER], ("ba", ""));
+        assert_cursor(*mode, ("ab", "cd"), &[E::ctrl('T'), E::ENTER], ("acb", "d"));
         if *mode == EditMode::Vi {
             // vi command mode
             assert_cursor(
                 *mode,
                 ("ab", ""),
-                &[KeyPress::Esc, KeyPress::Ctrl('T'), KeyPress::Enter],
+                &[E::ESC, E::ctrl('T'), E::ENTER],
                 ("ba", ""),
             );
         }
@@ -287,21 +241,16 @@ fn ctrl_u() {
         assert_cursor(
             *mode,
             ("start of line ", "end"),
-            &[KeyPress::Ctrl('U'), KeyPress::Enter],
+            &[E::ctrl('U'), E::ENTER],
             ("", "end"),
         );
-        assert_cursor(
-            *mode,
-            ("", "end"),
-            &[KeyPress::Ctrl('U'), KeyPress::Enter],
-            ("", "end"),
-        );
+        assert_cursor(*mode, ("", "end"), &[E::ctrl('U'), E::ENTER], ("", "end"));
         if *mode == EditMode::Vi {
             // vi command mode
             assert_cursor(
                 *mode,
                 ("start of line ", "end"),
-                &[KeyPress::Esc, KeyPress::Ctrl('U'), KeyPress::Enter],
+                &[E::ESC, E::ctrl('U'), E::ENTER],
                 ("", " end"),
             );
         }
@@ -315,7 +264,7 @@ fn ctrl_v() {
         assert_cursor(
             *mode,
             ("", ""),
-            &[KeyPress::Ctrl('V'), KeyPress::Char('\t'), KeyPress::Enter],
+            &[E::ctrl('V'), E(K::Char('\t'), M::NONE), E::ENTER],
             ("\t", ""),
         );
         if *mode == EditMode::Vi {
@@ -323,12 +272,7 @@ fn ctrl_v() {
             assert_cursor(
                 *mode,
                 ("", ""),
-                &[
-                    KeyPress::Esc,
-                    KeyPress::Ctrl('V'),
-                    KeyPress::Char('\t'),
-                    KeyPress::Enter,
-                ],
+                &[E::ESC, E::ctrl('V'), E(K::Char('\t'), M::NONE), E::ENTER],
                 ("\t", ""),
             );
         }
@@ -341,13 +285,13 @@ fn ctrl_w() {
         assert_cursor(
             *mode,
             ("Hello, ", "world"),
-            &[KeyPress::Ctrl('W'), KeyPress::Enter],
+            &[E::ctrl('W'), E::ENTER],
             ("", "world"),
         );
         assert_cursor(
             *mode,
             ("Hello, world.", ""),
-            &[KeyPress::Ctrl('W'), KeyPress::Enter],
+            &[E::ctrl('W'), E::ENTER],
             ("Hello, ", ""),
         );
         if *mode == EditMode::Vi {
@@ -355,7 +299,7 @@ fn ctrl_w() {
             assert_cursor(
                 *mode,
                 ("Hello, world.", ""),
-                &[KeyPress::Esc, KeyPress::Ctrl('W'), KeyPress::Enter],
+                &[E::ESC, E::ctrl('W'), E::ENTER],
                 ("Hello, ", "."),
             );
         }
@@ -368,7 +312,7 @@ fn ctrl_y() {
         assert_cursor(
             *mode,
             ("Hello, ", "world"),
-            &[KeyPress::Ctrl('W'), KeyPress::Ctrl('Y'), KeyPress::Enter],
+            &[E::ctrl('W'), E::ctrl('Y'), E::ENTER],
             ("Hello, ", "world"),
         );
     }
@@ -380,7 +324,7 @@ fn ctrl__() {
         assert_cursor(
             *mode,
             ("Hello, ", "world"),
-            &[KeyPress::Ctrl('W'), KeyPress::Ctrl('_'), KeyPress::Enter],
+            &[E::ctrl('W'), E::ctrl('_'), E::ENTER],
             ("Hello, ", "world"),
         );
         if *mode == EditMode::Vi {
@@ -388,12 +332,7 @@ fn ctrl__() {
             assert_cursor(
                 *mode,
                 ("Hello, ", "world"),
-                &[
-                    KeyPress::Esc,
-                    KeyPress::Ctrl('W'),
-                    KeyPress::Ctrl('_'),
-                    KeyPress::Enter,
-                ],
+                &[E::ESC, E::ctrl('W'), E::ctrl('_'), E::ENTER],
                 ("Hello,", " world"),
             );
         }

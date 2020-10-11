@@ -543,7 +543,7 @@ impl InputState {
             }
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) => {
+            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) | E(K::Left, M::CTRL) => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
@@ -551,7 +551,7 @@ impl InputState {
                 }
             }
             E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => {
+            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) | E(K::Right, M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {

@@ -603,16 +603,20 @@ fn readline_edit<H: Helper>(
                 let valid = s.validate()?;
                 let end = s.line.is_end_of_input();
                 match (cmd, valid, end) {
-                    | (Cmd::AcceptLine, _, _)
+                    (Cmd::AcceptLine, ..)
                     | (Cmd::AcceptOrInsertLine { .. }, true, true)
-                    | (Cmd::AcceptOrInsertLine { accept_in_the_middle: true }, true, _)
-                    => {
+                    | (
+                        Cmd::AcceptOrInsertLine {
+                            accept_in_the_middle: true,
+                        },
+                        true,
+                        _,
+                    ) => {
                         break;
                     }
-                    | (Cmd::Newline, _, _)
+                    (Cmd::Newline, ..)
                     | (Cmd::AcceptOrInsertLine { .. }, false, _)
-                    | (Cmd::AcceptOrInsertLine { .. }, true, false)
-                    => {
+                    | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
                         s.edit_insert('\n', 1)?;
                     }
                     _ => unreachable!(),

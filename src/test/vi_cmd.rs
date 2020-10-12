@@ -504,3 +504,80 @@ fn uppercase_t() {
         ("Hel", "lo, world!"),
     );
 }
+
+#[test]
+fn indent() {
+    assert_cursor(
+        EditMode::Vi,
+        ("Hello, world!", ""),
+        &[E::ESC, E::from('>'), E::from('>'), E::ENTER],
+        ("  Hello, world", "!"),  // Esc moves to the left
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("line1\nline2", ""),
+        &[E::ESC, E::from('>'), E::from('>'), E::ENTER],
+        ("line1\n  line", "2"),  // Esc moves to the left
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("line1\nline2", ""),
+        &[E::ESC, E::from('>'), E::from('k'), E::ENTER],
+        ("  line1\n  line", "2"),  // Esc moves to the left
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("  li", "ne1\n  line2",),
+        &[E::ESC, E::from('>'), E::from('j'), E::ENTER],
+        ("    l", "ine1\n    line2"),  // Esc moves to the left
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("  ", "line1\n  line2",),
+        &[E::ESC, E::from('>'), E::from('j'), E::ENTER],
+        ("   ", " line1\n    line2"),  // Esc moves to the left
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("  ", "line1\n  line2",),
+        &[E::ESC, E::from('>'), E::from('j'), E::ENTER],
+        ("   ", " line1\n    line2"),  // Esc moves to the left
+    );
+}
+
+#[test]
+fn dedent() {
+    assert_cursor(
+        EditMode::Vi,
+        ("  line1\n  line2", ""),
+        &[E::ESC, E::from('<'), E::from('<'), E::ENTER],
+        ("  line1\nline", "2"),
+    );
+
+    assert_cursor(
+        EditMode::Vi,
+        ("  line1\n  line2", ""),
+        &[E::ESC, E::from('<'), E::from('k'), E::ENTER],
+        ("line1\nline", "2"),
+    );
+
+    assert_cursor(
+        EditMode::Vi,
+        ("  li", "ne1\n  line2", ),
+        &[E::ESC, E::from('<'), E::from('j'), E::ENTER],
+        ("l", "ine1\nline2"),
+    );
+
+    assert_cursor(
+        EditMode::Vi,
+        ("  ", "line1\n  line2"),
+        &[E::ESC, E::from('<'), E::from('j'), E::ENTER],
+        ("", "line1\nline2"),
+    );
+    assert_cursor(
+        EditMode::Vi,
+        ("line", "1\n  line2"),
+        &[E::ESC, E::from('<'), E::from('j'), E::ENTER],
+        ("lin", "e1\nline2"),
+    );
+}

@@ -35,6 +35,8 @@ pub enum Cmd {
     CompleteBackward,
     /// complete-hint
     CompleteHint,
+    /// Dedent current line
+    Dedent(Movement),
     /// downcase-word
     DowncaseWord,
     /// vi-eof-maybe
@@ -47,6 +49,8 @@ pub enum Cmd {
     HistorySearchBackward,
     /// history-search-forward
     HistorySearchForward,
+    /// Indent current line
+    Indent(Movement),
     /// Insert text
     Insert(RepeatCount, String),
     /// Interrupt signal (Ctrl-C)
@@ -138,7 +142,10 @@ impl Cmd {
     }
 
     fn is_repeatable_change(&self) -> bool {
-        matches!(*self, Cmd::Insert(..)
+        matches!(*self,
+          Cmd::Dedent(..)
+        | Cmd::Indent(..)
+        | Cmd::Insert(..)
         | Cmd::Kill(_)
         | Cmd::ReplaceChar(..)
         | Cmd::Replace(..)
@@ -159,6 +166,8 @@ impl Cmd {
     // Replay this command with a possible different `RepeatCount`.
     fn redo(&self, new: Option<RepeatCount>, wrt: &dyn Refresher) -> Self {
         match *self {
+            Cmd::Dedent(ref mvt) => Cmd::Dedent(mvt.redo(new)),
+            Cmd::Indent(ref mvt) => Cmd::Indent(mvt.redo(new)),
             Cmd::Insert(previous, ref text) => {
                 Cmd::Insert(repeat_count(previous, new), text.clone())
             }
@@ -767,6 +776,14 @@ impl InputState {
                 self.input_mode = InputMode::Insert; // TODO Validate
                 Cmd::ForwardSearchHistory
             }
+            E(K::Char('<'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+                Some(mvt) => Cmd::Dedent(mvt),
+                None => Cmd::Unknown,
+            },
+            E(K::Char('>'), M::NONE) => match self.vi_cmd_motion(rdr, wrt, key, n)? {
+                Some(mvt) => Cmd::Indent(mvt),
+                None => Cmd::Unknown,
+            },
             E::ESC => Cmd::Noop,
             _ => self.common(rdr, key, n, true)?,
         };

@@ -653,6 +653,18 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
         self.refresh_line()
     }
+
+    /// Change the indentation of the lines covered by movement
+    pub fn edit_indent(&mut self, mvt: &Movement,
+        amount: usize, dedent: bool)
+        -> Result<()>
+    {
+        if self.line.indent(mvt, amount, dedent) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -55,7 +55,7 @@ use crate::hint::Hinter;
 use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
-pub use crate::keys::KeyPress;
+pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::validate::Validator;
@@ -174,10 +174,7 @@ fn complete_line<H: Helper>(
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
-            match cmd {
-                Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') => true,
-                _ => false,
-            }
+            matches!(cmd, Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y'))
         } else {
             true
         };
@@ -237,7 +234,11 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
         None => return Ok(()),
     };
     s.line.move_end();
-    if s.line.yank(hint, 1).is_none() {
+    if let Some(text) = hint.completion() {
+        if s.line.yank(text, 1).is_none() {
+            s.out.beep()?;
+        }
+    } else {
         s.out.beep()?;
     }
     s.refresh_line_with_msg(None)?;
@@ -281,7 +282,8 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::SelfInsert(1, ' ')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
                 && cmd != Cmd::AcceptLine
-                && cmd != Cmd::AcceptOrInsertLine
+                && cmd != Cmd::Newline
+                && !matches!(cmd, Cmd::AcceptOrInsertLine { .. })
             {
                 cmd = s.next_cmd(input_state, rdr, false)?;
             }
@@ -289,7 +291,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
-                Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
+                Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. } => {
                     pause_row += 1;
                 }
                 _ => break,
@@ -427,6 +429,7 @@ fn readline_edit<H: Helper>(
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
     let mut s = State::new(&mut stdout, prompt, helper, ctx);
+
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
     s.line.set_delete_listener(editor.kill_ring.clone());
@@ -438,8 +441,14 @@ fn readline_edit<H: Helper>(
     }
 
     let mut rdr = editor.term.create_reader(&editor.config)?;
-    if editor.term.is_output_tty() {
-        s.move_cursor_at_leftmost(&mut rdr)?;
+    if editor.term.is_output_tty() && editor.config.check_cursor_position() {
+        if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
+            if s.out.sigwinch() {
+                s.out.update_size();
+            } else {
+                return Err(e);
+            }
+        }
     }
     s.refresh_line()?;
 
@@ -509,13 +518,19 @@ fn readline_edit<H: Helper>(
                 s.edit_overwrite_char(c)?;
             }
             Cmd::EndOfFile => {
-                if !input_state.is_emacs_mode() && !s.line.is_empty() {
-                    s.edit_move_end()?;
-                    break;
-                } else if s.line.is_empty() {
-                    return Err(error::ReadlineError::Eof);
-                } else {
+                if input_state.is_emacs_mode() && !s.line.is_empty() {
                     s.edit_delete(1)?
+                } else {
+                    if s.has_hint() || !s.is_default_prompt() {
+                        // Force a refresh without hints to leave the previous
+                        // line as the user typed it after a newline.
+                        s.refresh_line_with_msg(None)?;
+                    }
+                    if s.line.is_empty() {
+                        return Err(error::ReadlineError::Eof);
+                    } else if !input_state.is_emacs_mode() {
+                        break;
+                    }
                 }
             }
             Cmd::Move(Movement::EndOfLine) => {
@@ -575,7 +590,7 @@ fn readline_edit<H: Helper>(
                     kill_ring.kill(&text, Mode::Append)
                 }
             }
-            Cmd::AcceptLine | Cmd::AcceptOrInsertLine => {
+            Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
                 #[cfg(test)]
                 {
                     editor.term.cursor = s.layout.cursor.col;
@@ -585,13 +600,27 @@ fn readline_edit<H: Helper>(
                     // line as the user typed it after a newline.
                     s.refresh_line_with_msg(None)?;
                 }
-                // Only accept value if cursor is at the end of the buffer
-                if s.validate()? && (cmd == Cmd::AcceptLine || s.line.is_end_of_input()) {
-                    break;
-                } else {
-                    s.edit_insert('\n', 1)?;
+                let valid = s.validate()?;
+                let end = s.line.is_end_of_input();
+                match (cmd, valid, end) {
+                    (Cmd::AcceptLine, ..)
+                    | (Cmd::AcceptOrInsertLine { .. }, true, true)
+                    | (
+                        Cmd::AcceptOrInsertLine {
+                            accept_in_the_middle: true,
+                        },
+                        true,
+                        _,
+                    ) => {
+                        break;
+                    }
+                    (Cmd::Newline, ..)
+                    | (Cmd::AcceptOrInsertLine { .. }, false, _)
+                    | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
+                        s.edit_insert('\n', 1)?;
+                    }
+                    _ => unreachable!(),
                 }
-                continue;
             }
             Cmd::BeginningOfHistory => {
                 // move to first entry in history
@@ -656,6 +685,10 @@ fn readline_edit<H: Helper>(
                 }
             }
             Cmd::Interrupt => {
+                // Move to end, in case cursor was in the middle of the
+                // line, so that next thing application prints goes after
+                // the input
+                s.edit_move_buffer_end()?;
                 return Err(error::ReadlineError::Interrupted);
             }
             #[cfg(unix)]
@@ -671,6 +704,11 @@ fn readline_edit<H: Helper>(
             }
         }
     }
+
+    // Move to end, in case cursor was in the middle of the line, so that
+    // next thing application prints goes after the input
+    s.edit_move_buffer_end()?;
+
     if cfg!(windows) {
         let _ = original_mode; // silent warning
     }
@@ -766,7 +804,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Arc<RwLock<HashMap<KeyPress, Cmd>>>,
+    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -839,8 +877,13 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Save the history in the specified file.
-    pub fn save_history<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
+    pub fn save_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         self.history.save(path)
+    }
+
+    /// Append new entries in the specified file.
+    pub fn append_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        self.history.append(path)
     }
 
     /// Add a new entry in the history.
@@ -880,18 +923,18 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Bind a sequence to a command.
-    pub fn bind_sequence(&mut self, key_seq: KeyPress, cmd: Cmd) -> Option<Cmd> {
+    pub fn bind_sequence(&mut self, key_seq: KeyEvent, cmd: Cmd) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(key_seq, cmd)
+            bindings.insert(KeyEvent::normalize(key_seq), cmd)
         } else {
             None
         }
     }
 
     /// Remove a binding for the given sequence.
-    pub fn unbind_sequence(&mut self, key_seq: KeyPress) -> Option<Cmd> {
+    pub fn unbind_sequence(&mut self, key_seq: KeyEvent) -> Option<Cmd> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.remove(&key_seq)
+            bindings.remove(&KeyEvent::normalize(key_seq))
         } else {
             None
         }

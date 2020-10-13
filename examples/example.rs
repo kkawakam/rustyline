@@ -6,7 +6,7 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyEvent};
 use rustyline_derive::Helper;
 
 #[derive(Helper)]
@@ -32,6 +32,8 @@ impl Completer for MyHelper {
 }
 
 impl Hinter for MyHelper {
+    type Hint = String;
+
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.hinter.hint(line, pos, ctx)
     }
@@ -95,8 +97,8 @@ fn main() -> rustyline::Result<()> {
     };
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
-    rl.bind_sequence(KeyPress::Meta('N'), Cmd::HistorySearchForward);
-    rl.bind_sequence(KeyPress::Meta('P'), Cmd::HistorySearchBackward);
+    rl.bind_sequence(KeyEvent::alt('N'), Cmd::HistorySearchForward);
+    rl.bind_sequence(KeyEvent::alt('P'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
@@ -125,5 +127,5 @@ fn main() -> rustyline::Result<()> {
         }
         count += 1;
     }
-    rl.save_history("history.txt")
+    rl.append_history("history.txt")
 }

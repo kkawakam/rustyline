@@ -17,6 +17,7 @@
 //! ```
 #![warn(missing_docs)]
 
+mod command;
 pub mod completion;
 pub mod config;
 mod edit;
@@ -56,8 +57,8 @@ use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
-use crate::kill_ring::{KillRing, Mode};
-use crate::line_buffer::WordAction;
+use crate::kill_ring::{KillRing};
+
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
@@ -422,13 +423,11 @@ fn readline_edit<H: Helper>(
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
 ) -> Result<String> {
-    let helper = editor.helper.as_ref();
-
     let mut stdout = editor.term.create_writer();
 
     editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
     let ctx = Context::new(&editor.history);
-    let mut s = State::new(&mut stdout, prompt, helper, ctx);
+    let mut s = State::new(&mut stdout, prompt, editor.helper.as_ref(), ctx);
 
     let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
 
@@ -453,14 +452,14 @@ fn readline_edit<H: Helper>(
     s.refresh_line()?;
 
     loop {
-        let rc = s.next_cmd(&mut input_state, &mut rdr, false);
-        let mut cmd = rc?;
+        let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false)?;
 
         if cmd.should_reset_kill_ring() {
             editor.reset_kill_ring();
         }
 
-        // autocomplete
+        // First trigger commands that need extra input
+
         if cmd == Cmd::Complete && s.helper.is_some() {
             let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
             if let Some(next) = next {
@@ -468,19 +467,6 @@ fn readline_edit<H: Helper>(
             } else {
                 continue;
             }
-        }
-
-        if Cmd::CompleteHint == cmd {
-            complete_hint_line(&mut s)?;
-            continue;
-        }
-
-        if let Cmd::SelfInsert(n, c) = cmd {
-            s.edit_insert(c, n)?;
-            continue;
-        } else if let Cmd::Insert(n, text) = cmd {
-            s.edit_yank(&input_state, &text, Anchor::Before, n)?;
-            continue;
         }
 
         if cmd == Cmd::ReverseSearchHistory {
@@ -494,220 +480,36 @@ fn readline_edit<H: Helper>(
             }
         }
 
-        match cmd {
-            Cmd::Move(Movement::BeginningOfLine) => {
-                // Move to the beginning of line.
-                s.edit_move_home()?
-            }
-            Cmd::Move(Movement::ViFirstPrint) => {
-                s.edit_move_home()?;
-                s.edit_move_to_next_word(At::Start, Word::Big, 1)?
-            }
-            Cmd::Move(Movement::BackwardChar(n)) => {
-                // Move back a character.
-                s.edit_move_backward(n)?
-            }
-            Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
-            Cmd::Replace(mvt, text) => {
-                s.edit_kill(&mvt)?;
-                if let Some(text) = text {
-                    s.edit_insert_text(&text)?
-                }
-            }
-            Cmd::Overwrite(c) => {
-                s.edit_overwrite_char(c)?;
-            }
-            Cmd::EndOfFile => {
-                if input_state.is_emacs_mode() && !s.line.is_empty() {
-                    s.edit_delete(1)?
-                } else {
-                    if s.has_hint() || !s.is_default_prompt() {
-                        // Force a refresh without hints to leave the previous
-                        // line as the user typed it after a newline.
-                        s.refresh_line_with_msg(None)?;
-                    }
-                    if s.line.is_empty() {
-                        return Err(error::ReadlineError::Eof);
-                    } else if !input_state.is_emacs_mode() {
-                        break;
-                    }
-                }
-            }
-            Cmd::Move(Movement::EndOfLine) => {
-                // Move to the end of line.
-                s.edit_move_end()?
-            }
-            Cmd::Move(Movement::ForwardChar(n)) => {
-                // Move forward a character.
-                s.edit_move_forward(n)?
-            }
-            Cmd::ClearScreen => {
-                // Clear the screen leaving the current line at the top of the screen.
-                s.clear_screen()?;
-                s.refresh_line()?
-            }
-            Cmd::NextHistory => {
-                // Fetch the next command from the history list.
-                s.edit_history_next(false)?
-            }
-            Cmd::PreviousHistory => {
-                // Fetch the previous command from the history list.
-                s.edit_history_next(true)?
-            }
-            Cmd::LineUpOrPreviousHistory(n) => {
-                if !s.edit_move_line_up(n)? {
-                    s.edit_history_next(true)?
-                }
-            }
-            Cmd::LineDownOrNextHistory(n) => {
-                if !s.edit_move_line_down(n)? {
-                    s.edit_history_next(false)?
-                }
-            }
-            Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
-            Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
-            Cmd::TransposeChars => {
-                // Exchange the char before cursor with the character at cursor.
-                s.edit_transpose_chars()?
-            }
-            #[cfg(unix)]
-            Cmd::QuotedInsert => {
-                // Quoted insert
-                use tty::RawReader;
-                let c = rdr.next_char()?;
-                s.edit_insert(c, 1)?
-            }
-            Cmd::Yank(n, anchor) => {
-                // retrieve (yank) last item killed
-                let mut kill_ring = editor.kill_ring.lock().unwrap();
-                if let Some(text) = kill_ring.yank() {
-                    s.edit_yank(&input_state, text, anchor, n)?
-                }
-            }
-            Cmd::ViYankTo(ref mvt) => {
-                if let Some(text) = s.line.copy(mvt) {
-                    let mut kill_ring = editor.kill_ring.lock().unwrap();
-                    kill_ring.kill(&text, Mode::Append)
-                }
-            }
-            Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
-                #[cfg(test)]
-                {
-                    editor.term.cursor = s.layout.cursor.col;
-                }
-                if s.has_hint() || !s.is_default_prompt() {
-                    // Force a refresh without hints to leave the previous
-                    // line as the user typed it after a newline.
-                    s.refresh_line_with_msg(None)?;
-                }
-                let valid = s.validate()?;
-                let end = s.line.is_end_of_input();
-                match (cmd, valid, end) {
-                    (Cmd::AcceptLine, ..)
-                    | (Cmd::AcceptOrInsertLine { .. }, true, true)
-                    | (
-                        Cmd::AcceptOrInsertLine {
-                            accept_in_the_middle: true,
-                        },
-                        true,
-                        _,
-                    ) => {
-                        break;
-                    }
-                    (Cmd::Newline, ..)
-                    | (Cmd::AcceptOrInsertLine { .. }, false, _)
-                    | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
-                        s.edit_insert('\n', 1)?;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Cmd::BeginningOfHistory => {
-                // move to first entry in history
-                s.edit_history(true)?
-            }
-            Cmd::EndOfHistory => {
-                // move to last entry in history
-                s.edit_history(false)?
-            }
-            Cmd::Move(Movement::BackwardWord(n, word_def)) => {
-                // move backwards one word
-                s.edit_move_to_prev_word(word_def, n)?
-            }
-            Cmd::CapitalizeWord => {
-                // capitalize word after point
-                s.edit_word(WordAction::CAPITALIZE)?
-            }
-            Cmd::Kill(ref mvt) => {
-                s.edit_kill(mvt)?;
-            }
-            Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
-                // move forwards one word
-                s.edit_move_to_next_word(at, word_def, n)?
-            }
-            Cmd::Move(Movement::LineUp(n)) => {
-                s.edit_move_line_up(n)?;
-            }
-            Cmd::Move(Movement::LineDown(n)) => {
-                s.edit_move_line_down(n)?;
-            }
-            Cmd::Move(Movement::BeginningOfBuffer) => {
-                // Move to the start of the buffer.
-                s.edit_move_buffer_start()?
-            }
-            Cmd::Move(Movement::EndOfBuffer) => {
-                // Move to the end of the buffer.
-                s.edit_move_buffer_end()?
-            }
-            Cmd::DowncaseWord => {
-                // lowercase word after point
-                s.edit_word(WordAction::LOWERCASE)?
-            }
-            Cmd::TransposeWords(n) => {
-                // transpose words
-                s.edit_transpose_words(n)?
-            }
-            Cmd::UpcaseWord => {
-                // uppercase word after point
-                s.edit_word(WordAction::UPPERCASE)?
-            }
-            Cmd::YankPop => {
-                // yank-pop
-                let mut kill_ring = editor.kill_ring.lock().unwrap();
-                if let Some((yank_size, text)) = kill_ring.yank_pop() {
-                    s.edit_yank_pop(yank_size, text)?
-                }
-            }
-            Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
-            Cmd::Undo(n) => {
-                if s.changes.borrow_mut().undo(&mut s.line, n) {
-                    s.refresh_line()?;
-                }
-            }
-            Cmd::Dedent(mvt) => {
-                s.edit_indent(&mvt, editor.config.indent_size(), true)?;
-            }
-            Cmd::Indent(mvt) => {
-                s.edit_indent(&mvt, editor.config.indent_size(), false)?;
-            }
-            Cmd::Interrupt => {
-                // Move to end, in case cursor was in the middle of the
-                // line, so that next thing application prints goes after
-                // the input
-                s.edit_move_buffer_end()?;
-                return Err(error::ReadlineError::Interrupted);
-            }
-            #[cfg(unix)]
-            Cmd::Suspend => {
-                original_mode.disable_raw_mode()?;
-                tty::suspend()?;
-                editor.term.enable_raw_mode()?; // TODO original_mode may have changed
-                s.refresh_line()?;
-                continue;
-            }
-            _ => {
-                // Ignore the character typed.
-            }
+        #[cfg(unix)]
+        if cmd == Cmd::Suspend {
+            original_mode.disable_raw_mode()?;
+            tty::suspend()?;
+            editor.term.enable_raw_mode()?; // TODO original_mode may have changed
+            s.refresh_line()?;
+            continue;
+        }
+
+        #[cfg(unix)]
+        if cmd == Cmd::QuotedInsert {
+            // Quoted insert
+            use crate::tty::RawReader;
+            let c = rdr.next_char()?;
+            s.edit_insert(c, 1)?;
+            continue;
+        }
+
+        // Tiny test quirk
+        #[cfg(test)]
+        if matches!(cmd, Cmd::AcceptLine | Cmd::Newline
+            | Cmd::AcceptOrInsertLine { .. })
+        {
+            editor.term.cursor = s.layout.cursor.col;
+        }
+
+        // Execute things can be done solely on a state object
+        match command::execute(cmd, &mut s, &input_state, &mut editor.kill_ring, &editor.config)? {
+            command::Status::Proceed => continue,
+            command::Status::Submit => break,
         }
     }
 

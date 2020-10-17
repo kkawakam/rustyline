@@ -309,7 +309,7 @@ fn filename_complete(
     quote: Quote,
 ) -> Result<Vec<Pair>> {
     #[cfg(feature = "with-dirs")]
-    use dirs_next::home_dir;
+    use dirs::home_dir;
     use std::env::current_dir;
 
     let sep = path::MAIN_SEPARATOR;

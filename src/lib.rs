@@ -684,6 +684,12 @@ fn readline_edit<H: Helper>(
                     s.refresh_line()?;
                 }
             }
+            Cmd::Dedent(mvt) => {
+                s.edit_indent(&mvt, editor.config.indent_size(), true)?;
+            }
+            Cmd::Indent(mvt) => {
+                s.edit_indent(&mvt, editor.config.indent_size(), false)?;
+            }
             Cmd::Interrupt => {
                 // Move to end, in case cursor was in the middle of the
                 // line, so that next thing application prints goes after

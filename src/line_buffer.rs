@@ -1,6 +1,7 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
 use std::cell::RefCell;
+use std::cmp::min;
 use std::fmt;
 use std::iter;
 use std::ops::{Deref, Index, Range};
@@ -11,6 +12,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 /// Default maximum buffer size for the line read
 pub(crate) const MAX_LINE: usize = 4096;
+pub(crate) const INDENT: &str = "                                ";
 
 /// Word's case change
 #[derive(Clone, Copy)]
@@ -1096,6 +1098,78 @@ impl LineBuffer {
             }
         }
         killed
+    }
+
+    /// Indent range specified by `mvt`.
+    pub fn indent(&mut self, mvt: &Movement, amount: usize, dedent: bool)
+        -> bool
+    {
+        let pair = match *mvt {
+            // All inline operators are the same: indent current line
+            | Movement::WholeLine
+            | Movement::BeginningOfLine
+            | Movement::ViFirstPrint
+            | Movement::EndOfLine
+            | Movement::BackwardChar(..)
+            | Movement::ForwardChar(..)
+            | Movement::ViCharSearch(..)
+            => {
+                Some((self.pos, self.pos))
+            }
+            Movement::EndOfBuffer => {
+                Some((self.pos, self.buf.len()))
+            }
+            Movement::WholeBuffer => {
+                Some((0, self.buf.len()))
+            }
+            Movement::BeginningOfBuffer => {
+                Some((0, self.pos))
+            }
+            Movement::BackwardWord(n, word_def) => {
+                self.prev_word_pos(self.pos, word_def, n)
+                    .map(|pos| (pos, self.pos))
+            }
+            Movement::ForwardWord(n, at, word_def) => {
+                self.next_word_pos(self.pos, at, word_def, n)
+                    .map(|pos| (self.pos, pos))
+            }
+            Movement::LineUp(n) => self.n_lines_up(n),
+            Movement::LineDown(n) => self.n_lines_down(n),
+        };
+        let (start, end) = pair.unwrap_or((self.pos, self.pos));
+        let start = self.buf[..start].rfind('\n')
+            .map(|pos| pos + 1).unwrap_or(0);
+        let end = self.buf[end..].rfind('\n')
+            .map(|pos| end + pos).unwrap_or(self.buf.len());
+        let mut index = start;
+        if dedent {
+            for line in self.buf[start..end].to_string().split('\n') {
+                let max = line.len() - line.trim_start().len();
+                let deleting = min(max, amount);
+                self.drain(index..index+deleting, Default::default());
+                if self.pos >= index {
+                    if self.pos.saturating_sub(index) < deleting {
+                        // don't wrap into the previous line
+                        self.pos = index;
+                    } else {
+                        self.pos -= deleting;
+                    }
+                }
+                index += line.len() + 1 - deleting;
+            }
+        } else {
+            for line in self.buf[start..end].to_string().split('\n') {
+                for off in (0..amount).step_by(INDENT.len()) {
+                    self.insert_str(index,
+                        &INDENT[..min(amount - off, INDENT.len())]);
+                }
+                if self.pos >= index {
+                    self.pos += amount;
+                }
+                index += amount + line.len() + 1;
+            }
+        }
+        return true;
     }
 }
 

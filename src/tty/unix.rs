@@ -607,8 +607,16 @@ impl PosixRawReader {
     }
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+        use nix::{Error, errno::Errno};
+
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
-        poll::poll(&mut fds, timeout_ms)
+        loop {
+            let polled = poll::poll(&mut fds, timeout_ms);
+            match polled {
+                Err(Error::Sys(Errno::EINTR)) => continue,
+                o => return o
+            }
+        }
     }
 }
 

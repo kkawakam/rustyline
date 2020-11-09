@@ -156,6 +156,7 @@ impl Config {
     pub fn check_cursor_position(&self) -> bool {
         self.check_cursor_position
     }
+
     /// Indentation size used by indentation commands
     ///
     /// By default, 2.

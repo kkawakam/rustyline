@@ -608,7 +608,18 @@ impl PosixRawReader {
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
-        poll::poll(&mut fds, timeout_ms)
+        let r = poll::poll(&mut fds, timeout_ms);
+        match r {
+            Ok(_) => r,
+            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+                if SIGWINCH.load(atomic::Ordering::Relaxed) {
+                    r
+                } else {
+                    Ok(0) // Ignore EINTR while polling
+                }
+            }
+            Err(_) => r,
+        }
     }
 }
 

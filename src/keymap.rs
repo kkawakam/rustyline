@@ -363,7 +363,7 @@ pub trait Refresher {
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()>;
     /// Same as [`refresh_line`] with a specific message instead of hint
-    fn refresh_line_with_msg(&mut self, msg: Option<String>) -> Result<()>;
+    fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()>;
     /// Same as `refresh_line` but with a dynamic prompt.
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
     /// Vi only, switch to insert mode.

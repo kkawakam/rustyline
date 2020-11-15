@@ -202,32 +202,30 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.layout.default_prompt
     }
 
-    pub fn validate(&mut self) -> Result<bool> {
+    pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
             self.changes.borrow_mut().begin();
             let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
-            let validated = match result {
-                ValidationResult::Incomplete => false,
-                ValidationResult::Valid(msg) => {
+            match result {
+                ValidationResult::Incomplete => {}
+                ValidationResult::Valid(ref msg) => {
                     // Accept the line regardless of where the cursor is.
                     if corrected || self.has_hint() || msg.is_some() {
                         // Force a refresh without hints to leave the previous
                         // line as the user typed it after a newline.
-                        self.refresh_line_with_msg(msg)?;
+                        self.refresh_line_with_msg(msg.as_deref())?;
                     }
-                    true
                 }
-                ValidationResult::Invalid(msg) => {
+                ValidationResult::Invalid(ref msg) => {
                     if corrected || self.has_hint() || msg.is_some() {
-                        self.refresh_line_with_msg(msg)?;
+                        self.refresh_line_with_msg(msg.as_deref())?;
                     }
-                    false
                 }
-            };
-            Ok(validated)
+            }
+            Ok(result)
         } else {
-            Ok(true)
+            Ok(ValidationResult::Valid(None))
         }
     }
 }
@@ -246,11 +244,11 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.refresh(self.prompt, prompt_size, true, Info::Hint)
     }
 
-    fn refresh_line_with_msg(&mut self, msg: Option<String>) -> Result<()> {
+    fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
-        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg.as_deref()))
+        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {

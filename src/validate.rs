@@ -15,6 +15,23 @@ pub enum ValidationResult {
     Valid(Option<String>),
 }
 
+impl ValidationResult {
+    pub(crate) fn is_valid(&self) -> bool {
+        if let ValidationResult::Valid(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub(crate) fn has_message(&self) -> bool {
+        match self {
+            ValidationResult::Valid(Some(_)) => true,
+            ValidationResult::Invalid(Some(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 /// Give access to user input.
 pub struct ValidationContext<'i> {
     i: &'i mut dyn Invoke,

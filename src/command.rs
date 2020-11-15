@@ -130,7 +130,8 @@ pub fn execute<H: Helper>(
                 // line as the user typed it after a newline.
                 s.refresh_line_with_msg(None)?;
             }
-            let valid = s.validate()?;
+            let validation_result = s.validate()?;
+            let valid = validation_result.is_valid();
             let end = s.line.is_end_of_input();
             match (cmd, valid, end) {
                 (Cmd::AcceptLine, ..)
@@ -147,7 +148,9 @@ pub fn execute<H: Helper>(
                 (Cmd::Newline, ..)
                 | (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
-                    s.edit_insert('\n', 1)?;
+                    if valid || !validation_result.has_message() {
+                        s.edit_insert('\n', 1)?;
+                    }
                 }
                 _ => unreachable!(),
             }

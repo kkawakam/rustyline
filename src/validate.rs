@@ -64,7 +64,8 @@ pub trait Validator {
     /// when user presses the Enter key.
     ///
     /// Default is `false`.
-    // TODO we can implement this later.
+    ///
+    /// This feature is not yet implemented, so this function is currently a no-op
     fn validate_while_typing(&self) -> bool {
         false
     }

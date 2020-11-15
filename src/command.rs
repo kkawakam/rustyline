@@ -1,16 +1,15 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{Helper, Result};
-use crate::{complete_hint_line};
+use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
 use crate::error;
-use crate::history::{Direction};
+use crate::history::Direction;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
+use crate::keymap::{InputState, Refresher};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
-use crate::keymap::{InputState, Refresher};
-
+use crate::{Helper, Result};
 
 pub enum Status {
     Proceed,
@@ -234,5 +233,5 @@ pub fn execute<H: Helper>(
             // Ignore the character typed.
         }
     }
-    return Ok(Proceed);
+    Ok(Proceed)
 }

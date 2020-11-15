@@ -1,16 +1,15 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{Helper, Result};
-use crate::{complete_hint_line};
+use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
 use crate::error;
-use crate::history::{Direction};
+use crate::history::Direction;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
+use crate::keymap::{InputState, Refresher};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
-use crate::keymap::{InputState, Refresher};
-
+use crate::{Helper, Result};
 
 pub enum Status {
     Proceed,
@@ -130,7 +129,8 @@ pub fn execute<H: Helper>(
                 // line as the user typed it after a newline.
                 s.refresh_line_with_msg(None)?;
             }
-            let valid = s.validate()?;
+            let validation_result = s.validate()?;
+            let valid = validation_result.is_valid();
             let end = s.line.is_end_of_input();
             match (cmd, valid, end) {
                 (Cmd::AcceptLine, ..)
@@ -147,7 +147,9 @@ pub fn execute<H: Helper>(
                 (Cmd::Newline, ..)
                 | (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
-                    s.edit_insert('\n', 1)?;
+                    if valid || !validation_result.has_message() {
+                        s.edit_insert('\n', 1)?;
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -231,5 +233,5 @@ pub fn execute<H: Helper>(
             // Ignore the character typed.
         }
     }
-    return Ok(Proceed);
+    Ok(Proceed)
 }

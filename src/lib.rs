@@ -57,7 +57,7 @@ use crate::history::{Direction, History};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
-use crate::kill_ring::{KillRing};
+use crate::kill_ring::KillRing;
 
 use crate::validate::Validator;
 
@@ -507,7 +507,7 @@ fn readline_edit<H: Helper>(
         }
 
         // Execute things can be done solely on a state object
-        match command::execute(cmd, &mut s, &input_state, &mut editor.kill_ring, &editor.config)? {
+        match command::execute(cmd, &mut s, &input_state, &editor.kill_ring, &editor.config)? {
             command::Status::Proceed => continue,
             command::Status::Submit => break,
         }

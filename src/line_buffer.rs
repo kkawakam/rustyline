@@ -1131,7 +1131,7 @@ impl LineBuffer {
         let end = self.buf[end..]
             .rfind('\n')
             .map(|pos| end + pos)
-            .unwrap_or(self.buf.len());
+            .unwrap_or_else(|| self.buf.len());
         let mut index = start;
         if dedent {
             for line in self.buf[start..end].to_string().split('\n') {
@@ -1159,7 +1159,7 @@ impl LineBuffer {
                 index += amount + line.len() + 1;
             }
         }
-        return true;
+        true
     }
 }
 

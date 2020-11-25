@@ -560,14 +560,14 @@ impl InputState {
                 }
             }
             E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) | E(K::Right, M::CTRL) => {
+            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) => {
+            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) | E(K::Right, M::CTRL) => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {

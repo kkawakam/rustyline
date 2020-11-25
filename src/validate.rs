@@ -17,18 +17,11 @@ pub enum ValidationResult {
 
 impl ValidationResult {
     pub(crate) fn is_valid(&self) -> bool {
-        if let ValidationResult::Valid(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ValidationResult::Valid(_))
     }
+
     pub(crate) fn has_message(&self) -> bool {
-        match self {
-            ValidationResult::Valid(Some(_)) => true,
-            ValidationResult::Invalid(Some(_)) => true,
-            _ => false,
-        }
+        matches!(self, ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_)))
     }
 }
 
@@ -82,7 +75,8 @@ pub trait Validator {
     ///
     /// Default is `false`.
     ///
-    /// This feature is not yet implemented, so this function is currently a no-op
+    /// This feature is not yet implemented, so this function is currently a
+    /// no-op
     fn validate_while_typing(&self) -> bool {
         false
     }

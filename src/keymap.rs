@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use log::debug;
 
 use super::Result;
+use crate::command;
 use crate::config::Config;
 use crate::config::EditMode;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
@@ -354,8 +355,7 @@ pub struct InputState {
 pub trait Invoke {
     /// currently edited line
     fn input(&self) -> &str;
-    // TODO
-    //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
+    fn invoke(&mut self, cmd: Cmd) -> Result<command::Status>;
 }
 
 pub trait Refresher {

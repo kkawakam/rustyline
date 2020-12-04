@@ -153,10 +153,10 @@ impl History {
             self.entries.len().saturating_sub(self.new_entries)
         } else {
             wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
+            wtr.write_all(b"\n")?;
             0
         };
         for entry in self.entries.iter().skip(first_new_entry) {
-            wtr.write_all(b"\n")?;
             let mut bytes = entry.as_bytes();
             while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
                 wtr.write_all(&bytes[..i])?;
@@ -169,6 +169,7 @@ impl History {
                 bytes = &bytes[i + 1..];
             }
             wtr.write_all(bytes)?; // remaining bytes with no \n or \
+            wtr.write_all(b"\n")?;
         }
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;

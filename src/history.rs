@@ -170,7 +170,6 @@ impl History {
             }
             wtr.write_all(bytes)?; // remaining bytes with no \n or \
         }
-        wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
         Ok(())

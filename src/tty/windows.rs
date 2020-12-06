@@ -1,22 +1,25 @@
 //! Windows specific definitions
 #![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::mem;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
+use winapi::shared::winerror;
+use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
-use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
+use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyPress};
+use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -27,7 +30,7 @@ const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
-    if handle == handleapi::INVALID_HANDLE_VALUE {
+    if handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
         Err(io::Error::new(
@@ -100,7 +103,7 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         use std::char::decode_utf16;
         use winapi::um::wincon::{
             LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
@@ -117,7 +120,7 @@ impl RawReader for ConsoleRawReader {
             })?;
 
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-                SIGWINCH.store(true, atomic::Ordering::SeqCst);
+                SIGWINCH.store(true, Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
                 return Err(error::ReadlineError::WindowResize); // sigwinch +
                                                                 // err => err
@@ -136,73 +139,51 @@ impl RawReader for ConsoleRawReader {
             let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
                 == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
-            let ctrl = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0;
-            let meta = alt && !alt_gr;
-            let shift = key_event.dwControlKeyState & SHIFT_PRESSED != 0;
+            let mut mods = M::NONE;
+            if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
+                mods |= M::CTRL;
+            }
+            if alt && !alt_gr {
+                mods |= M::ALT;
+            }
+            if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
+                mods |= M::SHIFT;
+            }
 
             let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-            if utf16 == 0 {
-                match i32::from(key_event.wVirtualKeyCode) {
-                    winuser::VK_LEFT => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlLeft
-                        } else if shift {
-                            KeyPress::ShiftLeft
-                        } else {
-                            KeyPress::Left
-                        });
-                    }
-                    winuser::VK_RIGHT => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlRight
-                        } else if shift {
-                            KeyPress::ShiftRight
-                        } else {
-                            KeyPress::Right
-                        });
-                    }
-                    winuser::VK_UP => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlUp
-                        } else if shift {
-                            KeyPress::ShiftUp
-                        } else {
-                            KeyPress::Up
-                        });
-                    }
-                    winuser::VK_DOWN => {
-                        return Ok(if ctrl {
-                            KeyPress::ControlDown
-                        } else if shift {
-                            KeyPress::ShiftDown
-                        } else {
-                            KeyPress::Down
-                        });
-                    }
-                    winuser::VK_DELETE => return Ok(KeyPress::Delete),
-                    winuser::VK_HOME => return Ok(KeyPress::Home),
-                    winuser::VK_END => return Ok(KeyPress::End),
-                    winuser::VK_PRIOR => return Ok(KeyPress::PageUp),
-                    winuser::VK_NEXT => return Ok(KeyPress::PageDown),
-                    winuser::VK_INSERT => return Ok(KeyPress::Insert),
-                    winuser::VK_F1 => return Ok(KeyPress::F(1)),
-                    winuser::VK_F2 => return Ok(KeyPress::F(2)),
-                    winuser::VK_F3 => return Ok(KeyPress::F(3)),
-                    winuser::VK_F4 => return Ok(KeyPress::F(4)),
-                    winuser::VK_F5 => return Ok(KeyPress::F(5)),
-                    winuser::VK_F6 => return Ok(KeyPress::F(6)),
-                    winuser::VK_F7 => return Ok(KeyPress::F(7)),
-                    winuser::VK_F8 => return Ok(KeyPress::F(8)),
-                    winuser::VK_F9 => return Ok(KeyPress::F(9)),
-                    winuser::VK_F10 => return Ok(KeyPress::F(10)),
-                    winuser::VK_F11 => return Ok(KeyPress::F(11)),
-                    winuser::VK_F12 => return Ok(KeyPress::F(12)),
-                    // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar is
-                    // also set.
-                    _ => continue,
-                };
+            let key = if utf16 == 0 {
+                KeyEvent(
+                    match i32::from(key_event.wVirtualKeyCode) {
+                        winuser::VK_LEFT => K::Left,
+                        winuser::VK_RIGHT => K::Right,
+                        winuser::VK_UP => K::Up,
+                        winuser::VK_DOWN => K::Down,
+                        winuser::VK_DELETE => K::Delete,
+                        winuser::VK_HOME => K::Home,
+                        winuser::VK_END => K::End,
+                        winuser::VK_PRIOR => K::PageUp,
+                        winuser::VK_NEXT => K::PageDown,
+                        winuser::VK_INSERT => K::Insert,
+                        winuser::VK_F1 => K::F(1),
+                        winuser::VK_F2 => K::F(2),
+                        winuser::VK_F3 => K::F(3),
+                        winuser::VK_F4 => K::F(4),
+                        winuser::VK_F5 => K::F(5),
+                        winuser::VK_F6 => K::F(6),
+                        winuser::VK_F7 => K::F(7),
+                        winuser::VK_F8 => K::F(8),
+                        winuser::VK_F9 => K::F(9),
+                        winuser::VK_F10 => K::F(10),
+                        winuser::VK_F11 => K::F(11),
+                        winuser::VK_F12 => K::F(12),
+                        // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
+                        // is also set.
+                        _ => continue,
+                    },
+                    mods,
+                )
             } else if utf16 == 27 {
-                return Ok(KeyPress::Esc);
+                KeyEvent(K::Esc, mods)
             } else {
                 if utf16 >= 0xD800 && utf16 < 0xDC00 {
                     surrogate = utf16;
@@ -219,18 +200,10 @@ impl RawReader for ConsoleRawReader {
                     return Err(error::ReadlineError::Eof);
                 };
                 let c = rc?;
-                if meta {
-                    return Ok(KeyPress::Meta(c));
-                } else {
-                    let mut key = keys::char_to_key_press(c);
-                    if key == KeyPress::Tab && shift {
-                        key = KeyPress::BackTab;
-                    } else if key == KeyPress::Char(' ') && ctrl {
-                        key = KeyPress::Ctrl(' ');
-                    }
-                    return Ok(key);
-                }
-            }
+                KeyEvent::new(c, mods)
+            };
+            debug!(target: "rustyline", "key: {:?}", key);
+            return Ok(key);
         }
     }
 
@@ -267,17 +240,17 @@ impl ConsoleRenderer {
         }
     }
 
-    fn get_console_screen_buffer_info(&self) -> Result<wincon::CONSOLE_SCREEN_BUFFER_INFO> {
+    fn get_console_screen_buffer_info(&self) -> Result<CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
         check(unsafe { wincon::GetConsoleScreenBufferInfo(self.handle, &mut info) })?;
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
+    fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
         check(unsafe { wincon::SetConsoleCursorPosition(self.handle, pos) })
     }
 
-    fn clear(&mut self, length: DWORD, pos: wincon::COORD, attr: WORD) -> Result<()> {
+    fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
             wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
@@ -317,11 +290,7 @@ impl ConsoleRenderer {
     }
 
     // position at the start of the prompt, clear to end of previous input
-    fn clear_old_rows(
-        &mut self,
-        info: &wincon::CONSOLE_SCREEN_BUFFER_INFO,
-        layout: &Layout,
-    ) -> Result<()> {
+    fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
         let mut coord = info.dwCursorPosition;
@@ -470,14 +439,14 @@ impl Renderer for ConsoleRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
-        let coord = wincon::COORD { X: 0, Y: 0 };
+        let coord = COORD { X: 0, Y: 0 };
         check(unsafe { wincon::SetConsoleCursorPosition(self.handle, coord) })?;
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
         self.clear(n, coord, info.wAttributes)
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to get the number of columns in the current terminal,
@@ -513,7 +482,7 @@ impl Renderer for ConsoleRenderer {
         info.dwCursorPosition.Y += 1;
         let res = self.set_console_cursor_position(info.dwCursorPosition);
         if let Err(error::ReadlineError::Io(ref e)) = res {
-            if e.kind() == ErrorKind::Other && e.raw_os_error() == Some(87) {
+            if e.raw_os_error() == Some(winerror::ERROR_INVALID_PARAMETER as i32) {
                 warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", info.dwCursorPosition.X, info.dwCursorPosition.Y, info.dwSize.X, info.dwSize.Y);
                 println!();
                 return Ok(());
@@ -523,7 +492,7 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;

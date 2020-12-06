@@ -1,9 +1,9 @@
 //! Unix specific definitions
-use std::cmp::Ordering;
-use std::io::{self, Read, Write};
+use std::cmp;
+use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
@@ -17,7 +17,7 @@ use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
-use crate::keys::{self, KeyPress};
+use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -41,7 +41,7 @@ impl AsRawFd for OutputStreamType {
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-#[allow(clippy::identity_conversion)]
+#[allow(clippy::useless_conversion)]
 fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     use std::mem::zeroed;
 
@@ -52,7 +52,23 @@ fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
     unsafe {
         let mut size: libc::winsize = zeroed();
         match win_size(fileno.as_raw_fd(), &mut size) {
-            Ok(0) => (size.ws_col as usize, size.ws_row as usize), // TODO getCursorPosition
+            Ok(0) => {
+                // In linux pseudo-terminals are created with dimensions of
+                // zero. If host application didn't initialize the correct
+                // size before start we treat zero size as 80 columns and
+                // inifinite rows
+                let cols = if size.ws_col == 0 {
+                    80
+                } else {
+                    size.ws_col as usize
+                };
+                let rows = if size.ws_row == 0 {
+                    usize::max_value()
+                } else {
+                    size.ws_row as usize
+                };
+                (cols, rows)
+            }
             _ => (80, 24),
         }
     }
@@ -115,9 +131,7 @@ impl Read for StdinRaw {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != io::ErrorKind::Interrupted
-                    || SIGWINCH.load(atomic::Ordering::Relaxed)
-                {
+                if error.kind() != ErrorKind::Interrupted || SIGWINCH.load(Ordering::Relaxed) {
                     return Err(error);
                 }
             } else {
@@ -142,9 +156,35 @@ struct Utf8 {
     valid: bool,
 }
 
+const UP: char = 'A'; // kcuu1, kUP*
+const DOWN: char = 'B'; // kcud1, kDN*
+const RIGHT: char = 'C'; // kcuf1, kRIT*
+const LEFT: char = 'D'; // kcub1, kLFT*
+const END: char = 'F'; // kend*
+const HOME: char = 'H'; // khom*
+const INSERT: char = '2'; // kic*
+const DELETE: char = '3'; // kdch1, kDC*
+const PAGE_UP: char = '5'; // kpp, kPRV*
+const PAGE_DOWN: char = '6'; // knp, kNXT*
+
+const RXVT_HOME: char = '7';
+const RXVT_END: char = '8';
+
+const SHIFT: char = '2';
+const ALT: char = '3';
+const ALT_SHIFT: char = '4';
+const CTRL: char = '5';
+const CTRL_SHIFT: char = '6';
+const CTRL_ALT: char = '7';
+const CTRL_ALT_SHIFT: char = '8';
+
+const RXVT_SHIFT: char = '$';
+const RXVT_CTRL: char = '\x1e';
+const RXVT_CTRL_SHIFT: char = '@';
+
 impl PosixRawReader {
-    fn new(config: &Config) -> Result<Self> {
-        Ok(Self {
+    fn new(config: &Config) -> Self {
+        Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
@@ -153,37 +193,42 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
-        })
-    }
-
-    /// Handle ESC <seq1> sequences
-    fn escape_sequence(&mut self) -> Result<KeyPress> {
-        // Read the next byte representing the escape sequence.
-        let seq1 = self.next_char()?;
-        if seq1 == '[' {
-            // ESC [ sequences. (CSI)
-            self.escape_csi()
-        } else if seq1 == 'O' {
-            // xterm
-            // ESC O sequences. (SS3)
-            self.escape_o()
-        } else if seq1 == '\x1b' {
-            // ESC ESC
-            Ok(KeyPress::Esc)
-        } else {
-            // TODO ESC-R (r): Undo all changes made to this line.
-            Ok(KeyPress::Meta(seq1))
         }
     }
 
-    /// Handle ESC [ <seq2> escape sequences
-    fn escape_csi(&mut self) -> Result<KeyPress> {
+    /// Handle \E <seq1> sequences
+    // https://invisible-island.net/xterm/xterm-function-keys.html
+    fn escape_sequence(&mut self) -> Result<KeyEvent> {
+        // Read the next byte representing the escape sequence.
+        let seq1 = self.next_char()?;
+        if seq1 == '[' {
+            // \E[ sequences. (CSI)
+            self.escape_csi()
+        } else if seq1 == 'O' {
+            // xterm
+            // \EO sequences. (SS3)
+            self.escape_o()
+        } else if seq1 == '\x1b' {
+            // \E\E
+            // \E\E[A => Alt-Up
+            // \E\E[B => Alt-Down
+            // \E\E[C => Alt-Right
+            // \E\E[D => Alt-Left
+            // ...
+            Ok(E::ESC)
+        } else {
+            Ok(E::alt(seq1))
+        }
+    }
+
+    /// Handle \E[ <seq2> escape sequences
+    fn escape_csi(&mut self) -> Result<KeyEvent> {
         let seq2 = self.next_char()?;
         if seq2.is_digit(10) {
             match seq2 {
                 '0' | '9' => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                    Ok(KeyPress::UnknownEscSeq)
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
                 _ => {
                     // Extended escape, read additional byte.
@@ -194,72 +239,85 @@ impl PosixRawReader {
             let seq3 = self.next_char()?;
             // Linux console
             Ok(match seq3 {
-                'A' => KeyPress::F(1),
-                'B' => KeyPress::F(2),
-                'C' => KeyPress::F(3),
-                'D' => KeyPress::F(4),
-                'E' => KeyPress::F(5),
+                'A' => E(K::F(1), M::NONE),
+                'B' => E(K::F(2), M::NONE),
+                'C' => E(K::F(3), M::NONE),
+                'D' => E(K::F(4), M::NONE),
+                'E' => E(K::F(5), M::NONE),
                 _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ [ {:?}", seq3);
-                    KeyPress::UnknownEscSeq
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[[{:?}", seq3);
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         } else {
             // ANSI
             Ok(match seq2 {
-                'A' => KeyPress::Up,    // kcuu1
-                'B' => KeyPress::Down,  // kcud1
-                'C' => KeyPress::Right, // kcuf1
-                'D' => KeyPress::Left,  // kcub1
-                'F' => KeyPress::End,
-                'H' => KeyPress::Home, // khome
-                'Z' => KeyPress::BackTab,
+                UP => E(K::Up, M::NONE),
+                DOWN => E(K::Down, M::NONE),
+                RIGHT => E(K::Right, M::NONE),
+                LEFT => E(K::Left, M::NONE),
+                //'E' => E(K::, M::), // Ignore
+                END => E(K::End, M::NONE),
+                //'G' => E(K::, M::), // Ignore
+                HOME => E(K::Home, M::NONE), // khome
+                //'J' => E(K::, M::), // clr_eos
+                //'K' => E(K::, M::), // clr_eol
+                //'L' => E(K::, M::), // il1
+                //'M' => E(K::, M::), // kmous
+                //'P' => E(K::Delete, M::NONE), // dch1
+                'Z' => E(K::BackTab, M::NONE),
+                'a' => E(K::Up, M::SHIFT),    // rxvt: kind or kUP
+                'b' => E(K::Down, M::SHIFT),  // rxvt: kri or kDN
+                'c' => E(K::Right, M::SHIFT), // rxvt
+                'd' => E(K::Left, M::SHIFT),  // rxvt
                 _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: ESC [ {:?}", seq2);
-                    KeyPress::UnknownEscSeq
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         }
     }
 
-    /// Handle ESC [ <seq2:digit> escape sequences
+    /// Handle \E[ <seq2:digit> escape sequences
     #[allow(clippy::cognitive_complexity)]
-    fn extended_escape(&mut self, seq2: char) -> Result<KeyPress> {
+    fn extended_escape(&mut self, seq2: char) -> Result<KeyEvent> {
         let seq3 = self.next_char()?;
         if seq3 == '~' {
             Ok(match seq2 {
-                '1' | '7' => KeyPress::Home, // tmux, xrvt
-                '2' => KeyPress::Insert,
-                '3' => KeyPress::Delete,    // kdch1
-                '4' | '8' => KeyPress::End, // tmux, xrvt
-                '5' => KeyPress::PageUp,    // kpp
-                '6' => KeyPress::PageDown,  // knp
+                '1' | RXVT_HOME => E(K::Home, M::NONE), // tmux, xrvt
+                INSERT => E(K::Insert, M::NONE),
+                DELETE => E(K::Delete, M::NONE),
+                '4' | RXVT_END => E(K::End, M::NONE), // tmux, xrvt
+                PAGE_UP => E(K::PageUp, M::NONE),
+                PAGE_DOWN => E(K::PageDown, M::NONE),
                 _ => {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ~", seq2);
-                    KeyPress::UnknownEscSeq
+                           "unsupported esc sequence: \\E[{}~", seq2);
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         } else if seq3.is_digit(10) {
             let seq4 = self.next_char()?;
             if seq4 == '~' {
                 Ok(match (seq2, seq3) {
-                    ('1', '1') => KeyPress::F(1),  // rxvt-unicode
-                    ('1', '2') => KeyPress::F(2),  // rxvt-unicode
-                    ('1', '3') => KeyPress::F(3),  // rxvt-unicode
-                    ('1', '4') => KeyPress::F(4),  // rxvt-unicode
-                    ('1', '5') => KeyPress::F(5),  // kf5
-                    ('1', '7') => KeyPress::F(6),  // kf6
-                    ('1', '8') => KeyPress::F(7),  // kf7
-                    ('1', '9') => KeyPress::F(8),  // kf8
-                    ('2', '0') => KeyPress::F(9),  // kf9
-                    ('2', '1') => KeyPress::F(10), // kf10
-                    ('2', '3') => KeyPress::F(11), // kf11
-                    ('2', '4') => KeyPress::F(12), // kf12
+                    ('1', '1') => E(K::F(1), M::NONE),  // rxvt-unicode
+                    ('1', '2') => E(K::F(2), M::NONE),  // rxvt-unicode
+                    ('1', '3') => E(K::F(3), M::NONE),  // rxvt-unicode
+                    ('1', '4') => E(K::F(4), M::NONE),  // rxvt-unicode
+                    ('1', '5') => E(K::F(5), M::NONE),  // kf5
+                    ('1', '7') => E(K::F(6), M::NONE),  // kf6
+                    ('1', '8') => E(K::F(7), M::NONE),  // kf7
+                    ('1', '9') => E(K::F(8), M::NONE),  // kf8
+                    ('2', '0') => E(K::F(9), M::NONE),  // kf9
+                    ('2', '1') => E(K::F(10), M::NONE), // kf10
+                    ('2', '3') => E(K::F(11), M::NONE), // kf11
+                    ('2', '4') => E(K::F(12), M::NONE), // kf12
+                    //('6', '2') => KeyCode::ScrollUp,
+                    //('6', '3') => KeyCode::ScrollDown,
                     _ => {
                         debug!(target: "rustyline",
-                               "unsupported esc sequence: ESC [ {}{} ~", seq2, seq3);
-                        KeyPress::UnknownEscSeq
+                               "unsupported esc sequence: \\E[{}{}~", seq2, seq3);
+                        E(K::UnknownEscSeq, M::NONE)
                     }
                 })
             } else if seq4 == ';' {
@@ -268,37 +326,63 @@ impl PosixRawReader {
                     let seq6 = self.next_char()?;
                     if seq6.is_digit(10) {
                         self.next_char()?; // 'R' expected
+                        Ok(E(K::UnknownEscSeq, M::NONE))
                     } else if seq6 == 'R' {
+                        Ok(E(K::UnknownEscSeq, M::NONE))
+                    } else if seq6 == '~' {
+                        Ok(match (seq2, seq3, seq5) {
+                            ('1', '5', CTRL) => E(K::F(5), M::CTRL),
+                            //('1', '5', '6') => E(K::F(17), M::CTRL),
+                            ('1', '7', CTRL) => E(K::F(6), M::CTRL),
+                            //('1', '7', '6') => E(K::F(18), M::CTRL),
+                            ('1', '8', CTRL) => E(K::F(7), M::CTRL),
+                            ('1', '9', CTRL) => E(K::F(8), M::CTRL),
+                            //('1', '9', '6') => E(K::F(19), M::CTRL),
+                            ('2', '0', CTRL) => E(K::F(9), M::CTRL),
+                            //('2', '0', '6') => E(K::F(21), M::CTRL),
+                            ('2', '1', CTRL) => E(K::F(10), M::CTRL),
+                            //('2', '1', '6') => E(K::F(22), M::CTRL),
+                            ('2', '3', CTRL) => E(K::F(11), M::CTRL),
+                            //('2', '3', '6') => E(K::F(23), M::CTRL),
+                            ('2', '4', CTRL) => E(K::F(12), M::CTRL),
+                            //('2', '4', '6') => E(K::F(24), M::CTRL),
+                            _ => {
+                                debug!(target: "rustyline",
+                                       "unsupported esc sequence: \\E[{}{};{}~", seq2, seq3, seq5);
+                                E(K::UnknownEscSeq, M::NONE)
+                            }
+                        })
                     } else {
                         debug!(target: "rustyline",
-                               "unsupported esc sequence: ESC [ {}{} ; {} {}", seq2, seq3, seq5, seq6);
+                               "unsupported esc sequence: \\E[{}{};{}{}", seq2, seq3, seq5, seq6);
+                        Ok(E(K::UnknownEscSeq, M::NONE))
                     }
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{} ; {:?}", seq2, seq3, seq5);
+                           "unsupported esc sequence: \\E[{}{};{:?}", seq2, seq3, seq5);
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
-                Ok(KeyPress::UnknownEscSeq)
             } else if seq4.is_digit(10) {
                 let seq5 = self.next_char()?;
                 if seq5 == '~' {
                     Ok(match (seq2, seq3, seq4) {
-                        ('2', '0', '0') => KeyPress::BracketedPasteStart,
-                        ('2', '0', '1') => KeyPress::BracketedPasteEnd,
+                        ('2', '0', '0') => E(K::BracketedPasteStart, M::NONE),
+                        ('2', '0', '1') => E(K::BracketedPasteEnd, M::NONE),
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ {}{}{}~", seq2, seq3, seq4);
-                            KeyPress::UnknownEscSeq
+                                   "unsupported esc sequence: \\E[{}{}{}~", seq2, seq3, seq4);
+                            E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {}{}{} {}", seq2, seq3, seq4, seq5);
-                    Ok(KeyPress::UnknownEscSeq)
+                           "unsupported esc sequence: \\E[{}{}{}{}", seq2, seq3, seq4, seq5);
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
-                       "unsupported esc sequence: ESC [ {}{} {:?}", seq2, seq3, seq4);
-                Ok(KeyPress::UnknownEscSeq)
+                       "unsupported esc sequence: \\E[{}{}{:?}", seq2, seq3, seq4);
+                Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else if seq3 == ';' {
             let seq4 = self.next_char()?;
@@ -306,85 +390,243 @@ impl PosixRawReader {
                 let seq5 = self.next_char()?;
                 if seq5.is_digit(10) {
                     self.next_char()?; // 'R' expected
-                    Ok(KeyPress::UnknownEscSeq)
+                                       //('1', '0', UP) => E(K::, M::), // Alt + Shift + Up
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
-                        ('5', 'A') => KeyPress::ControlUp,
-                        ('5', 'B') => KeyPress::ControlDown,
-                        ('5', 'C') => KeyPress::ControlRight,
-                        ('5', 'D') => KeyPress::ControlLeft,
-                        ('2', 'A') => KeyPress::ShiftUp,
-                        ('2', 'B') => KeyPress::ShiftDown,
-                        ('2', 'C') => KeyPress::ShiftRight,
-                        ('2', 'D') => KeyPress::ShiftLeft,
+                        (SHIFT, UP) => E(K::Up, M::SHIFT),     // ~ key_sr
+                        (SHIFT, DOWN) => E(K::Down, M::SHIFT), // ~ key_sf
+                        (SHIFT, RIGHT) => E(K::Right, M::SHIFT),
+                        (SHIFT, LEFT) => E(K::Left, M::SHIFT),
+                        (SHIFT, END) => E(K::End, M::SHIFT), // kEND
+                        (SHIFT, HOME) => E(K::Home, M::SHIFT), // kHOM
+                        //('2', 'P') => E(K::F(13), M::NONE),
+                        //('2', 'Q') => E(K::F(14), M::NONE),
+                        //('2', 'S') => E(K::F(16), M::NONE),
+                        (ALT, UP) => E(K::Up, M::ALT),
+                        (ALT, DOWN) => E(K::Down, M::ALT),
+                        (ALT, RIGHT) => E(K::Right, M::ALT),
+                        (ALT, LEFT) => E(K::Left, M::ALT),
+                        (ALT, END) => E(K::End, M::ALT),
+                        (ALT, HOME) => E(K::Home, M::ALT),
+                        (ALT_SHIFT, UP) => E(K::Up, M::ALT_SHIFT),
+                        (ALT_SHIFT, DOWN) => E(K::Down, M::ALT_SHIFT),
+                        (ALT_SHIFT, RIGHT) => E(K::Right, M::ALT_SHIFT),
+                        (ALT_SHIFT, LEFT) => E(K::Left, M::ALT_SHIFT),
+                        (ALT_SHIFT, END) => E(K::End, M::ALT_SHIFT),
+                        (ALT_SHIFT, HOME) => E(K::Home, M::ALT_SHIFT),
+                        (CTRL, UP) => E(K::Up, M::CTRL),
+                        (CTRL, DOWN) => E(K::Down, M::CTRL),
+                        (CTRL, RIGHT) => E(K::Right, M::CTRL),
+                        (CTRL, LEFT) => E(K::Left, M::CTRL),
+                        (CTRL, END) => E(K::End, M::CTRL),
+                        (CTRL, HOME) => E(K::Home, M::CTRL),
+                        (CTRL, 'P') => E(K::F(1), M::CTRL),
+                        (CTRL, 'Q') => E(K::F(2), M::CTRL),
+                        (CTRL, 'S') => E(K::F(4), M::CTRL),
+                        (CTRL, 'p') => E(K::Char('0'), M::CTRL),
+                        (CTRL, 'q') => E(K::Char('1'), M::CTRL),
+                        (CTRL, 'r') => E(K::Char('2'), M::CTRL),
+                        (CTRL, 's') => E(K::Char('3'), M::CTRL),
+                        (CTRL, 't') => E(K::Char('4'), M::CTRL),
+                        (CTRL, 'u') => E(K::Char('5'), M::CTRL),
+                        (CTRL, 'v') => E(K::Char('6'), M::CTRL),
+                        (CTRL, 'w') => E(K::Char('7'), M::CTRL),
+                        (CTRL, 'x') => E(K::Char('8'), M::CTRL),
+                        (CTRL, 'y') => E(K::Char('9'), M::CTRL),
+                        (CTRL_SHIFT, UP) => E(K::Up, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, DOWN) => E(K::Down, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, RIGHT) => E(K::Right, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, LEFT) => E(K::Left, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, END) => E(K::End, M::CTRL_SHIFT),
+                        (CTRL_SHIFT, HOME) => E(K::Home, M::CTRL_SHIFT),
+                        //('6', 'P') => E(K::F(13), M::CTRL),
+                        //('6', 'Q') => E(K::F(14), M::CTRL),
+                        //('6', 'S') => E(K::F(16), M::CTRL),
+                        (CTRL_SHIFT, 'p') => E(K::Char('0'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'q') => E(K::Char('1'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'r') => E(K::Char('2'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 's') => E(K::Char('3'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 't') => E(K::Char('4'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'u') => E(K::Char('5'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'v') => E(K::Char('6'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'w') => E(K::Char('7'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'x') => E(K::Char('8'), M::CTRL_SHIFT),
+                        (CTRL_SHIFT, 'y') => E(K::Char('9'), M::CTRL_SHIFT),
+                        (CTRL_ALT, UP) => E(K::Up, M::CTRL_ALT),
+                        (CTRL_ALT, DOWN) => E(K::Down, M::CTRL_ALT),
+                        (CTRL_ALT, RIGHT) => E(K::Right, M::CTRL_ALT),
+                        (CTRL_ALT, LEFT) => E(K::Left, M::CTRL_ALT),
+                        (CTRL_ALT, END) => E(K::End, M::CTRL_ALT),
+                        (CTRL_ALT, HOME) => E(K::Home, M::CTRL_ALT),
+                        (CTRL_ALT, 'p') => E(K::Char('0'), M::CTRL_ALT),
+                        (CTRL_ALT, 'q') => E(K::Char('1'), M::CTRL_ALT),
+                        (CTRL_ALT, 'r') => E(K::Char('2'), M::CTRL_ALT),
+                        (CTRL_ALT, 's') => E(K::Char('3'), M::CTRL_ALT),
+                        (CTRL_ALT, 't') => E(K::Char('4'), M::CTRL_ALT),
+                        (CTRL_ALT, 'u') => E(K::Char('5'), M::CTRL_ALT),
+                        (CTRL_ALT, 'v') => E(K::Char('6'), M::CTRL_ALT),
+                        (CTRL_ALT, 'w') => E(K::Char('7'), M::CTRL_ALT),
+                        (CTRL_ALT, 'x') => E(K::Char('8'), M::CTRL_ALT),
+                        (CTRL_ALT, 'y') => E(K::Char('9'), M::CTRL_ALT),
+                        (CTRL_ALT_SHIFT, UP) => E(K::Up, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, DOWN) => E(K::Down, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, RIGHT) => E(K::Right, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, LEFT) => E(K::Left, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, END) => E(K::End, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, HOME) => E(K::Home, M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'p') => E(K::Char('0'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'q') => E(K::Char('1'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'r') => E(K::Char('2'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 's') => E(K::Char('3'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 't') => E(K::Char('4'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'u') => E(K::Char('5'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'v') => E(K::Char('6'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'w') => E(K::Char('7'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'x') => E(K::Char('8'), M::CTRL_ALT_SHIFT),
+                        (CTRL_ALT_SHIFT, 'y') => E(K::Char('9'), M::CTRL_ALT_SHIFT),
+                        // Meta + arrow on (some?) Macs when using iTerm defaults
+                        ('9', UP) => E(K::Up, M::ALT),
+                        ('9', DOWN) => E(K::Down, M::ALT),
+                        ('9', RIGHT) => E(K::Right, M::ALT),
+                        ('9', LEFT) => E(K::Left, M::ALT),
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: ESC [ 1 ; {} {:?}", seq4, seq5);
-                            KeyPress::UnknownEscSeq
+                                   "unsupported esc sequence: \\E[1;{}{:?}", seq4, seq5);
+                            E(K::UnknownEscSeq, M::NONE)
+                        }
+                    })
+                } else if seq5 == '~' {
+                    Ok(match (seq2, seq4) {
+                        (INSERT, SHIFT) => E(K::Insert, M::SHIFT),
+                        (INSERT, ALT) => E(K::Insert, M::ALT),
+                        (INSERT, ALT_SHIFT) => E(K::Insert, M::ALT_SHIFT),
+                        (INSERT, CTRL) => E(K::Insert, M::CTRL),
+                        (INSERT, CTRL_SHIFT) => E(K::Insert, M::CTRL_SHIFT),
+                        (INSERT, CTRL_ALT) => E(K::Insert, M::CTRL_ALT),
+                        (INSERT, CTRL_ALT_SHIFT) => E(K::Insert, M::CTRL_ALT_SHIFT),
+                        (DELETE, SHIFT) => E(K::Delete, M::SHIFT),
+                        (DELETE, ALT) => E(K::Delete, M::ALT),
+                        (DELETE, ALT_SHIFT) => E(K::Delete, M::ALT_SHIFT),
+                        (DELETE, CTRL) => E(K::Delete, M::CTRL),
+                        (DELETE, CTRL_SHIFT) => E(K::Delete, M::CTRL_SHIFT),
+                        (DELETE, CTRL_ALT) => E(K::Delete, M::CTRL_ALT),
+                        (DELETE, CTRL_ALT_SHIFT) => E(K::Delete, M::CTRL_ALT_SHIFT),
+                        (PAGE_UP, SHIFT) => E(K::PageUp, M::SHIFT),
+                        (PAGE_UP, ALT) => E(K::PageUp, M::ALT),
+                        (PAGE_UP, ALT_SHIFT) => E(K::PageUp, M::ALT_SHIFT),
+                        (PAGE_UP, CTRL) => E(K::PageUp, M::CTRL),
+                        (PAGE_UP, CTRL_SHIFT) => E(K::PageUp, M::CTRL_SHIFT),
+                        (PAGE_UP, CTRL_ALT) => E(K::PageUp, M::CTRL_ALT),
+                        (PAGE_UP, CTRL_ALT_SHIFT) => E(K::PageUp, M::CTRL_ALT_SHIFT),
+                        (PAGE_DOWN, SHIFT) => E(K::PageDown, M::SHIFT),
+                        (PAGE_DOWN, ALT) => E(K::PageDown, M::ALT),
+                        (PAGE_DOWN, ALT_SHIFT) => E(K::PageDown, M::ALT_SHIFT),
+                        (PAGE_DOWN, CTRL) => E(K::PageDown, M::CTRL),
+                        (PAGE_DOWN, CTRL_SHIFT) => E(K::PageDown, M::CTRL_SHIFT),
+                        (PAGE_DOWN, CTRL_ALT) => E(K::PageDown, M::CTRL_ALT),
+                        (PAGE_DOWN, CTRL_ALT_SHIFT) => E(K::PageDown, M::CTRL_ALT_SHIFT),
+                        _ => {
+                            debug!(target: "rustyline",
+                                   "unsupported esc sequence: \\E[{};{:?}~", seq2, seq4);
+                            E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} ; {} {:?}", seq2, seq4, seq5);
-                    Ok(KeyPress::UnknownEscSeq)
+                           "unsupported esc sequence: \\E[{};{}{:?}", seq2, seq4, seq5);
+                    Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
-                       "unsupported esc sequence: ESC [ {} ; {:?}", seq2, seq4);
-                Ok(KeyPress::UnknownEscSeq)
+                       "unsupported esc sequence: \\E[{};{:?}", seq2, seq4);
+                Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else {
             Ok(match (seq2, seq3) {
-                ('5', 'A') => KeyPress::ControlUp,
-                ('5', 'B') => KeyPress::ControlDown,
-                ('5', 'C') => KeyPress::ControlRight,
-                ('5', 'D') => KeyPress::ControlLeft,
+                (DELETE, RXVT_CTRL) => E(K::Delete, M::CTRL),
+                (DELETE, RXVT_CTRL_SHIFT) => E(K::Delete, M::CTRL_SHIFT),
+                (CTRL, UP) => E(K::Up, M::CTRL),
+                (CTRL, DOWN) => E(K::Down, M::CTRL),
+                (CTRL, RIGHT) => E(K::Right, M::CTRL),
+                (CTRL, LEFT) => E(K::Left, M::CTRL),
+                (PAGE_UP, RXVT_CTRL) => E(K::PageUp, M::CTRL),
+                (PAGE_UP, RXVT_SHIFT) => E(K::PageUp, M::SHIFT),
+                (PAGE_UP, RXVT_CTRL_SHIFT) => E(K::PageUp, M::CTRL_SHIFT),
+                (PAGE_DOWN, RXVT_CTRL) => E(K::PageDown, M::CTRL),
+                (PAGE_DOWN, RXVT_SHIFT) => E(K::PageDown, M::SHIFT),
+                (PAGE_DOWN, RXVT_CTRL_SHIFT) => E(K::PageDown, M::CTRL_SHIFT),
+                (RXVT_HOME, RXVT_CTRL) => E(K::Home, M::CTRL),
+                (RXVT_HOME, RXVT_SHIFT) => E(K::Home, M::SHIFT),
+                (RXVT_HOME, RXVT_CTRL_SHIFT) => E(K::Home, M::CTRL_SHIFT),
+                (RXVT_END, RXVT_CTRL) => E(K::End, M::CTRL), // kEND5 or kel
+                (RXVT_END, RXVT_SHIFT) => E(K::End, M::SHIFT),
+                (RXVT_END, RXVT_CTRL_SHIFT) => E(K::End, M::CTRL_SHIFT),
                 _ => {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: ESC [ {} {:?}", seq2, seq3);
-                    KeyPress::UnknownEscSeq
+                           "unsupported esc sequence: \\E[{}{:?}", seq2, seq3);
+                    E(K::UnknownEscSeq, M::NONE)
                 }
             })
         }
     }
 
-    /// Handle ESC O <seq2> escape sequences
-    fn escape_o(&mut self) -> Result<KeyPress> {
+    /// Handle \EO <seq2> escape sequences
+    fn escape_o(&mut self) -> Result<KeyEvent> {
         let seq2 = self.next_char()?;
         Ok(match seq2 {
-            'A' => KeyPress::Up,    // kcuu1
-            'B' => KeyPress::Down,  // kcud1
-            'C' => KeyPress::Right, // kcuf1
-            'D' => KeyPress::Left,  // kcub1
-            'F' => KeyPress::End,   // kend
-            'H' => KeyPress::Home,  // khome
-            'P' => KeyPress::F(1),  // kf1
-            'Q' => KeyPress::F(2),  // kf2
-            'R' => KeyPress::F(3),  // kf3
-            'S' => KeyPress::F(4),  // kf4
-            'a' => KeyPress::ControlUp,
-            'b' => KeyPress::ControlDown,
-            'c' => KeyPress::ControlRight, // rxvt
-            'd' => KeyPress::ControlLeft,  // rxvt
+            UP => E(K::Up, M::NONE),
+            DOWN => E(K::Down, M::NONE),
+            RIGHT => E(K::Right, M::NONE),
+            LEFT => E(K::Left, M::NONE),
+            //'E' => E(K::, M::),// key_b2, kb2
+            END => E(K::End, M::NONE),   // kend
+            HOME => E(K::Home, M::NONE), // khome
+            'M' => E::ENTER,             // kent
+            'P' => E(K::F(1), M::NONE),  // kf1
+            'Q' => E(K::F(2), M::NONE),  // kf2
+            'R' => E(K::F(3), M::NONE),  // kf3
+            'S' => E(K::F(4), M::NONE),  // kf4
+            'a' => E(K::Up, M::CTRL),
+            'b' => E(K::Down, M::CTRL),
+            'c' => E(K::Right, M::CTRL), // rxvt
+            'd' => E(K::Left, M::CTRL),  // rxvt
+            'l' => E(K::F(8), M::NONE),
+            't' => E(K::F(5), M::NONE),  // kf5 or kb1
+            'u' => E(K::F(6), M::NONE),  // kf6 or kb2
+            'v' => E(K::F(7), M::NONE),  // kf7 or kb3
+            'w' => E(K::F(9), M::NONE),  // kf9 or ka1
+            'x' => E(K::F(10), M::NONE), // kf10 or ka2
             _ => {
-                debug!(target: "rustyline", "unsupported esc sequence: ESC O {:?}", seq2);
-                KeyPress::UnknownEscSeq
+                debug!(target: "rustyline", "unsupported esc sequence: \\EO{:?}", seq2);
+                E(K::UnknownEscSeq, M::NONE)
             }
         })
     }
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
-        poll::poll(&mut fds, timeout_ms)
+        let r = poll::poll(&mut fds, timeout_ms);
+        match r {
+            Ok(_) => r,
+            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+                if SIGWINCH.load(Ordering::Relaxed) {
+                    r
+                } else {
+                    Ok(0) // Ignore EINTR while polling
+                }
+            }
+            Err(_) => r,
+        }
     }
 }
 
 impl RawReader for PosixRawReader {
-    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress> {
+    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
         let c = self.next_char()?;
 
-        let mut key = keys::char_to_key_press(c);
-        if key == KeyPress::Esc {
+        let mut key = KeyEvent::new(c, M::NONE);
+        if key == E::ESC {
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
             } else {
@@ -428,7 +670,7 @@ impl RawReader for PosixRawReader {
             match self.next_char()? {
                 '\x1b' => {
                     let key = self.escape_sequence()?;
-                    if key == KeyPress::BracketedPasteEnd {
+                    if key == E(K::BracketedPasteEnd, M::NONE) {
                         break;
                     } else {
                         continue; // TODO validate
@@ -512,7 +754,7 @@ impl Renderer for PosixRenderer {
         use std::fmt::Write;
         self.buffer.clear();
         let row_ordering = new.row.cmp(&old.row);
-        if row_ordering == Ordering::Greater {
+        if row_ordering == cmp::Ordering::Greater {
             // move down
             let row_shift = new.row - old.row;
             if row_shift == 1 {
@@ -520,7 +762,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
             }
-        } else if row_ordering == Ordering::Less {
+        } else if row_ordering == cmp::Ordering::Less {
             // move up
             let row_shift = old.row - new.row;
             if row_shift == 1 {
@@ -530,7 +772,7 @@ impl Renderer for PosixRenderer {
             }
         }
         let col_ordering = new.col.cmp(&old.col);
-        if col_ordering == Ordering::Greater {
+        if col_ordering == cmp::Ordering::Greater {
             // move right
             let col_shift = new.col - old.col;
             if col_shift == 1 {
@@ -538,7 +780,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
             }
-        } else if col_ordering == Ordering::Less {
+        } else if col_ordering == cmp::Ordering::Less {
             // move left
             let col_shift = old.col - new.col;
             if col_shift == 1 {
@@ -591,7 +833,7 @@ impl Renderer for PosixRenderer {
         }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
-            self.buffer.push_str("\n");
+            self.buffer.push('\n');
         }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
@@ -662,7 +904,7 @@ impl Renderer for PosixRenderer {
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to update the number of columns in the current terminal,
@@ -729,7 +971,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
@@ -743,7 +985,7 @@ fn install_sigwinch_handler() {
 }
 
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    SIGWINCH.store(true, atomic::Ordering::SeqCst);
+    SIGWINCH.store(true, Ordering::SeqCst);
     debug!(target: "rustyline", "SIGWINCH");
 }
 
@@ -859,7 +1101,7 @@ impl Term for PosixTerminal {
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        PosixRawReader::new(config)
+        Ok(PosixRawReader::new(config))
     }
 
     fn create_writer(&self) -> PosixRenderer {

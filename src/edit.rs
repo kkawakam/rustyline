@@ -9,6 +9,7 @@ use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::highlight::Highlighter;
+use crate::hint::Hint;
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
@@ -30,9 +31,9 @@ pub struct State<'out, 'prompt, H: Helper> {
     byte_buffer: [u8; 4],
     pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
     pub helper: Option<&'out H>,
-    pub ctx: Context<'out>,   // Give access to history for `hinter`
-    pub hint: Option<String>, // last hint displayed
-    highlight_char: bool,     // `true` if a char has been highlighted
+    pub ctx: Context<'out>,          // Give access to history for `hinter`
+    pub hint: Option<Box<dyn Hint>>, // last hint displayed
+    highlight_char: bool,            // `true` if a char has been highlighted
 }
 
 enum Info<'m> {
@@ -142,7 +143,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     ) -> Result<()> {
         let info = match info {
             Info::NoHint => None,
-            Info::Hint => self.hint.as_deref(),
+            Info::Hint => self.hint.as_ref().map(|h| h.display()),
             Info::Msg(msg) => msg,
         };
         let highlighter = if self.out.colors_enabled() {
@@ -173,7 +174,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn hint(&mut self) {
         if let Some(hinter) = self.helper {
             let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
-            self.hint = hint;
+            self.hint = hint.map(|val| Box::new(val) as Box<dyn Hint>)
         } else {
             self.hint = None
         }
@@ -201,32 +202,30 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.layout.default_prompt
     }
 
-    pub fn validate(&mut self) -> Result<bool> {
+    pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
             self.changes.borrow_mut().begin();
             let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
-            let validated = match result {
-                ValidationResult::Incomplete => false,
-                ValidationResult::Valid(msg) => {
+            match result {
+                ValidationResult::Incomplete => {}
+                ValidationResult::Valid(ref msg) => {
                     // Accept the line regardless of where the cursor is.
                     if corrected || self.has_hint() || msg.is_some() {
                         // Force a refresh without hints to leave the previous
                         // line as the user typed it after a newline.
-                        self.refresh_line_with_msg(msg)?;
+                        self.refresh_line_with_msg(msg.as_deref())?;
                     }
-                    true
                 }
-                ValidationResult::Invalid(msg) => {
+                ValidationResult::Invalid(ref msg) => {
                     if corrected || self.has_hint() || msg.is_some() {
-                        self.refresh_line_with_msg(msg)?;
+                        self.refresh_line_with_msg(msg.as_deref())?;
                     }
-                    false
                 }
-            };
-            Ok(validated)
+            }
+            Ok(result)
         } else {
-            Ok(true)
+            Ok(ValidationResult::Valid(None))
         }
     }
 }
@@ -245,11 +244,11 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.refresh(self.prompt, prompt_size, true, Info::Hint)
     }
 
-    fn refresh_line_with_msg(&mut self, msg: Option<String>) -> Result<()> {
+    fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
-        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg.as_deref()))
+        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
@@ -660,6 +659,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
         self.refresh_line()
     }
+
+    /// Change the indentation of the lines covered by movement
+    pub fn edit_indent(&mut self, mvt: &Movement, amount: usize, dedent: bool) -> Result<()> {
+        if self.line.indent(mvt, amount, dedent) {
+            self.refresh_line()
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -681,7 +689,7 @@ pub fn init_state<'out, H: Helper>(
         changes: Rc::new(RefCell::new(Changeset::new())),
         helper,
         ctx: Context::new(history),
-        hint: Some("hint".to_owned()),
+        hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
     }
 }

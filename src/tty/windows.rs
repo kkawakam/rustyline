@@ -205,52 +205,53 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
             == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
         let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
         let mut mods = M::NONE;
-            if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
-        mods |= M::CTRL;
-            }
-            if alt && !alt_gr {
-        mods |= M::ALT;
-            }
-            if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
-                mods |= M::SHIFT;
-            }
+        if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
+            mods |= M::CTRL;
+        }
+        if alt && !alt_gr {
+            mods |= M::ALT;
+        }
+        if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
+            mods |= M::SHIFT;
+        }
 
         let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
         let key = if utf16 == 0 {
-                KeyEvent(
-            match i32::from(key_event.wVirtualKeyCode) {
-                winuser::VK_LEFT => K::Left,
+            KeyEvent(
+                match i32::from(key_event.wVirtualKeyCode) {
+                    winuser::VK_LEFT => K::Left,
 
-                winuser::VK_RIGHT => K::Right,
+                    winuser::VK_RIGHT => K::Right,
 
-                winuser::VK_UP => K::Up,
+                    winuser::VK_UP => K::Up,
 
-                winuser::VK_DOWN => K::Down,
+                    winuser::VK_DOWN => K::Down,
 
-                winuser::VK_DELETE => K::Delete,
-                winuser::VK_HOME => K::Home,
-                winuser::VK_END => K::End,
-                winuser::VK_PRIOR => K::PageUp,
-                winuser::VK_NEXT => K::PageDown,
-                winuser::VK_INSERT => K::Insert,
-                winuser::VK_F1 => K::F(1),
-                winuser::VK_F2 => K::F(2),
-                winuser::VK_F3 => K::F(3),
-                winuser::VK_F4 => K::F(4),
-                winuser::VK_F5 => K::F(5),
-                winuser::VK_F6 => K::F(6),
-                winuser::VK_F7 => K::F(7),
-                winuser::VK_F8 => K::F(8),
-                winuser::VK_F9 => K::F(9),
-                winuser::VK_F10 => K::F(10),
-                winuser::VK_F11 => K::F(11),
-                winuser::VK_F12 => K::F(12),
-                // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
-                // isalso set.
-                _ => continue,
-            },
-        mods,
-                )} else if utf16 == 27 {
+                    winuser::VK_DELETE => K::Delete,
+                    winuser::VK_HOME => K::Home,
+                    winuser::VK_END => K::End,
+                    winuser::VK_PRIOR => K::PageUp,
+                    winuser::VK_NEXT => K::PageDown,
+                    winuser::VK_INSERT => K::Insert,
+                    winuser::VK_F1 => K::F(1),
+                    winuser::VK_F2 => K::F(2),
+                    winuser::VK_F3 => K::F(3),
+                    winuser::VK_F4 => K::F(4),
+                    winuser::VK_F5 => K::F(5),
+                    winuser::VK_F6 => K::F(6),
+                    winuser::VK_F7 => K::F(7),
+                    winuser::VK_F8 => K::F(8),
+                    winuser::VK_F9 => K::F(9),
+                    winuser::VK_F10 => K::F(10),
+                    winuser::VK_F11 => K::F(11),
+                    winuser::VK_F12 => K::F(12),
+                    // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
+                    // isalso set.
+                    _ => continue,
+                },
+                mods,
+            )
+        } else if utf16 == 27 {
             KeyEvent(K::Esc, mods)
         } else {
             if utf16 >= 0xD800 && utf16 < 0xDC00 {
@@ -269,13 +270,12 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
             };
             let c = rc?;
             KeyEvent::new(c, mods)
-                };
-                    debug!(target: "rustyline", "key: {:?}",
+        };
+        debug!(target: "rustyline", "key: {:?}",
                     key );
-                return Ok(key);
-            }
-        }
-
+        return Ok(key);
+    }
+}
 
 pub struct ConsoleRenderer {
     out: OutputStreamType,
@@ -357,11 +357,7 @@ impl ConsoleRenderer {
     }
 
     // position at the start of the prompt, clear to end of previous input
-    fn clear_old_rows(
-        &mut self,
-        info: &CONSOLE_SCREEN_BUFFER_INFO,
-        layout: &Layout,
-    ) -> Result<()> {
+    fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
         let mut coord = info.dwCursorPosition;
@@ -782,7 +778,7 @@ impl Term for Console {
         self.pipe_reader.replace(reader);
         self.pipe_writer.replace(sender.clone());
         Ok(ExternalPrinter {
-            event: event,
+            event,
             buf: String::new(),
             sender,
             raw_mode: self.raw_mode.clone(),

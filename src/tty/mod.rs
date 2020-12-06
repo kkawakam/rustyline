@@ -18,7 +18,7 @@ pub trait RawMode: Sized {
 
 /// Input event
 pub enum Event {
-    KeyPress(KeyPress),
+    KeyPress(KeyEvent),
     ExternalPrint(String),
 }
 

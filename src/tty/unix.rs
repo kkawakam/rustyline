@@ -619,7 +619,7 @@ impl PosixRawReader {
         match r {
             Ok(_) => r,
             Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
-                if SIGWINCH.load(atomic::Ordering::Relaxed) {
+                if SIGWINCH.load(Ordering::Relaxed) {
                     r
                 } else {
                     Ok(0) // Ignore EINTR while polling

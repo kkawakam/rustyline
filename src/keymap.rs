@@ -17,6 +17,7 @@ pub type RepeatCount = usize;
 /// Custom dynamic action
 #[derive(Clone)]
 pub struct Action {
+    /// Currently used only for tracing
     pub name: String,
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the command to be performed or `None` to perform the default
@@ -384,6 +385,7 @@ impl Movement {
     }
 }
 
+/// Vi input modes
 #[derive(Clone, Copy, PartialEq)]
 pub enum InputMode {
     /// Vi Command/Alternate

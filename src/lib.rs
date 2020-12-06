@@ -484,7 +484,7 @@ fn readline_edit<H: Helper>(
         if cmd == Cmd::Suspend {
             original_mode.disable_raw_mode()?;
             tty::suspend()?;
-            editor.term.enable_raw_mode()?; // TODO original_mode may have changed
+            let _ = editor.term.enable_raw_mode()?; // TODO original_mode may have changed
             s.refresh_line()?;
             continue;
         }

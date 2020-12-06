@@ -66,6 +66,7 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     Ok(original_mode)
 }
 
+#[must_use = "You must restore default mode (disable_raw_mode)"]
 #[cfg(not(test))]
 pub type Mode = ConsoleMode;
 

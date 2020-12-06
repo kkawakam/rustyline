@@ -3,15 +3,17 @@
 
 use std::io::{self, Write};
 use std::mem;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
+use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
-use winapi::um::{consoleapi, handleapi, processenv, winbase, wincon, winuser};
+use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
@@ -28,7 +30,7 @@ const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
-    if handle == handleapi::INVALID_HANDLE_VALUE {
+    if handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
         Err(io::Error::new(
@@ -118,7 +120,7 @@ impl RawReader for ConsoleRawReader {
             })?;
 
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-                SIGWINCH.store(true, atomic::Ordering::SeqCst);
+                SIGWINCH.store(true, Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
                 return Err(error::ReadlineError::WindowResize); // sigwinch +
                                                                 // err => err
@@ -238,17 +240,17 @@ impl ConsoleRenderer {
         }
     }
 
-    fn get_console_screen_buffer_info(&self) -> Result<wincon::CONSOLE_SCREEN_BUFFER_INFO> {
+    fn get_console_screen_buffer_info(&self) -> Result<CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
         check(unsafe { wincon::GetConsoleScreenBufferInfo(self.handle, &mut info) })?;
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
+    fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
         check(unsafe { wincon::SetConsoleCursorPosition(self.handle, pos) })
     }
 
-    fn clear(&mut self, length: DWORD, pos: wincon::COORD, attr: WORD) -> Result<()> {
+    fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
             wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
@@ -288,11 +290,7 @@ impl ConsoleRenderer {
     }
 
     // position at the start of the prompt, clear to end of previous input
-    fn clear_old_rows(
-        &mut self,
-        info: &wincon::CONSOLE_SCREEN_BUFFER_INFO,
-        layout: &Layout,
-    ) -> Result<()> {
+    fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
         let mut coord = info.dwCursorPosition;
@@ -441,14 +439,14 @@ impl Renderer for ConsoleRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
-        let coord = wincon::COORD { X: 0, Y: 0 };
+        let coord = COORD { X: 0, Y: 0 };
         check(unsafe { wincon::SetConsoleCursorPosition(self.handle, coord) })?;
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
         self.clear(n, coord, info.wAttributes)
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to get the number of columns in the current terminal,
@@ -494,7 +492,7 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;

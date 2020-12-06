@@ -132,7 +132,7 @@ impl ConsoleRawReader {
                     consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count)
                 })?;
                 match read_input(self.handle, count)? {
-                    KeyPress::UnknownEscSeq => continue, // no relevant
+                    KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
                 };
             } else if rc == WAIT_OBJECT_0 + 1 {
@@ -166,7 +166,7 @@ impl RawReader for ConsoleRawReader {
     }
 }
 
-fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
+fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
     use std::char::decode_utf16;
     use winapi::um::wincon::{
         LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED,
@@ -178,7 +178,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
     let mut surrogate = 0;
     loop {
         if total >= max_count {
-            return Ok(KeyPress::UnknownEscSeq);
+            return Ok(KeyEvent(K::UnknownEscSeq, M::NONE));
         }
         // TODO GetNumberOfConsoleInputEvents
         check(unsafe { consoleapi::ReadConsoleInputW(handle, &mut rec, 1 as DWORD, &mut count) })?;
@@ -220,13 +220,9 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
             KeyEvent(
                 match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => K::Left,
-
                     winuser::VK_RIGHT => K::Right,
-
                     winuser::VK_UP => K::Up,
-
                     winuser::VK_DOWN => K::Down,
-
                     winuser::VK_DELETE => K::Delete,
                     winuser::VK_HOME => K::Home,
                     winuser::VK_END => K::End,
@@ -271,8 +267,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyPress> {
             let c = rc?;
             KeyEvent::new(c, mods)
         };
-        debug!(target: "rustyline", "key: {:?}",
-                    key );
+        debug!(target: "rustyline", "key: {:?}", key);
         return Ok(key);
     }
 }
@@ -437,7 +432,7 @@ impl Renderer for ConsoleRenderer {
                 self.buffer.push_str(hint);
             }
         }
-        let mut info = self.get_console_screen_buffer_info()?;
+        let info = self.get_console_screen_buffer_info()?;
         self.set_cursor_visible(FALSE)?; // just to avoid flickering
         let handle = self.handle;
         scopeguard::defer! {
@@ -515,8 +510,8 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
-        let mut info = self.get_console_screen_buffer_info()?;
-        self.clear_old_rows(&mut info, layout)
+        let info = self.get_console_screen_buffer_info()?;
+        self.clear_old_rows(&info, layout)
     }
 
     fn sigwinch(&self) -> bool {
@@ -763,7 +758,7 @@ impl Term for Console {
             });
         }
         if !self.is_stdin_tty() || !self.is_output_tty() {
-            Err(io::Error::from(ErrorKind::Other))?; // FIXME
+            Err(io::Error::from(io::ErrorKind::Other))?; // FIXME
         }
         let event = unsafe { CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
         if event.is_null() {

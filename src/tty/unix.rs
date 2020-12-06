@@ -95,6 +95,7 @@ fn is_a_tty(fd: RawFd) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
+#[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
     termios: termios::Termios,
     out: Option<OutputStreamType>,
@@ -210,6 +211,7 @@ impl PosixRawReader {
             self.escape_o()
         } else if seq1 == '\x1b' {
             // \E\E
+            // TODO poll ...
             // \E\E[A => Alt-Up
             // \E\E[B => Alt-Down
             // \E\E[C => Alt-Right

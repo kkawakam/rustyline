@@ -212,7 +212,7 @@ impl FilenameCompleter {
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
-        let mut matches = filename_complete(&path, esc_char, break_chars, quote)?;
+        let mut matches = filename_complete(&path, esc_char, break_chars, quote);
         #[allow(clippy::unnecessary_sort_by)]
         matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
@@ -307,7 +307,7 @@ fn filename_complete(
     esc_char: Option<char>,
     break_chars: &[u8],
     quote: Quote,
-) -> Result<Vec<Pair>> {
+) -> Vec<Pair> {
     #[cfg(feature = "with-dirs")]
     use dirs_next::home_dir;
     use std::env::current_dir;
@@ -351,7 +351,7 @@ fn filename_complete(
 
     // if dir doesn't exist, then don't offer any completions
     if !dir.exists() {
-        return Ok(entries);
+        return entries;
     }
 
     // if any of the below IO operations have errors, just ignore them
@@ -377,7 +377,7 @@ fn filename_complete(
             }
         }
     }
-    Ok(entries)
+    entries
 }
 
 #[cfg(any(windows, target_os = "macos"))]

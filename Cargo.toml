@@ -40,7 +40,7 @@ scopeguard = "1.1"
 
 [dev-dependencies]
 doc-comment = "0.3"
-env_logger = "0.8"
+env_logger = { version = "0.8", default-features = false }
 tempfile = "3.1.0"
 assert_matches = "1.2"
 rustyline-derive = { version = "0.4.0", path = "rustyline-derive" }

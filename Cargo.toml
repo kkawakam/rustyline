@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "6.1.2"
+version = "7.0.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -19,8 +19,10 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
-cfg-if = "0.1.6"
-dirs-next = { version = "1.0", optional = true }
+bitflags = "1.2"
+cfg-if = "1.0"
+dirs-next = { version = "2.0", optional = true }
+fs2 = "0.4"
 libc = "0.2"
 log = "0.4"
 unicode-width = "0.1"
@@ -28,7 +30,7 @@ unicode-segmentation = "1.0"
 memchr = "2.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.17"
+nix = "0.19"
 utf8parse = "0.2"
 skim = { version = "0.7", optional = true }
 
@@ -38,11 +40,11 @@ scopeguard = "1.1"
 
 [dev-dependencies]
 doc-comment = "0.3"
-env_logger = "0.7"
-tempdir = "0.3"
+env_logger = { version = "0.8", default-features = false }
+tempfile = "3.1.0"
 rand = "0.6"
 assert_matches = "1.2"
-rustyline-derive = { version = "0.3.1", path = "rustyline-derive" }
+rustyline-derive = { version = "0.4.0", path = "rustyline-derive" }
 
 [features]
 default = ["with-dirs"]

@@ -15,6 +15,16 @@ pub enum ValidationResult {
     Valid(Option<String>),
 }
 
+impl ValidationResult {
+    pub(crate) fn is_valid(&self) -> bool {
+        matches!(self, ValidationResult::Valid(_))
+    }
+
+    pub(crate) fn has_message(&self) -> bool {
+        matches!(self, ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_)))
+    }
+}
+
 /// Give access to user input.
 pub struct ValidationContext<'i> {
     i: &'i mut dyn Invoke,
@@ -64,7 +74,9 @@ pub trait Validator {
     /// when user presses the Enter key.
     ///
     /// Default is `false`.
-    // TODO we can implement this later.
+    ///
+    /// This feature is not yet implemented, so this function is currently a
+    /// no-op
     fn validate_while_typing(&self) -> bool {
         false
     }

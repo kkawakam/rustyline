@@ -1,11 +1,14 @@
 //! History API
 
+use log::{debug, warn};
 use std::collections::vec_deque;
 use std::collections::VecDeque;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::SeekFrom;
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use super::Result;
 use crate::config::{Config, HistoryDuplicates};
@@ -26,7 +29,14 @@ pub struct History {
     max_len: usize,
     pub(crate) ignore_space: bool,
     pub(crate) ignore_dups: bool,
+    /// Number of entries inputed by user and not saved yet
+    new_entries: usize,
+    /// last path used by either `load` or `save`
+    path_info: Option<PathInfo>,
 }
+
+/// Last histo path, modified timestamp and size
+struct PathInfo(PathBuf, SystemTime, usize);
 
 impl History {
     // New multiline-aware history files start with `#V2\n` and have newlines
@@ -48,6 +58,8 @@ impl History {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+            new_entries: 0,
+            path_info: None,
         }
     }
 
@@ -87,6 +99,7 @@ impl History {
             self.entries.pop_front();
         }
         self.entries.push_back(line.into());
+        self.new_entries = self.new_entries.saturating_add(1).min(self.len());
         true
     }
 
@@ -105,47 +118,109 @@ impl History {
     /// just the latest `len` elements if the new history length value is
     /// smaller than the amount of items already inside the history.
     ///
-    /// Like [stifle_history](http://cnswww.cns.cwru.
-    /// edu/php/chet/readline/history.html#IDX11).
+    /// Like [stifle_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX11).
     pub fn set_max_len(&mut self, len: usize) {
         self.max_len = len;
-        if len == 0 {
-            self.entries.clear();
-            return;
-        }
-        loop {
-            if self.entries.len() <= len {
-                break;
-            }
-            self.entries.pop_front();
+        if self.len() > len {
+            self.entries.drain(..self.len() - len);
+            self.new_entries = self.new_entries.min(len);
         }
     }
 
     /// Save the history in the specified file.
-    // TODO append_history
-    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX30
     // TODO history_truncate_file
-    // http://cnswww.cns.cwru.edu/php/chet/readline/history.html#IDX31
-    pub fn save<P: AsRef<Path> + ?Sized>(&self, path: &P) -> Result<()> {
-        use std::io::{BufWriter, Write};
-
-        if self.is_empty() {
+    // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
+    pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        if self.is_empty() || self.new_entries == 0 {
             return Ok(());
         }
+        let path = path.as_ref();
         let old_umask = umask();
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        fix_perm(&file);
+        self.save_to(&file, false)?;
+        self.new_entries = 0;
+        self.update_path(path, self.len())
+    }
+
+    fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
+        use std::io::{BufWriter, Write};
+
+        fix_perm(file);
         let mut wtr = BufWriter::new(file);
-        wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
-        for entry in &self.entries {
+        let first_new_entry = if append {
+            self.entries.len().saturating_sub(self.new_entries)
+        } else {
+            wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
             wtr.write_all(b"\n")?;
-            wtr.write_all(entry.replace('\\', "\\\\").replace('\n', "\\n").as_bytes())?;
+            0
+        };
+        for entry in self.entries.iter().skip(first_new_entry) {
+            let mut bytes = entry.as_bytes();
+            while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
+                wtr.write_all(&bytes[..i])?;
+                if bytes[i] == b'\n' {
+                    wtr.write_all(b"\\n")?; // escaped line feed
+                } else {
+                    debug_assert_eq!(bytes[i], b'\\');
+                    wtr.write_all(b"\\\\")?; // escaped backslash
+                }
+                bytes = &bytes[i + 1..];
+            }
+            wtr.write_all(bytes)?; // remaining bytes with no \n or \
+            wtr.write_all(b"\n")?;
         }
-        wtr.write_all(b"\n")?;
         // https://github.com/rust-lang/rust/issues/32677#issuecomment-204833485
         wtr.flush()?;
+        Ok(())
+    }
+
+    /// Append new entries in the specified file.
+    // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
+    pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        use fs2::FileExt;
+        use std::io::Seek;
+
+        if self.is_empty() || self.new_entries == 0 {
+            return Ok(());
+        }
+        let path = path.as_ref();
+        if !path.exists() || self.new_entries == self.max_len {
+            return self.save(path);
+        } else if self.can_just_append(path)? {
+            let file = OpenOptions::new().append(true).open(path)?;
+            self.save_to(&file, true)?;
+            let size = self
+                .path_info
+                .as_ref()
+                .unwrap()
+                .2
+                .saturating_add(self.new_entries);
+            self.new_entries = 0;
+            return self.update_path(path, size);
+        }
+        let mut file = OpenOptions::new().write(true).read(true).open(path)?;
+        file.lock_exclusive()?;
+        // we may need to truncate file before appending new entries
+        let mut other = Self {
+            entries: VecDeque::new(),
+            max_len: self.max_len,
+            ignore_space: self.ignore_space,
+            ignore_dups: self.ignore_dups,
+            new_entries: 0,
+            path_info: None,
+        };
+        other.load_from(&file)?;
+        let first_new_entry = self.entries.len().saturating_sub(self.new_entries);
+        for entry in self.entries.iter().skip(first_new_entry) {
+            other.add(entry);
+        }
+        file.seek(SeekFrom::Start(0))?;
+        other.save_to(&file, false)?;
+        file.unlock()?;
+        self.update_path(path, other.len())?;
+        self.new_entries = 0;
         Ok(())
     }
 
@@ -154,9 +229,21 @@ impl History {
     /// # Errors
     /// Will return `Err` if path does not already exist or could not be read.
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        let path = path.as_ref();
+        let file = File::open(path)?;
+        let len = self.len();
+        if self.load_from(&file)? {
+            self.update_path(path, self.len() - len)
+        } else {
+            // discard old version on next save
+            self.path_info = None;
+            Ok(())
+        }
+    }
+
+    fn load_from(&mut self, file: &File) -> Result<bool> {
         use std::io::{BufRead, BufReader};
 
-        let file = File::open(&path)?;
         let rdr = BufReader::new(file);
         let mut lines = rdr.lines();
         let mut v2 = false;
@@ -169,22 +256,100 @@ impl History {
             }
         }
         for line in lines {
-            let line = if v2 {
-                line?.replace("\\n", "\n").replace("\\\\", "\\")
-            } else {
-                line?
-            };
+            let mut line = line?;
             if line.is_empty() {
                 continue;
             }
+            if v2 {
+                let mut copy = None; // lazily copy line if unescaping is needed
+                let mut str = line.as_str();
+                while let Some(i) = str.find('\\') {
+                    if copy.is_none() {
+                        copy = Some(String::with_capacity(line.len()));
+                    }
+                    let s = copy.as_mut().unwrap();
+                    s.push_str(&str[..i]);
+                    let j = i + 1; // escaped char idx
+                    let b = if j < str.len() {
+                        str.as_bytes()[j]
+                    } else {
+                        0 // unexpected if History::save works properly
+                    };
+                    match b {
+                        b'n' => {
+                            s.push('\n'); // unescaped line feed
+                        }
+                        b'\\' => {
+                            s.push('\\'); // unescaped back slash
+                        }
+                        _ => {
+                            // only line feed and back slash should have been escaped
+                            warn!(target: "rustyline", "bad escaped line: {}", line);
+                            copy = None;
+                            break;
+                        }
+                    }
+                    str = &str[j + 1..];
+                }
+                if let Some(mut s) = copy {
+                    s.push_str(str); // remaining bytes with no escaped char
+                    line = s;
+                }
+            }
             self.add(line); // TODO truncate to MAX_LINE
         }
+        self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
+        Ok(v2)
+    }
+
+    fn update_path(&mut self, path: &Path, size: usize) -> Result<()> {
+        let modified = File::open(&path)?.metadata()?.modified()?;
+        if let Some(PathInfo(
+            ref mut previous_path,
+            ref mut previous_modified,
+            ref mut previous_size,
+        )) = self.path_info
+        {
+            if previous_path.as_path() != path {
+                *previous_path = path.to_owned();
+            }
+            *previous_modified = modified;
+            *previous_size = size;
+        } else {
+            self.path_info = Some(PathInfo(path.to_owned(), modified, size));
+        }
+        debug!(target: "rustyline", "PathInfo({:?}, {:?}, {})", path, modified, size);
         Ok(())
+    }
+
+    fn can_just_append(&self, path: &Path) -> Result<bool> {
+        if let Some(PathInfo(ref previous_path, ref previous_modified, ref previous_size)) =
+            self.path_info
+        {
+            if previous_path.as_path() != path {
+                debug!(target: "rustyline", "cannot append: {:?} <> {:?}", previous_path, path);
+                return Ok(false);
+            }
+            let modified = File::open(&path)?.metadata()?.modified()?;
+            if *previous_modified != modified
+                || self.max_len <= *previous_size
+                || self.max_len < (*previous_size).saturating_add(self.new_entries)
+            {
+                debug!(target: "rustyline", "cannot append: {:?} < {:?} or {} < {} + {}",
+                       previous_modified, modified, self.max_len, previous_size, self.new_entries);
+                Ok(false)
+            } else {
+                Ok(true)
+            }
+        } else {
+            Ok(false)
+        }
     }
 
     /// Clear history
     pub fn clear(&mut self) {
-        self.entries.clear()
+        self.entries.clear();
+        self.new_entries = 0;
     }
 
     /// Search history (start position inclusive [0, len-1]).
@@ -307,7 +472,7 @@ cfg_if::cfg_if! {
 mod tests {
     use super::{Direction, History};
     use crate::config::Config;
-    use std::path::Path;
+    use crate::Result;
 
     fn init() -> History {
         let mut history = History::new();
@@ -345,45 +510,80 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn save() {
-        let mut history = init();
-        assert!(history.add("line\nfour \\ abc"));
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history");
+    fn save() -> Result<()> {
+        check_save("line\nfour \\ abc")
+    }
 
-        history.save(&history_path).unwrap();
+    #[test]
+    fn save_windows_path() -> Result<()> {
+        let path = "cd source\\repos\\forks\\nushell\\";
+        check_save(path)
+    }
+
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn check_save(line: &str) -> Result<()> {
+        let mut history = init();
+        assert!(history.add(line));
+        let tf = tempfile::NamedTempFile::new()?;
+
+        history.save(tf.path())?;
         let mut history2 = History::new();
-        history2.load(&history_path).unwrap();
+        history2.load(tf.path())?;
         for (a, b) in history.entries.iter().zip(history2.entries.iter()) {
             assert_eq!(a, b);
         }
-
-        td.close().unwrap();
+        tf.close()?;
+        Ok(())
     }
 
     #[test]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
-    fn load_legacy() {
+    fn load_legacy() -> Result<()> {
         use std::io::Write;
-        let td = tempdir::TempDir::new_in(&Path::new("."), "histo").unwrap();
-        let history_path = td.path().join(".history_v1");
+        let tf = tempfile::NamedTempFile::new()?;
         {
-            let mut legacy = std::fs::File::create(&history_path).unwrap();
+            let mut legacy = std::fs::File::create(tf.path())?;
             // Some data we'd accidentally corrupt if we got the version wrong
             let data = b"\
                 test\\n \\abc \\123\n\
                 123\\n\\\\n\n\
                 abcde
             ";
-            legacy.write_all(data).unwrap();
-            legacy.flush().unwrap();
+            legacy.write_all(data)?;
+            legacy.flush()?;
         }
         let mut history = History::new();
-        history.load(&history_path).unwrap();
+        history.load(tf.path())?;
         assert_eq!(history.entries[0], "test\\n \\abc \\123");
         assert_eq!(history.entries[1], "123\\n\\\\n");
         assert_eq!(history.entries[2], "abcde");
-        td.close().unwrap();
+
+        tf.close()?;
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn append() -> Result<()> {
+        let mut history = init();
+        let tf = tempfile::NamedTempFile::new()?;
+
+        history.append(tf.path())?;
+
+        let mut history2 = History::new();
+        history2.load(tf.path())?;
+        history2.add("line4");
+        history2.append(tf.path())?;
+
+        history.add("line5");
+        history.append(tf.path())?;
+
+        let mut history3 = History::new();
+        history3.load(tf.path())?;
+        assert_eq!(history3.len(), 5);
+
+        tf.close()?;
+        Ok(())
     }
 
     #[test]

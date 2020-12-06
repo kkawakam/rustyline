@@ -28,6 +28,10 @@ pub struct Config {
     output_stream: OutputStreamType,
     /// Horizontal space taken by a tab.
     tab_stop: usize,
+    /// Indentation size for indent/dedent commands
+    indent_size: usize,
+    /// Check if cursor position is at leftmost before displaying prompt
+    check_cursor_position: bool,
 }
 
 impl Config {
@@ -145,6 +149,24 @@ impl Config {
     pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
         self.tab_stop = tab_stop;
     }
+
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    pub fn check_cursor_position(&self) -> bool {
+        self.check_cursor_position
+    }
+
+    /// Indentation size used by indentation commands
+    ///
+    /// By default, 2.
+    pub fn indent_size(&self) -> usize {
+        self.indent_size
+    }
+
+    pub(crate) fn set_indent_size(&mut self, indent_size: usize) {
+        self.indent_size = indent_size;
+    }
 }
 
 impl Default for Config {
@@ -162,6 +184,8 @@ impl Default for Config {
             color_mode: ColorMode::Enabled,
             output_stream: OutputStreamType::Stdout,
             tab_stop: 8,
+            indent_size: 2,
+            check_cursor_position: false,
         }
     }
 }
@@ -357,6 +381,22 @@ impl Builder {
         self
     }
 
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    pub fn check_cursor_position(mut self, yes: bool) -> Self {
+        self.set_check_cursor_position(yes);
+        self
+    }
+
+    /// Indentation size
+    ///
+    /// By default, `2`
+    pub fn indent_size(mut self, indent_size: usize) -> Self {
+        self.set_indent_size(indent_size);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     pub fn build(self) -> Config {
         self.p
@@ -450,5 +490,18 @@ pub trait Configurer {
     /// By default, `8`
     fn set_tab_stop(&mut self, tab_stop: usize) {
         self.config_mut().set_tab_stop(tab_stop);
+    }
+
+    /// Check if cursor position is at leftmost before displaying prompt.
+    ///
+    /// By default, we don't check.
+    fn set_check_cursor_position(&mut self, yes: bool) {
+        self.config_mut().check_cursor_position = yes;
+    }
+    /// Indentation size for indent/dedent commands
+    ///
+    /// By default, `2`
+    fn set_indent_size(&mut self, size: usize) {
+        self.config_mut().set_indent_size(size);
     }
 }

@@ -5,7 +5,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
-use crate::keys::KeyPress;
+use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::Result;
@@ -27,7 +27,7 @@ pub trait RawReader {
     /// Blocking wait for either a key press or an external print
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
-    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyPress>;
+    fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent>;
     /// For CTRL-V support
     #[cfg(unix)]
     fn next_char(&mut self) -> Result<char>;

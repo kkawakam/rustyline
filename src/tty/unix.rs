@@ -185,8 +185,8 @@ const RXVT_CTRL: char = '\x1e';
 const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Result<Self> {
-        Ok(Self {
+    fn new(config: &Config) -> Self {
+        Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
@@ -195,7 +195,7 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
-        })
+        }
     }
 
     /// Handle \E <seq1> sequences
@@ -1103,7 +1103,7 @@ impl Term for PosixTerminal {
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        PosixRawReader::new(config)
+        Ok(PosixRawReader::new(config))
     }
 
     fn create_writer(&self) -> PosixRenderer {

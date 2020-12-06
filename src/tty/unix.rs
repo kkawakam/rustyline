@@ -1,9 +1,9 @@
 //! Unix specific definitions
-use std::cmp::Ordering;
-use std::io::{self, Read, Write};
+use std::cmp;
+use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
@@ -131,9 +131,7 @@ impl Read for StdinRaw {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != io::ErrorKind::Interrupted
-                    || SIGWINCH.load(atomic::Ordering::Relaxed)
-                {
+                if error.kind() != ErrorKind::Interrupted || SIGWINCH.load(Ordering::Relaxed) {
                     return Err(error);
                 }
             } else {
@@ -612,7 +610,7 @@ impl PosixRawReader {
         match r {
             Ok(_) => r,
             Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
-                if SIGWINCH.load(atomic::Ordering::Relaxed) {
+                if SIGWINCH.load(Ordering::Relaxed) {
                     r
                 } else {
                     Ok(0) // Ignore EINTR while polling
@@ -756,7 +754,7 @@ impl Renderer for PosixRenderer {
         use std::fmt::Write;
         self.buffer.clear();
         let row_ordering = new.row.cmp(&old.row);
-        if row_ordering == Ordering::Greater {
+        if row_ordering == cmp::Ordering::Greater {
             // move down
             let row_shift = new.row - old.row;
             if row_shift == 1 {
@@ -764,7 +762,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
             }
-        } else if row_ordering == Ordering::Less {
+        } else if row_ordering == cmp::Ordering::Less {
             // move up
             let row_shift = old.row - new.row;
             if row_shift == 1 {
@@ -774,7 +772,7 @@ impl Renderer for PosixRenderer {
             }
         }
         let col_ordering = new.col.cmp(&old.col);
-        if col_ordering == Ordering::Greater {
+        if col_ordering == cmp::Ordering::Greater {
             // move right
             let col_shift = new.col - old.col;
             if col_shift == 1 {
@@ -782,7 +780,7 @@ impl Renderer for PosixRenderer {
             } else {
                 write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
             }
-        } else if col_ordering == Ordering::Less {
+        } else if col_ordering == cmp::Ordering::Less {
             // move left
             let col_shift = old.col - new.col;
             if col_shift == 1 {
@@ -906,7 +904,7 @@ impl Renderer for PosixRenderer {
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, atomic::Ordering::SeqCst)
+        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
     }
 
     /// Try to update the number of columns in the current terminal,
@@ -973,7 +971,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
 }
 
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();
-static SIGWINCH: atomic::AtomicBool = atomic::AtomicBool::new(false);
+static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 fn install_sigwinch_handler() {
     SIGWINCH_ONCE.call_once(|| unsafe {
@@ -987,7 +985,7 @@ fn install_sigwinch_handler() {
 }
 
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    SIGWINCH.store(true, atomic::Ordering::SeqCst);
+    SIGWINCH.store(true, Ordering::SeqCst);
     debug!(target: "rustyline", "SIGWINCH");
 }
 

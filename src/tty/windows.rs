@@ -141,7 +141,9 @@ impl RawReader for ConsoleRawReader {
                 == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
             let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
             let mut mods = M::NONE;
-            if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
+            if !alt_gr
+                && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0
+            {
                 mods |= M::CTRL;
             }
             if alt && !alt_gr {

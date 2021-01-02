@@ -906,7 +906,9 @@ impl Renderer for PosixRenderer {
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
+        SIGWINCH
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or(false)
     }
 
     /// Try to update the number of columns in the current terminal,

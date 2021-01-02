@@ -500,9 +500,10 @@ fn readline_edit<H: Helper>(
 
         // Tiny test quirk
         #[cfg(test)]
-        if matches!(cmd, Cmd::AcceptLine | Cmd::Newline
-            | Cmd::AcceptOrInsertLine { .. })
-        {
+        if matches!(
+            cmd,
+            Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
+        ) {
             editor.term.cursor = s.layout.cursor.col;
         }
 

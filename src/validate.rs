@@ -21,7 +21,10 @@ impl ValidationResult {
     }
 
     pub(crate) fn has_message(&self) -> bool {
-        matches!(self, ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_)))
+        matches!(
+            self,
+            ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_))
+        )
     }
 }
 

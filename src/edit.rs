@@ -704,7 +704,7 @@ mod test {
 
     #[test]
     fn edit_history_next() {
-        let mut out = Sink::new();
+        let mut out = Sink::default();
         let mut history = History::new();
         history.add("line0");
         history.add("line1");

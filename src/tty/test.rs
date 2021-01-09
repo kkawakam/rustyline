@@ -1,10 +1,9 @@
 //! Tests specific definitions
-use std::io::Sink as StdSink;
 use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{Event, RawMode, RawReader, Renderer, Term};
+use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
@@ -72,8 +71,8 @@ impl RawReader for IntoIter<KeyEvent> {
 
 pub struct Sink {}
 
-impl Sink {
-    pub fn new() -> Sink {
+impl Default for Sink {
+    fn default() -> Sink {
         Sink {}
     }
 }
@@ -142,6 +141,14 @@ impl Renderer for Sink {
     }
 }
 
+pub struct DummyExternalPrinter {}
+
+impl ExternalPrinter for DummyExternalPrinter {
+    fn print(&mut self, _msg: String) -> Result<()> {
+        Ok(())
+    }
+}
+
 pub type Terminal = DummyTerminal;
 
 #[derive(Clone, Debug)]
@@ -153,7 +160,7 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
-    type ExternalPrinter = StdSink;
+    type ExternalPrinter = DummyExternalPrinter;
     type Mode = Mode;
     type Reader = IntoIter<KeyEvent>;
     type Writer = Sink;
@@ -203,11 +210,11 @@ impl Term for DummyTerminal {
     }
 
     fn create_writer(&self) -> Sink {
-        Sink::new()
+        Sink::default()
     }
 
-    fn create_external_printer(&mut self) -> Result<StdSink> {
-        Ok(::std::io::sink())
+    fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
+        Ok(DummyExternalPrinter {})
     }
 }
 

@@ -58,7 +58,7 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
-
+pub use crate::tty::ExternalPrinter;
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)

@@ -1,11 +1,10 @@
-use std::io::Write;
 use std::thread;
 use std::time::Duration;
 
 use rand::{thread_rng, Rng};
 
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::{Editor, ExternalPrinter};
 
 fn main() {
     env_logger::init();
@@ -15,7 +14,9 @@ fn main() {
         let mut rng = thread_rng();
         let mut i = 0usize;
         loop {
-            writeln!(printer, "External message #{}", i).expect("External print failure");
+            printer
+                .print(format!("External message #{}", i))
+                .expect("External print failure");
             let wait_ms = rng.gen_range(1, 500);
             thread::sleep(Duration::from_millis(wait_ms));
             i += 1;

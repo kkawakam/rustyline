@@ -1,6 +1,5 @@
 //! This module implements and describes common TTY methods & traits
 
-use std::io::Write;
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
@@ -212,12 +211,18 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     }
 }
 
+/// External printer
+pub trait ExternalPrinter {
+    /// Print message to stdout
+    fn print(&mut self, msg: String) -> Result<()>;
+}
+
 /// Terminal contract
 pub trait Term {
     type Reader: RawReader; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
-    type ExternalPrinter: Write;
+    type ExternalPrinter: ExternalPrinter;
 
     fn new(
         color_mode: ColorMode,

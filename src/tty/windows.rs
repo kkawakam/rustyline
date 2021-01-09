@@ -15,7 +15,7 @@ use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
-use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO};
+use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
@@ -74,6 +74,7 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     Ok(original_mode)
 }
 
+#[must_use = "You must restore default mode (disable_raw_mode)"]
 #[cfg(not(test))]
 pub type Mode = ConsoleMode;
 
@@ -205,7 +206,9 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
         let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
         let mut mods = M::NONE;
-        if key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
+        if !alt_gr
+                && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0
+            {
             mods |= M::CTRL;
         }
         if alt && !alt_gr {
@@ -306,13 +309,13 @@ impl ConsoleRenderer {
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, pos: wincon::COORD) -> Result<()> {
+    fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
         Ok(check(unsafe {
             wincon::SetConsoleCursorPosition(self.handle, pos)
         })?)
     }
 
-    fn clear(&mut self, length: DWORD, pos: wincon::COORD, attr: WORD) -> Result<()> {
+    fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
             wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
@@ -503,7 +506,7 @@ impl Renderer for ConsoleRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
-        let coord = wincon::COORD { X: 0, Y: 0 };
+        let coord = COORD { X: 0, Y: 0 };
         check(unsafe { wincon::SetConsoleCursorPosition(self.handle, coord) })?;
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
         self.clear(n, coord, info.wAttributes)

@@ -1248,7 +1248,7 @@ pub struct ExternalPrinter {
 impl super::ExternalPrinter for ExternalPrinter {
     fn print(&mut self, msg: String) -> Result<()> {
         // write directly to stdout/stderr while not in raw mode
-        (if !self.raw_mode.load(Ordering::SeqCst) {
+        if !self.raw_mode.load(Ordering::SeqCst) {
             match self.target {
                 OutputStreamType::Stderr => io::stderr().write_all(msg.as_bytes()),
                 OutputStreamType::Stdout => io::stdout().write_all(msg.as_bytes()),
@@ -1262,8 +1262,7 @@ impl super::ExternalPrinter for ExternalPrinter {
             writer.flush()
         } else {
             Err(io::Error::from(ErrorKind::Other)) // FIXME
-        })
-        .map_err(error::ReadlineError::from)
+        }.map_err(error::ReadlineError::from)
     }
 }
 

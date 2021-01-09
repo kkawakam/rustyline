@@ -127,7 +127,7 @@ impl ConsoleRawReader {
         let n = handles.len().try_into().unwrap();
         loop {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
-            if rc == WAIT_OBJECT_0 + 0 {
+            if rc == WAIT_OBJECT_0 {
                 let mut count = 0;
                 check(unsafe {
                     consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count)
@@ -182,7 +182,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             return Ok(KeyEvent(K::UnknownEscSeq, M::NONE));
         }
         // TODO GetNumberOfConsoleInputEvents
-        check(unsafe { consoleapi::ReadConsoleInputW(handle, &mut rec, 1 as DWORD, &mut count) })?;
+        check(unsafe { consoleapi::ReadConsoleInputW(handle, &mut rec, 1, &mut count) })?;
         total += count;
 
         if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
@@ -251,7 +251,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         } else if utf16 == 27 {
             KeyEvent(K::Esc, mods)
         } else {
-            if utf16 >= 0xD800 && utf16 < 0xDC00 {
+            if (0xD800..0xDC00).contains(&utf16) {
                 surrogate = utf16;
                 continue;
             }
@@ -752,7 +752,6 @@ impl Term for Console {
         if let Some(ref sender) = self.pipe_writer {
             return Ok(ExternalPrinter {
                 event: INVALID_HANDLE_VALUE, // FIXME
-                buf: String::new(),
                 sender: sender.clone(),
                 raw_mode: self.raw_mode.clone(),
                 target: self.stream_type,
@@ -775,7 +774,6 @@ impl Term for Console {
         self.pipe_writer.replace(sender.clone());
         Ok(ExternalPrinter {
             event,
-            buf: String::new(),
             sender,
             raw_mode: self.raw_mode.clone(),
             target: self.stream_type,
@@ -795,7 +793,6 @@ struct AsyncPipe {
 #[derive(Debug)]
 pub struct ExternalPrinter {
     event: HANDLE,
-    buf: String,
     sender: SyncSender<String>,
     raw_mode: Arc<AtomicBool>,
     target: OutputStreamType,
@@ -804,40 +801,18 @@ pub struct ExternalPrinter {
 unsafe impl Send for ExternalPrinter {}
 unsafe impl Sync for ExternalPrinter {}
 
-impl Write for ExternalPrinter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl super::ExternalPrinter for ExternalPrinter {
+    fn print(&mut self, msg: String) -> Result<()> {
         // write directly to stdout/stderr while not in raw mode
         if !self.raw_mode.load(Ordering::SeqCst) {
             match self.target {
-                OutputStreamType::Stderr => io::stderr().write(buf),
-                OutputStreamType::Stdout => io::stdout().write(buf),
+                OutputStreamType::Stderr => io::stderr().write_all(msg.as_bytes()),
+                OutputStreamType::Stdout => io::stdout().write_all(msg.as_bytes()),
             }
         } else {
-            match std::str::from_utf8(buf) {
-                Ok(s) => {
-                    self.buf.push_str(s);
-                    if s.contains('\n') {
-                        self.flush()?
-                    }
-                }
-                Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, e)),
-            };
-            Ok(buf.len())
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        if !self.raw_mode.load(Ordering::SeqCst) {
-            match self.target {
-                OutputStreamType::Stderr => io::stderr().flush(),
-                OutputStreamType::Stdout => io::stdout().flush(),
-            }
-        } else {
-            if let Err(err) = self.sender.send(self.buf.split_off(0)) {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, err));
-            }
+            self.sender.send(msg).map_err(|_| io::Error::from(io::ErrorKind::Other))?; // FIXME
             check(unsafe { SetEvent(self.event) })
-        }
+        }.map_err(error::ReadlineError::from)
     }
 }
 

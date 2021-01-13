@@ -198,17 +198,17 @@ impl Cmd {
     }
 
     fn is_repeatable_change(&self) -> bool {
-        matches!(*self,
-          Cmd::Dedent(..)
-        | Cmd::Indent(..)
-        | Cmd::Insert(..)
-        | Cmd::Kill(_)
-        | Cmd::ReplaceChar(..)
-        | Cmd::Replace(..)
-        | Cmd::SelfInsert(..)
-        | Cmd::ViYankTo(_)
-        | Cmd::Yank(..)
-        // Cmd::TransposeChars | TODO Validate
+        matches!(
+            *self,
+            Cmd::Dedent(..)
+                | Cmd::Indent(..)
+                | Cmd::Insert(..)
+                | Cmd::Kill(_)
+                | Cmd::ReplaceChar(..)
+                | Cmd::Replace(..)
+                | Cmd::SelfInsert(..)
+                | Cmd::ViYankTo(_)
+                | Cmd::Yank(..) // Cmd::TransposeChars | TODO Validate
         )
     }
 

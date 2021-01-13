@@ -486,7 +486,7 @@ fn readline_edit<H: Helper>(
         if cmd == Cmd::Suspend {
             original_mode.disable_raw_mode()?;
             tty::suspend()?;
-            editor.term.enable_raw_mode()?; // TODO original_mode may have changed
+            let _ = editor.term.enable_raw_mode()?; // TODO original_mode may have changed
             s.refresh_line()?;
             continue;
         }
@@ -502,9 +502,10 @@ fn readline_edit<H: Helper>(
 
         // Tiny test quirk
         #[cfg(test)]
-        if matches!(cmd, Cmd::AcceptLine | Cmd::Newline
-            | Cmd::AcceptOrInsertLine { .. })
-        {
+        if matches!(
+            cmd,
+            Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
+        ) {
             editor.term.cursor = s.layout.cursor.col;
         }
 

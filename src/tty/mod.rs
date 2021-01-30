@@ -208,6 +208,7 @@ pub trait Term {
         stream: OutputStreamType,
         tab_stop: usize,
         bell_style: BellStyle,
+        enable_bracketed_paste: bool,
     ) -> Self;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.

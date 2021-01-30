@@ -533,6 +533,7 @@ impl Term for Console {
         stream_type: OutputStreamType,
         _tab_stop: usize,
         bell_style: BellStyle,
+        _enable_bracketed_paste: bool,
     ) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);

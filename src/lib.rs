@@ -630,6 +630,7 @@ impl<H: Helper> Editor<H> {
             config.output_stream(),
             config.tab_stop(),
             config.bell_style(),
+            config.enable_bracketed_paste(),
         );
         Self {
             term,

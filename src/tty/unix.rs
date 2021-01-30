@@ -1005,6 +1005,7 @@ pub struct PosixTerminal {
     stream_type: OutputStreamType,
     tab_stop: usize,
     bell_style: BellStyle,
+    enable_bracketed_paste: bool,
 }
 
 impl PosixTerminal {
@@ -1027,6 +1028,7 @@ impl Term for PosixTerminal {
         stream_type: OutputStreamType,
         tab_stop: usize,
         bell_style: BellStyle,
+        enable_bracketed_paste: bool,
     ) -> Self {
         let term = Self {
             unsupported: is_unsupported_term(),
@@ -1036,6 +1038,7 @@ impl Term for PosixTerminal {
             stream_type,
             tab_stop,
             bell_style,
+            enable_bracketed_paste,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -1091,7 +1094,9 @@ impl Term for PosixTerminal {
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
 
         // enable bracketed paste
-        let out = if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
+        let out = if !self.enable_bracketed_paste {
+            None
+        } else if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
             debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
             None
         } else {

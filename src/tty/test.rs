@@ -1,6 +1,7 @@
 //! Tests specific definitions
 use std::iter::IntoIterator;
 use std::slice::Iter;
+use std::time::Duration;
 use std::vec::IntoIter;
 
 use super::{RawMode, RawReader, Renderer, Term};
@@ -36,6 +37,10 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
     fn read_pasted_text(&mut self) -> Result<String> {
         unimplemented!()
     }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
@@ -58,6 +63,10 @@ impl RawReader for IntoIter<KeyEvent> {
 
     fn read_pasted_text(&mut self) -> Result<String> {
         unimplemented!()
+    }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
     }
 }
 

@@ -4,6 +4,7 @@
 use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
@@ -210,6 +211,10 @@ impl RawReader for ConsoleRawReader {
 
     fn read_pasted_text(&mut self) -> Result<String> {
         Ok(clipboard_win::get_clipboard_string()?)
+    }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true) // FIXME WaitForMultipleObjects + loop until a valid event
     }
 }
 

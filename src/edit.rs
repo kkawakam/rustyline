@@ -293,6 +293,12 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
 }
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+    /// Clear the buffer and reset the line at the start
+    pub fn clear_buffer(&mut self) {
+        self.line.move_buffer_start();
+        self.line.kill_buffer();
+    }
+
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();

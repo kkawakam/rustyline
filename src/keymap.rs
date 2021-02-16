@@ -27,6 +27,8 @@ pub enum Cmd {
     BeginningOfHistory,
     /// capitalize-word
     CapitalizeWord,
+    /// Clear the buffer and resets the cursor at the start
+    ClearBuffer,
     /// clear-screen
     ClearScreen,
     /// complete

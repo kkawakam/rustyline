@@ -86,6 +86,11 @@ pub fn execute<H: Helper>(
             s.clear_screen()?;
             s.refresh_line()?
         }
+        Cmd::ClearBuffer => {
+            // Clear the buffer and reset the cursor at the start
+            s.clear_buffer();
+            s.refresh_line()?;
+        }
         Cmd::NextHistory => {
             // Fetch the next command from the history list.
             s.edit_history_next(false)?

@@ -28,6 +28,9 @@ log = "0.4"
 unicode-width = "0.1"
 unicode-segmentation = "1.0"
 memchr = "2.0"
+# https://rustsec.org/advisories/RUSTSEC-2021-0003.html
+smallvec = "1.6.1"
+radix_trie = "0.2.1"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.19"

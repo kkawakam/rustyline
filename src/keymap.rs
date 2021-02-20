@@ -1,14 +1,13 @@
 //! Bindings from keys to command for Emacs and Vi modes
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use log::debug;
+use radix_trie::Trie;
 
 use super::Result;
-use crate::config::Config;
-use crate::config::EditMode;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::{RawReader, Term, Terminal};
+use crate::{Config, EditMode, Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -329,8 +328,9 @@ impl Movement {
     }
 }
 
-#[derive(PartialEq)]
-enum InputMode {
+/// Vi input modes
+#[derive(Clone, Copy, PartialEq)]
+pub enum InputMode {
     /// Vi Command/Alternate
     Command,
     /// Insert/Input mode
@@ -341,9 +341,9 @@ enum InputMode {
 
 /// Transform key(s) to commands based on current input mode
 pub struct InputState {
-    mode: EditMode,
-    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
-    input_mode: InputMode, // vi only ?
+    pub(crate) mode: EditMode,
+    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
+    pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd,                        // vi only
@@ -376,10 +376,14 @@ pub trait Refresher {
     fn is_cursor_at_end(&self) -> bool;
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
+    /// currently edited line
+    fn line(&self) -> &str;
+    /// Current cursor position (byte position)
+    fn pos(&self) -> usize;
 }
 
 impl InputState {
-    pub fn new(config: &Config, custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>) -> Self {
+    pub fn new(config: &Config, custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>) -> Self {
         Self {
             mode: config.edit_mode(),
             custom_bindings,
@@ -460,6 +464,29 @@ impl InputState {
         }
     }
 
+    fn custom_binding(
+        &self,
+        wrt: &mut dyn Refresher,
+        key: KeyEvent,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Option<Cmd> {
+        let bindings = self.custom_bindings.read().unwrap();
+        let evt = key.into();
+        let handler = bindings.get(&evt); // TODO key sequence and subtrie
+        if let Some(handler) = handler {
+            match handler {
+                EventHandler::Simple(cmd) => Some(cmd.clone()),
+                EventHandler::Conditional(handler) => {
+                    let ctx = EventContext::new(self, wrt);
+                    handler.handle(&evt, n, positive, &ctx)
+                }
+            }
+        } else {
+            None
+        }
+    }
+
     fn emacs<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -472,16 +499,13 @@ impl InputState {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(Some(n), wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+
+        if let Some(cmd) = self.custom_binding(wrt, key, n, positive) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(Some(n), wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -622,20 +646,16 @@ impl InputState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    if no_num_args {
-                        cmd.redo(None, wrt)
-                    } else {
-                        cmd.redo(Some(n), wrt)
-                    }
+        if let Some(cmd) = self.custom_binding(wrt, key, n, true) {
+            return Ok(if cmd.is_repeatable() {
+                if no_num_args {
+                    cmd.redo(None, wrt)
                 } else {
-                    cmd.clone()
-                });
-            }
+                    cmd.redo(Some(n), wrt)
+                }
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -800,16 +820,12 @@ impl InputState {
         wrt: &mut dyn Refresher,
         key: KeyEvent,
     ) -> Result<Cmd> {
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(None, wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+        if let Some(cmd) = self.custom_binding(wrt, key, 0, true) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(None, wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {

@@ -2,11 +2,15 @@
 use crate::{Cmd, EditMode, InputMode, InputState, KeyEvent, Refresher, RepeatCount};
 
 use radix_trie::TrieKey;
+use serde::Serialize;
 use smallvec::{smallvec, SmallVec};
 
 /// Input event
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum Event {
+    /// Wildcard.
+    /// Useful if you want to filter out some keys.
+    Any,
     /// Key sequence
     // TODO Validate 2 ?
     KeySeq(SmallVec<[KeyEvent; 2]>),
@@ -26,13 +30,17 @@ impl Event {
     }
 }
 
-impl Into<Event> for KeyEvent {
-    fn into(self) -> Event {
-        Event::KeySeq(smallvec![self])
+impl From<KeyEvent> for Event {
+    fn from(k: KeyEvent) -> Event {
+        Event::KeySeq(smallvec![k])
     }
 }
 
-impl TrieKey for Event {}
+impl TrieKey for Event {
+    fn encode_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+}
 
 /// Event handler
 pub enum EventHandler {
@@ -44,9 +52,9 @@ pub enum EventHandler {
      * TODO Macro(), */
 }
 
-impl Into<EventHandler> for Cmd {
-    fn into(self) -> EventHandler {
-        EventHandler::Simple(self)
+impl From<Cmd> for EventHandler {
+    fn from(c: Cmd) -> EventHandler {
+        EventHandler::Simple(c)
     }
 }
 

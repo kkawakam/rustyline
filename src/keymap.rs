@@ -473,7 +473,7 @@ impl InputState {
     ) -> Option<Cmd> {
         let bindings = self.custom_bindings.read().unwrap();
         let evt = key.into();
-        let handler = bindings.get(&evt); // TODO key sequence and subtrie
+        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any)); // TODO key sequence and subtrie
         if let Some(handler) = handler {
             match handler {
                 EventHandler::Simple(cmd) => Some(cmd.clone()),

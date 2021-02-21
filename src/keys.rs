@@ -1,7 +1,8 @@
 //! Key constants
+use serde::Serialize;
 
 /// Input key pressed and modifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct KeyEvent(pub KeyCode, pub Modifiers);
 
 impl KeyEvent {
@@ -108,7 +109,7 @@ impl From<char> for KeyEvent {
 }
 
 /// Input key pressed
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[non_exhaustive]
 pub enum KeyCode {
     /// Unsupported escape sequence (on unix platform)
@@ -157,6 +158,7 @@ pub enum KeyCode {
 
 bitflags::bitflags! {
     /// The set of modifier keys that were triggered along with a key press.
+    #[derive(Serialize)]
     pub struct Modifiers: u8 {
         /// Control modifier
         const CTRL  = 1<<3;

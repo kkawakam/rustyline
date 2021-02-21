@@ -30,9 +30,9 @@ unicode-segmentation = "1.0"
 memchr = "2.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.19"
+nix = "0.20"
 utf8parse = "0.2"
-skim = { version = "0.7", optional = true }
+skim = { version = "0.9", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }

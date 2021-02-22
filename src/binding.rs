@@ -121,3 +121,21 @@ pub trait ConditionalEventHandler: Send + Sync {
         ctx: &EventContext,
     ) -> Option<Cmd>;
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{KeyEvent, Cmd};
+    use super::{Event, EventHandler};
+    use radix_trie::Trie;
+    use smallvec::smallvec;
+
+    #[test]
+    fn encode() {
+        let mut trie = Trie::new();
+        let evt = Event::KeySeq(smallvec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]);
+        trie.insert(evt, EventHandler::from(Cmd::Noop));
+        let prefix = Event::from(KeyEvent::ctrl('X'));
+        let subtrie = trie.subtrie(&prefix);
+        assert!(subtrie.is_some())
+    }
+}

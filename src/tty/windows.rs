@@ -117,7 +117,7 @@ impl RawReader for ConsoleRawReader {
         loop {
             // TODO GetNumberOfConsoleInputEvents
             check(unsafe {
-                consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1 as DWORD, &mut count)
+                consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
             })?;
 
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
@@ -188,7 +188,7 @@ impl RawReader for ConsoleRawReader {
             } else if utf16 == 27 {
                 KeyEvent(K::Esc, mods)
             } else {
-                if utf16 >= 0xD800 && utf16 < 0xDC00 {
+                if (0xD800..0xDC00).contains(&utf16) {
                     surrogate = utf16;
                     continue;
                 }
@@ -449,7 +449,7 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
+        SIGWINCH.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).unwrap_or(false)
     }
 
     /// Try to get the number of columns in the current terminal,

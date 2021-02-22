@@ -30,7 +30,7 @@ unicode-segmentation = "1.0"
 memchr = "2.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.19"
+nix = "0.20"
 utf8parse = "0.2"
 skim = { version = "0.7", optional = true }
 

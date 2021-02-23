@@ -38,3 +38,24 @@ jobs:
 
     env:
       RUST_BACKTRACE: 1
+
+  features:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        default: true
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Run tests no-default-features
+      run: cargo test --workspace --all --doc --no-default-features
+    - name: Run tests only fuzzy
+      run: cargo test --workspace --all --doc --no-default-features --features with-fuzzy
+    - name: Run tests all features
+      run: cargo test --workspace --all --doc --features with-fuzzy,with-dirs
+
+    env:
+      RUST_BACKTRACE: 1

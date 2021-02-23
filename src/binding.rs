@@ -2,11 +2,10 @@
 use crate::{Cmd, EditMode, InputMode, InputState, KeyEvent, Refresher, RepeatCount};
 
 use radix_trie::TrieKey;
-use serde::Serialize;
 use smallvec::{smallvec, SmallVec};
 
 /// Input event
-#[derive(Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Event {
     /// Wildcard.
     /// Useful if you want to filter out some keys.
@@ -38,7 +37,17 @@ impl From<KeyEvent> for Event {
 
 impl TrieKey for Event {
     fn encode_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+        match self {
+            Event::Any => crate::keys::ANY.to_be_bytes().to_vec(),
+            Event::KeySeq(keys) => {
+                let mut dst = Vec::with_capacity(keys.len() * 4);
+                for key in keys {
+                    dst.extend_from_slice(&key.encode().to_be_bytes());
+                }
+                dst
+            }
+            Event::Mouse() => crate::keys::MOUSE.to_be_bytes().to_vec(),
+        }
     }
 }
 
@@ -124,8 +133,8 @@ pub trait ConditionalEventHandler: Send + Sync {
 
 #[cfg(test)]
 mod test {
-    use crate::{KeyEvent, Cmd};
     use super::{Event, EventHandler};
+    use crate::{Cmd, KeyEvent};
     use radix_trie::Trie;
     use smallvec::smallvec;
 
@@ -135,7 +144,10 @@ mod test {
         let evt = Event::KeySeq(smallvec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]);
         trie.insert(evt, EventHandler::from(Cmd::Noop));
         let prefix = Event::from(KeyEvent::ctrl('X'));
-        let subtrie = trie.subtrie(&prefix);
-        assert!(subtrie.is_some())
+        let subtrie = trie.get_raw_descendant(&prefix);
+        assert!(subtrie.is_some());
+        let prefix = Event::from(KeyEvent::ctrl('O'));
+        let subtrie = trie.get_raw_descendant(&prefix);
+        assert!(subtrie.is_none())
     }
 }

@@ -423,6 +423,61 @@ impl InputState {
         }
     }
 
+    fn custom_binding(
+        &self,
+        wrt: &mut dyn Refresher,
+        evt: &Event,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Option<Cmd> {
+        let bindings = self.custom_bindings.read().unwrap();
+        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any));
+        if let Some(handler) = handler {
+            match handler {
+                EventHandler::Simple(cmd) => Some(cmd.clone()),
+                EventHandler::Conditional(handler) => {
+                    let ctx = EventContext::new(self, wrt);
+                    handler.handle(&evt, n, positive, &ctx)
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    fn custom_seq_binding<R: RawReader>(
+        &self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        evt: &mut Event,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Result<Option<Cmd>> {
+        let bindings = self.custom_bindings.read().unwrap();
+        while let Some(subtrie) = bindings.get_raw_descendant(&evt) {
+            let snd_key = rdr.next_key(true)?;
+            if let Event::KeySeq(ref mut key_seq) = evt {
+                key_seq.push(snd_key);
+            } else {
+                break;
+            }
+            let handler = subtrie.get(&evt).unwrap();
+            if let Some(handler) = handler {
+                let cmd = match handler {
+                    EventHandler::Simple(cmd) => Some(cmd.clone()),
+                    EventHandler::Conditional(handler) => {
+                        let ctx = EventContext::new(self, wrt);
+                        handler.handle(&evt, n, positive, &ctx)
+                    }
+                };
+                if cmd.is_some() {
+                    return Ok(cmd);
+                }
+            }
+        }
+        Ok(None)
+    }
+
     fn emacs_digit_argument<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -464,29 +519,6 @@ impl InputState {
         }
     }
 
-    fn custom_binding(
-        &self,
-        wrt: &mut dyn Refresher,
-        key: KeyEvent,
-        n: RepeatCount,
-        positive: bool,
-    ) -> Option<Cmd> {
-        let bindings = self.custom_bindings.read().unwrap();
-        let evt = key.into();
-        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any)); // TODO key sequence and subtrie
-        if let Some(handler) = handler {
-            match handler {
-                EventHandler::Simple(cmd) => Some(cmd.clone()),
-                EventHandler::Conditional(handler) => {
-                    let ctx = EventContext::new(self, wrt);
-                    handler.handle(&evt, n, positive, &ctx)
-                }
-            }
-        } else {
-            None
-        }
-    }
-
     fn emacs<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -500,7 +532,8 @@ impl InputState {
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
 
-        if let Some(cmd) = self.custom_binding(wrt, key, n, positive) {
+        let mut evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, n, positive) {
             return Ok(if cmd.is_repeatable() {
                 cmd.redo(Some(n), wrt)
             } else {
@@ -560,11 +593,19 @@ impl InputState {
             E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
             E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
             E(K::Char('X'), M::CTRL) => {
-                let snd_key = rdr.next_key(true)?;
-                match snd_key {
-                    E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
-                    E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
-                    _ => Cmd::Unknown,
+                if let Some(cmd) = self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)? {
+                    cmd
+                } else {
+                    let snd_key = match evt {
+                        // we may have already read the second key in custom_seq_binding
+                        Event::KeySeq(ref key_seq) if key_seq.len() > 1 => key_seq[1],
+                        _ => rdr.next_key(true)?,
+                    };
+                    match snd_key {
+                        E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
+                        E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
+                        _ => Cmd::Unknown,
+                    }
                 }
             }
             E(K::Backspace, M::ALT) => {
@@ -603,7 +644,7 @@ impl InputState {
             // TODO ESC-R (r): Undo all changes made to this line.
             E(K::Char('U'), M::ALT) | E(K::Char('u'), M::ALT) => Cmd::UpcaseWord,
             E(K::Char('Y'), M::ALT) | E(K::Char('y'), M::ALT) => Cmd::YankPop,
-            _ => self.common(rdr, key, n, positive)?,
+            _ => self.common(rdr, wrt, evt, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
         Ok(cmd)
@@ -646,7 +687,8 @@ impl InputState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
-        if let Some(cmd) = self.custom_binding(wrt, key, n, true) {
+        let evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, n, true) {
             return Ok(if cmd.is_repeatable() {
                 if no_num_args {
                     cmd.redo(None, wrt)
@@ -805,7 +847,7 @@ impl InputState {
                 None => Cmd::Unknown,
             },
             E::ESC => Cmd::Noop,
-            _ => self.common(rdr, key, n, true)?,
+            _ => self.common(rdr, wrt, evt, key, n, true)?,
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -820,7 +862,8 @@ impl InputState {
         wrt: &mut dyn Refresher,
         key: KeyEvent,
     ) -> Result<Cmd> {
-        if let Some(cmd) = self.custom_binding(wrt, key, 0, true) {
+        let evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, 0, true) {
             return Ok(if cmd.is_repeatable() {
                 cmd.redo(None, wrt)
             } else {
@@ -853,7 +896,7 @@ impl InputState {
                 wrt.done_inserting();
                 Cmd::Move(Movement::BackwardChar(1))
             }
-            _ => self.common(rdr, key, 1, true)?,
+            _ => self.common(rdr, wrt, evt, key, 1, true)?,
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -959,6 +1002,8 @@ impl InputState {
     fn common<R: RawReader>(
         &mut self,
         rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        mut evt: Event,
         key: KeyEvent,
         n: RepeatCount,
         positive: bool,
@@ -1028,7 +1073,9 @@ impl InputState {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
             },
-            _ => Cmd::Unknown,
+            _ => {
+                self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)?.unwrap_or(Cmd::Unknown)
+            },
         })
     }
 

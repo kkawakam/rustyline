@@ -5,7 +5,7 @@ use radix_trie::TrieKey;
 use smallvec::{smallvec, SmallVec};
 
 /// Input event
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Event {
     /// Wildcard.
     /// Useful if you want to filter out some keys.
@@ -142,10 +142,14 @@ mod test {
     fn encode() {
         let mut trie = Trie::new();
         let evt = Event::KeySeq(smallvec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]);
-        trie.insert(evt, EventHandler::from(Cmd::Noop));
+        trie.insert(evt.clone(), EventHandler::from(Cmd::Noop));
         let prefix = Event::from(KeyEvent::ctrl('X'));
         let subtrie = trie.get_raw_descendant(&prefix);
         assert!(subtrie.is_some());
+        let subtrie = subtrie.unwrap();
+        let sub_result = subtrie.get(&evt);
+        assert!(sub_result.is_ok());
+        assert!(sub_result.unwrap().is_some());
         let prefix = Event::from(KeyEvent::ctrl('O'));
         let subtrie = trie.get_raw_descendant(&prefix);
         assert!(subtrie.is_none())

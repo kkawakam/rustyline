@@ -154,13 +154,13 @@ impl KeyEvent {
             KeyCode::Up => UP,
         };
         if self.1.contains(Modifiers::CTRL) {
-            u = u | BASE_CONTROL;
+            u |= BASE_CONTROL;
         }
         if self.1.contains(Modifiers::ALT) {
-            u = u | BASE_META;
+            u |= BASE_META;
         }
         if self.1.contains(Modifiers::SHIFT) {
-            u = u | BASE_SHIFT;
+            u |= BASE_SHIFT;
         }
         u
     }

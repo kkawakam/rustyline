@@ -168,7 +168,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::CapitalizeWord => {
             // capitalize word after point
-            s.edit_word(WordAction::CAPITALIZE)?
+            s.edit_word(WordAction::Capitalize)?
         }
         Cmd::Kill(ref mvt) => {
             s.edit_kill(mvt)?;
@@ -193,7 +193,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::DowncaseWord => {
             // lowercase word after point
-            s.edit_word(WordAction::LOWERCASE)?
+            s.edit_word(WordAction::Lowercase)?
         }
         Cmd::TransposeWords(n) => {
             // transpose words
@@ -201,7 +201,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::UpcaseWord => {
             // uppercase word after point
-            s.edit_word(WordAction::UPPERCASE)?
+            s.edit_word(WordAction::Uppercase)?
         }
         Cmd::YankPop => {
             // yank-pop

@@ -35,6 +35,9 @@ jobs:
       run: cargo test --workspace --all-targets
     - name: Run doctests
       run: cargo test --workspace --doc
+    - name: Test features
+      if: matrix.os != 'windows-latest'
+      run: cargo test --workspace --all-targets --all-features
 
     env:
       RUST_BACKTRACE: 1

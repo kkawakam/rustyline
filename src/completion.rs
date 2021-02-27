@@ -357,22 +357,20 @@ fn filename_complete(
     // if any of the below IO operations have errors, just ignore them
     if let Ok(read_dir) = dir.read_dir() {
         let file_name = normalize(file_name);
-        for entry in read_dir {
-            if let Ok(entry) = entry {
-                if let Some(s) = entry.file_name().to_str() {
-                    let ns = normalize(s);
-                    if ns.starts_with(file_name.as_ref()) {
-                        if let Ok(metadata) = fs::metadata(entry.path()) {
-                            let mut path = String::from(dir_name) + s;
-                            if metadata.is_dir() {
-                                path.push(sep);
-                            }
-                            entries.push(Pair {
-                                display: String::from(s),
-                                replacement: escape(path, esc_char, break_chars, quote),
-                            });
-                        } // else ignore PermissionDenied
-                    }
+        for entry in read_dir.flatten() {
+            if let Some(s) = entry.file_name().to_str() {
+                let ns = normalize(s);
+                if ns.starts_with(file_name.as_ref()) {
+                    if let Ok(metadata) = fs::metadata(entry.path()) {
+                        let mut path = String::from(dir_name) + s;
+                        if metadata.is_dir() {
+                            path.push(sep);
+                        }
+                        entries.push(Pair {
+                            display: String::from(s),
+                            replacement: escape(path, esc_char, break_chars, quote),
+                        });
+                    } // else ignore PermissionDenied
                 }
             }
         }

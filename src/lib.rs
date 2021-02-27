@@ -34,6 +34,7 @@ mod tty;
 mod undo;
 pub mod validate;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
@@ -72,7 +73,9 @@ fn complete_line<H: Helper>(
     config: &Config,
 ) -> Result<Option<Cmd>> {
     #[cfg(all(unix, feature = "with-fuzzy"))]
-    use skim::{Skim, SkimOptionsBuilder};
+    use skim::prelude::{
+        unbounded, Skim, SkimItem, SkimItemReceiver, SkimItemSender, SkimOptionsBuilder,
+    };
 
     let completer = s.helper.unwrap();
     // get a list of completions
@@ -191,12 +194,29 @@ fn complete_line<H: Helper>(
         #[cfg(all(unix, feature = "with-fuzzy"))]
         {
             if CompletionType::Fuzzy == config.completion_type() {
-                // skim takes input of candidates separated by new line
-                let input = candidates
+                struct Candidate {
+                    index: usize,
+                    text: String,
+                }
+                impl SkimItem for Candidate {
+                    fn text(&self) -> Cow<str> {
+                        Cow::Borrowed(&self.text)
+                    }
+                }
+
+                let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
+
+                candidates
                     .iter()
-                    .map(|c| c.display())
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    .enumerate()
+                    .map(|(i, c)| Candidate {
+                        index: i,
+                        text: c.display().to_owned(),
+                    })
+                    .for_each(|c| {
+                        let _ = tx_item.send(Arc::new(c));
+                    });
+                drop(tx_item); // so that skim could know when to stop waiting for more items.
 
                 // setup skim and run with input options
                 // will display UI for fuzzy search and return selected results
@@ -209,15 +229,17 @@ fn complete_line<H: Helper>(
                     .build()
                     .unwrap();
 
-                let selected_items =
-                    Skim::run_with(&options, Some(Box::new(std::io::Cursor::new(input))))
-                        .map(|out| out.selected_items)
-                        .unwrap_or_else(Vec::new);
+                let selected_items = Skim::run_with(&options, Some(rx_item))
+                    .map(|out| out.selected_items)
+                    .unwrap_or_else(Vec::new);
 
                 // match the first (and only) returned option with the candidate and update the
                 // line otherwise only refresh line to clear the skim UI changes
                 if let Some(item) = selected_items.first() {
-                    if let Some(candidate) = candidates.get(item.get_index()) {
+                    let item: &Candidate = (*item).as_any() // cast to Any
+                        .downcast_ref::<Candidate>() // downcast to concrete type
+                        .expect("something wrong with downcast");
+                    if let Some(candidate) = candidates.get(item.index) {
                         completer.update(&mut s.line, start, candidate.replacement());
                     }
                 }

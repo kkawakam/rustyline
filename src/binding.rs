@@ -1,5 +1,7 @@
 /// Custom event handlers
-use crate::{Cmd, EditMode, InputMode, InputState, KeyEvent, Refresher, RepeatCount};
+use crate::{
+    Cmd, EditMode, InputMode, InputState, KeyCode, KeyEvent, Modifiers, Refresher, RepeatCount,
+};
 
 use radix_trie::TrieKey;
 use smallvec::{smallvec, SmallVec};
@@ -35,10 +37,69 @@ impl From<KeyEvent> for Event {
     }
 }
 
+const BASE: u32 = 0x0010ffff + 1;
+const BASE_CONTROL: u32 = 0x02000000;
+const BASE_META: u32 = 0x04000000;
+const BASE_SHIFT: u32 = 0x01000000;
+const ESCAPE: u32 = 27;
+const PAGE_UP: u32 = BASE + 1;
+const PAGE_DOWN: u32 = PAGE_UP + 1;
+const DOWN: u32 = PAGE_DOWN + 1;
+const UP: u32 = DOWN + 1;
+const LEFT: u32 = UP + 1;
+const RIGHT: u32 = LEFT + 1;
+const HOME: u32 = RIGHT + 1;
+const END: u32 = HOME + 1;
+const DELETE: u32 = END + 1;
+const INSERT: u32 = DELETE + 1;
+//const F1: u32 = INSERT + 1;
+const MOUSE: u32 = /*F24 + 1*/ INSERT + 25;
+const PASTE_START: u32 = MOUSE + 1;
+const PASTE_FINISH: u32 = PASTE_START + 1;
+const ANY: u32 = PASTE_FINISH + 1;
+
+impl KeyEvent {
+    fn encode(&self) -> u32 {
+        let mut u = match self.0 {
+            KeyCode::UnknownEscSeq => 0,
+            KeyCode::Backspace => u32::from('H') | BASE_CONTROL,
+            KeyCode::BackTab => u32::from('I') | BASE_CONTROL | BASE_SHIFT,
+            KeyCode::BracketedPasteStart => PASTE_START,
+            KeyCode::BracketedPasteEnd => PASTE_FINISH,
+            KeyCode::Char(c) => u32::from(c),
+            KeyCode::Delete => DELETE,
+            KeyCode::Down => DOWN,
+            KeyCode::End => END,
+            KeyCode::Enter => u32::from('M') | BASE_CONTROL,
+            KeyCode::F(i) => INSERT + i as u32,
+            KeyCode::Esc => ESCAPE,
+            KeyCode::Home => HOME,
+            KeyCode::Insert => INSERT,
+            KeyCode::Left => LEFT,
+            KeyCode::Null => 0,
+            KeyCode::PageDown => PAGE_DOWN,
+            KeyCode::PageUp => PAGE_UP,
+            KeyCode::Right => RIGHT,
+            KeyCode::Tab => u32::from('I') | BASE_CONTROL,
+            KeyCode::Up => UP,
+        };
+        if self.1.contains(Modifiers::CTRL) {
+            u |= BASE_CONTROL;
+        }
+        if self.1.contains(Modifiers::ALT) {
+            u |= BASE_META;
+        }
+        if self.1.contains(Modifiers::SHIFT) {
+            u |= BASE_SHIFT;
+        }
+        u
+    }
+}
+
 impl TrieKey for Event {
     fn encode_bytes(&self) -> Vec<u8> {
         match self {
-            Event::Any => crate::keys::ANY.to_be_bytes().to_vec(),
+            Event::Any => ANY.to_be_bytes().to_vec(),
             Event::KeySeq(keys) => {
                 let mut dst = Vec::with_capacity(keys.len() * 4);
                 for key in keys {
@@ -46,7 +107,7 @@ impl TrieKey for Event {
                 }
                 dst
             }
-            Event::Mouse() => crate::keys::MOUSE.to_be_bytes().to_vec(),
+            Event::Mouse() => MOUSE.to_be_bytes().to_vec(),
         }
     }
 }

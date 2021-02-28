@@ -530,7 +530,13 @@ fn readline_edit<H: Helper>(
         }
 
         // Execute things can be done solely on a state object
-        match command::execute(cmd, &mut s, &input_state, &editor.kill_ring, &editor.config)? {
+        let mut ctx = command::InvokeContext {
+            state: &mut s,
+            input_state: &input_state,
+            kill_ring: &editor.kill_ring,
+            config: &editor.config,
+        };
+        match command::execute(cmd, &mut ctx)? {
             command::Status::Proceed => continue,
             command::Status::Submit => break,
         }

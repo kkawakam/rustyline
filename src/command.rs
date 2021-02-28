@@ -6,24 +6,29 @@ use crate::edit::State;
 use crate::error;
 use crate::history::Direction;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
-use crate::keymap::{InputState, Refresher};
+use crate::keymap::{InputState, Refresher, Invoke};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::{Helper, Result};
+use crate::validate::{ValidationContext, ValidationResult};
 
 pub enum Status {
     Proceed,
     Submit,
 }
 
-pub fn execute<H: Helper>(
-    cmd: Cmd,
-    s: &mut State<'_, '_, H>,
-    input_state: &InputState,
-    kill_ring: &Arc<Mutex<KillRing>>,
-    config: &Config,
-) -> Result<Status> {
+pub struct InvokeContext<'a, 'b, H: Helper> {
+    pub state: &'a mut State<'b, 'b, H>,
+    pub input_state: &'a InputState,
+    pub kill_ring: &'a Arc<Mutex<KillRing>>,
+    pub config: &'a Config,
+}
+
+pub fn execute<H: Helper>(cmd: Cmd, ctx: &mut InvokeContext<H>)
+    -> Result<Status>
+{
     use Status::*;
+    let InvokeContext { state: s, input_state, kill_ring, config } = ctx;
 
     match cmd {
         Cmd::CompleteHint => {
@@ -129,9 +134,9 @@ pub fn execute<H: Helper>(
                 // line as the user typed it after a newline.
                 s.refresh_line_with_msg(None)?;
             }
-            let validation_result = s.validate()?;
+            let validation_result = validate(ctx)?;
             let valid = validation_result.is_valid();
-            let end = s.line.is_end_of_input();
+            let end = ctx.state.line.is_end_of_input();
             match (cmd, valid, end) {
                 (Cmd::AcceptLine, ..)
                 | (Cmd::AcceptOrInsertLine { .. }, true, true)
@@ -148,7 +153,7 @@ pub fn execute<H: Helper>(
                 | (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
                     if valid || !validation_result.has_message() {
-                        s.edit_insert('\n', 1)?;
+                        ctx.state.edit_insert('\n', 1)?;
                     }
                 }
                 _ => unreachable!(),
@@ -235,3 +240,42 @@ pub fn execute<H: Helper>(
     }
     Ok(Proceed)
 }
+
+pub fn validate<H: Helper>(ctx: &mut InvokeContext<H>)
+    -> Result<ValidationResult>
+{
+    if let Some(validator) = ctx.state.helper {
+        ctx.state.changes.borrow_mut().begin();
+        let result = validator.validate(&mut ValidationContext::new(ctx))?;
+        let corrected = ctx.state.changes.borrow_mut().end();
+        match result {
+            ValidationResult::Incomplete => {}
+            ValidationResult::Valid(ref msg) => {
+                // Accept the line regardless of where the cursor is.
+                if corrected || ctx.state.has_hint() || msg.is_some() {
+                    // Force a refresh without hints to leave the previous
+                    // line as the user typed it after a newline.
+                    ctx.state.refresh_line_with_msg(msg.as_deref())?;
+                }
+            }
+            ValidationResult::Invalid(ref msg) => {
+                if corrected || ctx.state.has_hint() || msg.is_some() {
+                    ctx.state.refresh_line_with_msg(msg.as_deref())?;
+                }
+            }
+        }
+        Ok(result)
+    } else {
+        Ok(ValidationResult::Valid(None))
+    }
+}
+
+impl<H: Helper> Invoke for InvokeContext<'_, '_, H> {
+    fn input(&self) -> &str {
+        self.state.line.as_str()
+    }
+    fn invoke(&mut self, cmd: Cmd) -> Result<Status> {
+        execute(cmd, self)
+    }
+}
+

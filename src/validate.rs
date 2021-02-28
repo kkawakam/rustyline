@@ -1,7 +1,8 @@
 //! Input validation API (Multi-line editing)
 
-use crate::keymap::Invoke;
+use crate::keymap::{Cmd, Invoke};
 use crate::Result;
+use crate::command;
 
 /// Input validation result
 #[non_exhaustive]
@@ -43,10 +44,10 @@ impl<'i> ValidationContext<'i> {
         self.i.input()
     }
 
-    // TODO
-    //fn invoke(&mut self, cmd: Cmd) -> Result<?> {
-    //    self.i.invoke(cmd)
-    //}
+    /// Invokes arbitrary command
+    pub fn invoke(&mut self, cmd: Cmd) -> Result<command::Status> {
+        self.i.invoke(cmd)
+    }
 }
 
 /// This trait provides an extension interface for determining whether

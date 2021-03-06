@@ -97,8 +97,8 @@ fn main() -> rustyline::Result<()> {
     };
     let mut rl = Editor::with_config(config);
     rl.set_helper(Some(h));
-    rl.bind_sequence(KeyEvent::alt('N'), Cmd::HistorySearchForward);
-    rl.bind_sequence(KeyEvent::alt('P'), Cmd::HistorySearchBackward);
+    rl.bind_sequence(KeyEvent::alt('n'), Cmd::HistorySearchForward);
+    rl.bind_sequence(KeyEvent::alt('p'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }

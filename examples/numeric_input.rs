@@ -6,22 +6,14 @@ use rustyline::{
 struct FilteringEventHandler;
 impl ConditionalEventHandler for FilteringEventHandler {
     fn handle(&self, evt: &Event, _: RepeatCount, _: bool, _: &EventContext) -> Option<Cmd> {
-        match evt {
-            Event::KeySeq(ks) => {
-                if let Some(KeyEvent(KeyCode::Char(c), m)) = ks.first() {
-                    if m.contains(Modifiers::CTRL)
-                        || m.contains(Modifiers::ALT)
-                        || c.is_ascii_digit()
-                    {
-                        None
-                    } else {
-                        Some(Cmd::Noop) // filter out invalid input
-                    }
-                } else {
-                    None
-                }
+        if let Some(KeyEvent(KeyCode::Char(c), m)) = evt.get(0) {
+            if m.contains(Modifiers::CTRL) || m.contains(Modifiers::ALT) || c.is_ascii_digit() {
+                None
+            } else {
+                Some(Cmd::Noop) // filter out invalid input
             }
-            _ => None,
+        } else {
+            None
         }
     }
 }

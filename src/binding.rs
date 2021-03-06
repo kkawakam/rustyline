@@ -29,6 +29,15 @@ impl Event {
         }
         self
     }
+
+    /// Return `i`th key event
+    pub fn get(&self, i: usize) -> Option<&KeyEvent> {
+        if let Event::KeySeq(ref ks) = self {
+            ks.get(i)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<KeyEvent> for Event {

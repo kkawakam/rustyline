@@ -37,14 +37,24 @@ impl Highlighter for MyHelper {
     }
 }
 
+#[derive(Clone)]
 struct CompleteHintHandler;
 impl ConditionalEventHandler for CompleteHintHandler {
     fn handle(&self, evt: &Event, _: RepeatCount, _: bool, ctx: &EventContext) -> Option<Cmd> {
-        debug_assert_eq!(*evt, Event::from(KeyEvent::ctrl('E')));
-        if ctx.has_hint() {
-            Some(Cmd::CompleteHint)
+        if !ctx.has_hint() {
+            return None; // default
+        }
+        if let Some(k) = evt.get(0) {
+            #[allow(clippy::if_same_then_else)]
+            if *k == KeyEvent::ctrl('E') {
+                Some(Cmd::CompleteHint)
+            } else if *k == KeyEvent::alt('f') && ctx.line().len() == ctx.pos() {
+                Some(Cmd::CompleteHint) // TODO give access to hint
+            } else {
+                None
+            }
         } else {
-            None // default
+            unreachable!()
         }
     }
 }
@@ -71,10 +81,9 @@ fn main() {
     let mut rl = Editor::<MyHelper>::new();
     rl.set_helper(Some(MyHelper(HistoryHinter {})));
 
-    rl.bind_sequence(
-        KeyEvent::ctrl('E'),
-        EventHandler::Conditional(Box::new(CompleteHintHandler)),
-    );
+    let ceh = Box::new(CompleteHintHandler);
+    rl.bind_sequence(KeyEvent::ctrl('E'), EventHandler::Conditional(ceh.clone()));
+    rl.bind_sequence(KeyEvent::alt('f'), EventHandler::Conditional(ceh));
     rl.bind_sequence(
         KeyEvent::from('\t'),
         EventHandler::Conditional(Box::new(TabEventHandler)),

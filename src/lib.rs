@@ -34,7 +34,6 @@ mod tty;
 mod undo;
 pub mod validate;
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
@@ -193,6 +192,7 @@ fn complete_line<H: Helper>(
         // corresponding completion_type
         #[cfg(all(unix, feature = "with-fuzzy"))]
         {
+            use std::borrow::Cow;
             if CompletionType::Fuzzy == config.completion_type() {
                 struct Candidate {
                     index: usize,

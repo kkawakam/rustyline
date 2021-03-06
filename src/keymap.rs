@@ -938,19 +938,14 @@ impl InputState {
             E(K::Char('E'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
             E(K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = self.vi_char_search(rdr, c)?;
-                match cs {
-                    Some(cs) => Some(Movement::ViCharSearch(n, cs)),
-                    None => None,
-                }
+                cs.map(|cs| Movement::ViCharSearch(n, cs))
             }
-            E(K::Char(';'), M::NONE) => match self.last_char_search {
-                Some(cs) => Some(Movement::ViCharSearch(n, cs)),
-                None => None,
-            },
-            E(K::Char(','), M::NONE) => match self.last_char_search {
-                Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
-                None => None,
-            },
+            E(K::Char(';'), M::NONE) => self
+                .last_char_search
+                .map(|cs| Movement::ViCharSearch(n, cs)),
+            E(K::Char(','), M::NONE) => self
+                .last_char_search
+                .map(|cs| Movement::ViCharSearch(n, cs.opposite())),
             E(K::Char('h'), M::NONE) | E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 Some(Movement::BackwardChar(n))
             }

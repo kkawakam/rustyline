@@ -18,11 +18,11 @@ pub(crate) const INDENT: &str = "                                ";
 #[derive(Clone, Copy)]
 pub enum WordAction {
     /// Capitalize word
-    CAPITALIZE,
+    Capitalize,
     /// lowercase word
-    LOWERCASE,
+    Lowercase,
     /// uppercase word
-    UPPERCASE,
+    Uppercase,
 }
 
 /// Delete (kill) direction
@@ -694,23 +694,19 @@ impl LineBuffer {
                 }
             }
         };
-        if let Some(pos) = search_result {
-            Some(match cs {
-                CharSearch::Backward(_) => pos,
-                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
-                CharSearch::Forward(_) => shift + pos,
-                CharSearch::ForwardBefore(_) => {
-                    shift + pos
-                        - self.buf[..shift + pos]
-                            .chars()
-                            .next_back()
-                            .unwrap()
-                            .len_utf8()
-                }
-            })
-        } else {
-            None
-        }
+        search_result.map(|pos| match cs {
+            CharSearch::Backward(_) => pos,
+            CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+            CharSearch::Forward(_) => shift + pos,
+            CharSearch::ForwardBefore(_) => {
+                shift + pos
+                    - self.buf[..shift + pos]
+                        .chars()
+                        .next_back()
+                        .unwrap()
+                        .len_utf8()
+            }
+        })
     }
 
     /// Move cursor to the matching character position.
@@ -792,13 +788,13 @@ impl LineBuffer {
                     .drain(start..end, Direction::default())
                     .collect::<String>();
                 let result = match a {
-                    WordAction::CAPITALIZE => {
+                    WordAction::Capitalize => {
                         let ch = (&word).graphemes(true).next().unwrap();
                         let cap = ch.to_uppercase();
                         cap + &word[ch.len()..].to_lowercase()
                     }
-                    WordAction::LOWERCASE => word.to_lowercase(),
-                    WordAction::UPPERCASE => word.to_uppercase(),
+                    WordAction::Lowercase => word.to_lowercase(),
+                    WordAction::Uppercase => word.to_uppercase(),
                 };
                 self.insert_str(start, &result);
                 self.pos = start + result.len();
@@ -923,10 +919,9 @@ impl LineBuffer {
             Movement::ViFirstPrint => {
                 if self.pos == 0 {
                     None
-                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
-                    Some(self.buf[pos..self.pos].to_owned())
                 } else {
-                    None
+                    self.next_word_pos(0, At::Start, Word::Big, 1)
+                        .map(|pos| self.buf[pos..self.pos].to_owned())
                 }
             }
             Movement::EndOfLine => {
@@ -958,51 +953,31 @@ impl LineBuffer {
                     Some(self.buf[..self.pos].to_owned())
                 }
             }
-            Movement::BackwardWord(n, word_def) => {
-                if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::ForwardWord(n, at, word_def) => {
-                if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
-                    Some(self.buf[self.pos..pos].to_owned())
-                } else {
-                    None
-                }
-            }
+            Movement::BackwardWord(n, word_def) => self
+                .prev_word_pos(self.pos, word_def, n)
+                .map(|pos| self.buf[pos..self.pos].to_owned()),
+            Movement::ForwardWord(n, at, word_def) => self
+                .next_word_pos(self.pos, at, word_def, n)
+                .map(|pos| self.buf[self.pos..pos].to_owned()),
             Movement::ViCharSearch(n, cs) => {
                 let search_result = match cs {
                     CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
                     _ => self.search_char_pos(cs, n),
                 };
-                if let Some(pos) = search_result {
-                    Some(match cs {
-                        CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
-                            self.buf[pos..self.pos].to_owned()
-                        }
-                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
-                        CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
-                    })
-                } else {
-                    None
-                }
+                search_result.map(|pos| match cs {
+                    CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
+                        self.buf[pos..self.pos].to_owned()
+                    }
+                    CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
+                    CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
+                })
             }
-            Movement::BackwardChar(n) => {
-                if let Some(pos) = self.prev_pos(n) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::ForwardChar(n) => {
-                if let Some(pos) = self.next_pos(n) {
-                    Some(self.buf[self.pos..pos].to_owned())
-                } else {
-                    None
-                }
-            }
+            Movement::BackwardChar(n) => self
+                .prev_pos(n)
+                .map(|pos| self.buf[pos..self.pos].to_owned()),
+            Movement::ForwardChar(n) => self
+                .next_pos(n)
+                .map(|pos| self.buf[self.pos..pos].to_owned()),
             Movement::LineUp(n) => {
                 if let Some((start, end)) = self.n_lines_up(n) {
                     Some(self.buf[start..end].to_owned())
@@ -1798,22 +1773,22 @@ mod test {
     #[test]
     fn edit_word() {
         let mut s = LineBuffer::init("a ßeta  c", 1, None);
-        assert!(s.edit_word(WordAction::UPPERCASE));
+        assert!(s.edit_word(WordAction::Uppercase));
         assert_eq!("a SSETA  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßetA  c", 1, None);
-        assert!(s.edit_word(WordAction::LOWERCASE));
+        assert!(s.edit_word(WordAction::Lowercase));
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßETA  c", 1, None);
-        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert!(s.edit_word(WordAction::Capitalize));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("test", 1, None);
-        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert!(s.edit_word(WordAction::Capitalize));
         assert_eq!("tEst", s.buf);
         assert_eq!(4, s.pos);
     }

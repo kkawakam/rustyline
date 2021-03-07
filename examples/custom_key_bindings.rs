@@ -1,3 +1,4 @@
+use smallvec::smallvec;
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::highlight::Highlighter;
@@ -87,6 +88,10 @@ fn main() {
     rl.bind_sequence(
         KeyEvent::from('\t'),
         EventHandler::Conditional(Box::new(TabEventHandler)),
+    );
+    rl.bind_sequence(
+        Event::KeySeq(smallvec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
+        EventHandler::Simple(Cmd::Suspend), // TODO external editor
     );
 
     loop {

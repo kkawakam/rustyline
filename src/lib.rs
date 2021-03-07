@@ -17,6 +17,7 @@
 //! ```
 #![warn(missing_docs)]
 
+mod binding;
 mod command;
 pub mod completion;
 pub mod config;
@@ -34,7 +35,6 @@ mod tty;
 mod undo;
 pub mod validate;
 
-use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
@@ -42,10 +42,12 @@ use std::result;
 use std::sync::{Arc, Mutex, RwLock};
 
 use log::debug;
+use radix_trie::Trie;
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
+pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{
     ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
@@ -54,7 +56,7 @@ use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{Direction, History};
-pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
@@ -635,7 +637,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
+    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -660,7 +662,7 @@ impl<H: Helper> Editor<H> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: Arc::new(RwLock::new(HashMap::new())),
+            custom_bindings: Arc::new(RwLock::new(Trie::new())),
         }
     }
 
@@ -755,18 +757,22 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Bind a sequence to a command.
-    pub fn bind_sequence(&mut self, key_seq: KeyEvent, cmd: Cmd) -> Option<Cmd> {
+    pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
+        &mut self,
+        key_seq: E,
+        handler: R,
+    ) -> Option<EventHandler> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(KeyEvent::normalize(key_seq), cmd)
+            bindings.insert(Event::normalize(key_seq.into()), handler.into())
         } else {
             None
         }
     }
 
     /// Remove a binding for the given sequence.
-    pub fn unbind_sequence(&mut self, key_seq: KeyEvent) -> Option<Cmd> {
+    pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.remove(&KeyEvent::normalize(key_seq))
+            bindings.remove(&Event::normalize(key_seq.into()))
         } else {
             None
         }

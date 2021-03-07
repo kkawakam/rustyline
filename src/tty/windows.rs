@@ -116,9 +116,7 @@ impl RawReader for ConsoleRawReader {
         let mut surrogate = 0;
         loop {
             // TODO GetNumberOfConsoleInputEvents
-            check(unsafe {
-                consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
-            })?;
+            check(unsafe { consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
 
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, Ordering::SeqCst);
@@ -449,7 +447,9 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).unwrap_or(false)
+        SIGWINCH
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or(false)
     }
 
     /// Try to get the number of columns in the current terminal,

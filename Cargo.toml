@@ -23,8 +23,6 @@ cfg-if = "1.0"
 # For file completion
 # https://rustsec.org/advisories/RUSTSEC-2020-0053.html
 dirs-next = { version = "2.0", optional = true }
-# For History
-fs2 = "0.4"
 libc = "0.2"
 log = "0.4"
 unicode-width = "0.1"
@@ -41,7 +39,7 @@ utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
+winapi = { version = "0.3", features = ["consoleapi", "fileapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
 scopeguard = "1.1"
 
 [dev-dependencies]

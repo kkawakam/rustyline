@@ -179,7 +179,6 @@ impl History {
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use fs2::FileExt;
         use std::io::Seek;
 
         if self.is_empty() || self.new_entries == 0 {
@@ -201,7 +200,7 @@ impl History {
             return self.update_path(path, size);
         }
         let mut file = OpenOptions::new().write(true).read(true).open(path)?;
-        file.lock_exclusive()?;
+        lockf::lock_exclusive(&file)?;
         // we may need to truncate file before appending new entries
         let mut other = Self {
             entries: VecDeque::new(),
@@ -218,7 +217,7 @@ impl History {
         }
         file.seek(SeekFrom::Start(0))?;
         other.save_to(&file, false)?;
-        file.unlock()?;
+        lockf::unlock(&file)?;
         self.update_path(path, other.len())?;
         self.new_entries = 0;
         Ok(())
@@ -465,6 +464,54 @@ cfg_if::cfg_if! {
                 libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
             }
         }
+    }
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+mod lockf {
+    use super::*;
+    use std::os::unix::io::AsRawFd;
+    pub fn lock_exclusive(file: &File) -> Result<()> {
+        nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)?;
+        Ok(())
+    }
+    pub fn unlock(file: &File) -> Result<()> {
+        nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::Unlock)?;
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+mod lockf {
+    use super::*;
+    use std::os::windows::io::AsRawHandle;
+    use winapi::um::fileapi;
+    pub fn lock_exclusive(file: &File) -> Result<()> {
+        let ret = unsafe { fileapi::LockFile(file.as_raw_handle(), 0, 0, !0, !0) };
+        if ret != 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error().into())
+        }
+    }
+    pub fn unlock(file: &File) -> Result<()> {
+        let ret = unsafe { fileapi::UnlockFile(file.as_raw_handle(), 0, 0, !0, !0) };
+        if ret != 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error().into())
+        }
+    }
+}
+
+#[cfg(any(not(any(unix, windows)), target_os = "redox"))]
+mod lockf {
+    use super::*;
+    pub fn lock_exclusive(_f: &File) -> Result<()> {
+        Ok(())
+    }
+    pub fn unlock(_f: &File) -> Result<()> {
+        Ok(())
     }
 }
 

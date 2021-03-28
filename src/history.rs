@@ -179,7 +179,7 @@ impl History {
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use fs2::FileExt;
+        use fd_lock::FdLock;
         use std::io::Seek;
 
         if self.is_empty() || self.new_entries == 0 {
@@ -200,8 +200,9 @@ impl History {
             self.new_entries = 0;
             return self.update_path(path, size);
         }
-        let mut file = OpenOptions::new().write(true).read(true).open(path)?;
-        file.lock_exclusive()?;
+        let file = OpenOptions::new().write(true).read(true).open(path)?;
+        let mut lock = FdLock::new(file);
+        let mut lock_guard = lock.lock()?;
         // we may need to truncate file before appending new entries
         let mut other = Self {
             entries: VecDeque::new(),
@@ -211,14 +212,14 @@ impl History {
             new_entries: 0,
             path_info: None,
         };
-        other.load_from(&file)?;
+        other.load_from(&lock_guard)?;
         let first_new_entry = self.entries.len().saturating_sub(self.new_entries);
         for entry in self.entries.iter().skip(first_new_entry) {
             other.add(entry);
         }
-        file.seek(SeekFrom::Start(0))?;
-        other.save_to(&file, false)?;
-        file.unlock()?;
+        lock_guard.seek(SeekFrom::Start(0))?;
+        other.save_to(&lock_guard, false)?;
+        drop(lock_guard);
         self.update_path(path, other.len())?;
         self.new_entries = 0;
         Ok(())

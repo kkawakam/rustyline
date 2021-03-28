@@ -1,6 +1,6 @@
 use rustyline::{
     Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyCode, KeyEvent,
-    Modifiers, RepeatCount,
+    Modifiers, RepeatCount, Result,
 };
 
 struct FilteringEventHandler;
@@ -18,7 +18,7 @@ impl ConditionalEventHandler for FilteringEventHandler {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let mut rl = Editor::<()>::new();
 
     rl.bind_sequence(
@@ -27,15 +27,7 @@ fn main() {
     );
 
     loop {
-        let readline = rl.readline("> ");
-        match readline {
-            Ok(line) => {
-                println!("Num: {}", line);
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
-            }
-        }
+        let line = rl.readline("> ")?;
+        println!("Num: {}", line);
     }
 }

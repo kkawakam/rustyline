@@ -5,7 +5,7 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{
     Cmd, ConditionalEventHandler, Context, Editor, Event, EventContext, EventHandler, KeyEvent,
-    RepeatCount,
+    RepeatCount, Result,
 };
 use rustyline_derive::{Completer, Helper, Validator};
 
@@ -78,7 +78,7 @@ impl ConditionalEventHandler for TabEventHandler {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let mut rl = Editor::<MyHelper>::new();
     rl.set_helper(Some(MyHelper(HistoryHinter {})));
 
@@ -95,16 +95,8 @@ fn main() {
     );
 
     loop {
-        let readline = rl.readline("> ");
-        match readline {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                println!("Line: {}", line);
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
-            }
-        }
+        let line = rl.readline("> ")?;
+        rl.add_history_entry(line.as_str());
+        println!("Line: {}", line);
     }
 }

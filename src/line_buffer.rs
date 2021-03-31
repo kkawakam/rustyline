@@ -1,11 +1,9 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
-use std::cell::RefCell;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
 use std::ops::{Deref, Index, Range};
-use std::rc::Rc;
 use std::string::Drain;
 use std::sync::{Arc, Mutex};
 use unicode_segmentation::UnicodeSegmentation;
@@ -60,7 +58,7 @@ pub struct LineBuffer {
     pos: usize,       // Current cursor position (byte position) (rl_point)
     can_growth: bool, // Whether to allow dynamic growth
     dl: Option<Arc<Mutex<dyn DeleteListener>>>,
-    cl: Option<Rc<RefCell<dyn ChangeListener>>>,
+    cl: Option<Arc<Mutex<dyn ChangeListener>>>,
 }
 
 impl fmt::Debug for LineBuffer {
@@ -95,11 +93,7 @@ impl LineBuffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn init(
-        line: &str,
-        pos: usize,
-        cl: Option<Rc<RefCell<dyn ChangeListener>>>,
-    ) -> Self {
+    pub(crate) fn init(line: &str, pos: usize, cl: Option<Arc<Mutex<dyn ChangeListener>>>) -> Self {
         let mut lb = Self::with_capacity(MAX_LINE);
         assert!(lb.insert_str(0, line));
         lb.set_pos(pos);
@@ -111,8 +105,8 @@ impl LineBuffer {
         self.dl = Some(dl);
     }
 
-    pub(crate) fn set_change_listener(&mut self, dl: Rc<RefCell<dyn ChangeListener>>) {
-        self.cl = Some(dl);
+    pub(crate) fn set_change_listener(&mut self, cl: Arc<Mutex<dyn ChangeListener>>) {
+        self.cl = Some(cl);
     }
 
     /// Extracts a string slice containing the entire buffer.
@@ -231,7 +225,7 @@ impl LineBuffer {
         if n == 1 {
             self.buf.insert(self.pos, ch);
             for cl in &self.cl {
-                if let Ok(mut cl) = cl.try_borrow_mut() {
+                if let Ok(mut cl) = cl.try_lock() {
                     cl.insert_char(self.pos, ch);
                 } // Ok: while undoing, cl is borrowed. And we want to ignore
                   // changes while undoing.
@@ -838,7 +832,7 @@ impl LineBuffer {
     pub fn replace(&mut self, range: Range<usize>, text: &str) {
         let start = range.start;
         for cl in &self.cl {
-            if let Ok(mut cl) = cl.try_borrow_mut() {
+            if let Ok(mut cl) = cl.try_lock() {
                 cl.replace(start, self.buf.index(range.clone()), text);
             } // Ok: while undoing, cl is borrowed. And we want to ignore
               // changes while undoing.
@@ -856,7 +850,7 @@ impl LineBuffer {
     /// Return `true` if the text has been inserted at the end of the line.
     pub fn insert_str(&mut self, idx: usize, s: &str) -> bool {
         for cl in &self.cl {
-            if let Ok(mut cl) = cl.try_borrow_mut() {
+            if let Ok(mut cl) = cl.try_lock() {
                 cl.insert_str(idx, s);
             } // Ok: while undoing, cl is borrowed. And we want to ignore
               // changes while undoing.
@@ -884,7 +878,7 @@ impl LineBuffer {
             }
         }
         for cl in &self.cl {
-            if let Ok(mut cl) = cl.try_borrow_mut() {
+            if let Ok(mut cl) = cl.try_lock() {
                 cl.delete(range.start, &self.buf[range.start..range.end], dir);
             } // Ok: while undoing, cl is borrowed. And we want to ignore
               // changes while undoing.
@@ -1173,17 +1167,16 @@ fn is_other_char(grapheme: &str) -> bool {
 mod test {
     use super::{ChangeListener, DeleteListener, Direction, LineBuffer, WordAction, MAX_LINE};
     use crate::keymap::{At, CharSearch, Word};
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     struct Listener {
         deleted_str: Option<String>,
     }
 
     impl Listener {
-        fn new() -> Rc<RefCell<Listener>> {
+        fn new() -> Arc<Mutex<Listener>> {
             let l = Listener { deleted_str: None };
-            Rc::new(RefCell::new(l))
+            Arc::new(Mutex::new(l))
         }
 
         fn assert_deleted_str_eq(&self, expected: &str) {
@@ -1372,7 +1365,7 @@ mod test {
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("α");
+        cl.lock().unwrap().assert_deleted_str_eq("α");
     }
 
     #[test]
@@ -1383,14 +1376,14 @@ mod test {
         assert_eq!("αßγ", s.buf);
         assert_eq!(6, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("δε");
+        cl.lock().unwrap().assert_deleted_str_eq("δε");
 
         s.pos = 4;
         let ok = s.discard_line();
         assert_eq!("γ", s.buf);
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("αß");
+        cl.lock().unwrap().assert_deleted_str_eq("αß");
     }
 
     #[test]
@@ -1402,19 +1395,19 @@ mod test {
         assert_eq!("αß\nγ\nε f4", s.buf);
         assert_eq!(7, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("δ 12");
+        cl.lock().unwrap().assert_deleted_str_eq("δ 12");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγε f4", s.buf);
         assert_eq!(7, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("\n");
+        cl.lock().unwrap().assert_deleted_str_eq("\n");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγ", s.buf);
         assert_eq!(7, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ε f4");
+        cl.lock().unwrap().assert_deleted_str_eq("ε f4");
 
         let ok = s.kill_line();
         assert_eq!(7, s.pos);
@@ -1430,19 +1423,19 @@ mod test {
         assert_eq!("αß\nδε", s.buf);
         assert_eq!(5, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("c γ");
+        cl.lock().unwrap().assert_deleted_str_eq("c γ");
 
         let ok = s.discard_line();
         assert_eq!("αßδε", s.buf);
         assert_eq!(4, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("\n");
+        cl.lock().unwrap().assert_deleted_str_eq("\n");
 
         let ok = s.discard_line();
         assert_eq!("δε", s.buf);
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("αß");
+        cl.lock().unwrap().assert_deleted_str_eq("αß");
 
         let ok = s.discard_line();
         assert_eq!(0, s.pos);
@@ -1574,7 +1567,7 @@ mod test {
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ß  ");
+        cl.lock().unwrap().assert_deleted_str_eq("ß  ");
     }
 
     #[test]
@@ -1713,14 +1706,14 @@ mod test {
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq(" ß");
+        cl.lock().unwrap().assert_deleted_str_eq(" ß");
 
         let mut s = LineBuffer::init("test", 0, Some(cl.clone()));
         let ok = s.delete_word(At::AfterEnd, Word::Vi, 1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("test");
+        cl.lock().unwrap().assert_deleted_str_eq("test");
     }
 
     #[test]
@@ -1731,7 +1724,7 @@ mod test {
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ß  ");
+        cl.lock().unwrap().assert_deleted_str_eq("ß  ");
     }
 
     #[test]
@@ -1740,14 +1733,14 @@ mod test {
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::ForwardBefore('ε'), 1);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ßγδ");
+        cl.lock().unwrap().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Forward('ε'), 1);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ßγδε");
+        cl.lock().unwrap().assert_deleted_str_eq("ßγδε");
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
     }
@@ -1758,14 +1751,14 @@ mod test {
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::BackwardAfter('α'), 1);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ßγδ");
+        cl.lock().unwrap().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Backward('ß'), 1);
         assert_eq!(true, ok);
-        cl.borrow().assert_deleted_str_eq("ßγδ");
+        cl.lock().unwrap().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
     }

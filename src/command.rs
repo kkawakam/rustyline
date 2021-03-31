@@ -212,7 +212,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
         Cmd::Undo(n) => {
-            if s.changes.borrow_mut().undo(&mut s.line, n) {
+            if s.changes.lock().unwrap().undo(&mut s.line, n) {
                 s.refresh_line()?;
             }
         }

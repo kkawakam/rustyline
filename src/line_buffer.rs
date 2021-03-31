@@ -37,7 +37,7 @@ impl Default for Direction {
 }
 
 /// Listener to be notified when some text is deleted.
-pub(crate) trait DeleteListener {
+pub(crate) trait DeleteListener: Send + Sync {
     fn start_killing(&mut self);
     fn delete(&mut self, idx: usize, string: &str, dir: Direction);
     fn stop_killing(&mut self);
@@ -1843,5 +1843,17 @@ mod test {
         let ok = s.move_to_line_down(2);
         assert_eq!(14, s.pos);
         assert!(ok);
+    }
+
+    #[test]
+    fn test_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<LineBuffer>();
+    }
+
+    #[test]
+    fn test_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<LineBuffer>();
     }
 }

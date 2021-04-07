@@ -41,7 +41,7 @@ impl Candidate for str {
     }
 }
 
-impl Candidate for &'static str {
+impl Candidate for &'_ str {
     fn display(&self) -> &str {
         self
     }

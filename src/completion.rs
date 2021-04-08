@@ -30,7 +30,18 @@ impl Candidate for String {
     }
 }
 
+/// #[deprecated = "Unusable"]
 impl Candidate for str {
+    fn display(&self) -> &str {
+        self
+    }
+
+    fn replacement(&self) -> &str {
+        self
+    }
+}
+
+impl Candidate for &'_ str {
     fn display(&self) -> &str {
         self
     }

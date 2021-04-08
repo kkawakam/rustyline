@@ -71,15 +71,15 @@ impl KeyEvent {
     fn encode(&self) -> u32 {
         let mut u = match self.0 {
             KeyCode::UnknownEscSeq => 0,
-            KeyCode::Backspace => u32::from('H') | BASE_CONTROL,
-            KeyCode::BackTab => u32::from('I') | BASE_CONTROL | BASE_SHIFT,
+            KeyCode::Backspace => u32::from('\x7f'),
+            KeyCode::BackTab => u32::from('\t') | BASE_SHIFT,
             KeyCode::BracketedPasteStart => PASTE_START,
             KeyCode::BracketedPasteEnd => PASTE_FINISH,
             KeyCode::Char(c) => u32::from(c),
             KeyCode::Delete => DELETE,
             KeyCode::Down => DOWN,
             KeyCode::End => END,
-            KeyCode::Enter => u32::from('M') | BASE_CONTROL,
+            KeyCode::Enter => u32::from('\r'),
             KeyCode::F(i) => INSERT + i as u32,
             KeyCode::Esc => ESCAPE,
             KeyCode::Home => HOME,
@@ -89,7 +89,7 @@ impl KeyEvent {
             KeyCode::PageDown => PAGE_DOWN,
             KeyCode::PageUp => PAGE_UP,
             KeyCode::Right => RIGHT,
-            KeyCode::Tab => u32::from('I') | BASE_CONTROL,
+            KeyCode::Tab => u32::from('\t'),
             KeyCode::Up => UP,
         };
         if self.1.contains(Modifiers::CTRL) {
@@ -204,7 +204,7 @@ pub trait ConditionalEventHandler: Send + Sync {
 #[cfg(test)]
 mod test {
     use super::{Event, EventHandler};
-    use crate::{Cmd, KeyEvent};
+    use crate::{Cmd, KeyCode, KeyEvent, Modifiers};
     use radix_trie::Trie;
     use smallvec::smallvec;
 
@@ -223,5 +223,17 @@ mod test {
         let prefix = Event::from(KeyEvent::ctrl('O'));
         let subtrie = trie.get_raw_descendant(&prefix);
         assert!(subtrie.is_none())
+    }
+
+    #[test]
+    fn no_collision() {
+        use {Event as E, EventHandler as H, KeyCode as C, KeyEvent as K, Modifiers as M};
+        let mut trie = Trie::new();
+        trie.insert(E::from(K(C::Backspace, M::NONE)), H::from(Cmd::Noop));
+        trie.insert(E::from(K(C::Enter, M::NONE)), H::from(Cmd::Noop));
+        trie.insert(E::from(K(C::Tab, M::NONE)), H::from(Cmd::Noop));
+        trie.insert(E::from(K(C::Backspace, M::CTRL)), H::from(Cmd::Noop));
+        trie.insert(E::from(K(C::Enter, M::CTRL)), H::from(Cmd::Noop));
+        trie.insert(E::from(K(C::Tab, M::CTRL)), H::from(Cmd::Noop));
     }
 }

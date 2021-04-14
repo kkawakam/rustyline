@@ -50,7 +50,22 @@ impl ConditionalEventHandler for CompleteHintHandler {
             if *k == KeyEvent::ctrl('E') {
                 Some(Cmd::CompleteHint)
             } else if *k == KeyEvent::alt('f') && ctx.line().len() == ctx.pos() {
-                Some(Cmd::CompleteHint) // TODO give access to hint
+                let text = ctx.hint_text()?;
+                let mut start = 0;
+                if let Some(first) = text.chars().next() {
+                    if !first.is_alphanumeric() {
+                        start = text.find(|c: char| c.is_alphanumeric()).unwrap_or_default();
+                    }
+                }
+        
+                let text = text
+                    .chars()
+                    .enumerate()
+                    .take_while(|(i, c)| *i <= start || c.is_alphanumeric())
+                    .map(|(_, c)| c)
+                    .collect::<String>();
+
+                Some(Cmd::Insert(1, text))
             } else {
                 None
             }

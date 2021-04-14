@@ -168,6 +168,11 @@ impl<'r> EventContext<'r> {
         self.wrt.has_hint()
     }
 
+    /// Returns the hint text that is shown after the current cursor position.
+    pub fn hint_text(&self) -> Option<&str> {
+        self.wrt.hint_text()
+    }
+
     /// currently edited line
     pub fn line(&self) -> &str {
         self.wrt.line()

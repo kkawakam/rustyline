@@ -376,6 +376,8 @@ pub trait Refresher {
     fn is_cursor_at_end(&self) -> bool;
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
+    /// Returns the hint text that is shown after the current cursor position.
+    fn hint_text(&self) -> Option<&str>;
     /// currently edited line
     fn line(&self) -> &str;
     /// Current cursor position (byte position)

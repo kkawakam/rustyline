@@ -103,12 +103,11 @@ fn complete_line<H: Helper>(
                     Borrowed(candidate)
                 };*/
                 completer.update(&mut s.line, start, candidate);
-                s.refresh_line()?;
             } else {
                 // Restore current edited line
                 s.line.update(&backup, backup_pos);
-                s.refresh_line()?;
             }
+            s.refresh_line()?;
 
             cmd = s.next_cmd(input_state, rdr, true)?;
             match cmd {
@@ -321,10 +320,8 @@ fn page_completions<C: Candidate, H: Helper>(
                 }
                 _ => break,
             }
-            s.out.write_and_flush(b"\n")?;
-        } else {
-            s.out.write_and_flush(b"\n")?;
         }
+        s.out.write_and_flush(b"\n")?;
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;

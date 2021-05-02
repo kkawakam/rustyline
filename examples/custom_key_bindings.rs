@@ -57,7 +57,7 @@ impl ConditionalEventHandler for CompleteHintHandler {
                         start = text.find(|c: char| c.is_alphanumeric()).unwrap_or_default();
                     }
                 }
-        
+
                 let text = text
                     .chars()
                     .enumerate()

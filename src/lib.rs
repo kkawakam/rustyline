@@ -578,12 +578,55 @@ fn readline_raw<H: Helper>(
     user_input
 }
 
-fn readline_direct() -> Result<String> {
-    let mut line = String::new();
-    if io::stdin().read_line(&mut line)? > 0 {
-        Ok(line)
-    } else {
-        Err(error::ReadlineError::Eof)
+fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
+    let mut input = String::new();
+
+    loop {
+        match io::stdin().read_line(&mut input)? {
+            0 => return Err(error::ReadlineError::Eof),
+            _ => {
+                // Remove trailing newline
+                if input.ends_with('\n') {
+                    input.pop();
+                    if input.ends_with('\r') {
+                        input.pop();
+                    }
+                }
+
+                match validator.as_ref() {
+                    None => return Ok(input),
+                    Some(v) => {
+                        struct SimpleInvoke<'a> {
+                            s: &'a str,
+                        }
+
+                        impl<'a> keymap::Invoke for SimpleInvoke<'a> {
+                            fn input(&self) -> &str {
+                                self.s
+                            }
+                        }
+
+                        let mut ctx = SimpleInvoke { s: &input };
+                        let mut ctx = validate::ValidationContext::new(&mut ctx);
+
+                        match v.validate(&mut ctx)? {
+                            validate::ValidationResult::Incomplete => {
+                                // Add a newline back onto the end of the buffer
+                                input.push('\n');
+                            }
+                            validate::ValidationResult::Invalid(_msg) => {
+                                // TODO: present the msg back to stdout?
+                                return Ok(input);
+                            }
+                            validate::ValidationResult::Valid(_msg) => {
+                                // TODO: present the msg back to stdout?
+                                return Ok(input);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -692,13 +735,13 @@ impl<H: Helper> Editor<H> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct()
+            readline_direct(&self.helper)
         } else if self.term.is_stdin_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct()
+            readline_direct(&self.helper)
         }
     }
 

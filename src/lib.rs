@@ -585,16 +585,8 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
         match io::stdin().read_line(&mut input)? {
             0 => return Err(error::ReadlineError::Eof),
             _ => {
-                // Remove trailing newline
-                if input.ends_with('\n') {
-                    input.pop();
-                    if input.ends_with('\r') {
-                        input.pop();
-                    }
-                }
-
                 match validator.as_ref() {
-                    None => return Ok(input),
+                    None => break,
                     Some(v) => {
                         struct SimpleInvoke<'a> {
                             s: &'a str,
@@ -606,21 +598,24 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
                             }
                         }
 
-                        let mut ctx = SimpleInvoke { s: &input };
+                        let mut ctx = SimpleInvoke {
+                            // Strip trailing newline for validation
+                            s: input
+                                .strip_suffix('\n')
+                                .map(|s| s.strip_suffix('\r').unwrap_or(s))
+                                .unwrap_or(&input),
+                        };
                         let mut ctx = validate::ValidationContext::new(&mut ctx);
 
                         match v.validate(&mut ctx)? {
-                            validate::ValidationResult::Incomplete => {
-                                // Add a newline back onto the end of the buffer
-                                input.push('\n');
-                            }
+                            validate::ValidationResult::Incomplete => {}
                             validate::ValidationResult::Invalid(_msg) => {
                                 // TODO: present the msg back to stdout?
-                                return Ok(input);
+                                break;
                             }
                             validate::ValidationResult::Valid(_msg) => {
                                 // TODO: present the msg back to stdout?
-                                return Ok(input);
+                                break;
                             }
                         }
                     }
@@ -628,6 +623,16 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
             }
         }
     }
+
+    // Remove trailing newline
+    if input.ends_with('\n') {
+        input.pop();
+        if input.ends_with('\r') {
+            input.pop();
+        }
+    }
+
+    Ok(input)
 }
 
 /// Syntax specific helper.

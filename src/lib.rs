@@ -642,7 +642,6 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
                             validate::ValidationResult::Incomplete => {}
                             validate::ValidationResult::Invalid(_msg) => {
                                 // TODO: present the msg back to stdout?
-                                break;
                             }
                             validate::ValidationResult::Valid(_msg) => {
                                 // TODO: present the msg back to stdout?

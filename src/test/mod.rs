@@ -12,7 +12,7 @@ use crate::keymap::{Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
-use crate::{Context, Editor, Helper, Result};
+use crate::{apply_backspace_direct, Context, Editor, Helper, Result};
 
 mod common;
 mod emacs;
@@ -143,4 +143,12 @@ fn test_send() {
 fn test_sync() {
     fn assert_sync<T: Sync>() {}
     assert_sync::<Editor<()>>();
+}
+
+#[test]
+fn test_apply_backspace_direct() {
+    assert_eq!(
+        &apply_backspace_direct("Hel\u{0008}\u{0008}el\u{0008}llo ☹\u{0008}☺"),
+        "Hello ☺"
+    );
 }

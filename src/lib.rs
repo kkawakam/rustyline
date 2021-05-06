@@ -578,6 +578,35 @@ fn readline_raw<H: Helper>(
     user_input
 }
 
+// Helper to handle backspace characters in a direct input
+fn apply_backspace_direct(input: &str) -> String {
+    // Setup the output buffer
+    // No '\b' in the input in the common case, so set the capacity to the input length
+    let mut out = String::with_capacity(input.len());
+
+    // Keep track of the size of each grapheme from the input
+    // As many graphemes as input bytes in the common case
+    let mut grapheme_sizes: Vec<u8> = Vec::with_capacity(input.len());
+
+    for g in unicode_segmentation::UnicodeSegmentation::graphemes(input, true) {
+        match g {
+            // backspace char
+            "\u{0008}" => {
+                if let Some(n) = grapheme_sizes.pop() {
+                    // Remove the last grapheme
+                    out.truncate(out.len() - n as usize);
+                }
+            }
+            _ => {
+                out.push_str(g);
+                grapheme_sizes.push(g.len() as u8);
+            }
+        }
+    }
+
+    out
+}
+
 fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
     let mut input = String::new();
 
@@ -585,6 +614,8 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
         match io::stdin().read_line(&mut input)? {
             0 => return Err(error::ReadlineError::Eof),
             _ => {
+                input = apply_backspace_direct(&input);
+
                 match validator.as_ref() {
                     None => break,
                     Some(v) => {

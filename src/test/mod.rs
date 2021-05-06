@@ -12,7 +12,7 @@ use crate::keymap::{Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
-use crate::{apply_backspace_direct, Context, Editor, Helper, Result};
+use crate::{apply_backspace_direct, readline_direct, Context, Editor, Helper, Result};
 
 mod common;
 mod emacs;
@@ -151,4 +151,22 @@ fn test_apply_backspace_direct() {
         &apply_backspace_direct("Hel\u{0008}\u{0008}el\u{0008}llo ☹\u{0008}☺"),
         "Hello ☺"
     );
+}
+
+#[test]
+fn test_readline_direct() {
+    use std::io::Cursor;
+
+    let mut write_buf = vec![];
+    let output = readline_direct(
+        Cursor::new("([)\n\u{0008}\u{0008}\n])".as_bytes()),
+        Cursor::new(&mut write_buf),
+        &Some(crate::validate::MatchingBracketValidator::new()),
+    );
+
+    assert_eq!(
+        &write_buf,
+        b"Mismatched brackets: '[' is not properly closed"
+    );
+    assert_eq!(&output.unwrap(), "([\n])");
 }

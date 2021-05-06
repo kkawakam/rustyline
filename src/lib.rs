@@ -36,7 +36,7 @@ mod undo;
 pub mod validate;
 
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{Arc, Mutex, RwLock};
@@ -607,11 +607,15 @@ fn apply_backspace_direct(input: &str) -> String {
     out
 }
 
-fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
+fn readline_direct(
+    mut reader: impl BufRead,
+    mut writer: impl Write,
+    validator: &Option<impl Validator>,
+) -> Result<String> {
     let mut input = String::new();
 
     loop {
-        match io::stdin().read_line(&mut input)? {
+        match reader.read_line(&mut input)? {
             0 => return Err(error::ReadlineError::Eof),
             _ => {
                 input = apply_backspace_direct(&input);
@@ -639,14 +643,16 @@ fn readline_direct(validator: &Option<impl Validator>) -> Result<String> {
                         let mut ctx = validate::ValidationContext::new(&mut ctx);
 
                         match v.validate(&mut ctx)? {
-                            validate::ValidationResult::Incomplete => {}
-                            validate::ValidationResult::Invalid(_msg) => {
-                                // TODO: present the msg back to stdout?
-                            }
-                            validate::ValidationResult::Valid(_msg) => {
-                                // TODO: present the msg back to stdout?
+                            validate::ValidationResult::Valid(msg) => {
+                                if let Some(msg) = msg {
+                                    writer.write_all(msg.as_bytes())?;
+                                }
                                 break;
                             }
+                            validate::ValidationResult::Invalid(Some(msg)) => {
+                                writer.write_all(msg.as_bytes())?;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -770,13 +776,13 @@ impl<H: Helper> Editor<H> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(&self.helper)
+            readline_direct(io::stdin().lock(), io::stdout(), &self.helper)
         } else if self.term.is_stdin_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(&self.helper)
+            readline_direct(io::stdin().lock(), io::stdout(), &self.helper)
         }
     }
 

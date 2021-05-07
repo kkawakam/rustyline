@@ -31,6 +31,9 @@ pub enum ReadlineError {
     /// Like Utf8Error on unix
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
+    /// Something went wrong calling a Windows API
+    #[cfg(windows)]
+    SystemError(error_code::SystemError),
 }
 
 impl fmt::Display for ReadlineError {
@@ -47,6 +50,8 @@ impl fmt::Display for ReadlineError {
             ReadlineError::WindowResize => write!(f, "WindowResize"),
             #[cfg(windows)]
             ReadlineError::Decode(ref err) => err.fmt(f),
+            #[cfg(windows)]
+            ReadlineError::SystemError(ref err) => err.fmt(f),
         }
     }
 }
@@ -76,5 +81,12 @@ impl From<nix::Error> for ReadlineError {
 impl From<char::DecodeUtf16Error> for ReadlineError {
     fn from(err: char::DecodeUtf16Error) -> Self {
         ReadlineError::Decode(err)
+    }
+}
+
+#[cfg(windows)]
+impl From<error_code::SystemError> for ReadlineError {
+    fn from(err: error_code::SystemError) -> Self {
+        ReadlineError::SystemError(err)
     }
 }

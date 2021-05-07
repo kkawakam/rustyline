@@ -28,6 +28,9 @@ pub enum Cmd {
     CapitalizeWord,
     /// clear-screen
     ClearScreen,
+    /// Paste from the clipboard
+    #[cfg(windows)]
+    PasteFromClipboard,
     /// complete
     Complete,
     /// complete-backward
@@ -1046,9 +1049,13 @@ impl InputState {
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
-            },
-            E(K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
+            }
+            // most terminals override Ctrl+Q to resume execution
+            E(K::Char('Q'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(not(windows))]
             E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(windows)]
+            E(K::Char('V'), M::CTRL) => Cmd::PasteFromClipboard,
             E(K::Char('W'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))

@@ -1034,10 +1034,9 @@ impl InputState {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            E(K::Char('J'), M::CTRL) |
-            E::ENTER => {
-                Cmd::AcceptOrInsertLine { accept_in_the_middle: true }
-            }
+            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
+                accept_in_the_middle: true,
+            },
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
@@ -1076,10 +1075,10 @@ impl InputState {
             E(K::BracketedPasteStart, M::NONE) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
-            },
-            _ => {
-                self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)?.unwrap_or(Cmd::Unknown)
-            },
+            }
+            _ => self
+                .custom_seq_binding(rdr, wrt, &mut evt, n, positive)?
+                .unwrap_or(Cmd::Unknown),
         })
     }
 

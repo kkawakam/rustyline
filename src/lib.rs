@@ -86,7 +86,7 @@ fn complete_line<H: Helper>(
         s.out.beep()?;
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
-        let mark = s.changes.borrow_mut().begin();
+        let mark = s.changes.lock().unwrap().begin();
         // Save the current edited line before overwriting it
         let backup = s.line.as_str().to_owned();
         let backup_pos = s.line.pos();
@@ -131,11 +131,11 @@ fn complete_line<H: Helper>(
                         s.line.update(&backup, backup_pos);
                         s.refresh_line()?;
                     }
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.lock().unwrap().truncate(mark);
                     return Ok(None);
                 }
                 _ => {
-                    s.changes.borrow_mut().end();
+                    s.changes.lock().unwrap().end();
                     break;
                 }
             }
@@ -359,7 +359,7 @@ fn reverse_incremental_search<H: Helper>(
     if history.is_empty() {
         return Ok(None);
     }
-    let mark = s.changes.borrow_mut().begin();
+    let mark = s.changes.lock().unwrap().begin();
     // Save the current edited line (and cursor position) before overwriting it
     let backup = s.line.as_str().to_owned();
     let backup_pos = s.line.pos();
@@ -410,7 +410,7 @@ fn reverse_incremental_search<H: Helper>(
                     // Restore current edited line (before search)
                     s.line.update(&backup, backup_pos);
                     s.refresh_line()?;
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.lock().unwrap().truncate(mark);
                     return Ok(None);
                 }
                 Cmd::Move(_) => {
@@ -431,7 +431,7 @@ fn reverse_incremental_search<H: Helper>(
             _ => false,
         };
     }
-    s.changes.borrow_mut().end();
+    s.changes.lock().unwrap().end();
     Ok(Some(cmd))
 }
 

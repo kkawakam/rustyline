@@ -209,7 +209,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
+        Ok(clipboard_win::get_clipboard_string()?)
     }
 }
 

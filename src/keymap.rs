@@ -28,6 +28,9 @@ pub enum Cmd {
     CapitalizeWord,
     /// clear-screen
     ClearScreen,
+    /// Paste from the clipboard
+    #[cfg(windows)]
+    PasteFromClipboard,
     /// complete
     Complete,
     /// complete-backward
@@ -1031,10 +1034,9 @@ impl InputState {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            E(K::Char('J'), M::CTRL) |
-            E::ENTER => {
-                Cmd::AcceptOrInsertLine { accept_in_the_middle: true }
-            }
+            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
+                accept_in_the_middle: true,
+            },
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
@@ -1046,9 +1048,13 @@ impl InputState {
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
-            },
-            E(K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
+            }
+            // most terminals override Ctrl+Q to resume execution
+            E(K::Char('Q'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(not(windows))]
             E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(windows)]
+            E(K::Char('V'), M::CTRL) => Cmd::PasteFromClipboard,
             E(K::Char('W'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
@@ -1069,10 +1075,10 @@ impl InputState {
             E(K::BracketedPasteStart, M::NONE) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
-            },
-            _ => {
-                self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)?.unwrap_or(Cmd::Unknown)
-            },
+            }
+            _ => self
+                .custom_seq_binding(rdr, wrt, &mut evt, n, positive)?
+                .unwrap_or(Cmd::Unknown),
         })
     }
 

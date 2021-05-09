@@ -159,7 +159,7 @@ fn test_readline_direct() {
 
     let mut write_buf = vec![];
     let output = readline_direct(
-        Cursor::new("([)\n\u{0008}\u{0008}\n])".as_bytes()),
+        Cursor::new("([)\n\u{0008}\n])".as_bytes()),
         Cursor::new(&mut write_buf),
         &Some(crate::validate::MatchingBracketValidator::new()),
     );

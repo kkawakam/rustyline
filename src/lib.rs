@@ -618,10 +618,24 @@ fn readline_direct(
         match reader.read_line(&mut input)? {
             0 => return Err(error::ReadlineError::Eof),
             _ => {
+                // Remove trailing newline
+                let trailing_n = input.ends_with('\n');
+                let trailing_r;
+
+                if trailing_n {
+                    input.pop();
+                    trailing_r = input.ends_with('\r');
+                    if trailing_r {
+                        input.pop();
+                    }
+                } else {
+                    trailing_r = false;
+                }
+
                 input = apply_backspace_direct(&input);
 
                 match validator.as_ref() {
-                    None => break,
+                    None => return Ok(input),
                     Some(v) => {
                         struct SimpleInvoke<'a> {
                             s: &'a str,
@@ -633,13 +647,7 @@ fn readline_direct(
                             }
                         }
 
-                        let mut ctx = SimpleInvoke {
-                            // Strip trailing newline for validation
-                            s: input
-                                .strip_suffix('\n')
-                                .map(|s| s.strip_suffix('\r').unwrap_or(s))
-                                .unwrap_or(&input),
-                        };
+                        let mut ctx = SimpleInvoke { s: &input };
                         let mut ctx = validate::ValidationContext::new(&mut ctx);
 
                         match v.validate(&mut ctx)? {
@@ -647,10 +655,19 @@ fn readline_direct(
                                 if let Some(msg) = msg {
                                     writer.write_all(msg.as_bytes())?;
                                 }
-                                break;
+                                return Ok(input);
                             }
                             validate::ValidationResult::Invalid(Some(msg)) => {
                                 writer.write_all(msg.as_bytes())?;
+                            }
+                            validate::ValidationResult::Incomplete => {
+                                // Add newline and keep on taking input
+                                if trailing_r {
+                                    input.push('\r');
+                                }
+                                if trailing_n {
+                                    input.push('\n');
+                                }
                             }
                             _ => {}
                         }
@@ -659,16 +676,6 @@ fn readline_direct(
             }
         }
     }
-
-    // Remove trailing newline
-    if input.ends_with('\n') {
-        input.pop();
-        if input.ends_with('\r') {
-            input.pop();
-        }
-    }
-
-    Ok(input)
 }
 
 /// Syntax specific helper.

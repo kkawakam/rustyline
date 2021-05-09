@@ -622,7 +622,10 @@ impl InputState {
             }
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) | E(K::Left, M::CTRL) => {
+            E(K::Char('B'), M::ALT)
+            | E(K::Char('b'), M::ALT)
+            | E(K::Left, M::CTRL)
+            | E(K::Left, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
@@ -637,7 +640,10 @@ impl InputState {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) | E(K::Right, M::CTRL) => {
+            E(K::Char('F'), M::ALT)
+            | E(K::Char('f'), M::ALT)
+            | E(K::Right, M::CTRL)
+            | E(K::Right, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {

@@ -1194,10 +1194,10 @@ mod test {
     #[test]
     fn test_unsupported_term() {
         ::std::env::set_var("TERM", "xterm");
-        assert_eq!(false, super::is_unsupported_term());
+        assert!(!super::is_unsupported_term());
 
         ::std::env::set_var("TERM", "dumb");
-        assert_eq!(true, super::is_unsupported_term());
+        assert!(super::is_unsupported_term());
     }
 
     #[test]

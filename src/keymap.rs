@@ -1046,7 +1046,8 @@ impl InputState {
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
-            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            // most terminals override Ctrl+S to suspend execution
+            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory,
             E(K::Char('T'), M::CTRL) => Cmd::TransposeChars,
             E(K::Char('U'), M::CTRL) => {
                 if positive {

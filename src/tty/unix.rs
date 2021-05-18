@@ -865,7 +865,12 @@ impl Renderer for PosixRenderer {
             }
         }
         // we have to generate our own newline on line wrap
-        if end_pos.col == 0 && end_pos.row > 0 && !ends_with_new_line(&self.buffer) {
+        if end_pos.col == 0
+            && end_pos.row > 0
+            && !hint
+                .map(|h| h.ends_with('\n'))
+                .unwrap_or_else(|| line.ends_with('\n'))
+        {
             self.buffer.push('\n');
         }
         // position the cursor
@@ -1176,35 +1181,11 @@ fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
     Ok(())
 }
 
-// check if buffer ends with `\n`, with SGR (Select Graphic Rendition) removed
-fn ends_with_new_line(buf: &str) -> bool {
-    let mut esc_seq = false;
-    for c in buf.as_bytes().iter().rev() {
-        if *c == b'\n' {
-            return esc_seq == false;
-        } else if *c == b'm' {
-            if esc_seq {
-                return false;
-            }
-            esc_seq = true;
-        } else if *c >= b'0' && *c <= b'9' || *c == b';' && esc_seq {
-        } else if *c == b'\x12' && esc_seq {
-            esc_seq = false;
-        } else {
-            return false;
-        }
-    }
-    return false;
-}
-
 #[cfg(test)]
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
+    use crate::config::{BellStyle, OutputStreamType};
     use crate::line_buffer::LineBuffer;
-    use crate::{
-        config::{BellStyle, OutputStreamType},
-        tty::unix::ends_with_new_line,
-    };
 
     #[test]
     #[ignore]
@@ -1259,20 +1240,5 @@ mod test {
             "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
-    }
-
-    #[test]
-    fn test_ends_with_new_line() {
-        assert_eq!(ends_with_new_line("\n"), true);
-        assert_eq!(ends_with_new_line("> \n"), true);
-        assert_eq!(ends_with_new_line("\n\x12m"), true);
-        assert_eq!(ends_with_new_line("\n\x1235m"), true);
-        assert_eq!(ends_with_new_line("\n\x1235;45m"), true);
-        assert_eq!(ends_with_new_line("\n\x1235m\x12m"), true);
-        assert_eq!(ends_with_new_line(""), false);
-        assert_eq!(ends_with_new_line("> "), false);
-        assert_eq!(ends_with_new_line("> \x12m"), false);
-        assert_eq!(ends_with_new_line("> \x1235;45m"), false);
-        assert_eq!(ends_with_new_line("\n\x1210A"), false);
     }
 }

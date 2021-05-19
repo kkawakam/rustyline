@@ -33,7 +33,7 @@ pub enum ReadlineError {
     Decode(char::DecodeUtf16Error),
     /// Something went wrong calling a Windows API
     #[cfg(windows)]
-    SystemError(error_code::SystemError),
+    SystemError(clipboard_win::SystemError),
 }
 
 impl fmt::Display for ReadlineError {
@@ -85,8 +85,8 @@ impl From<char::DecodeUtf16Error> for ReadlineError {
 }
 
 #[cfg(windows)]
-impl From<error_code::SystemError> for ReadlineError {
-    fn from(err: error_code::SystemError) -> Self {
+impl From<clipboard_win::SystemError> for ReadlineError {
+    fn from(err: clipboard_win::SystemError) -> Self {
         ReadlineError::SystemError(err)
     }
 }

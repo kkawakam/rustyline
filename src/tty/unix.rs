@@ -742,6 +742,7 @@ pub struct PosixRenderer {
     bell_style: BellStyle,
 }
 
+// https://web.archive.org/web/20090227051140/http://ascii-table.com/ansi-escape-sequences-vt-100.php
 impl PosixRenderer {
     fn new(
         out: OutputStreamType,
@@ -777,6 +778,10 @@ impl PosixRenderer {
         }
         // clear the line
         self.buffer.push_str("\r\x1b[0K");
+    }
+
+    pub(crate) fn clear_screen_from_cursor_down(&mut self) -> Result<()> {
+        self.write_and_flush(b"\x1b[0J")
     }
 }
 

@@ -304,6 +304,14 @@ impl ConsoleRenderer {
             info.wAttributes,
         )
     }
+
+    pub(crate) fn clear_screen_from_cursor_down(&mut self) -> Result<()> {
+        let info = self.get_console_screen_buffer_info()?;
+        let n = info.dwSize.X as DWORD
+            * (info.dwSize.Y as DWORD).saturating_sub(info.dwCursorPosition.Y as DWORD)
+            + (info.dwSize.X as DWORD).saturating_sub(info.dwCursorPosition.X as DWORD);
+        self.clear(n, info.dwCursorPosition, info.wAttributes)
+    }
 }
 
 fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {

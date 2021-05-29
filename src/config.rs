@@ -240,10 +240,17 @@ pub enum HistoryDuplicates {
 pub enum CompletionType {
     /// Complete the next full match (like in Vim by default)
     Circular,
+
     /// Complete till longest match.
     /// When more than one match, list all matches
     /// (like in Bash/Readline).
     List,
+
+    /// Combination of List and Circular behavior.
+    /// Complete until the longest match on first <TAB>.
+    /// Complete the next full match on second <TAB>
+    /// When more than one match, list all matches
+    CircularList,
 
     /// Complete the match using fuzzy search and selection
     /// (like fzf and plugins)

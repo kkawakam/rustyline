@@ -84,7 +84,7 @@ fn main() -> rustyline::Result<()> {
     env_logger::init();
     let config = Config::builder()
         .history_ignore_space(true)
-        .completion_type(CompletionType::List)
+        .completion_type(CompletionType::CircularList)
         .edit_mode(EditMode::Emacs)
         .output_stream(OutputStreamType::Stdout)
         .build();

@@ -20,6 +20,7 @@
 mod binding;
 mod command;
 pub mod completion;
+mod completion_type;
 pub mod config;
 mod edit;
 pub mod error;
@@ -188,6 +189,15 @@ fn complete_line<H: Helper>(
             s.refresh_line()?;
             Ok(None)
         }
+    } else if CompletionType::CircularList == config.completion_type() {
+        completion_type::circular_completion_list_loop(
+            rdr,
+            s,
+            input_state,
+            completer,
+            start,
+            candidates,
+        )
     } else {
         // if fuzzy feature is enabled and on unix based systems check for the
         // corresponding completion_type

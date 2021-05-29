@@ -67,6 +67,10 @@ impl Sink {
     pub fn new() -> Sink {
         Sink {}
     }
+
+    pub(crate) fn clear_screen_from_cursor_down(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl Renderer for Sink {

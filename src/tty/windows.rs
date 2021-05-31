@@ -813,9 +813,12 @@ impl super::ExternalPrinter for ExternalPrinter {
                 OutputStreamType::Stdout => io::stdout().write_all(msg.as_bytes()),
             }
         } else {
-            self.sender.send(msg).map_err(|_| io::Error::from(io::ErrorKind::Other))?; // FIXME
+            self.sender
+                .send(msg)
+                .map_err(|_| io::Error::from(io::ErrorKind::Other))?; // FIXME
             check(unsafe { SetEvent(self.event) })
-        }.map_err(error::ReadlineError::from)
+        }
+        .map_err(error::ReadlineError::from)
     }
 }
 

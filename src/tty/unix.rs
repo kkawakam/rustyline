@@ -1303,7 +1303,8 @@ impl super::ExternalPrinter for ExternalPrinter {
             writer.flush()
         } else {
             Err(io::Error::from(ErrorKind::Other)) // FIXME
-        }.map_err(error::ReadlineError::from)
+        }
+        .map_err(error::ReadlineError::from)
     }
 }
 

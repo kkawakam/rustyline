@@ -18,11 +18,11 @@ pub(crate) const INDENT: &str = "                                ";
 #[derive(Clone, Copy)]
 pub enum WordAction {
     /// Capitalize word
-    CAPITALIZE,
+    Capitalize,
     /// lowercase word
-    LOWERCASE,
+    Lowercase,
     /// uppercase word
-    UPPERCASE,
+    Uppercase,
 }
 
 /// Delete (kill) direction
@@ -694,23 +694,19 @@ impl LineBuffer {
                 }
             }
         };
-        if let Some(pos) = search_result {
-            Some(match cs {
-                CharSearch::Backward(_) => pos,
-                CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
-                CharSearch::Forward(_) => shift + pos,
-                CharSearch::ForwardBefore(_) => {
-                    shift + pos
-                        - self.buf[..shift + pos]
-                            .chars()
-                            .next_back()
-                            .unwrap()
-                            .len_utf8()
-                }
-            })
-        } else {
-            None
-        }
+        search_result.map(|pos| match cs {
+            CharSearch::Backward(_) => pos,
+            CharSearch::BackwardAfter(c) => pos + c.len_utf8(),
+            CharSearch::Forward(_) => shift + pos,
+            CharSearch::ForwardBefore(_) => {
+                shift + pos
+                    - self.buf[..shift + pos]
+                        .chars()
+                        .next_back()
+                        .unwrap()
+                        .len_utf8()
+            }
+        })
     }
 
     /// Move cursor to the matching character position.
@@ -792,13 +788,13 @@ impl LineBuffer {
                     .drain(start..end, Direction::default())
                     .collect::<String>();
                 let result = match a {
-                    WordAction::CAPITALIZE => {
+                    WordAction::Capitalize => {
                         let ch = (&word).graphemes(true).next().unwrap();
                         let cap = ch.to_uppercase();
                         cap + &word[ch.len()..].to_lowercase()
                     }
-                    WordAction::LOWERCASE => word.to_lowercase(),
-                    WordAction::UPPERCASE => word.to_uppercase(),
+                    WordAction::Lowercase => word.to_lowercase(),
+                    WordAction::Uppercase => word.to_uppercase(),
                 };
                 self.insert_str(start, &result);
                 self.pos = start + result.len();
@@ -923,10 +919,9 @@ impl LineBuffer {
             Movement::ViFirstPrint => {
                 if self.pos == 0 {
                     None
-                } else if let Some(pos) = self.next_word_pos(0, At::Start, Word::Big, 1) {
-                    Some(self.buf[pos..self.pos].to_owned())
                 } else {
-                    None
+                    self.next_word_pos(0, At::Start, Word::Big, 1)
+                        .map(|pos| self.buf[pos..self.pos].to_owned())
                 }
             }
             Movement::EndOfLine => {
@@ -958,51 +953,31 @@ impl LineBuffer {
                     Some(self.buf[..self.pos].to_owned())
                 }
             }
-            Movement::BackwardWord(n, word_def) => {
-                if let Some(pos) = self.prev_word_pos(self.pos, word_def, n) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::ForwardWord(n, at, word_def) => {
-                if let Some(pos) = self.next_word_pos(self.pos, at, word_def, n) {
-                    Some(self.buf[self.pos..pos].to_owned())
-                } else {
-                    None
-                }
-            }
+            Movement::BackwardWord(n, word_def) => self
+                .prev_word_pos(self.pos, word_def, n)
+                .map(|pos| self.buf[pos..self.pos].to_owned()),
+            Movement::ForwardWord(n, at, word_def) => self
+                .next_word_pos(self.pos, at, word_def, n)
+                .map(|pos| self.buf[self.pos..pos].to_owned()),
             Movement::ViCharSearch(n, cs) => {
                 let search_result = match cs {
                     CharSearch::ForwardBefore(c) => self.search_char_pos(CharSearch::Forward(c), n),
                     _ => self.search_char_pos(cs, n),
                 };
-                if let Some(pos) = search_result {
-                    Some(match cs {
-                        CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
-                            self.buf[pos..self.pos].to_owned()
-                        }
-                        CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
-                        CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
-                    })
-                } else {
-                    None
-                }
+                search_result.map(|pos| match cs {
+                    CharSearch::Backward(_) | CharSearch::BackwardAfter(_) => {
+                        self.buf[pos..self.pos].to_owned()
+                    }
+                    CharSearch::ForwardBefore(_) => self.buf[self.pos..pos].to_owned(),
+                    CharSearch::Forward(c) => self.buf[self.pos..pos + c.len_utf8()].to_owned(),
+                })
             }
-            Movement::BackwardChar(n) => {
-                if let Some(pos) = self.prev_pos(n) {
-                    Some(self.buf[pos..self.pos].to_owned())
-                } else {
-                    None
-                }
-            }
-            Movement::ForwardChar(n) => {
-                if let Some(pos) = self.next_pos(n) {
-                    Some(self.buf[self.pos..pos].to_owned())
-                } else {
-                    None
-                }
-            }
+            Movement::BackwardChar(n) => self
+                .prev_pos(n)
+                .map(|pos| self.buf[pos..self.pos].to_owned()),
+            Movement::ForwardChar(n) => self
+                .next_pos(n)
+                .map(|pos| self.buf[self.pos..pos].to_owned()),
             Movement::LineUp(n) => {
                 if let Some((start, end)) = self.n_lines_up(n) {
                     Some(self.buf[start..end].to_owned())
@@ -1264,18 +1239,18 @@ mod test {
         let push = s.insert('α', 1).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, push);
+        assert!(push);
 
         let push = s.insert('ß', 1).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, push);
+        assert!(push);
 
         s.pos = 0;
         let push = s.insert('γ', 1).unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(false, push);
+        assert!(!push);
     }
 
     #[test]
@@ -1303,22 +1278,22 @@ mod test {
         let ok = s.move_backward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_forward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_home();
         assert_eq!("αß", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_end();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1328,22 +1303,22 @@ mod test {
         let ok = s.move_home();
         assert_eq!(text, s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_home();
         assert_eq!(text, s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
 
         let ok = s.move_end();
         assert_eq!(text, s.buf);
         assert_eq!(11, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_end();
         assert_eq!(text, s.buf);
         assert_eq!(11, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1353,22 +1328,22 @@ mod test {
         let ok = s.move_buffer_start();
         assert_eq!(text, s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_buffer_start();
         assert_eq!(text, s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
 
         let ok = s.move_buffer_end();
         assert_eq!(text, s.buf);
         assert_eq!(text.len(), s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_buffer_end();
         assert_eq!(text, s.buf);
         assert_eq!(text.len(), s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1376,11 +1351,11 @@ mod test {
         let mut s = LineBuffer::init("ag̈", 4, None);
         assert_eq!(4, s.len());
         let ok = s.move_backward(1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(1, s.pos);
 
         let ok = s.move_forward(1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos);
     }
 
@@ -1396,7 +1371,7 @@ mod test {
         let ok = s.backspace(1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("α");
     }
 
@@ -1407,14 +1382,14 @@ mod test {
         let ok = s.kill_line();
         assert_eq!("αßγ", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("δε");
 
         s.pos = 4;
         let ok = s.discard_line();
         assert_eq!("γ", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("αß");
     }
 
@@ -1426,24 +1401,24 @@ mod test {
         let ok = s.kill_line();
         assert_eq!("αß\nγ\nε f4", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("δ 12");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγε f4", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("\n");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγ", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ε f4");
 
         let ok = s.kill_line();
         assert_eq!(7, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1454,24 +1429,24 @@ mod test {
         let ok = s.discard_line();
         assert_eq!("αß\nδε", s.buf);
         assert_eq!(5, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("c γ");
 
         let ok = s.discard_line();
         assert_eq!("αßδε", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("\n");
 
         let ok = s.discard_line();
         assert_eq!("δε", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("αß");
 
         let ok = s.discard_line();
         assert_eq!(0, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1480,21 +1455,21 @@ mod test {
         let ok = s.transpose_chars();
         assert_eq!("ßac", s.buf);
         assert_eq!(3, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         s.buf = String::from("aßc");
         s.pos = 3;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         s.buf = String::from("aßc");
         s.pos = 4;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1564,17 +1539,17 @@ mod test {
     fn move_to_forward() {
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::ForwardBefore('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(6, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::Forward('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(8, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::Forward('ε'), 10);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(8, s.pos);
     }
 
@@ -1582,12 +1557,12 @@ mod test {
     fn move_to_backward() {
         let mut s = LineBuffer::init("αßγδε", 8, None);
         let ok = s.move_to(CharSearch::BackwardAfter('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8, None);
         let ok = s.move_to(CharSearch::Backward('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(2, s.pos);
     }
 
@@ -1598,7 +1573,7 @@ mod test {
         let ok = s.delete_prev_word(Word::Big, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ß  ");
     }
 
@@ -1607,20 +1582,20 @@ mod test {
         let mut s = LineBuffer::init("a ß  c", 1, None); // after 'a'
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos); // after 'ß'
 
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(7, s.pos); // after 'c'
 
         s.move_home();
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(1, s.pos); // after 'a'
 
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 2);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(7, s.pos); // after 'c'
     }
 
@@ -1630,7 +1605,7 @@ mod test {
         let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1683,7 +1658,7 @@ mod test {
         let ok = s.move_to_next_word(At::Start, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1737,14 +1712,14 @@ mod test {
         let ok = s.delete_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq(" ß");
 
         let mut s = LineBuffer::init("test", 0, Some(cl.clone()));
         let ok = s.delete_word(At::AfterEnd, Word::Vi, 1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("test");
     }
 
@@ -1755,7 +1730,7 @@ mod test {
         let ok = s.delete_word(At::Start, Word::Emacs, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ß  ");
     }
 
@@ -1764,14 +1739,14 @@ mod test {
         let cl = Listener::new();
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::ForwardBefore('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Forward('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδε");
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
@@ -1782,14 +1757,14 @@ mod test {
         let cl = Listener::new();
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::BackwardAfter('α'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Backward('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
@@ -1798,22 +1773,22 @@ mod test {
     #[test]
     fn edit_word() {
         let mut s = LineBuffer::init("a ßeta  c", 1, None);
-        assert!(s.edit_word(WordAction::UPPERCASE));
+        assert!(s.edit_word(WordAction::Uppercase));
         assert_eq!("a SSETA  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßetA  c", 1, None);
-        assert!(s.edit_word(WordAction::LOWERCASE));
+        assert!(s.edit_word(WordAction::Lowercase));
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßETA  c", 1, None);
-        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert!(s.edit_word(WordAction::Capitalize));
         assert_eq!("a SSeta  c", s.buf);
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("test", 1, None);
-        assert!(s.edit_word(WordAction::CAPITALIZE));
+        assert!(s.edit_word(WordAction::Capitalize));
         assert_eq!("tEst", s.buf);
         assert_eq!(4, s.pos);
     }

@@ -279,6 +279,18 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.hint.is_some()
     }
 
+    fn hint_text(&self) -> Option<&str> {
+        self.hint.as_ref().map(|hint| hint.completion()).flatten()
+    }
+
+    fn line(&self) -> &str {
+        self.line.as_str()
+    }
+
+    fn pos(&self) -> usize {
+        self.line.pos()
+    }
+
     fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()> {
         self.out.clear_rows(&self.layout)?;
         self.layout.end.row = 0;

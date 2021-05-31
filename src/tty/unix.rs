@@ -215,6 +215,11 @@ impl PosixRawReader {
     /// Handle \E <seq1> sequences
     // https://invisible-island.net/xterm/xterm-function-keys.html
     fn escape_sequence(&mut self) -> Result<KeyEvent> {
+        self._do_escape_sequence(true)
+    }
+
+    /// Don't call directly, call `PosixRawReader::escape_sequence` instead
+    fn _do_escape_sequence(&mut self, allow_recurse: bool) -> Result<KeyEvent> {
         // Read the next byte representing the escape sequence.
         let seq1 = self.next_char()?;
         if seq1 == '[' {
@@ -225,14 +230,40 @@ impl PosixRawReader {
             // \EO sequences. (SS3)
             self.escape_o()
         } else if seq1 == '\x1b' {
-            // \E\E
-            // TODO poll ...
+            // \E\E — used by rxvt, iTerm (under default config), etc.
+            // ```
             // \E\E[A => Alt-Up
             // \E\E[B => Alt-Down
             // \E\E[C => Alt-Right
             // \E\E[D => Alt-Left
-            // ...
-            Ok(E::ESC)
+            // ```
+            //
+            // In general this more or less works just adding ALT to an existing
+            // key, but has a wrinkle in that `ESC ESC` without anything
+            // following should be interpreted as the the escape key.
+            //
+            // We hanlde this by polling to see if there's anything coming
+            // within our timeout, and if so, recursing once, but adding alt to
+            // what we read.
+            if !allow_recurse {
+                return Ok(E::ESC);
+            }
+            let timeout = if self.timeout_ms < 0 {
+                100
+            } else {
+                self.timeout_ms
+            };
+            match self.poll(timeout) {
+                // Ignore poll errors, it's very likely we'll pick them up on
+                // the next read anyway.
+                Ok(0) | Err(_) => Ok(E::ESC),
+                Ok(n) => {
+                    debug_assert!(n > 0, "{}", n);
+                    // recurse, and add the alt modifier.
+                    let E(k, m) = self._do_escape_sequence(false)?;
+                    Ok(E(k, m | M::ALT))
+                }
+            }
         } else {
             Ok(E::alt(seq1))
         }
@@ -898,7 +929,12 @@ impl Renderer for PosixRenderer {
             }
         }
         // we have to generate our own newline on line wrap
-        if end_pos.col == 0 && end_pos.row > 0 && !self.buffer.ends_with('\n') {
+        if end_pos.col == 0
+            && end_pos.row > 0
+            && !hint
+                .map(|h| h.ends_with('\n'))
+                .unwrap_or_else(|| line.ends_with('\n'))
+        {
             self.buffer.push('\n');
         }
         // position the cursor
@@ -1075,6 +1111,7 @@ pub struct PosixTerminal {
     stream_type: OutputStreamType,
     tab_stop: usize,
     bell_style: BellStyle,
+    enable_bracketed_paste: bool,
     raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<PipeReader>,
@@ -1103,6 +1140,7 @@ impl Term for PosixTerminal {
         stream_type: OutputStreamType,
         tab_stop: usize,
         bell_style: BellStyle,
+        enable_bracketed_paste: bool,
     ) -> Self {
         let term = Self {
             unsupported: is_unsupported_term(),
@@ -1112,6 +1150,7 @@ impl Term for PosixTerminal {
             stream_type,
             tab_stop,
             bell_style,
+            enable_bracketed_paste,
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
@@ -1171,7 +1210,9 @@ impl Term for PosixTerminal {
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
-        let out = if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
+        let out = if !self.enable_bracketed_paste {
+            None
+        } else if let Err(e) = write_and_flush(self.stream_type, BRACKETED_PASTE_ON) {
             debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
             None
         } else {
@@ -1306,10 +1347,10 @@ mod test {
     #[test]
     fn test_unsupported_term() {
         ::std::env::set_var("TERM", "xterm");
-        assert_eq!(false, super::is_unsupported_term());
+        assert!(!super::is_unsupported_term());
 
         ::std::env::set_var("TERM", "dumb");
-        assert_eq!(true, super::is_unsupported_term());
+        assert!(super::is_unsupported_term());
     }
 
     #[test]

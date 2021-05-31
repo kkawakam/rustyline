@@ -17,6 +17,7 @@
 //! ```
 #![warn(missing_docs)]
 
+mod binding;
 mod command;
 pub mod completion;
 pub mod config;
@@ -34,7 +35,6 @@ mod tty;
 mod undo;
 pub mod validate;
 
-use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
@@ -42,10 +42,12 @@ use std::result;
 use std::sync::{Arc, Mutex, RwLock};
 
 use log::debug;
+use radix_trie::Trie;
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
+pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{
     ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
@@ -54,7 +56,7 @@ use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{Direction, History};
-pub use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
+pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
@@ -72,7 +74,9 @@ fn complete_line<H: Helper>(
     config: &Config,
 ) -> Result<Option<Cmd>> {
     #[cfg(all(unix, feature = "with-fuzzy"))]
-    use skim::{Skim, SkimOptionsBuilder};
+    use skim::prelude::{
+        unbounded, Skim, SkimItem, SkimItemReceiver, SkimItemSender, SkimOptionsBuilder,
+    };
 
     let completer = s.helper.unwrap();
     // get a list of completions
@@ -99,12 +103,11 @@ fn complete_line<H: Helper>(
                     Borrowed(candidate)
                 };*/
                 completer.update(&mut s.line, start, candidate);
-                s.refresh_line()?;
             } else {
                 // Restore current edited line
                 s.line.update(&backup, backup_pos);
-                s.refresh_line()?;
             }
+            s.refresh_line()?;
 
             cmd = s.next_cmd(input_state, rdr, true, true)?;
             match cmd {
@@ -190,13 +193,31 @@ fn complete_line<H: Helper>(
         // corresponding completion_type
         #[cfg(all(unix, feature = "with-fuzzy"))]
         {
+            use std::borrow::Cow;
             if CompletionType::Fuzzy == config.completion_type() {
-                // skim takes input of candidates separated by new line
-                let input = candidates
+                struct Candidate {
+                    index: usize,
+                    text: String,
+                }
+                impl SkimItem for Candidate {
+                    fn text(&self) -> Cow<str> {
+                        Cow::Borrowed(&self.text)
+                    }
+                }
+
+                let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
+
+                candidates
                     .iter()
-                    .map(|c| c.display())
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    .enumerate()
+                    .map(|(i, c)| Candidate {
+                        index: i,
+                        text: c.display().to_owned(),
+                    })
+                    .for_each(|c| {
+                        let _ = tx_item.send(Arc::new(c));
+                    });
+                drop(tx_item); // so that skim could know when to stop waiting for more items.
 
                 // setup skim and run with input options
                 // will display UI for fuzzy search and return selected results
@@ -209,15 +230,17 @@ fn complete_line<H: Helper>(
                     .build()
                     .unwrap();
 
-                let selected_items =
-                    Skim::run_with(&options, Some(Box::new(std::io::Cursor::new(input))))
-                        .map(|out| out.selected_items)
-                        .unwrap_or_else(Vec::new);
+                let selected_items = Skim::run_with(&options, Some(rx_item))
+                    .map(|out| out.selected_items)
+                    .unwrap_or_else(Vec::new);
 
                 // match the first (and only) returned option with the candidate and update the
                 // line otherwise only refresh line to clear the skim UI changes
                 if let Some(item) = selected_items.first() {
-                    if let Some(candidate) = candidates.get(item.get_index()) {
+                    let item: &Candidate = (*item).as_any() // cast to Any
+                        .downcast_ref::<Candidate>() // downcast to concrete type
+                        .expect("something wrong with downcast");
+                    if let Some(candidate) = candidates.get(item.index) {
                         completer.update(&mut s.line, start, candidate.replacement());
                     }
                 }
@@ -297,10 +320,8 @@ fn page_completions<C: Candidate, H: Helper>(
                 }
                 _ => break,
             }
-            s.out.write_and_flush(b"\n")?;
-        } else {
-            s.out.write_and_flush(b"\n")?;
         }
+        s.out.write_and_flush(b"\n")?;
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
@@ -498,6 +519,13 @@ fn readline_edit<H: Helper>(
             continue;
         }
 
+        #[cfg(windows)]
+        if cmd == Cmd::PasteFromClipboard {
+            use crate::tty::RawReader;
+            let clipboard = rdr.read_pasted_text()?;
+            s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
+        }
+
         // Tiny test quirk
         #[cfg(test)]
         if matches!(
@@ -613,7 +641,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
+    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -630,6 +658,7 @@ impl<H: Helper> Editor<H> {
             config.output_stream(),
             config.tab_stop(),
             config.bell_style(),
+            config.enable_bracketed_paste(),
         );
         Self {
             term,
@@ -637,7 +666,7 @@ impl<H: Helper> Editor<H> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: Arc::new(RwLock::new(HashMap::new())),
+            custom_bindings: Arc::new(RwLock::new(Trie::new())),
         }
     }
 
@@ -732,18 +761,22 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Bind a sequence to a command.
-    pub fn bind_sequence(&mut self, key_seq: KeyEvent, cmd: Cmd) -> Option<Cmd> {
+    pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
+        &mut self,
+        key_seq: E,
+        handler: R,
+    ) -> Option<EventHandler> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(KeyEvent::normalize(key_seq), cmd)
+            bindings.insert(Event::normalize(key_seq.into()), handler.into())
         } else {
             None
         }
     }
 
     /// Remove a binding for the given sequence.
-    pub fn unbind_sequence(&mut self, key_seq: KeyEvent) -> Option<Cmd> {
+    pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.remove(&KeyEvent::normalize(key_seq))
+            bindings.remove(&Event::normalize(key_seq.into()))
         } else {
             None
         }

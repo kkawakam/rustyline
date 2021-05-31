@@ -25,6 +25,12 @@ pub enum ReadlineError {
     /// signal
     #[cfg(windows)]
     WindowResize,
+    /// Like Utf8Error on unix
+    #[cfg(windows)]
+    Decode(char::DecodeUtf16Error),
+    /// Something went wrong calling a Windows API
+    #[cfg(windows)]
+    SystemError(clipboard_win::SystemError),
 }
 
 impl fmt::Display for ReadlineError {
@@ -37,6 +43,10 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
             ReadlineError::WindowResize => write!(f, "WindowResize"),
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => err.fmt(f),
+            #[cfg(windows)]
+            ReadlineError::SystemError(ref err) => err.fmt(f),
         }
     }
 }
@@ -80,5 +90,12 @@ impl From<std::string::FromUtf8Error> for ReadlineError {
 impl From<fmt::Error> for ReadlineError {
     fn from(err: fmt::Error) -> Self {
         ReadlineError::Io(io::Error::new(io::ErrorKind::Other, err))
+    }
+}
+
+#[cfg(windows)]
+impl From<clipboard_win::SystemError> for ReadlineError {
+    fn from(err: clipboard_win::SystemError) -> Self {
+        ReadlineError::SystemError(err)
     }
 }

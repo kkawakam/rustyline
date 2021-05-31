@@ -1,14 +1,13 @@
 //! Bindings from keys to command for Emacs and Vi modes
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use log::debug;
+use radix_trie::Trie;
 
 use super::Result;
-use crate::config::Config;
-use crate::config::EditMode;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::tty::{Event, RawReader, Term, Terminal};
+use crate::tty::{self, RawReader, Term, Terminal};
+use crate::{Config, EditMode, Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -29,6 +28,9 @@ pub enum Cmd {
     CapitalizeWord,
     /// clear-screen
     ClearScreen,
+    /// Paste from the clipboard
+    #[cfg(windows)]
+    PasteFromClipboard,
     /// complete
     Complete,
     /// complete-backward
@@ -329,8 +331,9 @@ impl Movement {
     }
 }
 
-#[derive(PartialEq)]
-enum InputMode {
+/// Vi input modes
+#[derive(Clone, Copy, PartialEq)]
+pub enum InputMode {
     /// Vi Command/Alternate
     Command,
     /// Insert/Input mode
@@ -341,9 +344,9 @@ enum InputMode {
 
 /// Transform key(s) to commands based on current input mode
 pub struct InputState {
-    mode: EditMode,
-    custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>,
-    input_mode: InputMode, // vi only ?
+    pub(crate) mode: EditMode,
+    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
+    pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd,                        // vi only
@@ -376,12 +379,18 @@ pub trait Refresher {
     fn is_cursor_at_end(&self) -> bool;
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
+    /// Returns the hint text that is shown after the current cursor position.
+    fn hint_text(&self) -> Option<&str>;
+    /// currently edited line
+    fn line(&self) -> &str;
+    /// Current cursor position (byte position)
+    fn pos(&self) -> usize;
     /// Display `msg` above currently edited line.
     fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()>;
 }
 
 impl InputState {
-    pub fn new(config: &Config, custom_bindings: Arc<RwLock<HashMap<KeyEvent, Cmd>>>) -> Self {
+    pub fn new(config: &Config, custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>) -> Self {
         Self {
             mode: config.edit_mode(),
             custom_bindings,
@@ -414,11 +423,11 @@ impl InputState {
             loop {
                 let event = rdr.wait_for_input(single_esc_abort)?;
                 match event {
-                    Event::KeyPress(k) => {
+                    tty::Event::KeyPress(k) => {
                         key = k;
                         break;
                     }
-                    Event::ExternalPrint(msg) => {
+                    tty::Event::ExternalPrint(msg) => {
                         wrt.external_print(rdr, msg)?;
                     }
                 }
@@ -436,6 +445,61 @@ impl InputState {
             EditMode::Emacs => single_esc_abort,
             EditMode::Vi => false,
         }
+    }
+
+    fn custom_binding(
+        &self,
+        wrt: &mut dyn Refresher,
+        evt: &Event,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Option<Cmd> {
+        let bindings = self.custom_bindings.read().unwrap();
+        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any));
+        if let Some(handler) = handler {
+            match handler {
+                EventHandler::Simple(cmd) => Some(cmd.clone()),
+                EventHandler::Conditional(handler) => {
+                    let ctx = EventContext::new(self, wrt);
+                    handler.handle(&evt, n, positive, &ctx)
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    fn custom_seq_binding<R: RawReader>(
+        &self,
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        evt: &mut Event,
+        n: RepeatCount,
+        positive: bool,
+    ) -> Result<Option<Cmd>> {
+        let bindings = self.custom_bindings.read().unwrap();
+        while let Some(subtrie) = bindings.get_raw_descendant(&evt) {
+            let snd_key = rdr.next_key(true)?;
+            if let Event::KeySeq(ref mut key_seq) = evt {
+                key_seq.push(snd_key);
+            } else {
+                break;
+            }
+            let handler = subtrie.get(&evt).unwrap();
+            if let Some(handler) = handler {
+                let cmd = match handler {
+                    EventHandler::Simple(cmd) => Some(cmd.clone()),
+                    EventHandler::Conditional(handler) => {
+                        let ctx = EventContext::new(self, wrt);
+                        handler.handle(&evt, n, positive, &ctx)
+                    }
+                };
+                if cmd.is_some() {
+                    return Ok(cmd);
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn emacs_digit_argument<R: RawReader>(
@@ -491,16 +555,14 @@ impl InputState {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(Some(n), wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+
+        let mut evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, n, positive) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(Some(n), wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -555,11 +617,19 @@ impl InputState {
             E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
             E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
             E(K::Char('X'), M::CTRL) => {
-                let snd_key = rdr.next_key(true)?;
-                match snd_key {
-                    E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
-                    E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
-                    _ => Cmd::Unknown,
+                if let Some(cmd) = self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)? {
+                    cmd
+                } else {
+                    let snd_key = match evt {
+                        // we may have already read the second key in custom_seq_binding
+                        Event::KeySeq(ref key_seq) if key_seq.len() > 1 => key_seq[1],
+                        _ => rdr.next_key(true)?,
+                    };
+                    match snd_key {
+                        E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
+                        E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
+                        _ => Cmd::Unknown,
+                    }
                 }
             }
             E(K::Backspace, M::ALT) => {
@@ -571,7 +641,10 @@ impl InputState {
             }
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) | E(K::Left, M::CTRL) => {
+            E(K::Char('B'), M::ALT)
+            | E(K::Char('b'), M::ALT)
+            | E(K::Left, M::CTRL)
+            | E(K::Left, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
@@ -586,7 +659,10 @@ impl InputState {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) | E(K::Right, M::CTRL) => {
+            E(K::Char('F'), M::ALT)
+            | E(K::Char('f'), M::ALT)
+            | E(K::Right, M::CTRL)
+            | E(K::Right, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
@@ -598,7 +674,7 @@ impl InputState {
             // TODO ESC-R (r): Undo all changes made to this line.
             E(K::Char('U'), M::ALT) | E(K::Char('u'), M::ALT) => Cmd::UpcaseWord,
             E(K::Char('Y'), M::ALT) | E(K::Char('y'), M::ALT) => Cmd::YankPop,
-            _ => self.common(rdr, key, n, positive)?,
+            _ => self.common(rdr, wrt, evt, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
         Ok(cmd)
@@ -641,20 +717,17 @@ impl InputState {
         }
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    if no_num_args {
-                        cmd.redo(None, wrt)
-                    } else {
-                        cmd.redo(Some(n), wrt)
-                    }
+        let evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, n, true) {
+            return Ok(if cmd.is_repeatable() {
+                if no_num_args {
+                    cmd.redo(None, wrt)
                 } else {
-                    cmd.clone()
-                });
-            }
+                    cmd.redo(Some(n), wrt)
+                }
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -804,7 +877,7 @@ impl InputState {
                 None => Cmd::Unknown,
             },
             E::ESC => Cmd::Noop,
-            _ => self.common(rdr, key, n, true)?,
+            _ => self.common(rdr, wrt, evt, key, n, true)?,
         };
         debug!(target: "rustyline", "Vi command: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -819,16 +892,13 @@ impl InputState {
         wrt: &mut dyn Refresher,
         key: KeyEvent,
     ) -> Result<Cmd> {
-        {
-            let bindings = self.custom_bindings.read().unwrap();
-            if let Some(cmd) = bindings.get(&key) {
-                debug!(target: "rustyline", "Custom command: {:?}", cmd);
-                return Ok(if cmd.is_repeatable() {
-                    cmd.redo(None, wrt)
-                } else {
-                    cmd.clone()
-                });
-            }
+        let evt = key.into();
+        if let Some(cmd) = self.custom_binding(wrt, &evt, 0, true) {
+            return Ok(if cmd.is_repeatable() {
+                cmd.redo(None, wrt)
+            } else {
+                cmd
+            });
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -856,7 +926,7 @@ impl InputState {
                 wrt.done_inserting();
                 Cmd::Move(Movement::BackwardChar(1))
             }
-            _ => self.common(rdr, key, 1, true)?,
+            _ => self.common(rdr, wrt, evt, key, 1, true)?,
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -898,19 +968,14 @@ impl InputState {
             E(K::Char('E'), M::NONE) => Some(Movement::ForwardWord(n, At::AfterEnd, Word::Big)),
             E(K::Char(c), M::NONE) if c == 'f' || c == 'F' || c == 't' || c == 'T' => {
                 let cs = self.vi_char_search(rdr, c)?;
-                match cs {
-                    Some(cs) => Some(Movement::ViCharSearch(n, cs)),
-                    None => None,
-                }
+                cs.map(|cs| Movement::ViCharSearch(n, cs))
             }
-            E(K::Char(';'), M::NONE) => match self.last_char_search {
-                Some(cs) => Some(Movement::ViCharSearch(n, cs)),
-                None => None,
-            },
-            E(K::Char(','), M::NONE) => match self.last_char_search {
-                Some(ref cs) => Some(Movement::ViCharSearch(n, cs.opposite())),
-                None => None,
-            },
+            E(K::Char(';'), M::NONE) => self
+                .last_char_search
+                .map(|cs| Movement::ViCharSearch(n, cs)),
+            E(K::Char(','), M::NONE) => self
+                .last_char_search
+                .map(|cs| Movement::ViCharSearch(n, cs.opposite())),
             E(K::Char('h'), M::NONE) | E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 Some(Movement::BackwardChar(n))
             }
@@ -962,6 +1027,8 @@ impl InputState {
     fn common<R: RawReader>(
         &mut self,
         rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        mut evt: Event,
         key: KeyEvent,
         n: RepeatCount,
         positive: bool,
@@ -992,14 +1059,14 @@ impl InputState {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            E(K::Char('J'), M::CTRL) |
-            E::ENTER => {
-                Cmd::AcceptOrInsertLine { accept_in_the_middle: true }
-            }
+            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
+                accept_in_the_middle: true,
+            },
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
-            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            // most terminals override Ctrl+S to suspend execution
+            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory,
             E(K::Char('T'), M::CTRL) => Cmd::TransposeChars,
             E(K::Char('U'), M::CTRL) => {
                 if positive {
@@ -1007,9 +1074,13 @@ impl InputState {
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
-            },
-            E(K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
+            }
+            // most terminals override Ctrl+Q to resume execution
+            E(K::Char('Q'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(not(windows))]
             E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(windows)]
+            E(K::Char('V'), M::CTRL) => Cmd::PasteFromClipboard,
             E(K::Char('W'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
@@ -1030,8 +1101,10 @@ impl InputState {
             E(K::BracketedPasteStart, M::NONE) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
-            },
-            _ => Cmd::Unknown,
+            }
+            _ => self
+                .custom_seq_binding(rdr, wrt, &mut evt, n, positive)?
+                .unwrap_or(Cmd::Unknown),
         })
     }
 

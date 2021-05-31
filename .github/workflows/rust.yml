@@ -28,6 +28,7 @@ jobs:
         default: true
         profile: minimal
         toolchain: stable
+        components: rustfmt, clippy
         override: true
     - name: Build
       run: cargo build --workspace --all-targets
@@ -35,6 +36,13 @@ jobs:
       run: cargo test --workspace --all-targets
     - name: Run doctests
       run: cargo test --workspace --doc
+    - name: Test features
+      if: matrix.os != 'windows-latest'
+      run: cargo test --workspace --all-targets --all-features
+    - name: Clippy
+      run: cargo clippy --workspace -- -D warnings
+    - name: Format
+      run: cargo fmt --all -- --check
 
     env:
       RUST_BACKTRACE: 1

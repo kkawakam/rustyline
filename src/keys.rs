@@ -188,6 +188,11 @@ mod tests {
     }
 
     #[test]
+    fn from() {
+        assert_eq!(E(K::Tab, M::NONE), E::from('\t'));
+    }
+
+    #[test]
     fn normalize() {
         assert_eq!(E::ctrl('A'), E::normalize(E(K::Char('\x01'), M::NONE)));
         assert_eq!(E::ctrl('A'), E::normalize(E::ctrl('a')));

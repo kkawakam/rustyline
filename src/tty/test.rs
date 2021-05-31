@@ -170,6 +170,7 @@ impl Term for DummyTerminal {
         _stream: OutputStreamType,
         _tab_stop: usize,
         bell_style: BellStyle,
+        _enable_bracketed_paste: bool,
     ) -> DummyTerminal {
         DummyTerminal {
             keys: Vec::new(),

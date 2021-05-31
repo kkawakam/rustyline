@@ -163,7 +163,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
+        Ok(clipboard_win::get_clipboard_string()?)
     }
 }
 
@@ -516,7 +516,9 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn sigwinch(&self) -> bool {
-        SIGWINCH.compare_and_swap(true, false, Ordering::SeqCst)
+        SIGWINCH
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or(false)
     }
 
     /// Try to get the number of columns in the current terminal,
@@ -606,6 +608,7 @@ impl Term for Console {
         stream_type: OutputStreamType,
         _tab_stop: usize,
         bell_style: BellStyle,
+        _enable_bracketed_paste: bool,
     ) -> Console {
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {

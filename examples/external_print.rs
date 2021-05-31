@@ -17,7 +17,7 @@ fn main() {
             printer
                 .print(format!("External message #{}", i))
                 .expect("External print failure");
-            let wait_ms = rng.gen_range(1, 500);
+            let wait_ms = rng.gen_range(1..500);
             thread::sleep(Duration::from_millis(wait_ms));
             i += 1;
         }

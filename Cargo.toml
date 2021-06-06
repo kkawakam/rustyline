@@ -36,7 +36,7 @@ smallvec = "1.6.1"
 radix_trie = "0.2"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.20"
+nix = "0.21"
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 

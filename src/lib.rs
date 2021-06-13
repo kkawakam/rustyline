@@ -443,6 +443,7 @@ fn readline_edit<H: Helper>(
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
+    term_key_map: tty::KeyMap,
 ) -> Result<String> {
     let mut stdout = editor.term.create_writer();
 
@@ -460,7 +461,7 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    let mut rdr = editor.term.create_reader(&editor.config)?;
+    let mut rdr = editor.term.create_reader(&editor.config, term_key_map)?;
     if editor.term.is_output_tty() && editor.config.check_cursor_position() {
         if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
             if s.out.sigwinch() {
@@ -569,9 +570,9 @@ fn readline_raw<H: Helper>(
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
 ) -> Result<String> {
-    let original_mode = editor.term.enable_raw_mode()?;
+    let (original_mode, term_key_map) = editor.term.enable_raw_mode()?;
     let guard = Guard(&original_mode);
-    let user_input = readline_edit(prompt, initial, editor, &original_mode);
+    let user_input = readline_edit(prompt, initial, editor, &original_mode, term_key_map);
     if editor.config.auto_add_history() {
         if let Ok(ref line) = user_input {
             editor.add_history_entry(line.as_str());
@@ -588,7 +589,8 @@ fn readline_raw<H: Helper>(
 // Helper to handle backspace characters in a direct input
 fn apply_backspace_direct(input: &str) -> String {
     // Setup the output buffer
-    // No '\b' in the input in the common case, so set the capacity to the input length
+    // No '\b' in the input in the common case, so set the capacity to the input
+    // length
     let mut out = String::with_capacity(input.len());
 
     // Keep track of the size of each grapheme from the input

@@ -550,6 +550,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -715,6 +717,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -886,6 +890,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {

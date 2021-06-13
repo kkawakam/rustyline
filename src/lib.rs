@@ -36,7 +36,7 @@ mod undo;
 pub mod validate;
 
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{Arc, Mutex, RwLock};
@@ -585,12 +585,93 @@ fn readline_raw<H: Helper>(
     user_input
 }
 
-fn readline_direct() -> Result<String> {
-    let mut line = String::new();
-    if io::stdin().read_line(&mut line)? > 0 {
-        Ok(line)
-    } else {
-        Err(error::ReadlineError::Eof)
+// Helper to handle backspace characters in a direct input
+fn apply_backspace_direct(input: &str) -> String {
+    // Setup the output buffer
+    // No '\b' in the input in the common case, so set the capacity to the input length
+    let mut out = String::with_capacity(input.len());
+
+    // Keep track of the size of each grapheme from the input
+    // As many graphemes as input bytes in the common case
+    let mut grapheme_sizes: Vec<u8> = Vec::with_capacity(input.len());
+
+    for g in unicode_segmentation::UnicodeSegmentation::graphemes(input, true) {
+        match g {
+            // backspace char
+            "\u{0008}" => {
+                if let Some(n) = grapheme_sizes.pop() {
+                    // Remove the last grapheme
+                    out.truncate(out.len() - n as usize);
+                }
+            }
+            _ => {
+                out.push_str(g);
+                grapheme_sizes.push(g.len() as u8);
+            }
+        }
+    }
+
+    out
+}
+
+fn readline_direct(
+    mut reader: impl BufRead,
+    mut writer: impl Write,
+    validator: &Option<impl Validator>,
+) -> Result<String> {
+    let mut input = String::new();
+
+    loop {
+        match reader.read_line(&mut input)? {
+            0 => return Err(error::ReadlineError::Eof),
+            _ => {
+                // Remove trailing newline
+                let trailing_n = input.ends_with('\n');
+                let trailing_r;
+
+                if trailing_n {
+                    input.pop();
+                    trailing_r = input.ends_with('\r');
+                    if trailing_r {
+                        input.pop();
+                    }
+                } else {
+                    trailing_r = false;
+                }
+
+                input = apply_backspace_direct(&input);
+
+                match validator.as_ref() {
+                    None => return Ok(input),
+                    Some(v) => {
+                        let mut ctx = input.as_str();
+                        let mut ctx = validate::ValidationContext::new(&mut ctx);
+
+                        match v.validate(&mut ctx)? {
+                            validate::ValidationResult::Valid(msg) => {
+                                if let Some(msg) = msg {
+                                    writer.write_all(msg.as_bytes())?;
+                                }
+                                return Ok(input);
+                            }
+                            validate::ValidationResult::Invalid(Some(msg)) => {
+                                writer.write_all(msg.as_bytes())?;
+                            }
+                            validate::ValidationResult::Incomplete => {
+                                // Add newline and keep on taking input
+                                if trailing_r {
+                                    input.push('\r');
+                                }
+                                if trailing_n {
+                                    input.push('\n');
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -699,13 +780,13 @@ impl<H: Helper> Editor<H> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct()
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         } else if self.term.is_stdin_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct()
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         }
     }
 

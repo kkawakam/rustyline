@@ -644,17 +644,7 @@ fn readline_direct(
                 match validator.as_ref() {
                     None => return Ok(input),
                     Some(v) => {
-                        struct SimpleInvoke<'a> {
-                            s: &'a str,
-                        }
-
-                        impl<'a> keymap::Invoke for SimpleInvoke<'a> {
-                            fn input(&self) -> &str {
-                                self.s
-                            }
-                        }
-
-                        let mut ctx = SimpleInvoke { s: &input };
+                        let mut ctx = input.as_str();
                         let mut ctx = validate::ValidationContext::new(&mut ctx);
 
                         match v.validate(&mut ctx)? {

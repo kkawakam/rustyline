@@ -361,6 +361,12 @@ pub trait Invoke {
     //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
 }
 
+impl Invoke for &str {
+    fn input(&self) -> &str {
+        self
+    }
+}
+
 pub trait Refresher {
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.

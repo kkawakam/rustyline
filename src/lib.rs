@@ -519,6 +519,13 @@ fn readline_edit<H: Helper>(
             continue;
         }
 
+        #[cfg(windows)]
+        if cmd == Cmd::PasteFromClipboard {
+            use crate::tty::RawReader;
+            let clipboard = rdr.read_pasted_text()?;
+            s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
+        }
+
         // Tiny test quirk
         #[cfg(test)]
         if matches!(

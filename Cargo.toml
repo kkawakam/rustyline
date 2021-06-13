@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "8.0.0"
+version = "8.2.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -36,13 +36,14 @@ smallvec = "1.6.1"
 radix_trie = "0.2"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.20"
+nix = "0.21"
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"] }
+winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "std", "winbase", "wincon", "winuser"] }
 scopeguard = "1.1"
+clipboard-win = "4.2.1"
 
 [dev-dependencies]
 doc-comment = "0.3"

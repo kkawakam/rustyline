@@ -1239,18 +1239,18 @@ mod test {
         let push = s.insert('α', 1).unwrap();
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, push);
+        assert!(push);
 
         let push = s.insert('ß', 1).unwrap();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, push);
+        assert!(push);
 
         s.pos = 0;
         let push = s.insert('γ', 1).unwrap();
         assert_eq!("γαß", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(false, push);
+        assert!(!push);
     }
 
     #[test]
@@ -1278,22 +1278,22 @@ mod test {
         let ok = s.move_backward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_forward(1);
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_home();
         assert_eq!("αß", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_end();
         assert_eq!("αß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1303,22 +1303,22 @@ mod test {
         let ok = s.move_home();
         assert_eq!(text, s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_home();
         assert_eq!(text, s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
 
         let ok = s.move_end();
         assert_eq!(text, s.buf);
         assert_eq!(11, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_end();
         assert_eq!(text, s.buf);
         assert_eq!(11, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1328,22 +1328,22 @@ mod test {
         let ok = s.move_buffer_start();
         assert_eq!(text, s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_buffer_start();
         assert_eq!(text, s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
 
         let ok = s.move_buffer_end();
         assert_eq!(text, s.buf);
         assert_eq!(text.len(), s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         let ok = s.move_buffer_end();
         assert_eq!(text, s.buf);
         assert_eq!(text.len(), s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1351,11 +1351,11 @@ mod test {
         let mut s = LineBuffer::init("ag̈", 4, None);
         assert_eq!(4, s.len());
         let ok = s.move_backward(1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(1, s.pos);
 
         let ok = s.move_forward(1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos);
     }
 
@@ -1371,7 +1371,7 @@ mod test {
         let ok = s.backspace(1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("α");
     }
 
@@ -1382,14 +1382,14 @@ mod test {
         let ok = s.kill_line();
         assert_eq!("αßγ", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("δε");
 
         s.pos = 4;
         let ok = s.discard_line();
         assert_eq!("γ", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("αß");
     }
 
@@ -1401,24 +1401,24 @@ mod test {
         let ok = s.kill_line();
         assert_eq!("αß\nγ\nε f4", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("δ 12");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγε f4", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("\n");
 
         let ok = s.kill_line();
         assert_eq!("αß\nγ", s.buf);
         assert_eq!(7, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ε f4");
 
         let ok = s.kill_line();
         assert_eq!(7, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1429,24 +1429,24 @@ mod test {
         let ok = s.discard_line();
         assert_eq!("αß\nδε", s.buf);
         assert_eq!(5, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("c γ");
 
         let ok = s.discard_line();
         assert_eq!("αßδε", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("\n");
 
         let ok = s.discard_line();
         assert_eq!("δε", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("αß");
 
         let ok = s.discard_line();
         assert_eq!(0, s.pos);
-        assert_eq!(false, ok);
+        assert!(!ok);
     }
 
     #[test]
@@ -1455,21 +1455,21 @@ mod test {
         let ok = s.transpose_chars();
         assert_eq!("ßac", s.buf);
         assert_eq!(3, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         s.buf = String::from("aßc");
         s.pos = 3;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
 
         s.buf = String::from("aßc");
         s.pos = 4;
         let ok = s.transpose_chars();
         assert_eq!("acß", s.buf);
         assert_eq!(4, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1539,17 +1539,17 @@ mod test {
     fn move_to_forward() {
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::ForwardBefore('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(6, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::Forward('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(8, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, None);
         let ok = s.move_to(CharSearch::Forward('ε'), 10);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(8, s.pos);
     }
 
@@ -1557,12 +1557,12 @@ mod test {
     fn move_to_backward() {
         let mut s = LineBuffer::init("αßγδε", 8, None);
         let ok = s.move_to(CharSearch::BackwardAfter('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8, None);
         let ok = s.move_to(CharSearch::Backward('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(2, s.pos);
     }
 
@@ -1573,7 +1573,7 @@ mod test {
         let ok = s.delete_prev_word(Word::Big, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ß  ");
     }
 
@@ -1582,20 +1582,20 @@ mod test {
         let mut s = LineBuffer::init("a ß  c", 1, None); // after 'a'
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(4, s.pos); // after 'ß'
 
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(7, s.pos); // after 'c'
 
         s.move_home();
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(1, s.pos); // after 'a'
 
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 2);
-        assert_eq!(true, ok);
+        assert!(ok);
         assert_eq!(7, s.pos); // after 'c'
     }
 
@@ -1605,7 +1605,7 @@ mod test {
         let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
         assert_eq!("a ßeta  c", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1658,7 +1658,7 @@ mod test {
         let ok = s.move_to_next_word(At::Start, Word::Emacs, 1);
         assert_eq!("a ß  c", s.buf);
         assert_eq!(6, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
     }
 
     #[test]
@@ -1712,14 +1712,14 @@ mod test {
         let ok = s.delete_word(At::AfterEnd, Word::Emacs, 1);
         assert_eq!("a  c", s.buf);
         assert_eq!(1, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq(" ß");
 
         let mut s = LineBuffer::init("test", 0, Some(cl.clone()));
         let ok = s.delete_word(At::AfterEnd, Word::Vi, 1);
         assert_eq!("", s.buf);
         assert_eq!(0, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("test");
     }
 
@@ -1730,7 +1730,7 @@ mod test {
         let ok = s.delete_word(At::Start, Word::Emacs, 1);
         assert_eq!("a c", s.buf);
         assert_eq!(2, s.pos);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ß  ");
     }
 
@@ -1739,14 +1739,14 @@ mod test {
         let cl = Listener::new();
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::ForwardBefore('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Forward('ε'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδε");
         assert_eq!("α", s.buf);
         assert_eq!(2, s.pos);
@@ -1757,14 +1757,14 @@ mod test {
         let cl = Listener::new();
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::BackwardAfter('α'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8, Some(cl.clone()));
         let ok = s.delete_to(CharSearch::Backward('ß'), 1);
-        assert_eq!(true, ok);
+        assert!(ok);
         cl.borrow().assert_deleted_str_eq("ßγδ");
         assert_eq!("αε", s.buf);
         assert_eq!(2, s.pos);

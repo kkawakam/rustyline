@@ -28,6 +28,9 @@ pub enum Cmd {
     CapitalizeWord,
     /// clear-screen
     ClearScreen,
+    /// Paste from the clipboard
+    #[cfg(windows)]
+    PasteFromClipboard,
     /// complete
     Complete,
     /// complete-backward
@@ -358,6 +361,12 @@ pub trait Invoke {
     //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
 }
 
+impl Invoke for &str {
+    fn input(&self) -> &str {
+        self
+    }
+}
+
 pub trait Refresher {
     /// Rewrite the currently edited line accordingly to the buffer content,
     /// cursor position, and number of columns of the terminal.
@@ -619,7 +628,10 @@ impl InputState {
             }
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            E(K::Char('B'), M::ALT) | E(K::Char('b'), M::ALT) | E(K::Left, M::CTRL) => {
+            E(K::Char('B'), M::ALT)
+            | E(K::Char('b'), M::ALT)
+            | E(K::Left, M::CTRL)
+            | E(K::Left, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
                 } else {
@@ -634,7 +646,10 @@ impl InputState {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
                 }
             }
-            E(K::Char('F'), M::ALT) | E(K::Char('f'), M::ALT) | E(K::Right, M::CTRL) => {
+            E(K::Char('F'), M::ALT)
+            | E(K::Char('f'), M::ALT)
+            | E(K::Right, M::CTRL)
+            | E(K::Right, M::ALT) => {
                 if positive {
                     Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
                 } else {
@@ -1031,14 +1046,14 @@ impl InputState {
                     Cmd::Move(Movement::BackwardChar(n))
                 }
             }
-            E(K::Char('J'), M::CTRL) |
-            E::ENTER => {
-                Cmd::AcceptOrInsertLine { accept_in_the_middle: true }
-            }
+            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
+                accept_in_the_middle: true,
+            },
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
-            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory, // most terminals override Ctrl+S to suspend execution
+            // most terminals override Ctrl+S to suspend execution
+            E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory,
             E(K::Char('T'), M::CTRL) => Cmd::TransposeChars,
             E(K::Char('U'), M::CTRL) => {
                 if positive {
@@ -1046,9 +1061,13 @@ impl InputState {
                 } else {
                     Cmd::Kill(Movement::EndOfLine)
                 }
-            },
-            E(K::Char('Q'), M::CTRL) | // most terminals override Ctrl+Q to resume execution
+            }
+            // most terminals override Ctrl+Q to resume execution
+            E(K::Char('Q'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(not(windows))]
             E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
+            #[cfg(windows)]
+            E(K::Char('V'), M::CTRL) => Cmd::PasteFromClipboard,
             E(K::Char('W'), M::CTRL) => {
                 if positive {
                     Cmd::Kill(Movement::BackwardWord(n, Word::Big))
@@ -1069,10 +1088,10 @@ impl InputState {
             E(K::BracketedPasteStart, M::NONE) => {
                 let paste = rdr.read_pasted_text()?;
                 Cmd::Insert(1, paste)
-            },
-            _ => {
-                self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)?.unwrap_or(Cmd::Unknown)
-            },
+            }
+            _ => self
+                .custom_seq_binding(rdr, wrt, &mut evt, n, positive)?
+                .unwrap_or(Cmd::Unknown),
         })
     }
 

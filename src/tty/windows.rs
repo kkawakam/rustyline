@@ -596,7 +596,7 @@ impl Term for Console {
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<(Mode, ConsoleKeyMap)> {
+    fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
         if !self.stdin_isatty {
             Err(io::Error::new(
                 io::ErrorKind::Other,

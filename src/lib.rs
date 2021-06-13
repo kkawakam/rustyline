@@ -780,13 +780,13 @@ impl<H: Helper> Editor<H> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stdout(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         } else if self.term.is_stdin_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stdout(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         }
     }
 

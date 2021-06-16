@@ -219,7 +219,7 @@ impl FilenameCompleter {
                     )
                 }
             } else {
-                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, &self.break_chars);
+                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, self.break_chars);
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
             };
@@ -444,7 +444,7 @@ pub fn longest_common_prefix<C: Candidate>(candidates: &[C]) -> Option<&str> {
     if candidates.is_empty() {
         return None;
     } else if candidates.len() == 1 {
-        return Some(&candidates[0].replacement());
+        return Some(candidates[0].replacement());
     }
     let mut longest_common_prefix = 0;
     'o: loop {
@@ -536,12 +536,12 @@ mod tests {
         let line = "ls '/usr/local/b";
         assert_eq!(
             (4, "/usr/local/b"),
-            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+            super::extract_word(line, line.len(), Some('\\'), break_chars)
         );
         let line = "ls /User\\ Information";
         assert_eq!(
             (3, "/User\\ Information"),
-            super::extract_word(line, line.len(), Some('\\'), &break_chars)
+            super::extract_word(line, line.len(), Some('\\'), break_chars)
         );
     }
 
@@ -567,13 +567,13 @@ mod tests {
         let input = String::from("/usr/local/b");
         assert_eq!(
             input.clone(),
-            super::escape(input, Some('\\'), &break_chars, super::Quote::None)
+            super::escape(input, Some('\\'), break_chars, super::Quote::None)
         );
         let input = String::from("/User Information");
         let result = String::from("/User\\ Information");
         assert_eq!(
             result,
-            super::escape(input, Some('\\'), &break_chars, super::Quote::None)
+            super::escape(input, Some('\\'), break_chars, super::Quote::None)
         );
     }
 

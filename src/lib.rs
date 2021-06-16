@@ -588,7 +588,8 @@ fn readline_raw<H: Helper>(
 // Helper to handle backspace characters in a direct input
 fn apply_backspace_direct(input: &str) -> String {
     // Setup the output buffer
-    // No '\b' in the input in the common case, so set the capacity to the input length
+    // No '\b' in the input in the common case, so set the capacity to the input
+    // length
     let mut out = String::with_capacity(input.len());
 
     // Keep track of the size of each grapheme from the input
@@ -706,7 +707,7 @@ impl<'h> Context<'h> {
 
     /// Return an immutable reference to the history object.
     pub fn history(&self) -> &History {
-        &self.history
+        self.history
     }
 
     /// The history index we are currently editing

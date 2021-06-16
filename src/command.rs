@@ -33,7 +33,7 @@ pub fn execute<H: Helper>(
             s.edit_insert(c, n)?;
         }
         Cmd::Insert(n, text) => {
-            s.edit_yank(&input_state, &text, Anchor::Before, n)?;
+            s.edit_yank(input_state, &text, Anchor::Before, n)?;
         }
         Cmd::Move(Movement::BeginningOfLine) => {
             // Move to the beginning of line.
@@ -114,7 +114,7 @@ pub fn execute<H: Helper>(
             // retrieve (yank) last item killed
             let mut kill_ring = kill_ring.lock().unwrap();
             if let Some(text) = kill_ring.yank() {
-                s.edit_yank(&input_state, text, anchor, n)?
+                s.edit_yank(input_state, text, anchor, n)?
             }
         }
         Cmd::ViYankTo(ref mvt) => {

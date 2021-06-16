@@ -442,13 +442,13 @@ impl InputState {
         positive: bool,
     ) -> Option<Cmd> {
         let bindings = self.custom_bindings.read().unwrap();
-        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any));
+        let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
         if let Some(handler) = handler {
             match handler {
                 EventHandler::Simple(cmd) => Some(cmd.clone()),
                 EventHandler::Conditional(handler) => {
                     let ctx = EventContext::new(self, wrt);
-                    handler.handle(&evt, n, positive, &ctx)
+                    handler.handle(evt, n, positive, &ctx)
                 }
             }
         } else {
@@ -465,20 +465,20 @@ impl InputState {
         positive: bool,
     ) -> Result<Option<Cmd>> {
         let bindings = self.custom_bindings.read().unwrap();
-        while let Some(subtrie) = bindings.get_raw_descendant(&evt) {
+        while let Some(subtrie) = bindings.get_raw_descendant(evt) {
             let snd_key = rdr.next_key(true)?;
             if let Event::KeySeq(ref mut key_seq) = evt {
                 key_seq.push(snd_key);
             } else {
                 break;
             }
-            let handler = subtrie.get(&evt).unwrap();
+            let handler = subtrie.get(evt).unwrap();
             if let Some(handler) = handler {
                 let cmd = match handler {
                     EventHandler::Simple(cmd) => Some(cmd.clone()),
                     EventHandler::Conditional(handler) => {
                         let ctx = EventContext::new(self, wrt);
-                        handler.handle(&evt, n, positive, &ctx)
+                        handler.handle(evt, n, positive, &ctx)
                     }
                 };
                 if cmd.is_some() {

@@ -258,7 +258,7 @@ impl LineBuffer {
         if n == 1 {
             self.insert_str(pos, text);
         } else {
-            let text = iter::repeat(text).take(n).collect::<String>();
+            let text = text.repeat(n);
             self.insert_str(pos, &text);
         }
         self.pos += shift;

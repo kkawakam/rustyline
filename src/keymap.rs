@@ -632,7 +632,7 @@ impl InputState {
                             CharSearch::ForwardBefore(ch)
                         } else {
                             CharSearch::Backward(ch)
-                        }
+                        },
                     )),
                     _ => Cmd::Unknown,
                 }

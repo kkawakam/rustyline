@@ -620,8 +620,9 @@ impl InputState {
             E(K::Char(']'), m @ M::CTRL) | E(K::Char(']'), m @ M::CTRL_ALT) => {
                 let ch = rdr.next_key(false)?;
                 match ch {
-                    E(K::Char(ch), M::NONE) => {
-                        Cmd::Move(Movement::ViCharSearch(n, if positive {
+                    E(K::Char(ch), M::NONE) => Cmd::Move(Movement::ViCharSearch(
+                        n,
+                        if positive {
                             if m.contains(M::ALT) {
                                 CharSearch::Backward(ch)
                             } else {
@@ -631,8 +632,8 @@ impl InputState {
                             CharSearch::ForwardBefore(ch)
                         } else {
                             CharSearch::Backward(ch)
-                        }))
-                    }
+                        }
+                    )),
                     _ => Cmd::Unknown,
                 }
             }

@@ -245,7 +245,7 @@ pub enum Anchor {
     Before,
 }
 
-/// Vi character search
+/// character search
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CharSearch {
     /// Forward search
@@ -283,7 +283,7 @@ pub enum Movement {
     BackwardWord(RepeatCount, Word), // Backward until start of word
     /// forward-word, vi-end-word, vi-next-word
     ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
-    /// vi-char-search
+    /// character-search, character-search-backward, vi-char-search
     ViCharSearch(RepeatCount, CharSearch),
     /// vi-first-print
     ViFirstPrint,
@@ -617,6 +617,26 @@ impl InputState {
                         E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
                         _ => Cmd::Unknown,
                     }
+                }
+            }
+            // character-search, character-search-backward
+            E(K::Char(']'), m @ M::CTRL) | E(K::Char(']'), m @ M::CTRL_ALT) => {
+                let ch = rdr.next_key(false)?;
+                match ch {
+                    E(K::Char(ch), M::NONE) => {
+                        Cmd::Move(Movement::ViCharSearch(n, if positive {
+                            if m.contains(M::ALT) {
+                                CharSearch::Backward(ch)
+                            } else {
+                                CharSearch::ForwardBefore(ch)
+                            }
+                        } else if m.contains(M::ALT) {
+                            CharSearch::ForwardBefore(ch)
+                        } else {
+                            CharSearch::Backward(ch)
+                        }))
+                    }
+                    _ => Cmd::Unknown,
                 }
             }
             E(K::Backspace, M::ALT) => {

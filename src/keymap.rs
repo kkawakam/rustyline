@@ -1030,7 +1030,17 @@ impl InputState {
                 }
             }
             E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
-            E(K::Char('D'), M::CTRL) => Cmd::EndOfFile,
+            E(K::Char('D'), M::CTRL) => {
+                if self.is_emacs_mode() && !wrt.line().is_empty() {
+                    Cmd::Kill(if positive {
+                        Movement::ForwardChar(n)
+                    } else {
+                        Movement::BackwardChar(n)
+                    })
+                } else {
+                    Cmd::EndOfFile
+                }
+            }
             E(K::Delete, M::NONE) => {
                 if positive {
                     Cmd::Kill(Movement::ForwardChar(n))

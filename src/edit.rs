@@ -482,14 +482,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.refresh_line()
     }
 
-    pub fn edit_delete(&mut self, n: RepeatCount) -> Result<()> {
-        if self.line.delete(n).is_some() {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
-    }
-
     /// Exchange the char before cursor with the character at cursor.
     pub fn edit_transpose_chars(&mut self) -> Result<()> {
         self.changes.borrow_mut().begin();

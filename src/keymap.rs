@@ -607,6 +607,11 @@ impl InputState {
                     match snd_key {
                         E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
                         E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
+                        E(K::Backspace, M::NONE) => Cmd::Kill(if positive {
+                            Movement::BeginningOfLine
+                        } else {
+                            Movement::EndOfLine
+                        }),
                         _ => Cmd::Unknown,
                     }
                 }

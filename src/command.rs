@@ -58,19 +58,15 @@ pub fn execute<H: Helper>(
             s.edit_overwrite_char(c)?;
         }
         Cmd::EndOfFile => {
-            if input_state.is_emacs_mode() && !s.line.is_empty() {
-                s.edit_delete(1)?
-            } else {
-                if s.has_hint() || !s.is_default_prompt() {
-                    // Force a refresh without hints to leave the previous
-                    // line as the user typed it after a newline.
-                    s.refresh_line_with_msg(None)?;
-                }
-                if s.line.is_empty() {
-                    return Err(error::ReadlineError::Eof);
-                } else if !input_state.is_emacs_mode() {
-                    return Ok(Submit);
-                }
+            if s.has_hint() || !s.is_default_prompt() {
+                // Force a refresh without hints to leave the previous
+                // line as the user typed it after a newline.
+                s.refresh_line_with_msg(None)?;
+            }
+            if s.line.is_empty() {
+                return Err(error::ReadlineError::Eof);
+            } else if !input_state.is_emacs_mode() {
+                return Ok(Submit);
             }
         }
         Cmd::Move(Movement::EndOfLine) => {

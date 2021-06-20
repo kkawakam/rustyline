@@ -272,7 +272,6 @@ impl ConsoleRenderer {
         for c in s.graphemes(true) {
             if c == "\n" {
                 col = 0;
-                self.buffer.push_str(c);
             } else {
                 let cw = width(c, &mut esc_seq);
                 col += cw;
@@ -280,8 +279,8 @@ impl ConsoleRenderer {
                     self.buffer.push('\n');
                     col = cw;
                 }
-                self.buffer.push_str(c);
             }
+            self.buffer.push_str(c);
         }
         if col == self.cols {
             self.buffer.push('\n');

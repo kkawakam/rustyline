@@ -561,22 +561,22 @@ impl InputState {
             }
             E(K::Char('A'), M::CTRL) => Cmd::Move(Movement::BeginningOfLine),
             E(K::Char('B'), M::CTRL) => Cmd::Move(if positive {
-                    Movement::BackwardChar(n)
-                } else {
-                    Movement::ForwardChar(n)
-                }),
+                Movement::BackwardChar(n)
+            } else {
+                Movement::ForwardChar(n)
+            }),
             E(K::Char('E'), M::CTRL) => Cmd::Move(Movement::EndOfLine),
             E(K::Char('F'), M::CTRL) => Cmd::Move(if positive {
-                    Movement::ForwardChar(n)
-                } else {
-                    Movement::BackwardChar(n)
-                }),
+                Movement::ForwardChar(n)
+            } else {
+                Movement::BackwardChar(n)
+            }),
             E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('G'), M::CTRL_ALT) => Cmd::Abort,
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(if positive {
-                    Movement::BackwardChar(n)
-                } else {
-                    Movement::ForwardChar(n)
-                }),
+                Movement::BackwardChar(n)
+            } else {
+                Movement::ForwardChar(n)
+            }),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
             E(K::Tab, M::NONE) => {
                 if positive {
@@ -588,10 +588,10 @@ impl InputState {
             // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             E(K::Char('K'), M::CTRL) => Cmd::Kill(if positive {
-                    Movement::EndOfLine
-                } else {
-                    Movement::BeginningOfLine
-                }),
+                Movement::EndOfLine
+            } else {
+                Movement::BeginningOfLine
+            }),
             E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
             E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
             E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
@@ -637,35 +637,34 @@ impl InputState {
                 }
             }
             E(K::Backspace, M::ALT) => Cmd::Kill(if positive {
-                    Movement::BackwardWord(n, Word::Emacs)
-                } else {
-                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-                }),
+                Movement::BackwardWord(n, Word::Emacs)
+            } else {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            }),
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
             E(K::Char('B'), M::ALT)
             | E(K::Char('b'), M::ALT)
             | E(K::Left, M::CTRL)
             | E(K::Left, M::ALT) => Cmd::Move(if positive {
-                    Movement::BackwardWord(n, Word::Emacs)
-                } else {
-                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-                }),
+                Movement::BackwardWord(n, Word::Emacs)
+            } else {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            }),
             E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => Cmd::Kill(
-                if positive {
-                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-                } else {
-                    Movement::BackwardWord(n, Word::Emacs)
-                }),
+            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => Cmd::Kill(if positive {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            } else {
+                Movement::BackwardWord(n, Word::Emacs)
+            }),
             E(K::Char('F'), M::ALT)
             | E(K::Char('f'), M::ALT)
             | E(K::Right, M::CTRL)
             | E(K::Right, M::ALT) => Cmd::Move(if positive {
-                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-                } else {
-                    Movement::BackwardWord(n, Word::Emacs)
-                }),
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            } else {
+                Movement::BackwardWord(n, Word::Emacs)
+            }),
             E(K::Char('L'), M::ALT) | E(K::Char('l'), M::ALT) => Cmd::DowncaseWord,
             E(K::Char('T'), M::ALT) | E(K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
             // TODO ESC-R (r): Undo all changes made to this line.

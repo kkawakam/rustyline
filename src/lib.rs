@@ -708,7 +708,7 @@ impl<'h> Context<'h> {
 
     /// Return an immutable reference to the history object.
     pub fn history(&self) -> &History {
-        &self.history
+        self.history
     }
 
     /// The history index we are currently editing

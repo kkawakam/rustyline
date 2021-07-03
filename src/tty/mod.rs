@@ -66,7 +66,7 @@ pub trait Renderer {
             self.calculate_position(&line[pos..], cursor)
         };
         if let Some(info) = info {
-            end = self.calculate_position(&info, end);
+            end = self.calculate_position(info, end);
         }
 
         let new_layout = Layout {

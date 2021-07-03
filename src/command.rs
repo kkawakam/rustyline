@@ -33,7 +33,7 @@ pub fn execute<H: Helper>(
             s.edit_insert(c, n)?;
         }
         Cmd::Insert(n, text) => {
-            s.edit_yank(&input_state, &text, Anchor::Before, n)?;
+            s.edit_yank(input_state, &text, Anchor::Before, n)?;
         }
         Cmd::Move(Movement::BeginningOfLine) => {
             // Move to the beginning of line.
@@ -58,19 +58,15 @@ pub fn execute<H: Helper>(
             s.edit_overwrite_char(c)?;
         }
         Cmd::EndOfFile => {
-            if input_state.is_emacs_mode() && !s.line.is_empty() {
-                s.edit_delete(1)?
-            } else {
-                if s.has_hint() || !s.is_default_prompt() {
-                    // Force a refresh without hints to leave the previous
-                    // line as the user typed it after a newline.
-                    s.refresh_line_with_msg(None)?;
-                }
-                if s.line.is_empty() {
-                    return Err(error::ReadlineError::Eof);
-                } else if !input_state.is_emacs_mode() {
-                    return Ok(Submit);
-                }
+            if s.has_hint() || !s.is_default_prompt() {
+                // Force a refresh without hints to leave the previous
+                // line as the user typed it after a newline.
+                s.refresh_line_with_msg(None)?;
+            }
+            if s.line.is_empty() {
+                return Err(error::ReadlineError::Eof);
+            } else if !input_state.is_emacs_mode() {
+                return Ok(Submit);
             }
         }
         Cmd::Move(Movement::EndOfLine) => {
@@ -114,7 +110,7 @@ pub fn execute<H: Helper>(
             // retrieve (yank) last item killed
             let mut kill_ring = kill_ring.lock().unwrap();
             if let Some(text) = kill_ring.yank() {
-                s.edit_yank(&input_state, text, anchor, n)?
+                s.edit_yank(input_state, text, anchor, n)?
             }
         }
         Cmd::ViYankTo(ref mvt) => {

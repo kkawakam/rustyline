@@ -245,7 +245,7 @@ pub enum Anchor {
     Before,
 }
 
-/// Vi character search
+/// character search
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CharSearch {
     /// Forward search
@@ -283,7 +283,7 @@ pub enum Movement {
     BackwardWord(RepeatCount, Word), // Backward until start of word
     /// forward-word, vi-end-word, vi-next-word
     ForwardWord(RepeatCount, At, Word), // Forward until start/end of word
-    /// vi-char-search
+    /// character-search, character-search-backward, vi-char-search
     ViCharSearch(RepeatCount, CharSearch),
     /// vi-first-print
     ViFirstPrint,
@@ -359,6 +359,12 @@ pub trait Invoke {
     fn input(&self) -> &str;
     // TODO
     //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
+}
+
+impl Invoke for &str {
+    fn input(&self) -> &str {
+        self
+    }
 }
 
 pub trait Refresher {
@@ -455,13 +461,13 @@ impl InputState {
         positive: bool,
     ) -> Option<Cmd> {
         let bindings = self.custom_bindings.read().unwrap();
-        let handler = bindings.get(&evt).or_else(|| bindings.get(&Event::Any));
+        let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
         if let Some(handler) = handler {
             match handler {
                 EventHandler::Simple(cmd) => Some(cmd.clone()),
                 EventHandler::Conditional(handler) => {
                     let ctx = EventContext::new(self, wrt);
-                    handler.handle(&evt, n, positive, &ctx)
+                    handler.handle(evt, n, positive, &ctx)
                 }
             }
         } else {
@@ -478,20 +484,20 @@ impl InputState {
         positive: bool,
     ) -> Result<Option<Cmd>> {
         let bindings = self.custom_bindings.read().unwrap();
-        while let Some(subtrie) = bindings.get_raw_descendant(&evt) {
+        while let Some(subtrie) = bindings.get_raw_descendant(evt) {
             let snd_key = rdr.next_key(true)?;
             if let Event::KeySeq(ref mut key_seq) = evt {
                 key_seq.push(snd_key);
             } else {
                 break;
             }
-            let handler = subtrie.get(&evt).unwrap();
+            let handler = subtrie.get(evt).unwrap();
             if let Some(handler) = handler {
                 let cmd = match handler {
                     EventHandler::Simple(cmd) => Some(cmd.clone()),
                     EventHandler::Conditional(handler) => {
                         let ctx = EventContext::new(self, wrt);
-                        handler.handle(&evt, n, positive, &ctx)
+                        handler.handle(evt, n, positive, &ctx)
                     }
                 };
                 if cmd.is_some() {
@@ -573,29 +579,23 @@ impl InputState {
                 }
             }
             E(K::Char('A'), M::CTRL) => Cmd::Move(Movement::BeginningOfLine),
-            E(K::Char('B'), M::CTRL) => {
-                if positive {
-                    Cmd::Move(Movement::BackwardChar(n))
-                } else {
-                    Cmd::Move(Movement::ForwardChar(n))
-                }
-            }
+            E(K::Char('B'), M::CTRL) => Cmd::Move(if positive {
+                Movement::BackwardChar(n)
+            } else {
+                Movement::ForwardChar(n)
+            }),
             E(K::Char('E'), M::CTRL) => Cmd::Move(Movement::EndOfLine),
-            E(K::Char('F'), M::CTRL) => {
-                if positive {
-                    Cmd::Move(Movement::ForwardChar(n))
-                } else {
-                    Cmd::Move(Movement::BackwardChar(n))
-                }
-            }
+            E(K::Char('F'), M::CTRL) => Cmd::Move(if positive {
+                Movement::ForwardChar(n)
+            } else {
+                Movement::BackwardChar(n)
+            }),
             E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('G'), M::CTRL_ALT) => Cmd::Abort,
-            E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
-                if positive {
-                    Cmd::Kill(Movement::BackwardChar(n))
-                } else {
-                    Cmd::Kill(Movement::ForwardChar(n))
-                }
-            }
+            E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(if positive {
+                Movement::BackwardChar(n)
+            } else {
+                Movement::ForwardChar(n)
+            }),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
             E(K::Tab, M::NONE) => {
                 if positive {
@@ -606,13 +606,11 @@ impl InputState {
             }
             // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
-            E(K::Char('K'), M::CTRL) => {
-                if positive {
-                    Cmd::Kill(Movement::EndOfLine)
-                } else {
-                    Cmd::Kill(Movement::BeginningOfLine)
-                }
-            }
+            E(K::Char('K'), M::CTRL) => Cmd::Kill(if positive {
+                Movement::EndOfLine
+            } else {
+                Movement::BeginningOfLine
+            }),
             E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
             E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
             E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
@@ -628,47 +626,65 @@ impl InputState {
                     match snd_key {
                         E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
                         E(K::Char('U'), M::CTRL) => Cmd::Undo(n),
+                        E(K::Backspace, M::NONE) => Cmd::Kill(if positive {
+                            Movement::BeginningOfLine
+                        } else {
+                            Movement::EndOfLine
+                        }),
                         _ => Cmd::Unknown,
                     }
                 }
             }
-            E(K::Backspace, M::ALT) => {
-                if positive {
-                    Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
-                } else {
-                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
+            // character-search, character-search-backward
+            E(K::Char(']'), m @ M::CTRL) | E(K::Char(']'), m @ M::CTRL_ALT) => {
+                let ch = rdr.next_key(false)?;
+                match ch {
+                    E(K::Char(ch), M::NONE) => Cmd::Move(Movement::ViCharSearch(
+                        n,
+                        if positive {
+                            if m.contains(M::ALT) {
+                                CharSearch::Backward(ch)
+                            } else {
+                                CharSearch::ForwardBefore(ch)
+                            }
+                        } else if m.contains(M::ALT) {
+                            CharSearch::ForwardBefore(ch)
+                        } else {
+                            CharSearch::Backward(ch)
+                        },
+                    )),
+                    _ => Cmd::Unknown,
                 }
             }
+            E(K::Backspace, M::ALT) => Cmd::Kill(if positive {
+                Movement::BackwardWord(n, Word::Emacs)
+            } else {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            }),
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
             E(K::Char('B'), M::ALT)
             | E(K::Char('b'), M::ALT)
             | E(K::Left, M::CTRL)
-            | E(K::Left, M::ALT) => {
-                if positive {
-                    Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
-                } else {
-                    Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-                }
-            }
+            | E(K::Left, M::ALT) => Cmd::Move(if positive {
+                Movement::BackwardWord(n, Word::Emacs)
+            } else {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            }),
             E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => {
-                if positive {
-                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-                } else {
-                    Cmd::Kill(Movement::BackwardWord(n, Word::Emacs))
-                }
-            }
+            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => Cmd::Kill(if positive {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            } else {
+                Movement::BackwardWord(n, Word::Emacs)
+            }),
             E(K::Char('F'), M::ALT)
             | E(K::Char('f'), M::ALT)
             | E(K::Right, M::CTRL)
-            | E(K::Right, M::ALT) => {
-                if positive {
-                    Cmd::Move(Movement::ForwardWord(n, At::AfterEnd, Word::Emacs))
-                } else {
-                    Cmd::Move(Movement::BackwardWord(n, Word::Emacs))
-                }
-            }
+            | E(K::Right, M::ALT) => Cmd::Move(if positive {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+            } else {
+                Movement::BackwardWord(n, Word::Emacs)
+            }),
             E(K::Char('L'), M::ALT) | E(K::Char('l'), M::ALT) => Cmd::DowncaseWord,
             E(K::Char('T'), M::ALT) | E(K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
             // TODO ESC-R (r): Undo all changes made to this line.
@@ -1035,30 +1051,34 @@ impl InputState {
     ) -> Result<Cmd> {
         Ok(match key {
             E(K::Home, M::NONE) => Cmd::Move(Movement::BeginningOfLine),
-            E(K::Left, M::NONE) => {
-                if positive {
-                    Cmd::Move(Movement::BackwardChar(n))
-                } else {
-                    Cmd::Move(Movement::ForwardChar(n))
-                }
-            }
+            E(K::Left, M::NONE) => Cmd::Move(if positive {
+                Movement::BackwardChar(n)
+            } else {
+                Movement::ForwardChar(n)
+            }),
             E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
-            E(K::Char('D'), M::CTRL) => Cmd::EndOfFile,
-            E(K::Delete, M::NONE) => {
-                if positive {
-                    Cmd::Kill(Movement::ForwardChar(n))
+            E(K::Char('D'), M::CTRL) => {
+                if self.is_emacs_mode() && !wrt.line().is_empty() {
+                    Cmd::Kill(if positive {
+                        Movement::ForwardChar(n)
+                    } else {
+                        Movement::BackwardChar(n)
+                    })
                 } else {
-                    Cmd::Kill(Movement::BackwardChar(n))
+                    Cmd::EndOfFile
                 }
             }
+            E(K::Delete, M::NONE) => Cmd::Kill(if positive {
+                Movement::ForwardChar(n)
+            } else {
+                Movement::BackwardChar(n)
+            }),
             E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
-            E(K::Right, M::NONE) => {
-                if positive {
-                    Cmd::Move(Movement::ForwardChar(n))
-                } else {
-                    Cmd::Move(Movement::BackwardChar(n))
-                }
-            }
+            E(K::Right, M::NONE) => Cmd::Move(if positive {
+                Movement::ForwardChar(n)
+            } else {
+                Movement::BackwardChar(n)
+            }),
             E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
                 accept_in_the_middle: true,
             },
@@ -1068,26 +1088,22 @@ impl InputState {
             // most terminals override Ctrl+S to suspend execution
             E(K::Char('S'), M::CTRL) => Cmd::ForwardSearchHistory,
             E(K::Char('T'), M::CTRL) => Cmd::TransposeChars,
-            E(K::Char('U'), M::CTRL) => {
-                if positive {
-                    Cmd::Kill(Movement::BeginningOfLine)
-                } else {
-                    Cmd::Kill(Movement::EndOfLine)
-                }
-            }
+            E(K::Char('U'), M::CTRL) => Cmd::Kill(if positive {
+                Movement::BeginningOfLine
+            } else {
+                Movement::EndOfLine
+            }),
             // most terminals override Ctrl+Q to resume execution
             E(K::Char('Q'), M::CTRL) => Cmd::QuotedInsert,
             #[cfg(not(windows))]
             E(K::Char('V'), M::CTRL) => Cmd::QuotedInsert,
             #[cfg(windows)]
             E(K::Char('V'), M::CTRL) => Cmd::PasteFromClipboard,
-            E(K::Char('W'), M::CTRL) => {
-                if positive {
-                    Cmd::Kill(Movement::BackwardWord(n, Word::Big))
-                } else {
-                    Cmd::Kill(Movement::ForwardWord(n, At::AfterEnd, Word::Big))
-                }
-            }
+            E(K::Char('W'), M::CTRL) => Cmd::Kill(if positive {
+                Movement::BackwardWord(n, Word::Big)
+            } else {
+                Movement::ForwardWord(n, At::AfterEnd, Word::Big)
+            }),
             E(K::Char('Y'), M::CTRL) => {
                 if positive {
                     Cmd::Yank(n, Anchor::Before)

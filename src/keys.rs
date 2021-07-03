@@ -25,15 +25,15 @@ impl KeyEvent {
         }
         #[allow(clippy::match_same_arms)]
         match c {
-            '\x00' => E(K::Char(' '), mods | M::CTRL),
+            '\x00' => E(K::Char('@'), mods | M::CTRL), // '\0'
             '\x01' => E(K::Char('A'), mods | M::CTRL),
             '\x02' => E(K::Char('B'), mods | M::CTRL),
             '\x03' => E(K::Char('C'), mods | M::CTRL),
             '\x04' => E(K::Char('D'), mods | M::CTRL),
             '\x05' => E(K::Char('E'), mods | M::CTRL),
             '\x06' => E(K::Char('F'), mods | M::CTRL),
-            '\x07' => E(K::Char('G'), mods | M::CTRL),
-            '\x08' => E(K::Backspace, mods), // '\b'
+            '\x07' => E(K::Char('G'), mods | M::CTRL), // '\a'
+            '\x08' => E(K::Backspace, mods),           // '\b'
             '\x09' => {
                 // '\t'
                 if mods.contains(M::SHIFT) {
@@ -60,12 +60,12 @@ impl KeyEvent {
             '\x18' => E(K::Char('X'), mods | M::CTRL),
             '\x19' => E(K::Char('Y'), mods | M::CTRL),
             '\x1a' => E(K::Char('Z'), mods | M::CTRL),
-            '\x1b' => E(K::Esc, mods), // Ctrl-[
+            '\x1b' => E(K::Esc, mods), // Ctrl-[, '\e'
             '\x1c' => E(K::Char('\\'), mods | M::CTRL),
             '\x1d' => E(K::Char(']'), mods | M::CTRL),
             '\x1e' => E(K::Char('^'), mods | M::CTRL),
             '\x1f' => E(K::Char('_'), mods | M::CTRL),
-            '\x7f' => E(K::Backspace, mods), // Rubout
+            '\x7f' => E(K::Backspace, mods), // Rubout, Ctrl-?
             '\u{9b}' => E(K::Esc, mods | M::SHIFT),
             _ => E(K::Null, mods),
         }

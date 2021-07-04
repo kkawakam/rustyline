@@ -41,7 +41,7 @@ utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "std", "winbase", "wincon", "winuser"] }
+winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "std", "synchapi", "winbase", "wincon", "winerror", "winuser"] }
 scopeguard = "1.1"
 clipboard-win = "4.2.1"
 

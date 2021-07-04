@@ -222,7 +222,7 @@ impl RawReader for ConsoleRawReader {
         use std::convert::TryFrom;
         use winapi::shared::winerror::WAIT_TIMEOUT;
         use winapi::um::synchapi::WaitForSingleObject;
-        use winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
+        use winapi::um::winbase::WAIT_OBJECT_0;
 
         let start = Instant::now();
         loop {
@@ -241,7 +241,7 @@ impl RawReader for ConsoleRawReader {
                     WAIT_TIMEOUT => {
                         return Ok(false);
                     }
-                    WAIT_FAILED | _ => Err(io::Error::last_os_error())?,
+                    _ => Err(io::Error::last_os_error())?,
                 }
             }
 

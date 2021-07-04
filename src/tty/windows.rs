@@ -219,7 +219,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn poll(&mut self, mut timeout: Duration) -> Result<bool> {
-        use std::convert::TryInto;
+        use std::convert::TryFrom;
         use winapi::shared::winerror::WAIT_TIMEOUT;
         use winapi::um::synchapi::WaitForSingleObject;
         use winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
@@ -248,9 +248,7 @@ impl RawReader for ConsoleRawReader {
             let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
             let mut count = 0;
             while noe > 0 {
-                check(unsafe {
-                    consoleapi::PeekConsoleInputW(self.handle, &mut rec, 1, &mut count)
-                })?;
+                check(unsafe { wincon::PeekConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
                 if count > 0 {
                     noe -= count;
                     if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {

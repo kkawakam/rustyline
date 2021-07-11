@@ -4,7 +4,7 @@ use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
 use crate::error;
-use crate::history::Direction;
+use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
 use crate::keymap::{InputState, Refresher};
 use crate::kill_ring::{KillRing, Mode};
@@ -100,8 +100,8 @@ pub fn execute<H: Helper>(
                 s.edit_history_next(false)?
             }
         }
-        Cmd::HistorySearchBackward => s.edit_history_search(Direction::Reverse)?,
-        Cmd::HistorySearchForward => s.edit_history_search(Direction::Forward)?,
+        Cmd::HistorySearchBackward => s.edit_history_search(SearchDirection::Reverse)?,
+        Cmd::HistorySearchForward => s.edit_history_search(SearchDirection::Forward)?,
         Cmd::TransposeChars => {
             // Exchange the char before cursor with the character at cursor.
             s.edit_transpose_chars()?

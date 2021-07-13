@@ -34,6 +34,9 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// Whether Arrow-Up/Down and C-p/n should go through the history line-by-line or perform a
+    /// reverse-search with the current prefix before the cursor.
+    history_search_behaviour: HistorySearchBehaviour,
 }
 
 impl Config {
@@ -176,6 +179,21 @@ impl Config {
     pub fn enable_bracketed_paste(&self) -> bool {
         self.enable_bracketed_paste
     }
+
+    /// Whether Arrow-Up/Down and C-p/n should go through the history line-by-line or perform a
+    /// reverse-search with the current prefix before the cursor.
+    ///
+    /// By default, go through the history line-by-line.
+    pub fn history_search_behaviour(&self) -> HistorySearchBehaviour {
+        self.history_search_behaviour
+    }
+
+    pub(crate) fn set_history_search_behaviour(
+        &mut self,
+        history_search_behaviour: HistorySearchBehaviour,
+    ) {
+        self.history_search_behaviour = history_search_behaviour;
+    }
 }
 
 impl Default for Config {
@@ -196,6 +214,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            history_search_behaviour: HistorySearchBehaviour::LineByLine,
         }
     }
 }
@@ -284,6 +303,17 @@ pub enum OutputStreamType {
     Stderr,
     /// Use stdout
     Stdout,
+}
+
+/// Control going through the history with Arrow-Up/Down and C-p/n
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum HistorySearchBehaviour {
+    /// Go backwards through the history line-by-line.
+    LineByLine,
+    /// Implicit reverse search: Only show history entries which start with the current prefix
+    /// before the cursor.
+    PrefixReverseSearch,
 }
 
 /// Configuration builder
@@ -415,6 +445,18 @@ impl Builder {
         self
     }
 
+    /// Whether Arrow-Up/Down and C-p/n should go through the history line-by-line or perform a
+    /// reverse-search with the current prefix before the cursor.
+    ///
+    /// By default, go through the history line-by-line.
+    pub fn history_search_behaviour(
+        mut self,
+        history_search_behaviour: HistorySearchBehaviour,
+    ) -> Self {
+        self.set_history_search_behaviour(history_search_behaviour);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     pub fn build(self) -> Config {
         self.p
@@ -528,5 +570,14 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Whether Arrow-Up/Down and C-p/n should go through the history line-by-line or perform a
+    /// reverse-search with the current prefix before the cursor.
+    ///
+    /// By default, go through the history line-by-line.
+    fn set_history_search_behaviour(&mut self, history_search_behaviour: HistorySearchBehaviour) {
+        self.config_mut()
+            .set_history_search_behaviour(history_search_behaviour);
     }
 }

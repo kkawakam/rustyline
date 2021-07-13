@@ -8,6 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
+use crate::config::HistorySearchBehaviour;
 use crate::highlight::Highlighter;
 use crate::hint::Hint;
 use crate::history::Direction;
@@ -34,6 +35,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     highlight_char: bool,            // `true` if a char has been highlighted
+    history_search_behaviour: HistorySearchBehaviour, // search history line-by-line or prefix-based
 }
 
 enum Info<'m> {
@@ -48,6 +50,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
+        history_search_behaviour: HistorySearchBehaviour,
     ) -> State<'out, 'prompt, H> {
         let prompt_size = out.calculate_position(prompt, Position::default());
         State {
@@ -63,6 +66,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
+            history_search_behaviour,
         }
     }
 
@@ -227,6 +231,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else {
             Ok(ValidationResult::Valid(None))
         }
+    }
+
+    fn update_line(&mut self, buf: &str, pos: usize) {
+        self.changes.borrow_mut().begin();
+        self.line.update(buf, pos);
+        self.changes.borrow_mut().end();
     }
 }
 
@@ -577,25 +587,42 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else if self.ctx.history_index == 0 && prev {
             return Ok(());
         }
-        if prev {
-            self.ctx.history_index -= 1;
-        } else {
-            self.ctx.history_index += 1;
-        }
-        if self.ctx.history_index < history.len() {
-            let buf = history.get(self.ctx.history_index).unwrap();
-            self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
-            self.changes.borrow_mut().end();
-        } else {
-            // Restore current edited line
-            self.restore();
+
+        match self.history_search_behaviour {
+            // only if we have a prefix, do a prefix reverse search
+            HistorySearchBehaviour::PrefixReverseSearch if self.line.pos() != 0 => {
+                let direction = if prev {
+                    Direction::Reverse
+                } else {
+                    Direction::Forward
+                };
+                self.edit_history_search(direction, true)?;
+            }
+            // if we don't have a prefix, just go forward / backward one history entry
+            HistorySearchBehaviour::LineByLine | HistorySearchBehaviour::PrefixReverseSearch => {
+                if prev {
+                    self.ctx.history_index -= 1;
+                } else {
+                    self.ctx.history_index += 1;
+                }
+                if self.ctx.history_index < history.len() {
+                    let buf = history.get(self.ctx.history_index).unwrap();
+                    let pos = match self.history_search_behaviour {
+                        HistorySearchBehaviour::LineByLine => buf.len(),
+                        HistorySearchBehaviour::PrefixReverseSearch => self.line.pos(),
+                    };
+                    self.update_line(buf, pos);
+                } else {
+                    // Restore current edited line
+                    self.restore();
+                }
+            }
         }
         self.refresh_line()
     }
 
     // Non-incremental, anchored search
-    pub fn edit_history_search(&mut self, dir: Direction) -> Result<()> {
+    pub fn edit_history_search(&mut self, dir: Direction, keep_cursor_pos: bool) -> Result<()> {
         let history = self.ctx.history;
         if history.is_empty() {
             return self.out.beep();
@@ -617,13 +644,28 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ) {
             self.ctx.history_index = history_index;
             let buf = history.get(history_index).unwrap();
-            self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
-            self.changes.borrow_mut().end();
-            self.refresh_line()
+
+            // if the history search results in the same command we found last, continue searching
+            // for a different command
+            if buf == self.line.as_str() {
+                return self.edit_history_search(dir, keep_cursor_pos);
+            }
+
+            let pos = if keep_cursor_pos {
+                self.line.pos()
+            } else {
+                buf.len()
+            };
+            self.update_line(buf, pos);
         } else {
-            self.out.beep()
+            self.ctx.history_index = match dir {
+                Direction::Forward => history.len(),
+                Direction::Reverse => 0,
+            };
+            self.restore();
+            self.out.beep()?;
         }
+        self.refresh_line()
     }
 
     /// Substitute the currently edited line with the first/last history entry.
@@ -645,9 +687,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if first {
             self.ctx.history_index = 0;
             let buf = history.get(self.ctx.history_index).unwrap();
-            self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
-            self.changes.borrow_mut().end();
+            self.update_line(buf, buf.len());
         } else {
             self.ctx.history_index = history.len();
             // Restore current edited line
@@ -673,6 +713,7 @@ pub fn init_state<'out, H: Helper>(
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::History,
+    history_search_behaviour: HistorySearchBehaviour,
 ) -> State<'out, 'static, H> {
     State {
         out,
@@ -687,12 +728,14 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
+        history_search_behaviour,
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::init_state;
+    use crate::config::HistorySearchBehaviour;
     use crate::history::History;
     use crate::tty::Sink;
 
@@ -704,7 +747,8 @@ mod test {
         history.add("line1");
         let line = "current edited line";
         let helper: Option<()> = None;
-        let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history);
+        let hsb = HistorySearchBehaviour::LineByLine;
+        let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history, hsb);
         s.ctx.history_index = history.len();
 
         for _ in 0..2 {
@@ -732,6 +776,55 @@ mod test {
         s.edit_history_next(false).unwrap();
         // assert_eq!(line, s.saved_line_for_history);
         assert_eq!(2, s.ctx.history_index);
+        assert_eq!(line, s.line.as_str());
+    }
+
+    #[test]
+    fn edit_history_prefix() {
+        let mut out = Sink::new();
+        let mut history = History::new();
+        history.add("foo");
+        history.add("bar");
+        history.add("cd abcdef");
+        history.add("ls");
+        history.add("cd abcdef");
+        history.add("ls");
+        history.add("cd ab123");
+        history.add("ls");
+        let line = "cd abxyz";
+        let helper: Option<()> = None;
+        let hsb = HistorySearchBehaviour::PrefixReverseSearch;
+        let mut s = init_state(&mut out, line, 5, helper.as_ref(), &history, hsb);
+        s.ctx.history_index = history.len();
+
+        s.edit_history_next(true).unwrap();
+        assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(6, s.ctx.history_index);
+        assert_eq!("cd ab123", s.line.as_str());
+
+        s.edit_history_next(true).unwrap();
+        assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(4, s.ctx.history_index);
+        assert_eq!("cd abcdef", s.line.as_str());
+
+        s.edit_history_next(true).unwrap();
+        assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(0, s.ctx.history_index);
+        assert_eq!(line, s.line.as_str());
+
+        s.edit_history_next(false).unwrap();
+        assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(2, s.ctx.history_index);
+        assert_eq!("cd abcdef", s.line.as_str());
+
+        s.edit_history_next(false).unwrap();
+        assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(6, s.ctx.history_index);
+        assert_eq!("cd ab123", s.line.as_str());
+
+        s.edit_history_next(false).unwrap();
+        // assert_eq!(line, s.saved_line_for_history.as_str());
+        assert_eq!(8, s.ctx.history.len());
         assert_eq!(line, s.line.as_str());
     }
 }

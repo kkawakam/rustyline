@@ -4,7 +4,7 @@ use std::vec::IntoIter;
 use radix_trie::Trie;
 
 use crate::completion::Completer;
-use crate::config::{Config, EditMode};
+use crate::config::{Config, EditMode, HistorySearchBehaviour};
 use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -57,7 +57,8 @@ fn complete_line() {
     let mut out = Sink::new();
     let history = crate::history::History::new();
     let helper = Some(SimpleCompleter);
-    let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
+    let hsb = HistorySearchBehaviour::LineByLine;
+    let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history, hsb);
     let config = Config::default();
     let mut input_state = InputState::new(&config, Arc::new(RwLock::new(Trie::new())));
     let keys = vec![E::ENTER];

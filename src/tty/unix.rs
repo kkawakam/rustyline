@@ -642,7 +642,7 @@ impl PosixRawReader {
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
             Ok(_) => r,
-            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+            Err(nix::errno::Errno::EINTR) => {
                 if SIGWINCH.load(Ordering::Relaxed) {
                     r
                 } else {
@@ -1105,7 +1105,7 @@ impl Term for PosixTerminal {
         use nix::errno::Errno::ENOTTY;
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
         if !self.stdin_isatty {
-            return Err(nix::Error::from_errno(ENOTTY).into());
+            return Err(ENOTTY.into());
         }
         let original_mode = termios::tcgetattr(STDIN_FILENO)?;
         let mut raw = original_mode.clone();

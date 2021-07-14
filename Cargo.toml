@@ -34,6 +34,7 @@ memchr = "2.0"
 # https://rustsec.org/advisories/RUSTSEC-2021-0003.html
 smallvec = "1.6.1"
 radix_trie = "0.2"
+regex = { version = "1.5.4", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.22"
@@ -56,6 +57,7 @@ rustyline-derive = { version = "0.4.0", path = "rustyline-derive" }
 default = ["with-dirs"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
+case_insensitive_history_search = ["regex"]
 
 [package.metadata.docs.rs]
 features = ["with-dirs", "with-fuzzy"]

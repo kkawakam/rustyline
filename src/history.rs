@@ -373,8 +373,24 @@ impl History {
     /// forward search
     /// or between [0, start] for reverse search.
     pub fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
-        let test = |entry: &str| entry.find(term);
-        self.search_match(term, start, dir, test)
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| entry.find(term);
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| re.find(entry).map(|m| m.start());
+                self.search_match(term, start, dir, test)
+            } else {
+                None
+            }
+        }
     }
 
     /// Anchored search
@@ -384,14 +400,34 @@ impl History {
         start: usize,
         dir: SearchDirection,
     ) -> Option<SearchResult> {
-        let test = |entry: &str| {
-            if entry.starts_with(term) {
-                Some(term.len())
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| {
+                if entry.starts_with(term) {
+                    Some(term.len())
+                } else {
+                    None
+                }
+            };
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| {
+                    re.find(entry)
+                        .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                        .map(|m| m.end())
+                };
+                self.search_match(term, start, dir, test)
             } else {
                 None
             }
-        };
-        self.search_match(term, start, dir, test)
+        }
     }
 
     fn search_match<F>(
@@ -695,6 +731,24 @@ mod tests {
                 pos: 0
             }),
             history.search("line1", 1, SearchDirection::Reverse)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "case_insensitive_history_search")]
+    fn anchored_search() {
+        let history = init();
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 4
+            }),
+            history.starts_with("LiNe", 2, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            None,
+            history.starts_with("iNe", 2, SearchDirection::Reverse)
         );
     }
 }

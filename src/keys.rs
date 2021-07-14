@@ -33,7 +33,10 @@ impl KeyEvent {
             '\x05' => E(K::Char('E'), mods | M::CTRL),
             '\x06' => E(K::Char('F'), mods | M::CTRL),
             '\x07' => E(K::Char('G'), mods | M::CTRL), // '\a'
-            '\x08' => E(K::Backspace, mods),           // '\b'
+            #[cfg(unix)]
+            '\x08' => E(K::Backspace, mods), // '\b'
+            #[cfg(windows)]
+            '\x08' => E(K::Char('H'), mods | M::CTRL),
             '\x09' => {
                 // '\t'
                 if mods.contains(M::SHIFT) {
@@ -46,7 +49,10 @@ impl KeyEvent {
             '\x0a' => E(K::Char('J'), mods | M::CTRL), // '\n' (10)
             '\x0b' => E(K::Char('K'), mods | M::CTRL),
             '\x0c' => E(K::Char('L'), mods | M::CTRL),
+            #[cfg(unix)]
             '\x0d' => E(K::Enter, mods), // '\r' (13)
+            #[cfg(windows)]
+            '\x0d' => E(K::Char('M'), mods | M::CTRL),
             '\x0e' => E(K::Char('N'), mods | M::CTRL),
             '\x0f' => E(K::Char('O'), mods | M::CTRL),
             '\x10' => E(K::Char('P'), mods | M::CTRL),
@@ -60,12 +66,18 @@ impl KeyEvent {
             '\x18' => E(K::Char('X'), mods | M::CTRL),
             '\x19' => E(K::Char('Y'), mods | M::CTRL),
             '\x1a' => E(K::Char('Z'), mods | M::CTRL),
+            #[cfg(unix)]
             '\x1b' => E(K::Esc, mods), // Ctrl-[, '\e'
+            #[cfg(windows)]
+            '\x1b' => E(K::Char('['), mods | M::CTRL),
             '\x1c' => E(K::Char('\\'), mods | M::CTRL),
             '\x1d' => E(K::Char(']'), mods | M::CTRL),
             '\x1e' => E(K::Char('^'), mods | M::CTRL),
             '\x1f' => E(K::Char('_'), mods | M::CTRL),
+            #[cfg(unix)]
             '\x7f' => E(K::Backspace, mods), // Rubout, Ctrl-?
+            #[cfg(windows)]
+            '\x7f' => E(K::Char('?'), mods | M::CTRL),
             '\u{9b}' => E(K::Esc, mods | M::SHIFT),
             _ => E(K::Null, mods),
         }

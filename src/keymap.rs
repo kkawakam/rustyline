@@ -1060,9 +1060,11 @@ impl InputState {
             } else {
                 Movement::BackwardChar(n)
             }),
-            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
-                accept_in_the_middle: true,
-            },
+            E(K::Char('J'), M::CTRL) | E(K::Char('M'), M::CTRL) | E::ENTER => {
+                Cmd::AcceptOrInsertLine {
+                    accept_in_the_middle: true,
+                }
+            }
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,

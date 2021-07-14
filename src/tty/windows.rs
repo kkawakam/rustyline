@@ -177,8 +177,10 @@ impl RawReader for ConsoleRawReader {
                         winuser::VK_F10 => K::F(10),
                         winuser::VK_F11 => K::F(11),
                         winuser::VK_F12 => K::F(12),
-                        // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
-                        // is also set.
+                        winuser::VK_BACK => K::Backspace, // vs Ctrl-h or Ctrl-?
+                        winuser::VK_RETURN => K::Enter,   // vs Ctrl-m
+                        winuser::VK_ESCAPE => K::Esc,     // vs Ctrl-[
+                        winuser::VK_TAB => K::Tab,        // vs Ctrl-i
                         _ => continue,
                     },
                     mods,

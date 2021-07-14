@@ -1,6 +1,6 @@
 //! Hints (suggestions at the right of the prompt as you type).
 
-use crate::history::Direction;
+use crate::history::SearchDirection;
 use crate::Context;
 
 /// A hint returned by Hinter
@@ -64,17 +64,14 @@ impl Hinter for HistoryHinter {
         } else {
             ctx.history_index()
         };
-        if let Some(history_index) =
-            ctx.history
-                .starts_with(&line[..pos], start, Direction::Reverse)
+        if let Some(sr) = ctx
+            .history
+            .starts_with(&line[..pos], start, SearchDirection::Reverse)
         {
-            let entry = ctx.history.get(history_index);
-            if let Some(entry) = entry {
-                if entry == line || entry == &line[..pos] {
-                    return None;
-                }
+            if sr.entry == line || sr.entry == &line[..pos] {
+                return None;
             }
-            return entry.map(|s| s[pos..].to_owned());
+            return Some(sr.entry[pos..].to_owned());
         }
         None
     }

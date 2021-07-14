@@ -15,11 +15,22 @@ use crate::config::{Config, HistoryDuplicates};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
+pub enum SearchDirection {
     /// Search history forward
     Forward,
     /// Search history backward
     Reverse,
+}
+
+/// History search result
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SearchResult<'a> {
+    /// history entry
+    pub entry: &'a str,
+    /// history index
+    pub idx: usize,
+    /// match position in `entry`
+    pub pos: usize,
 }
 
 /// Current state of the history.
@@ -361,37 +372,71 @@ impl History {
     /// Return None if no entry contains `term` between [start, len -1] for
     /// forward search
     /// or between [0, start] for reverse search.
-    pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
-        let test = |entry: &String| entry.contains(term);
+    pub fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        let test = |entry: &str| entry.find(term);
         self.search_match(term, start, dir, test)
     }
 
     /// Anchored search
-    pub fn starts_with(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
-        let test = |entry: &String| entry.starts_with(term);
+    pub fn starts_with(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Option<SearchResult> {
+        let test = |entry: &str| {
+            if entry.starts_with(term) {
+                Some(term.len())
+            } else {
+                None
+            }
+        };
         self.search_match(term, start, dir, test)
     }
 
-    fn search_match<F>(&self, term: &str, start: usize, dir: Direction, test: F) -> Option<usize>
+    fn search_match<F>(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+        test: F,
+    ) -> Option<SearchResult>
     where
-        F: Fn(&String) -> bool,
+        F: Fn(&str) -> Option<usize>,
     {
         if term.is_empty() || start >= self.len() {
             return None;
         }
         match dir {
-            Direction::Reverse => {
-                let index = self
+            SearchDirection::Reverse => {
+                for (idx, entry) in self
                     .entries
                     .iter()
                     .rev()
                     .skip(self.entries.len() - 1 - start)
-                    .position(test);
-                index.map(|index| start - index)
+                    .enumerate()
+                {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: start - idx,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
             }
-            Direction::Forward => {
-                let index = self.entries.iter().skip(start).position(test);
-                index.map(|index| index + start)
+            SearchDirection::Forward => {
+                for (idx, entry) in self.entries.iter().skip(start).enumerate() {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: idx + start,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
             }
         }
     }
@@ -471,7 +516,7 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{Direction, History};
+    use super::{History, SearchDirection, SearchResult};
     use crate::config::Config;
     use crate::Result;
 
@@ -590,24 +635,66 @@ mod tests {
     #[test]
     fn search() {
         let history = init();
-        assert_eq!(None, history.search("", 0, Direction::Forward));
-        assert_eq!(None, history.search("none", 0, Direction::Forward));
-        assert_eq!(None, history.search("line", 3, Direction::Forward));
+        assert_eq!(None, history.search("", 0, SearchDirection::Forward));
+        assert_eq!(None, history.search("none", 0, SearchDirection::Forward));
+        assert_eq!(None, history.search("line", 3, SearchDirection::Forward));
 
-        assert_eq!(Some(0), history.search("line", 0, Direction::Forward));
-        assert_eq!(Some(1), history.search("line", 1, Direction::Forward));
-        assert_eq!(Some(2), history.search("line3", 1, Direction::Forward));
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: history.get(0).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 0, SearchDirection::Forward)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: history.get(1).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 1, SearchDirection::Forward)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 0
+            }),
+            history.search("line3", 1, SearchDirection::Forward)
+        );
     }
 
     #[test]
     fn reverse_search() {
         let history = init();
-        assert_eq!(None, history.search("", 2, Direction::Reverse));
-        assert_eq!(None, history.search("none", 2, Direction::Reverse));
-        assert_eq!(None, history.search("line", 3, Direction::Reverse));
+        assert_eq!(None, history.search("", 2, SearchDirection::Reverse));
+        assert_eq!(None, history.search("none", 2, SearchDirection::Reverse));
+        assert_eq!(None, history.search("line", 3, SearchDirection::Reverse));
 
-        assert_eq!(Some(2), history.search("line", 2, Direction::Reverse));
-        assert_eq!(Some(1), history.search("line", 1, Direction::Reverse));
-        assert_eq!(Some(0), history.search("line1", 1, Direction::Reverse));
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 2, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: history.get(1).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 1, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: history.get(0).unwrap(),
+                pos: 0
+            }),
+            history.search("line1", 1, SearchDirection::Reverse)
+        );
     }
 }

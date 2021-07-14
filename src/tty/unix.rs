@@ -677,7 +677,7 @@ impl RawReader for PosixRawReader {
                 Err(e) => return Err(e.into()),
             }
         }
-        debug!(target: "rustyline", "key: {:?}", key);
+        debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);
         Ok(key)
     }
 

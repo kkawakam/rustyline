@@ -386,7 +386,7 @@ impl History {
     ) -> Option<SearchResult> {
         let test = |entry: &str| {
             if entry.starts_with(term) {
-                Some(0)
+                Some(term.len())
             } else {
                 None
             }

@@ -617,7 +617,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ) {
             self.ctx.history_index = sr.idx;
             self.changes.borrow_mut().begin();
-            self.line.update(sr.entry, sr.entry.len()); // FIXME
+            self.line.update(sr.entry, sr.pos);
             self.changes.borrow_mut().end();
             self.refresh_line()
         } else {

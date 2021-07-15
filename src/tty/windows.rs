@@ -194,7 +194,7 @@ impl RawReader for ConsoleRawReader {
                     }
                 }
             };
-            if key_code != K::UnknownEscSeq {
+            let key = if key_code != K::UnknownEscSeq {
                 KeyEvent(key_code, mods)
             } else if utf16 == 27 {
                 KeyEvent(K::Esc, mods) // FIXME dead code ?
@@ -216,7 +216,7 @@ impl RawReader for ConsoleRawReader {
                 let c = rc?;
                 KeyEvent::new(c, mods)
             };
-            debug!(target: "rustyline", "wVirtualKeyCode: {}, utf16: {}, dwControlKeyState: {} => key: {:?}", key_event.wVirtualKeyCode, utf16, key_event.dwControlKeyState, key);
+            debug!(target: "rustyline", "wVirtualKeyCode: {:#x}, utf16: {:#x}, dwControlKeyState: {:#x} => key: {:?}", key_event.wVirtualKeyCode, utf16, key_event.dwControlKeyState, key);
             return Ok(key);
         }
     }

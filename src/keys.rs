@@ -197,8 +197,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn from() {
         assert_eq!(E(K::Tab, M::NONE), E::from('\t'));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn from() {
+        assert_eq!(E(K::Char('I'), M::CTRL), E::from('\t'));
     }
 
     #[test]

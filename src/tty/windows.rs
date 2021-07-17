@@ -4,6 +4,7 @@
 use std::io::{self, Write};
 use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
@@ -101,6 +102,12 @@ impl ConsoleRawReader {
         let handle = get_std_handle(STDIN_FILENO)?;
         Ok(ConsoleRawReader { handle })
     }
+
+    fn get_number_of_events(&mut self) -> Result<u32> {
+        let mut count = 0;
+        check(unsafe { consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count) })?;
+        Ok(count)
+    }
 }
 
 impl RawReader for ConsoleRawReader {
@@ -121,9 +128,8 @@ impl RawReader for ConsoleRawReader {
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, Ordering::SeqCst);
                 debug!(target: "rustyline", "SIGWINCH");
-                return Err(error::ReadlineError::WindowResize); // sigwinch +
-                                                                // err => err
-                                                                // ignored
+                // sigwinch + err => err ignored
+                return Err(error::ReadlineError::WindowResize);
             } else if rec.EventType != wincon::KEY_EVENT {
                 continue;
             }
@@ -210,6 +216,71 @@ impl RawReader for ConsoleRawReader {
 
     fn read_pasted_text(&mut self) -> Result<String> {
         Ok(clipboard_win::get_clipboard_string()?)
+    }
+
+    fn poll(&mut self, mut timeout: Duration) -> Result<bool> {
+        use std::convert::TryFrom;
+        use winapi::shared::winerror::WAIT_TIMEOUT;
+        use winapi::um::synchapi::WaitForSingleObject;
+        use winapi::um::winbase::WAIT_OBJECT_0;
+
+        let start = Instant::now();
+        loop {
+            let mut noe = self.get_number_of_events()?;
+            if noe == 0 {
+                let rc = unsafe {
+                    WaitForSingleObject(
+                        self.handle,
+                        u32::try_from(timeout.as_millis()).expect("invalid timeout"),
+                    )
+                };
+                match rc {
+                    WAIT_OBJECT_0 => {
+                        noe = self.get_number_of_events()?;
+                    }
+                    WAIT_TIMEOUT => {
+                        return Ok(false);
+                    }
+                    _ => Err(io::Error::last_os_error())?,
+                }
+            }
+
+            let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
+            let mut count = 0;
+            while noe > 0 {
+                check(unsafe { wincon::PeekConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
+                if count > 0 {
+                    noe -= count;
+                    if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
+                        return Ok(true);
+                    } else if rec.EventType != wincon::KEY_EVENT {
+                        // read the event to unsignal the handle
+                        check(unsafe {
+                            consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
+                        })?;
+                    } else {
+                        let key_event = unsafe { rec.Event.KeyEvent() };
+                        if key_event.bKeyDown == 0
+                            && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD
+                        {
+                            // read the event to unsignal the handle
+                            check(unsafe {
+                                consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
+                            })?;
+                        } else {
+                            return Ok(true);
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            if let Some(t) = timeout.checked_sub(start.elapsed()) {
+                timeout = t;
+            } else {
+                return Ok(false);
+            }
+        }
     }
 }
 

@@ -1,9 +1,11 @@
 //! Unix specific definitions
 use std::cmp;
+use std::convert::TryFrom;
 use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
@@ -238,7 +240,7 @@ impl PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            match self.poll(timeout) {
+            match self.poll_input(timeout) {
                 // Ignore poll errors, it's very likely we'll pick them up on
                 // the next read anyway.
                 Ok(0) | Err(_) => Ok(E::ESC),
@@ -637,7 +639,7 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+    fn poll_input(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
@@ -665,7 +667,7 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            match self.poll(timeout_ms) {
+            match self.poll_input(timeout_ms) {
                 Ok(n) if n == 0 => {
                     // single escape
                 }
@@ -715,6 +717,12 @@ impl RawReader for PosixRawReader {
         let buffer = buffer.replace("\r\n", "\n");
         let buffer = buffer.replace("\r", "\n");
         Ok(buffer)
+    }
+
+    fn poll(&mut self, timeout: Duration) -> Result<bool> {
+        Ok(self
+            .poll_input(i32::try_from(timeout.as_millis()).expect("invalid timeout"))
+            .map(|i| i != 0)?)
     }
 }
 
@@ -969,14 +977,14 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
-        if rdr.poll(0)? != 0 {
+        if rdr.poll_input(0)? != 0 {
             debug!(target: "rustyline", "cannot request cursor location");
             return Ok(());
         }
         /* Report cursor location */
         self.write_and_flush(b"\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
-        if rdr.poll(100)? == 0
+        if rdr.poll_input(100)? == 0
             || rdr.next_char()? != '\x1b'
             || rdr.next_char()? != '['
             || read_digits_until(rdr, ';')?.is_none()

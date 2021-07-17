@@ -550,6 +550,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -725,6 +727,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -896,6 +900,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = rdr.find_binding(&key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -1037,6 +1043,7 @@ impl InputState {
             } else {
                 Movement::ForwardChar(n)
             }),
+            #[cfg(any(windows, test))]
             E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
             E(K::Char('D'), M::CTRL) => {
                 if self.is_emacs_mode() && !wrt.line().is_empty() {
@@ -1092,7 +1099,6 @@ impl InputState {
                     Cmd::Unknown // TODO Validate
                 }
             }
-            E(K::Char('Z'), M::CTRL) => Cmd::Suspend,
             E(K::Char('_'), M::CTRL) => Cmd::Undo(n),
             E(K::UnknownEscSeq, M::NONE) => Cmd::Noop,
             E(K::BracketedPasteStart, M::NONE) => {

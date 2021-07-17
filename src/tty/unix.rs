@@ -1,19 +1,22 @@
 //! Unix specific definitions
 use std::cmp;
+use std::fs::File;
 use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, SyncSender};
+use std::sync::{self, Arc, Mutex};
 
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
+use nix::sys::select::{self, FdSet};
 use nix::sys::signal;
 use nix::sys::termios;
 use nix::sys::termios::SetArg;
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -99,6 +102,7 @@ fn is_a_tty(fd: RawFd) -> bool {
 pub struct PosixMode {
     termios: termios::Termios,
     out: Option<OutputStreamType>,
+    raw_mode: Arc<AtomicBool>,
 }
 
 #[cfg(not(test))]
@@ -112,6 +116,7 @@ impl RawMode for PosixMode {
         if let Some(out) = self.out {
             write_and_flush(out, BRACKETED_PASTE_OFF)?;
         }
+        self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -143,6 +148,11 @@ impl Read for StdinRaw {
     }
 }
 
+// (native receiver with a selectable file descriptor, actual message receiver)
+type PipeReader = Arc<Mutex<(File, mpsc::Receiver<String>)>>;
+// (native sender, actual message sender)
+type PipeWriter = (Arc<Mutex<File>>, SyncSender<String>);
+
 /// Console input reader
 pub struct PosixRawReader {
     stdin: StdinRaw,
@@ -150,6 +160,9 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    // external print reader
+    pipe_reader: Option<PipeReader>,
+    fds: FdSet,
 }
 
 struct Utf8 {
@@ -184,7 +197,7 @@ const RXVT_CTRL: char = '\x1e';
 const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Self {
+    fn new(config: &Config, pipe_reader: Option<PipeReader>) -> Self {
         Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
@@ -194,6 +207,8 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
+            pipe_reader,
+            fds: FdSet::new(),
         }
     }
 
@@ -652,9 +667,58 @@ impl PosixRawReader {
             Err(_) => r,
         }
     }
+
+    fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
+        loop {
+            let mut readfds = self.fds;
+            readfds.clear();
+            readfds.insert(STDIN_FILENO);
+            readfds.insert(
+                self.pipe_reader
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .0
+                    .as_raw_fd(),
+            );
+            if let Err(err) = select::select(
+                readfds.highest().map(|h| h + 1),
+                Some(&mut readfds),
+                None,
+                None,
+                None,
+            ) {
+                if err != ::nix::Error::Sys(::nix::errno::Errno::EINTR)
+                    || SIGWINCH.load(Ordering::Relaxed)
+                {
+                    return Err(err.into());
+                } else {
+                    continue;
+                }
+            };
+            if readfds.contains(STDIN_FILENO) {
+                // prefer user input over external print
+                return self.next_key(single_esc_abort).map(Event::KeyPress);
+            } else {
+                let mut guard = self.pipe_reader.as_ref().unwrap().lock().unwrap();
+                guard.0.read_exact(&mut self.buf)?;
+                if let Ok(msg) = guard.1.try_recv() {
+                    return Ok(Event::ExternalPrint(msg));
+                }
+            }
+        }
+    }
 }
 
 impl RawReader for PosixRawReader {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        match self.pipe_reader {
+            Some(_) => self.select(single_esc_abort),
+            None => self.next_key(single_esc_abort).map(Event::KeyPress),
+        }
+    }
+
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
         let c = self.next_char()?;
 
@@ -690,7 +754,7 @@ impl RawReader for PosixRawReader {
             let b = self.buf[0];
             self.parser.advance(&mut self.receiver, b);
             if !self.receiver.valid {
-                return Err(error::ReadlineError::Utf8Error);
+                return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
             } else if let Some(c) = self.receiver.c.take() {
                 return Ok(c);
             }
@@ -793,7 +857,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[B");
             } else {
-                write!(self.buffer, "\x1b[{}B", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}B", row_shift)?;
             }
         } else if row_ordering == cmp::Ordering::Less {
             // move up
@@ -801,7 +865,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[A");
             } else {
-                write!(self.buffer, "\x1b[{}A", row_shift).unwrap();
+                write!(self.buffer, "\x1b[{}A", row_shift)?;
             }
         }
         let col_ordering = new.col.cmp(&old.col);
@@ -811,7 +875,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[C");
             } else {
-                write!(self.buffer, "\x1b[{}C", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}C", col_shift)?;
             }
         } else if col_ordering == cmp::Ordering::Less {
             // move left
@@ -819,7 +883,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[D");
             } else {
-                write!(self.buffer, "\x1b[{}D", col_shift).unwrap();
+                write!(self.buffer, "\x1b[{}D", col_shift)?;
             }
         }
         self.write_and_flush(self.buffer.as_bytes())
@@ -877,7 +941,7 @@ impl Renderer for PosixRenderer {
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if new_cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement)?;
         }
         // position the cursor within the line
         if cursor.col > 0 {
@@ -938,6 +1002,12 @@ impl Renderer for PosixRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         self.write_and_flush(b"\x1b[H\x1b[2J")
+    }
+
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
+        self.buffer.clear();
+        self.clear_old_rows(layout);
+        self.write_and_flush(self.buffer.as_bytes())
     }
 
     /// Check if a SIGWINCH signal has been received
@@ -1042,6 +1112,11 @@ pub struct PosixTerminal {
     tab_stop: usize,
     bell_style: BellStyle,
     enable_bracketed_paste: bool,
+    raw_mode: Arc<AtomicBool>,
+    // external print reader
+    pipe_reader: Option<PipeReader>,
+    // external print writer
+    pipe_writer: Option<PipeWriter>,
 }
 
 impl PosixTerminal {
@@ -1055,6 +1130,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type ExternalPrinter = ExternalPrinter;
     type Mode = PosixMode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
@@ -1075,6 +1151,9 @@ impl Term for PosixTerminal {
             tab_stop,
             bell_style,
             enable_bracketed_paste,
+            raw_mode: Arc::new(AtomicBool::new(false)),
+            pipe_reader: None,
+            pipe_writer: None,
         };
         if !term.unsupported && term.stdin_isatty && term.stdstream_isatty {
             install_sigwinch_handler();
@@ -1129,6 +1208,7 @@ impl Term for PosixTerminal {
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
 
+        self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
         let out = if !self.enable_bracketed_paste {
             None
@@ -1138,15 +1218,25 @@ impl Term for PosixTerminal {
         } else {
             Some(self.stream_type)
         };
+
+        // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
+        if let Some((ref arc, _)) = self.pipe_writer {
+            if Arc::strong_count(arc) == 1 {
+                self.pipe_writer = None;
+                self.pipe_reader = None;
+            }
+        }
+
         Ok(PosixMode {
             termios: original_mode,
             out,
+            raw_mode: self.raw_mode.clone(),
         })
     }
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        Ok(PosixRawReader::new(config))
+        Ok(PosixRawReader::new(config, self.pipe_reader.clone()))
     }
 
     fn create_writer(&self) -> PosixRenderer {
@@ -1156,6 +1246,65 @@ impl Term for PosixTerminal {
             self.colors_enabled(),
             self.bell_style,
         )
+    }
+
+    fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
+        if let Some(ref writer) = self.pipe_writer {
+            return Ok(ExternalPrinter {
+                writer: writer.clone(),
+                raw_mode: self.raw_mode.clone(),
+                target: self.stream_type,
+            });
+        }
+        if self.unsupported || !self.is_stdin_tty() || !self.is_output_tty() {
+            use nix::errno::Errno::ENOTTY;
+            return Err(nix::Error::from_errno(ENOTTY).into());
+        }
+        use nix::unistd::pipe;
+        use std::os::unix::io::FromRawFd;
+        let (sender, receiver) = mpsc::sync_channel(1); // TODO validate: bound
+        let (r, w) = pipe()?;
+        let reader = Arc::new(Mutex::new((unsafe { File::from_raw_fd(r) }, receiver)));
+        let writer = (
+            Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) })),
+            sender,
+        );
+        self.pipe_reader.replace(reader);
+        self.pipe_writer.replace(writer.clone());
+        Ok(ExternalPrinter {
+            writer,
+            raw_mode: self.raw_mode.clone(),
+            target: self.stream_type,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ExternalPrinter {
+    writer: PipeWriter,
+    raw_mode: Arc<AtomicBool>,
+    target: OutputStreamType,
+}
+
+impl super::ExternalPrinter for ExternalPrinter {
+    fn print(&mut self, msg: String) -> Result<()> {
+        // write directly to stdout/stderr while not in raw mode
+        if !self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().write_all(msg.as_bytes()),
+                OutputStreamType::Stdout => io::stdout().write_all(msg.as_bytes()),
+            }
+        } else if let Ok(mut writer) = self.writer.0.lock() {
+            self.writer
+                .1
+                .send(msg)
+                .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
+            writer.write_all(&[b'm'])?;
+            writer.flush()
+        } else {
+            Err(io::Error::from(ErrorKind::Other)) // FIXME
+        }
+        .map_err(error::ReadlineError::from)
     }
 }
 

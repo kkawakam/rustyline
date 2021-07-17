@@ -3,19 +3,23 @@
 
 use std::io::{self, Write};
 use std::mem;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::Arc;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::error;
 use crate::highlight::Highlighter;
@@ -30,6 +34,10 @@ const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
+    check_handle(handle)
+}
+
+fn check_handle(handle: HANDLE) -> Result<HANDLE> {
     if handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
@@ -41,9 +49,9 @@ fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     Ok(handle)
 }
 
-fn check(rc: BOOL) -> Result<()> {
+fn check(rc: BOOL) -> io::Result<()> {
     if rc == FALSE {
-        Err(io::Error::last_os_error())?
+        Err(io::Error::last_os_error())
     } else {
         Ok(())
     }
@@ -70,12 +78,13 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
 #[cfg(not(test))]
 pub type Mode = ConsoleMode;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ConsoleMode {
     original_stdin_mode: DWORD,
     stdin_handle: HANDLE,
     original_stdstream_mode: Option<DWORD>,
     stdstream_handle: HANDLE,
+    raw_mode: Arc<AtomicBool>,
 }
 
 impl RawMode for ConsoleMode {
@@ -87,6 +96,7 @@ impl RawMode for ConsoleMode {
                 consoleapi::SetConsoleMode(self.stdstream_handle, original_stdstream_mode)
             })?;
         }
+        self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -94,122 +104,172 @@ impl RawMode for ConsoleMode {
 /// Console input reader
 pub struct ConsoleRawReader {
     handle: HANDLE,
+    // external print reader
+    pipe_reader: Option<Arc<AsyncPipe>>,
 }
 
 impl ConsoleRawReader {
-    pub fn create() -> Result<ConsoleRawReader> {
+    fn create(pipe_reader: Option<Arc<AsyncPipe>>) -> Result<ConsoleRawReader> {
         let handle = get_std_handle(STDIN_FILENO)?;
-        Ok(ConsoleRawReader { handle })
+        Ok(ConsoleRawReader {
+            handle,
+            pipe_reader,
+        })
+    }
+
+    fn select(&mut self) -> Result<Event> {
+        use std::convert::TryInto;
+        use winapi::um::synchapi::WaitForMultipleObjects;
+        use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
+
+        let pipe_reader = self.pipe_reader.as_ref().unwrap();
+        let handles = [self.handle, pipe_reader.event.0];
+        let n = handles.len().try_into().unwrap();
+        loop {
+            let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
+            if rc == WAIT_OBJECT_0 {
+                let mut count = 0;
+                check(unsafe {
+                    consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count)
+                })?;
+                match read_input(self.handle, count)? {
+                    KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
+                    key => return Ok(Event::KeyPress(key)),
+                };
+            } else if rc == WAIT_OBJECT_0 + 1 {
+                debug!(target: "rustyline", "ExternalPrinter::receive");
+                check(unsafe { ResetEvent(pipe_reader.event.0) })?;
+                match pipe_reader.receiver.recv() {
+                    Ok(msg) => return Ok(Event::ExternalPrint(msg)),
+                    Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
+                }
+            } else {
+                Err(io::Error::last_os_error())?
+            }
+        }
     }
 }
 
 impl RawReader for ConsoleRawReader {
-    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
-        use std::char::decode_utf16;
-        use winapi::um::wincon::{
-            LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED,
-            SHIFT_PRESSED,
-        };
-
-        let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
-        let mut count = 0;
-        let mut surrogate = 0;
-        loop {
-            // TODO GetNumberOfConsoleInputEvents
-            check(unsafe { consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
-
-            if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-                SIGWINCH.store(true, Ordering::SeqCst);
-                debug!(target: "rustyline", "SIGWINCH");
-                return Err(error::ReadlineError::WindowResize); // sigwinch +
-                                                                // err => err
-                                                                // ignored
-            } else if rec.EventType != wincon::KEY_EVENT {
-                continue;
-            }
-            let key_event = unsafe { rec.Event.KeyEvent() };
-            // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
-            if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD {
-                continue;
-            }
-            // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
-            // read one character at a time)
-
-            let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
-                == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-            let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
-            let mut mods = M::NONE;
-            if !alt_gr
-                && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0
-            {
-                mods |= M::CTRL;
-            }
-            if alt && !alt_gr {
-                mods |= M::ALT;
-            }
-            if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
-                mods |= M::SHIFT;
-            }
-
-            let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-            let key = if utf16 == 0 {
-                KeyEvent(
-                    match i32::from(key_event.wVirtualKeyCode) {
-                        winuser::VK_LEFT => K::Left,
-                        winuser::VK_RIGHT => K::Right,
-                        winuser::VK_UP => K::Up,
-                        winuser::VK_DOWN => K::Down,
-                        winuser::VK_DELETE => K::Delete,
-                        winuser::VK_HOME => K::Home,
-                        winuser::VK_END => K::End,
-                        winuser::VK_PRIOR => K::PageUp,
-                        winuser::VK_NEXT => K::PageDown,
-                        winuser::VK_INSERT => K::Insert,
-                        winuser::VK_F1 => K::F(1),
-                        winuser::VK_F2 => K::F(2),
-                        winuser::VK_F3 => K::F(3),
-                        winuser::VK_F4 => K::F(4),
-                        winuser::VK_F5 => K::F(5),
-                        winuser::VK_F6 => K::F(6),
-                        winuser::VK_F7 => K::F(7),
-                        winuser::VK_F8 => K::F(8),
-                        winuser::VK_F9 => K::F(9),
-                        winuser::VK_F10 => K::F(10),
-                        winuser::VK_F11 => K::F(11),
-                        winuser::VK_F12 => K::F(12),
-                        // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
-                        // is also set.
-                        _ => continue,
-                    },
-                    mods,
-                )
-            } else if utf16 == 27 {
-                KeyEvent(K::Esc, mods)
-            } else {
-                if (0xD800..0xDC00).contains(&utf16) {
-                    surrogate = utf16;
-                    continue;
-                }
-                let orc = if surrogate == 0 {
-                    decode_utf16(Some(utf16)).next()
-                } else {
-                    decode_utf16([surrogate, utf16].iter().cloned()).next()
-                };
-                let rc = if let Some(rc) = orc {
-                    rc
-                } else {
-                    return Err(error::ReadlineError::Eof);
-                };
-                let c = rc?;
-                KeyEvent::new(c, mods)
-            };
-            debug!(target: "rustyline", "key: {:?}", key);
-            return Ok(key);
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        match self.pipe_reader {
+            Some(_) => self.select(),
+            None => self.next_key(single_esc_abort).map(Event::KeyPress),
         }
+    }
+
+    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
+        read_input(self.handle, std::u32::MAX)
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
         Ok(clipboard_win::get_clipboard_string()?)
+    }
+}
+
+fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
+    use std::char::decode_utf16;
+    use winapi::um::wincon::{
+        LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED,
+    };
+
+    let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
+    let mut count = 0;
+    let mut total = 0;
+    let mut surrogate = 0;
+    loop {
+        if total >= max_count {
+            return Ok(KeyEvent(K::UnknownEscSeq, M::NONE));
+        }
+        // TODO GetNumberOfConsoleInputEvents
+        check(unsafe { consoleapi::ReadConsoleInputW(handle, &mut rec, 1, &mut count) })?;
+        total += count;
+
+        if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
+            SIGWINCH.store(true, Ordering::SeqCst);
+            debug!(target: "rustyline", "SIGWINCH");
+            return Err(error::ReadlineError::WindowResize); // sigwinch +
+                                                            // err => err
+                                                            // ignored
+        } else if rec.EventType != wincon::KEY_EVENT {
+            continue;
+        }
+        let key_event = unsafe { rec.Event.KeyEvent() };
+        // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
+        if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD {
+            continue;
+        }
+        // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
+        // read one character at a time)
+
+        let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
+            == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
+        let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
+        let mut mods = M::NONE;
+        if !alt_gr && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
+            mods |= M::CTRL;
+        }
+        if alt && !alt_gr {
+            mods |= M::ALT;
+        }
+        if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
+            mods |= M::SHIFT;
+        }
+
+        let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
+        let key = if utf16 == 0 {
+            KeyEvent(
+                match i32::from(key_event.wVirtualKeyCode) {
+                    winuser::VK_LEFT => K::Left,
+                    winuser::VK_RIGHT => K::Right,
+                    winuser::VK_UP => K::Up,
+                    winuser::VK_DOWN => K::Down,
+                    winuser::VK_DELETE => K::Delete,
+                    winuser::VK_HOME => K::Home,
+                    winuser::VK_END => K::End,
+                    winuser::VK_PRIOR => K::PageUp,
+                    winuser::VK_NEXT => K::PageDown,
+                    winuser::VK_INSERT => K::Insert,
+                    winuser::VK_F1 => K::F(1),
+                    winuser::VK_F2 => K::F(2),
+                    winuser::VK_F3 => K::F(3),
+                    winuser::VK_F4 => K::F(4),
+                    winuser::VK_F5 => K::F(5),
+                    winuser::VK_F6 => K::F(6),
+                    winuser::VK_F7 => K::F(7),
+                    winuser::VK_F8 => K::F(8),
+                    winuser::VK_F9 => K::F(9),
+                    winuser::VK_F10 => K::F(10),
+                    winuser::VK_F11 => K::F(11),
+                    winuser::VK_F12 => K::F(12),
+                    // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
+                    // isalso set.
+                    _ => continue,
+                },
+                mods,
+            )
+        } else if utf16 == 27 {
+            KeyEvent(K::Esc, mods)
+        } else {
+            if (0xD800..0xDC00).contains(&utf16) {
+                surrogate = utf16;
+                continue;
+            }
+            let orc = if surrogate == 0 {
+                decode_utf16(Some(utf16)).next()
+            } else {
+                decode_utf16([surrogate, utf16].iter().cloned()).next()
+            };
+            let rc = if let Some(rc) = orc {
+                rc
+            } else {
+                return Err(error::ReadlineError::Eof);
+            };
+            let c = rc?;
+            KeyEvent::new(c, mods)
+        };
+        debug!(target: "rustyline", "key: {:?}", key);
+        return Ok(key);
     }
 }
 
@@ -248,7 +308,9 @@ impl ConsoleRenderer {
     }
 
     fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
-        check(unsafe { wincon::SetConsoleCursorPosition(self.handle, pos) })
+        Ok(check(unsafe {
+            wincon::SetConsoleCursorPosition(self.handle, pos)
+        })?)
     }
 
     fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
@@ -256,9 +318,9 @@ impl ConsoleRenderer {
         check(unsafe {
             wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
         })?;
-        check(unsafe {
+        Ok(check(unsafe {
             wincon::FillConsoleOutputAttribute(self.handle, attr, length, pos, &mut _count)
-        })
+        })?)
     }
 
     fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
@@ -312,7 +374,9 @@ fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
         return Ok(());
     }
     info.bVisible = visible;
-    check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })
+    Ok(check(unsafe {
+        wincon::SetConsoleCursorInfo(handle, &info)
+    })?)
 }
 
 impl Renderer for ConsoleRenderer {
@@ -445,6 +509,11 @@ impl Renderer for ConsoleRenderer {
         self.clear(n, coord, info.wAttributes)
     }
 
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
+        let info = self.get_console_screen_buffer_info()?;
+        self.clear_old_rows(&info, layout)
+    }
+
     fn sigwinch(&self) -> bool {
         SIGWINCH
             .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -509,6 +578,11 @@ pub struct Console {
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
     bell_style: BellStyle,
+    raw_mode: Arc<AtomicBool>,
+    // external print reader
+    pipe_reader: Option<Arc<AsyncPipe>>,
+    // external print writer
+    pipe_writer: Option<SyncSender<String>>,
 }
 
 impl Console {
@@ -523,6 +597,7 @@ impl Console {
 }
 
 impl Term for Console {
+    type ExternalPrinter = ExternalPrinter;
     type Mode = ConsoleMode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
@@ -534,7 +609,6 @@ impl Term for Console {
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
     ) -> Console {
-        use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
         let stdin_isatty = match stdin_handle {
             Ok(handle) => {
@@ -566,6 +640,9 @@ impl Term for Console {
             ansi_colors_supported: false,
             stream_type,
             bell_style,
+            raw_mode: Arc::new(AtomicBool::new(false)),
+            pipe_reader: None,
+            pipe_writer: None,
         }
     }
 
@@ -642,16 +719,26 @@ impl Term for Console {
             None
         };
 
+        self.raw_mode.store(true, Ordering::SeqCst);
+        // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
+        /*if let Some(ref arc) = self.pipe_writer { FIXME
+            if Arc::strong_count(arc) == 1 {
+                self.pipe_writer = None;
+                self.pipe_reader = None;
+            }
+        }*/
+
         Ok(ConsoleMode {
             original_stdin_mode,
             stdin_handle: self.stdin_handle,
             original_stdstream_mode,
             stdstream_handle: self.stdstream_handle,
+            raw_mode: self.raw_mode.clone(),
         })
     }
 
     fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::create()
+        ConsoleRawReader::create(self.pipe_reader.clone())
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
@@ -662,10 +749,89 @@ impl Term for Console {
             self.bell_style,
         )
     }
+
+    fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
+        if let Some(ref sender) = self.pipe_writer {
+            return Ok(ExternalPrinter {
+                event: INVALID_HANDLE_VALUE, // FIXME
+                sender: sender.clone(),
+                raw_mode: self.raw_mode.clone(),
+                target: self.stream_type,
+            });
+        }
+        if !self.is_stdin_tty() || !self.is_output_tty() {
+            Err(io::Error::from(io::ErrorKind::Other))?; // FIXME
+        }
+        let event = unsafe { CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
+        if event.is_null() {
+            Err(io::Error::last_os_error())?;
+        }
+        let (sender, receiver) = sync_channel(1);
+
+        let reader = Arc::new(AsyncPipe {
+            event: Handle(event),
+            receiver,
+        });
+        self.pipe_reader.replace(reader);
+        self.pipe_writer.replace(sender.clone());
+        Ok(ExternalPrinter {
+            event,
+            sender,
+            raw_mode: self.raw_mode.clone(),
+            target: self.stream_type,
+        })
+    }
 }
 
 unsafe impl Send for Console {}
 unsafe impl Sync for Console {}
+
+#[derive(Debug)]
+struct AsyncPipe {
+    event: Handle,
+    receiver: Receiver<String>,
+}
+
+#[derive(Debug)]
+pub struct ExternalPrinter {
+    event: HANDLE,
+    sender: SyncSender<String>,
+    raw_mode: Arc<AtomicBool>,
+    target: OutputStreamType,
+}
+
+unsafe impl Send for ExternalPrinter {}
+unsafe impl Sync for ExternalPrinter {}
+
+impl super::ExternalPrinter for ExternalPrinter {
+    fn print(&mut self, msg: String) -> Result<()> {
+        // write directly to stdout/stderr while not in raw mode
+        if !self.raw_mode.load(Ordering::SeqCst) {
+            match self.target {
+                OutputStreamType::Stderr => io::stderr().write_all(msg.as_bytes()),
+                OutputStreamType::Stdout => io::stdout().write_all(msg.as_bytes()),
+            }
+        } else {
+            self.sender
+                .send(msg)
+                .map_err(|_| io::Error::from(io::ErrorKind::Other))?; // FIXME
+            check(unsafe { SetEvent(self.event) })
+        }
+        .map_err(error::ReadlineError::from)
+    }
+}
+
+#[derive(Debug)]
+struct Handle(HANDLE);
+
+unsafe impl Send for Handle {}
+unsafe impl Sync for Handle {}
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        unsafe { CloseHandle(self.0) };
+    }
+}
 
 #[cfg(test)]
 mod test {

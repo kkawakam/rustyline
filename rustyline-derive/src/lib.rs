@@ -9,6 +9,7 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
+        #[automatically_derived]
         impl #impl_generics ::rustyline::completion::Completer for #name #ty_generics #where_clause {
             type Candidate = ::std::string::String;
         }
@@ -23,6 +24,7 @@ pub fn helper_macro_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
+        #[automatically_derived]
         impl #impl_generics ::rustyline::Helper for #name #ty_generics #where_clause {
         }
     };
@@ -36,6 +38,7 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
+        #[automatically_derived]
         impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
         }
     };
@@ -49,6 +52,7 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
+        #[automatically_derived]
         impl #impl_generics ::rustyline::hint::Hinter for #name #ty_generics #where_clause {
             type Hint = ::std::string::String;
         }
@@ -63,6 +67,7 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = quote! {
+        #[automatically_derived]
         impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
         }
     };

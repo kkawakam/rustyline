@@ -561,12 +561,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `open` not available when isolation is enabled
     fn save_windows_path() -> Result<()> {
         let path = "cd source\\repos\\forks\\nushell\\";
         check_save(path)
     }
 
-    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn check_save(line: &str) -> Result<()> {
         let mut history = init();
         assert!(history.add(line));

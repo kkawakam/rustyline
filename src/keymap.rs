@@ -578,7 +578,7 @@ impl InputState {
                 Movement::ForwardChar(n)
             }),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            E(K::Tab, M::NONE) => {
+            E(K::Char('I'), M::CTRL) | E(K::Tab, M::NONE) => {
                 if positive {
                     Cmd::Complete
                 } else {
@@ -907,7 +907,7 @@ impl InputState {
             }
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(Movement::BackwardChar(1)),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            E(K::Tab, M::NONE) => Cmd::Complete,
+            E(K::Char('I'), M::CTRL) | E(K::Tab, M::NONE) => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             E(K::Char(k), M::ALT) => {
@@ -1060,9 +1060,11 @@ impl InputState {
             } else {
                 Movement::BackwardChar(n)
             }),
-            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
-                accept_in_the_middle: true,
-            },
+            E(K::Char('J'), M::CTRL) | E(K::Char('M'), M::CTRL) | E::ENTER => {
+                Cmd::AcceptOrInsertLine {
+                    accept_in_the_middle: true,
+                }
+            }
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,

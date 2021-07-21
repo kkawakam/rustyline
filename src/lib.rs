@@ -656,13 +656,16 @@ fn readline_direct(
                             validate::ValidationResult::Invalid(Some(msg)) => {
                                 writer.write_all(msg.as_bytes())?;
                             }
-                            validate::ValidationResult::Incomplete => {
+                            validate::ValidationResult::Incomplete(msg) => {
                                 // Add newline and keep on taking input
                                 if trailing_r {
                                     input.push('\r');
                                 }
                                 if trailing_n {
                                     input.push('\n');
+                                }
+                                if let Some(msg) = msg {
+                                    writer.write_all(msg.as_bytes())?;
                                 }
                             }
                             _ => {}

@@ -7,7 +7,7 @@ use crate::Result;
 #[non_exhaustive]
 pub enum ValidationResult {
     /// Incomplete input
-    Incomplete,
+    Incomplete(Option<String>),
     /// Validation fails with an optional error message. User must fix the
     /// input.
     Invalid(Option<String>),
@@ -23,7 +23,9 @@ impl ValidationResult {
     pub(crate) fn has_message(&self) -> bool {
         matches!(
             self,
-            ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_))
+            ValidationResult::Valid(Some(_))
+                | ValidationResult::Invalid(Some(_))
+                | ValidationResult::Incomplete(Some(_))
         )
     }
 }
@@ -142,6 +144,6 @@ fn validate_brackets(input: &str) -> ValidationResult {
     if stack.is_empty() {
         ValidationResult::Valid(None)
     } else {
-        ValidationResult::Incomplete
+        ValidationResult::Incomplete(None)
     }
 }

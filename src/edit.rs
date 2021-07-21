@@ -208,7 +208,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let result = validator.validate(&mut ValidationContext::new(self))?;
             let corrected = self.changes.borrow_mut().end();
             match result {
-                ValidationResult::Incomplete => {}
+                ValidationResult::Incomplete(ref msg) => {
+                    if msg.is_some() {
+                        self.refresh_line_with_msg(msg.as_deref())?;
+                    }
+                }
                 ValidationResult::Valid(ref msg) => {
                     // Accept the line regardless of where the cursor is.
                     if corrected || self.has_hint() || msg.is_some() {

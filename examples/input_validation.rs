@@ -12,7 +12,7 @@ impl Validator for InputValidator {
         let result = if !input.starts_with("SELECT") {
             Invalid(Some(" --< Expect: SELECT stmt".to_owned()))
         } else if !input.ends_with(';') {
-            Incomplete
+            Incomplete(None)
         } else {
             Valid(None)
         };

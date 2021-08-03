@@ -56,7 +56,7 @@ impl Hinter for HistoryHinter {
     type Hint = String;
 
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
-        if pos < line.len() {
+        if line.is_empty() || pos < line.len() {
             return None;
         }
         let start = if ctx.history_index() == ctx.history().len() {
@@ -66,9 +66,9 @@ impl Hinter for HistoryHinter {
         };
         if let Some(sr) = ctx
             .history
-            .starts_with(&line[..pos], start, SearchDirection::Reverse)
+            .starts_with(line, start, SearchDirection::Reverse)
         {
-            if sr.entry == line || sr.entry == &line[..pos] {
+            if sr.entry == line {
                 return None;
             }
             return Some(sr.entry[pos..].to_owned());

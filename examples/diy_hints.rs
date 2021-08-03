@@ -52,7 +52,7 @@ impl Hinter for DIYHinter {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
-        if pos < line.len() {
+        if line.is_empty() || pos < line.len() {
             return None;
         }
 
@@ -61,7 +61,7 @@ impl Hinter for DIYHinter {
             .filter_map(|hint| {
                 // expect hint after word complete, like redis cli, add condition:
                 // line.ends_with(" ")
-                if pos > 0 && hint.display.starts_with(&line[..pos]) {
+                if hint.display.starts_with(line) {
                     Some(hint.suffix(pos))
                 } else {
                     None

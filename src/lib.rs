@@ -265,8 +265,7 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     } else {
         s.out.beep()?;
     }
-    s.refresh_line_with_msg(None)?;
-    Ok(())
+    s.refresh_line()
 }
 
 fn page_completions<C: Candidate, H: Helper>(

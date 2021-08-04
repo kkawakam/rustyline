@@ -174,9 +174,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn hint(&mut self) {
         if let Some(hinter) = self.helper {
             let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
-            self.hint = hint.map(|val| Box::new(val) as Box<dyn Hint>)
+            self.hint = match hint {
+                Some(val) if !val.display().is_empty() => Some(Box::new(val) as Box<dyn Hint>),
+                _ => None,
+            };
         } else {
-            self.hint = None
+            self.hint = None;
         }
     }
 

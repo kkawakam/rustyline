@@ -1151,6 +1151,7 @@ impl Term for PosixTerminal {
         raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
 
         let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(3);
+        map_key(&mut key_map, &raw, SCI::VEOF, "VEOF", Cmd::EndOfFile);
         map_key(&mut key_map, &raw, SCI::VINTR, "VINTR", Cmd::Interrupt);
         map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
         map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);

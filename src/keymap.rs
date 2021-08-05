@@ -434,6 +434,7 @@ impl InputState {
         }
     }
 
+    /// Application customized binding
     fn custom_binding(
         &self,
         wrt: &mut dyn Refresher,
@@ -453,6 +454,18 @@ impl InputState {
             }
         } else {
             None
+        }
+    }
+
+    /// Terminal peculiar binding
+    fn term_binding<R: RawReader>(
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: &KeyEvent,
+    ) -> Option<Cmd> {
+        match key {
+            E(K::Char('D'), M::CTRL) if !wrt.line().is_empty() => None,
+            _ => rdr.find_binding(key),
         }
     }
 
@@ -550,7 +563,7 @@ impl InputState {
             } else {
                 cmd
             });
-        } else if let Some(cmd) = rdr.find_binding(&key) {
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
             return Ok(cmd);
         }
         let cmd = match key {
@@ -727,7 +740,7 @@ impl InputState {
             } else {
                 cmd
             });
-        } else if let Some(cmd) = rdr.find_binding(&key) {
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
             return Ok(cmd);
         }
         let cmd = match key {
@@ -900,7 +913,7 @@ impl InputState {
             } else {
                 cmd
             });
-        } else if let Some(cmd) = rdr.find_binding(&key) {
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
             return Ok(cmd);
         }
         let cmd = match key {
@@ -1052,8 +1065,10 @@ impl InputState {
                     } else {
                         Movement::BackwardChar(n)
                     })
-                } else {
+                } else if cfg!(window) || cfg!(test) || !wrt.line().is_empty() {
                     Cmd::EndOfFile
+                } else {
+                    Cmd::Unknown
                 }
             }
             E(K::Delete, M::NONE) => Cmd::Kill(if positive {

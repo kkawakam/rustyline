@@ -463,9 +463,11 @@ impl InputState {
         wrt: &mut dyn Refresher,
         key: &KeyEvent,
     ) -> Option<Cmd> {
-        match key {
-            E(K::Char('D'), M::CTRL) if !wrt.line().is_empty() => None,
-            _ => rdr.find_binding(key),
+        let cmd = rdr.find_binding(key);
+        if cmd == Some(Cmd::EndOfFile) && !wrt.line().is_empty() {
+            None // ReadlineError::Eof only if line is empty
+        } else {
+            cmd
         }
     }
 

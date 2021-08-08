@@ -193,17 +193,13 @@ fn check_bracket(line: &str, pos: usize) -> Option<(u8, usize)> {
         loop {
             let b = line.as_bytes()[pos];
             if is_close_bracket(b) {
-                if pos == 0 {
-                    return None;
-                } else {
-                    return Some((b, pos));
-                }
+                return if pos == 0 { None } else { Some((b, pos)) };
             } else if is_open_bracket(b) {
-                if pos + 1 == line.len() {
-                    return None;
+                return if pos + 1 == line.len() {
+                    None
                 } else {
-                    return Some((b, pos));
-                }
+                    Some((b, pos))
+                };
             } else if under_cursor && pos > 0 {
                 under_cursor = false;
                 pos -= 1; // or before cursor

@@ -628,7 +628,7 @@ impl Term for Console {
                 mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
                 debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
                 unsafe {
-                    assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                    assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
                 }
             }
             // To enable ANSI colors (Windows 10 only):
@@ -639,7 +639,7 @@ impl Term for Console {
                     mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                     debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
                     unsafe {
-                        assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                        assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
                     }
                 } else {
                     debug!(target: "rustyline", "ANSI colors already enabled");

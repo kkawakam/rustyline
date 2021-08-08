@@ -1123,7 +1123,7 @@ impl InputState {
             if let (n, false) = num_args.overflowing_abs() {
                 (n as RepeatCount, false)
             } else {
-                (RepeatCount::max_value(), false)
+                (RepeatCount::MAX, false)
             }
         } else {
             (num_args as RepeatCount, true)

@@ -32,10 +32,10 @@ Some keys/commands may ask for more input.
 I am not sure this point should be tackle here.
 
 ## Multiple / complex actions
-For one key/command, we may want to perfom multiple actions.
+For one key/command, we may want to perform multiple actions.
 We should ask the undo manager to start a "transaction" before first action and commit it after the last action.
 Should we do something specific with the kill ring ?
-We should refresh / repaint only when all actions are performed (or if ask explictly?) depending on cumulated action impacts.
+We should refresh / repaint only when all actions are performed (or if ask explicitly?) depending on cumulated action impacts.
 ...
 
 ## Misc

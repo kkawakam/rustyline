@@ -56,7 +56,7 @@ fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
                 // In linux pseudo-terminals are created with dimensions of
                 // zero. If host application didn't initialize the correct
                 // size before start we treat zero size as 80 columns and
-                // inifinite rows
+                // infinite rows
                 let cols = if size.ws_col == 0 {
                     80
                 } else {
@@ -227,7 +227,7 @@ impl PosixRawReader {
             // key, but has a wrinkle in that `ESC ESC` without anything
             // following should be interpreted as the the escape key.
             //
-            // We hanlde this by polling to see if there's anything coming
+            // We handle this by polling to see if there's anything coming
             // within our timeout, and if so, recursing once, but adding alt to
             // what we read.
             if !allow_recurse {

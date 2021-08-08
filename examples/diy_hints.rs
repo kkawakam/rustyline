@@ -7,7 +7,7 @@ use rustyline_derive::{Completer, Helper, Highlighter, Validator};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct DIYHinter {
-    // It's simple example of rustyline, for more effecient, please use ** radix trie **
+    // It's simple example of rustyline, for more efficient, please use ** radix trie **
     hints: HashSet<CommandHint>,
 }
 

@@ -211,7 +211,7 @@ pub enum BellStyle {
     Visible,
 }
 
-/// `Audible` by default on unix (overriden by current Terminal settings).
+/// `Audible` by default on unix (overridden by current Terminal settings).
 /// `None` on windows.
 impl Default for BellStyle {
     #[cfg(any(windows, target_arch = "wasm32"))]

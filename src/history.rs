@@ -670,6 +670,32 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn truncate() -> Result<()> {
+        let tf = tempfile::NamedTempFile::new()?;
+
+        let config = Config::builder().history_ignore_dups(false).build();
+        let mut history = History::with_config(config);
+        history.add("line1");
+        history.add("line1");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        history.update_path(tf.path(), 100)?; // to avoid append
+        history.add("l");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.entries[1], "l");
+
+        tf.close()?;
+        Ok(())
+    }
+
+    #[test]
     fn search() {
         let history = init();
         assert_eq!(None, history.search("", 0, SearchDirection::Forward));

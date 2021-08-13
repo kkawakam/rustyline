@@ -268,6 +268,7 @@ impl History {
                 self.add(line);
             }
         }
+        let mut appendable = v2;
         for line in lines {
             let mut line = line?;
             if line.is_empty() {
@@ -309,10 +310,10 @@ impl History {
                     line = s;
                 }
             }
-            self.add(line); // TODO truncate to MAX_LINE
+            appendable &= self.add(line); // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
-        Ok(v2)
+        Ok(appendable)
     }
 
     fn update_path(&mut self, path: &Path, size: usize) -> Result<()> {
@@ -682,7 +683,6 @@ mod tests {
 
         let mut history = History::new();
         history.load(tf.path())?;
-        history.update_path(tf.path(), 100)?; // to avoid append
         history.add("l");
         history.append(tf.path())?;
 

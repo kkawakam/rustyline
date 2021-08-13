@@ -229,6 +229,7 @@ impl History {
             other.add(entry);
         }
         lock_guard.seek(SeekFrom::Start(0))?;
+        lock_guard.set_len(0)?; // if new size < old size
         other.save_to(&lock_guard, false)?;
         drop(lock_guard);
         self.update_path(path, other.len())?;

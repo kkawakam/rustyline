@@ -1,5 +1,6 @@
 //! History API
 
+use fd_lock::RwLock;
 use log::{debug, warn};
 use std::collections::vec_deque;
 use std::collections::VecDeque;
@@ -150,9 +151,11 @@ impl History {
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        self.save_to(&file, false)?;
+        let mut lock = RwLock::new(file);
+        let lock_guard = lock.write()?;
+        self.save_to(&lock_guard, false)?;
         self.new_entries = 0;
-        self.update_path(path, self.len())
+        self.update_path(path, &lock_guard, self.len())
     }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
@@ -190,7 +193,6 @@ impl History {
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use fd_lock::RwLock;
         use std::io::Seek;
 
         if self.is_empty() || self.new_entries == 0 {
@@ -199,9 +201,13 @@ impl History {
         let path = path.as_ref();
         if !path.exists() || self.new_entries == self.max_len {
             return self.save(path);
-        } else if self.can_just_append(path)? {
-            let file = OpenOptions::new().append(true).open(path)?;
-            self.save_to(&file, true)?;
+        }
+        let file = OpenOptions::new().write(true).read(true).open(path)?;
+        let mut lock = RwLock::new(file);
+        let mut lock_guard = lock.write()?;
+        if self.can_just_append(path, &lock_guard)? {
+            lock_guard.seek(SeekFrom::End(0))?;
+            self.save_to(&lock_guard, true)?;
             let size = self
                 .path_info
                 .as_ref()
@@ -209,11 +215,8 @@ impl History {
                 .2
                 .saturating_add(self.new_entries);
             self.new_entries = 0;
-            return self.update_path(path, size);
+            return self.update_path(path, &lock_guard, size);
         }
-        let file = OpenOptions::new().write(true).read(true).open(path)?;
-        let mut lock = RwLock::new(file);
-        let mut lock_guard = lock.write()?;
         // we may need to truncate file before appending new entries
         let mut other = Self {
             entries: VecDeque::new(),
@@ -229,9 +232,9 @@ impl History {
             other.add(entry);
         }
         lock_guard.seek(SeekFrom::Start(0))?;
+        lock_guard.set_len(0)?; // if new size < old size
         other.save_to(&lock_guard, false)?;
-        drop(lock_guard);
-        self.update_path(path, other.len())?;
+        self.update_path(path, &lock_guard, other.len())?;
         self.new_entries = 0;
         Ok(())
     }
@@ -243,9 +246,11 @@ impl History {
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         let path = path.as_ref();
         let file = File::open(path)?;
+        let lock = RwLock::new(file);
+        let lock_guard = lock.read()?;
         let len = self.len();
-        if self.load_from(&file)? {
-            self.update_path(path, self.len() - len)
+        if self.load_from(&lock_guard)? {
+            self.update_path(path, &lock_guard, self.len() - len)
         } else {
             // discard old version on next save
             self.path_info = None;
@@ -267,6 +272,7 @@ impl History {
                 self.add(line);
             }
         }
+        let mut appendable = v2;
         for line in lines {
             let mut line = line?;
             if line.is_empty() {
@@ -308,14 +314,14 @@ impl History {
                     line = s;
                 }
             }
-            self.add(line); // TODO truncate to MAX_LINE
+            appendable &= self.add(line); // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
-        Ok(v2)
+        Ok(appendable)
     }
 
-    fn update_path(&mut self, path: &Path, size: usize) -> Result<()> {
-        let modified = File::open(&path)?.metadata()?.modified()?;
+    fn update_path(&mut self, path: &Path, file: &File, size: usize) -> Result<()> {
+        let modified = file.metadata()?.modified()?;
         if let Some(PathInfo(
             ref mut previous_path,
             ref mut previous_modified,
@@ -334,7 +340,7 @@ impl History {
         Ok(())
     }
 
-    fn can_just_append(&self, path: &Path) -> Result<bool> {
+    fn can_just_append(&self, path: &Path, file: &File) -> Result<bool> {
         if let Some(PathInfo(ref previous_path, ref previous_modified, ref previous_size)) =
             self.path_info
         {
@@ -342,7 +348,7 @@ impl History {
                 debug!(target: "rustyline", "cannot append: {:?} <> {:?}", previous_path, path);
                 return Ok(false);
             }
-            let modified = File::open(&path)?.metadata()?.modified()?;
+            let modified = file.metadata()?.modified()?;
             if *previous_modified != modified
                 || self.max_len <= *previous_size
                 || self.max_len < (*previous_size).saturating_add(self.new_entries)
@@ -663,6 +669,31 @@ mod tests {
         let mut history3 = History::new();
         history3.load(tf.path())?;
         assert_eq!(history3.len(), 5);
+
+        tf.close()?;
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn truncate() -> Result<()> {
+        let tf = tempfile::NamedTempFile::new()?;
+
+        let config = Config::builder().history_ignore_dups(false).build();
+        let mut history = History::with_config(config);
+        history.add("line1");
+        history.add("line1");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        history.add("l");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.entries[1], "l");
 
         tf.close()?;
         Ok(())

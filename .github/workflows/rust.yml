@@ -12,6 +12,7 @@ on:
       - '**.rs'
       - '**.toml'
       - '.github/workflows/rust.yml'
+      - '*.md'
 env:
   RUST_BACKTRACE: 1
 jobs:

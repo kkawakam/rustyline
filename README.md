@@ -1,7 +1,7 @@
 # RustyLine
 [![Build Status](https://github.com/kkawakam/rustyline/workflows/Rust/badge.svg)](https://github.com/kkawakam/rustyline/actions)
 [![dependency status](https://deps.rs/repo/github/kkawakam/rustyline/status.svg)](https://deps.rs/repo/github/kkawakam/rustyline)
-[![](http://meritbadge.herokuapp.com/rustyline)](https://crates.io/crates/rustyline)
+[![](https://img.shields.io/crates/v/rustyline.svg)](https://crates.io/crates/rustyline)
 [![Docs](https://docs.rs/rustyline/badge.svg)](https://docs.rs/rustyline)
 
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)

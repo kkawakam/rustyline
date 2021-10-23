@@ -434,6 +434,7 @@ impl InputState {
         }
     }
 
+    /// Application customized binding
     fn custom_binding(
         &self,
         wrt: &mut dyn Refresher,
@@ -453,6 +454,20 @@ impl InputState {
             }
         } else {
             None
+        }
+    }
+
+    /// Terminal peculiar binding
+    fn term_binding<R: RawReader>(
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: &KeyEvent,
+    ) -> Option<Cmd> {
+        let cmd = rdr.find_binding(key);
+        if cmd == Some(Cmd::EndOfFile) && !wrt.line().is_empty() {
+            None // ReadlineError::Eof only if line is empty
+        } else {
+            cmd
         }
     }
 
@@ -550,6 +565,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -725,6 +742,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -896,6 +915,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -1038,6 +1059,7 @@ impl InputState {
             } else {
                 Movement::ForwardChar(n)
             }),
+            #[cfg(any(windows, test))]
             E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
             E(K::Char('D'), M::CTRL) => {
                 if self.is_emacs_mode() && !wrt.line().is_empty() {
@@ -1046,8 +1068,10 @@ impl InputState {
                     } else {
                         Movement::BackwardChar(n)
                     })
-                } else {
+                } else if cfg!(window) || cfg!(test) || !wrt.line().is_empty() {
                     Cmd::EndOfFile
+                } else {
+                    Cmd::Unknown
                 }
             }
             E(K::Delete, M::NONE) => Cmd::Kill(if positive {
@@ -1095,7 +1119,6 @@ impl InputState {
                     Cmd::Unknown // TODO Validate
                 }
             }
-            E(K::Char('Z'), M::CTRL) => Cmd::Suspend,
             E(K::Char('_'), M::CTRL) => Cmd::Undo(n),
             E(K::UnknownEscSeq, M::NONE) => Cmd::Noop,
             E(K::BracketedPasteStart, M::NONE) => {

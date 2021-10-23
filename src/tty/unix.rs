@@ -9,18 +9,18 @@ use log::{debug, warn};
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios;
-use nix::sys::termios::SetArg;
+use nix::sys::termios::{SetArg, SpecialCharacterIndices as SCI, Termios};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{error, Cmd, Result};
+use std::collections::HashMap;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
@@ -95,6 +95,10 @@ fn is_a_tty(fd: RawFd) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
 
+pub type PosixKeyMap = HashMap<KeyEvent, Cmd>;
+#[cfg(not(test))]
+pub type KeyMap = PosixKeyMap;
+
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
     termios: termios::Termios,
@@ -150,6 +154,7 @@ pub struct PosixRawReader {
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    key_map: PosixKeyMap,
 }
 
 struct Utf8 {
@@ -184,7 +189,7 @@ const RXVT_CTRL: char = '\x1e';
 const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Self {
+    fn new(config: &Config, key_map: PosixKeyMap) -> Self {
         Self {
             stdin: StdinRaw {},
             timeout_ms: config.keyseq_timeout(),
@@ -194,6 +199,7 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
+            key_map,
         }
     }
 
@@ -716,6 +722,14 @@ impl RawReader for PosixRawReader {
         let buffer = buffer.replace("\r", "\n");
         Ok(buffer)
     }
+
+    fn find_binding(&self, key: &KeyEvent) -> Option<Cmd> {
+        let cmd = self.key_map.get(key).cloned();
+        if let Some(ref cmd) = cmd {
+            debug!(target: "rustyline", "terminal key binding: {:?} => {:?}", key, cmd);
+        }
+        cmd
+    }
 }
 
 impl Receiver for Utf8 {
@@ -1029,6 +1043,13 @@ extern "C" fn sigwinch_handler(_: libc::c_int) {
     debug!(target: "rustyline", "SIGWINCH");
 }
 
+fn map_key(key_map: &mut HashMap<KeyEvent, Cmd>, raw: &Termios, index: SCI, name: &str, cmd: Cmd) {
+    let cc = char::from(raw.control_chars[index as usize]);
+    let key = KeyEvent::new(cc, M::NONE);
+    debug!(target: "rustyline", "{}: {:?}", name, key);
+    key_map.insert(key, cmd);
+}
+
 #[cfg(not(test))]
 pub type Terminal = PosixTerminal;
 
@@ -1055,6 +1076,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type KeyMap = PosixKeyMap;
     type Mode = PosixMode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
@@ -1101,9 +1123,9 @@ impl Term for PosixTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
+    fn enable_raw_mode(&mut self) -> Result<(Self::Mode, PosixKeyMap)> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
+        use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
         if !self.stdin_isatty {
             return Err(ENOTTY.into());
         }
@@ -1125,8 +1147,15 @@ impl Term for PosixTerminal {
         // disable echoing, canonical mode, extended input processing and signals
         raw.local_flags &=
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
-        raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
-        raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
+        raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
+        raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
+
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(3);
+        map_key(&mut key_map, &raw, SCI::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, &raw, SCI::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
+
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
 
         // enable bracketed paste
@@ -1138,15 +1167,18 @@ impl Term for PosixTerminal {
         } else {
             Some(self.stream_type)
         };
-        Ok(PosixMode {
-            termios: original_mode,
-            out,
-        })
+        Ok((
+            PosixMode {
+                termios: original_mode,
+                out,
+            },
+            key_map,
+        ))
     }
 
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        Ok(PosixRawReader::new(config))
+    fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> Result<PosixRawReader> {
+        Ok(PosixRawReader::new(config, key_map))
     }
 
     fn create_writer(&self) -> PosixRenderer {

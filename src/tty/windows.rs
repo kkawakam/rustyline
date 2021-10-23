@@ -17,12 +17,11 @@ use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{error, Cmd, Result};
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -65,6 +64,10 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     check(unsafe { consoleapi::GetConsoleMode(handle, &mut original_mode) })?;
     Ok(original_mode)
 }
+
+type ConsoleKeyMap = ();
+#[cfg(not(test))]
+pub type KeyMap = ConsoleKeyMap;
 
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 #[cfg(not(test))]
@@ -223,6 +226,10 @@ impl RawReader for ConsoleRawReader {
 
     fn read_pasted_text(&mut self) -> Result<String> {
         Ok(clipboard_win::get_clipboard_string()?)
+    }
+
+    fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
     }
 }
 
@@ -536,6 +543,7 @@ impl Console {
 }
 
 impl Term for Console {
+    type KeyMap = ConsoleKeyMap;
     type Mode = ConsoleMode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
@@ -600,7 +608,7 @@ impl Term for Console {
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
+    fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
         if !self.stdin_isatty {
             Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -655,15 +663,18 @@ impl Term for Console {
             None
         };
 
-        Ok(ConsoleMode {
-            original_stdin_mode,
-            stdin_handle: self.stdin_handle,
-            original_stdstream_mode,
-            stdstream_handle: self.stdstream_handle,
-        })
+        Ok((
+            ConsoleMode {
+                original_stdin_mode,
+                stdin_handle: self.stdin_handle,
+                original_stdstream_mode,
+                stdstream_handle: self.stdstream_handle,
+            },
+            (),
+        ))
     }
 
-    fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
+    fn create_reader(&self, _: &Config, _: ConsoleKeyMap) -> Result<ConsoleRawReader> {
         ConsoleRawReader::create()
     }
 

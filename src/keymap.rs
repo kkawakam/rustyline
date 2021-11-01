@@ -45,11 +45,11 @@ pub enum Cmd {
     EndOfFile,
     /// end-of-history
     EndOfHistory,
-    /// forward-search-history
+    /// forward-search-history (incremental search)
     ForwardSearchHistory,
-    /// history-search-backward
+    /// history-search-backward (common prefix search)
     HistorySearchBackward,
-    /// history-search-forward
+    /// history-search-forward (common prefix search)
     HistorySearchForward,
     /// Indent current line
     Indent(Movement),
@@ -79,7 +79,7 @@ pub enum Cmd {
     ReplaceChar(RepeatCount, char),
     /// vi-change-to, vi-substitute
     Replace(Movement, Option<String>),
-    /// reverse-search-history
+    /// reverse-search-history (incremental search)
     ReverseSearchHistory,
     /// self-insert
     SelfInsert(RepeatCount, char),

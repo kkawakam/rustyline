@@ -7,11 +7,6 @@ use crate::line_buffer::LineBuffer;
 use crate::{Context, Result};
 use memchr::memchr;
 
-// TODO: let the implementers choose/find word boundaries ???
-// (line, pos) is like (rl_line_buffer, rl_point) to make contextual completion
-// ("select t.na| from tbl as t")
-// TODO: make &self &mut self ???
-
 /// A completion candidate.
 pub trait Candidate {
     /// Text to display when listing alternatives.
@@ -69,10 +64,15 @@ impl Candidate for Pair {
     }
 }
 
+// TODO: let the implementers customize how the candidate(s) are displayed
+// https://github.com/kkawakam/rustyline/issues/302
+
 /// To be called for tab-completion.
 pub trait Completer {
     /// Specific completion candidate.
     type Candidate: Candidate;
+
+    // TODO: let the implementers choose/find word boundaries ??? => Lexer
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the start position and the completion candidates for the
@@ -80,7 +80,7 @@ pub trait Completer {
     ///
     /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
     fn complete(
-        &self,
+        &self, // FIXME should be `&mut self`
         line: &str,
         pos: usize,
         ctx: &Context<'_>,

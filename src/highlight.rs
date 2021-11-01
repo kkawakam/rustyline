@@ -42,7 +42,7 @@ pub trait Highlighter {
     /// Currently, used only with `CompletionType::List`.
     fn highlight_candidate<'c>(
         &self,
-        candidate: &'c str,
+        candidate: &'c str, // FIXME should be Completer::Candidate
         completion: CompletionType,
     ) -> Cow<'c, str> {
         let _ = completion;
@@ -93,6 +93,8 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
 
 const OPENS: &[u8; 3] = b"{[(";
 const CLOSES: &[u8; 3] = b"}])";
+
+/// TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.
 #[derive(Default)]

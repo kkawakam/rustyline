@@ -1,5 +1,7 @@
 //! Completion API
+use searchpath::search_path;
 use std::borrow::Cow::{self, Borrowed, Owned};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{self, Path};
 
@@ -146,6 +148,18 @@ pub struct FilenameCompleter {
     double_quotes_special_chars: &'static [u8],
 }
 
+/// A `Completer` for binaries in path.
+pub struct BinCompleter {
+    break_chars: &'static [u8],
+    double_quotes_special_chars: &'static [u8],
+}
+
+/// A `Completer` for binaries in path and filenames, like a shell.
+pub struct ShellCompleter {
+    break_chars: &'static [u8],
+    double_quotes_special_chars: &'static [u8],
+}
+
 const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 
 cfg_if::cfg_if! {
@@ -183,6 +197,77 @@ pub enum Quote {
     Single,
     /// No quote
     None,
+}
+
+impl ShellCompleter {
+    /// Constructor
+    pub fn new() -> Self {
+        Self {
+            break_chars: &DEFAULT_BREAK_CHARS,
+            double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
+        }
+    }
+
+    /// Takes the currently edited `line` with the cursor `pos`ition and
+    /// returns the start position and the completion candidates for the
+    /// partial path to be completed.
+    pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
+        let (start, path, escaped_path, esc_char, break_chars, quote) =
+            if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
+                let start = idx + 1;
+                if quote == Quote::Double {
+                    (
+                        start,
+                        unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR),
+                        Borrowed(&line[..pos]),
+                        DOUBLE_QUOTES_ESCAPE_CHAR,
+                        &self.double_quotes_special_chars,
+                        quote,
+                    )
+                } else {
+                    (
+                        start,
+                        Borrowed(&line[start..pos]),
+                        Borrowed(&line[..pos]),
+                        None,
+                        &self.break_chars,
+                        quote,
+                    )
+                }
+            } else {
+                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, self.break_chars);
+                (
+                    start,
+                    unescape(path, ESCAPE_CHAR),
+                    Borrowed(path),
+                    ESCAPE_CHAR,
+                    &self.break_chars,
+                    Quote::None,
+                )
+            };
+        let mut matches = if should_complete_executable(&path, &escaped_path, line, pos) {
+            bin_complete(&path, esc_char, break_chars, quote)
+        } else {
+            filename_complete(&path, esc_char, break_chars, quote)
+        };
+        #[allow(clippy::unnecessary_sort_by)]
+        matches.sort_by(|a, b| a.display().cmp(b.display()));
+        Ok((start, matches))
+    }
+}
+
+impl Default for ShellCompleter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Completer for ShellCompleter {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        self.complete_path(line, pos)
+    }
 }
 
 impl FilenameCompleter {
@@ -242,6 +327,99 @@ impl Completer for FilenameCompleter {
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
         self.complete_path(line, pos)
     }
+}
+
+impl BinCompleter {
+    /// Constructor
+    pub fn new() -> Self {
+        Self {
+            break_chars: &DEFAULT_BREAK_CHARS,
+            double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
+        }
+    }
+
+    /// S
+    pub fn complete_bin(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
+        // Todo: Fix unused _ temporary
+        let (start, path, esc_char, break_chars, quote) =
+            if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
+                let start = idx + 1;
+                if quote == Quote::Double {
+                    (
+                        start,
+                        unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR),
+                        DOUBLE_QUOTES_ESCAPE_CHAR,
+                        &self.double_quotes_special_chars,
+                        quote,
+                    )
+                } else {
+                    (
+                        start,
+                        Borrowed(&line[start..pos]),
+                        None,
+                        &self.break_chars,
+                        quote,
+                    )
+                }
+            } else {
+                let (start, path) = extract_word(line, pos, ESCAPE_CHAR, self.break_chars);
+                (
+                    start,
+                    unescape(path, ESCAPE_CHAR),
+                    ESCAPE_CHAR,
+                    &self.break_chars,
+                    Quote::None,
+                )
+            };
+        let mut matches = bin_complete(&path, esc_char, break_chars, quote);
+        #[allow(clippy::unnecessary_sort_by)]
+        matches.sort_by(|a, b| a.display().cmp(b.display()));
+        Ok((start, matches))
+    }
+}
+
+impl Default for BinCompleter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Completer for BinCompleter {
+    type Candidate = Pair;
+
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        self.complete_bin(line, pos)
+    }
+}
+
+fn should_complete_executable(path: &str, escaped_path: &str, line: &str, pos: usize) -> bool {
+    if cfg!(windows) {
+        if line.starts_with(".\\") || line.starts_with("\\") {
+            return false;
+        }
+    } else {
+        if line.starts_with("./") || line.starts_with("/") {
+            return false;
+        }
+    }
+    if if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
+        let start = idx + 1;
+        if quote == Quote::Double {
+            unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR)
+        } else {
+            Borrowed(&line[start..pos])
+        }
+    } else {
+        unescape(line, ESCAPE_CHAR)
+    }
+    .starts_with(path)
+    {
+        // Check if the cursor is located inside the executable
+        if pos <= escaped_path.len() {
+            return true;
+        }
+    }
+    false
 }
 
 /// Remove escape char
@@ -386,6 +564,30 @@ fn filename_complete(
             }
         }
     }
+    entries
+}
+
+fn bin_complete(path: &str, esc_char: Option<char>, break_chars: &[u8], quote: Quote) -> Vec<Pair> {
+    let mut entries: Vec<Pair> = Vec::new();
+    let (path_var, path_var_ext) = if cfg!(windows) {
+        ("path", "pathext")
+    } else {
+        ("PATH", "")
+    };
+
+    for file in search_path(
+        path,
+        std::env::var_os(path_var).as_ref().map(OsString::as_os_str),
+        std::env::var_os(path_var_ext)
+            .as_ref()
+            .map(OsString::as_os_str),
+    ) {
+        entries.push(Pair {
+            display: file.clone(),
+            replacement: escape(file, esc_char, break_chars, quote),
+        });
+    }
+
     entries
 }
 

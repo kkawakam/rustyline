@@ -397,10 +397,8 @@ fn should_complete_executable(path: &str, escaped_path: &str, line: &str, pos: u
         if line.starts_with(".\\") || line.starts_with("\\") {
             return false;
         }
-    } else {
-        if line.starts_with("./") || line.starts_with("/") {
-            return false;
-        }
+    } else if line.starts_with("./") || line.starts_with("/") {
+        return false;
     }
     if if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
         let start = idx + 1;

@@ -1,7 +1,6 @@
 //! Completion API
 use searchpath::search_path;
 use std::borrow::Cow::{self, Borrowed, Owned};
-use std::ffi::OsString;
 use std::fs;
 use std::path::{self, Path};
 
@@ -394,10 +393,10 @@ impl Completer for BinCompleter {
 
 fn should_complete_executable(path: &str, escaped_path: &str, line: &str, pos: usize) -> bool {
     if cfg!(windows) {
-        if line.starts_with(".\\") || line.starts_with("\\") {
+        if line.starts_with(".\\") || line.starts_with('\\') {
             return false;
         }
-    } else if line.starts_with("./") || line.starts_with("/") {
+    } else if line.starts_with("./") || line.starts_with('/') {
         return false;
     }
     if if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
@@ -575,10 +574,9 @@ fn bin_complete(path: &str, esc_char: Option<char>, break_chars: &[u8], quote: Q
 
     for file in search_path(
         path,
-        std::env::var_os(path_var).as_ref().map(OsString::as_os_str),
+        std::env::var_os(path_var).as_deref(),
         std::env::var_os(path_var_ext)
-            .as_ref()
-            .map(OsString::as_os_str),
+            .as_deref(),
     ) {
         entries.push(Pair {
             display: file.clone(),

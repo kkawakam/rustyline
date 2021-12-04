@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "9.0.0"
+version = "9.1.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2021"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -51,7 +51,7 @@ doc-comment = "0.3"
 env_logger = { version = "0.9", default-features = false }
 tempfile = "3.1.0"
 assert_matches = "1.2"
-rustyline-derive = { version = "0.5.0", path = "rustyline-derive" }
+rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
 default = ["with-dirs"]

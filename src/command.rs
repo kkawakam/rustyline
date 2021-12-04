@@ -222,7 +222,7 @@ pub fn execute<H: Helper>(
             // Move to end, in case cursor was in the middle of the
             // line, so that next thing application prints goes after
             // the input
-            s.edit_move_to_end()?;
+            s.move_cursor_to_end()?;
             return Err(error::ReadlineError::Interrupted);
         }
         _ => {

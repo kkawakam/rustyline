@@ -130,7 +130,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
-    pub fn edit_move_to_end(&mut self) -> Result<()> {
+    pub fn move_cursor_to_end(&mut self) -> Result<()> {
         if self.layout.cursor == self.layout.end {
             return Ok(());
         }

@@ -130,6 +130,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
+    pub fn move_cursor_to_end(&mut self) -> Result<()> {
+        if self.layout.cursor == self.layout.end {
+            return Ok(());
+        }
+        self.out.move_cursor(self.layout.cursor, self.layout.end)?;
+        self.layout.cursor = self.layout.end;
+        Ok(())
+    }
+
     pub fn move_cursor_at_leftmost(&mut self, rdr: &mut <Terminal as Term>::Reader) -> Result<()> {
         self.out.move_cursor_at_leftmost(rdr)
     }

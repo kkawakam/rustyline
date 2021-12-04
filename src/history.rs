@@ -34,6 +34,12 @@ pub struct SearchResult<'a> {
     pub pos: usize,
 }
 
+/// HistoryEntry: text + timestamp
+/// TODO Make possible to customize how history is stored / loaded.
+/// https://github.com/kkawakam/rustyline/issues/442
+/// https://github.com/kkawakam/rustyline/issues/127
+/// See https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html#prompt_toolkit.history.History abstract methods
+
 /// Current state of the history.
 #[derive(Default)]
 pub struct History {

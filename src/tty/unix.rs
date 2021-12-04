@@ -1000,7 +1000,7 @@ impl Renderer for PosixRenderer {
         }
         let col = read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", col);
-        if col.is_some() && col != Some(1) {
+        if col != Some(1) {
             self.write_and_flush(b"\n")?;
         }
         Ok(())

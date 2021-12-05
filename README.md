@@ -215,6 +215,7 @@ Library            | Lang    | OS     | Term  | Unicode | History       | Comple
 [Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/vi/prog | No        | Yes  | Ux         | History based     |
 [prompt_toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
 [rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/vi/conf | Yes       | Yes  | ?          | No                |
+[reedline][]       | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | No        | Yes  | Ux/Win     | Yes               |
 [replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
 Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
 [termwiz][]        | Rust    | Ux/Win | Any   | ?       | Yes           | any        | Emacs         | No        | No   | Ux/Win     | No                |
@@ -227,6 +228,7 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 [Liner]: https://github.com/redox-os/liner
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [rb-readline]: https://github.com/ConnorAtherton/rb-readline
+[reedline]: https://github.com/nushell/reedline
 [replxx]: https://github.com/AmokHuginnsson/replxx
 [termwiz]: https://github.com/wez/wezterm/tree/master/termwiz
 

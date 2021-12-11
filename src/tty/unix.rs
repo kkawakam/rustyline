@@ -719,7 +719,7 @@ impl RawReader for PosixRawReader {
             };
         }
         let buffer = buffer.replace("\r\n", "\n");
-        let buffer = buffer.replace("\r", "\n");
+        let buffer = buffer.replace('\r', "\n");
         Ok(buffer)
     }
 

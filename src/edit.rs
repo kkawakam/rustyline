@@ -291,7 +291,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 
     fn hint_text(&self) -> Option<&str> {
-        self.hint.as_ref().map(|hint| hint.completion()).flatten()
+        self.hint.as_ref().and_then(|hint| hint.completion())
     }
 
     fn line(&self) -> &str {

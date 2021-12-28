@@ -583,6 +583,8 @@ impl InputState {
                 Movement::ForwardChar(n)
             }),
             E(K::Char('E'), M::CTRL) => Cmd::Move(Movement::EndOfLine),
+            // Don't complete hints when the cursor is not at the end of a line
+            E(K::Char('F'), M::CTRL) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             E(K::Char('F'), M::CTRL) => Cmd::Move(if positive {
                 Movement::ForwardChar(n)
             } else {

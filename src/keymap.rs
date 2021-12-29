@@ -1068,7 +1068,7 @@ impl InputState {
                     } else {
                         Movement::BackwardChar(n)
                     })
-                } else if cfg!(window) || cfg!(test) || !wrt.line().is_empty() {
+                } else if cfg!(windows) || cfg!(test) || !wrt.line().is_empty() {
                     Cmd::EndOfFile
                 } else {
                     Cmd::Unknown

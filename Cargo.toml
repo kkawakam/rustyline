@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "9.1.1"
+version = "9.1.2"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"

@@ -21,12 +21,11 @@ use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{error, Cmd, Result};
 
 const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
 const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
@@ -73,6 +72,10 @@ fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
     check(unsafe { consoleapi::GetConsoleMode(handle, &mut original_mode) })?;
     Ok(original_mode)
 }
+
+type ConsoleKeyMap = ();
+#[cfg(not(test))]
+pub type KeyMap = ConsoleKeyMap;
 
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 #[cfg(not(test))]
@@ -165,6 +168,10 @@ impl RawReader for ConsoleRawReader {
     fn read_pasted_text(&mut self) -> Result<String> {
         Ok(clipboard_win::get_clipboard_string()?)
     }
+
+    fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
+    }
 }
 
 fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
@@ -204,12 +211,11 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 
         let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
             == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-        let alt = key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0;
-        let mut mods = M::NONE;
+        let  mut mods = M::NONE;
         if !alt_gr && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
             mods |= M::CTRL;
         }
-        if alt && !alt_gr {
+        if !alt_gr && key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0{
             mods |= M::ALT;
         }
         if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
@@ -217,8 +223,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         }
 
         let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-        let key = if utf16 == 0 {
-            KeyEvent(
+        let key_code =
                 match i32::from(key_event.wVirtualKeyCode) {
                     winuser::VK_LEFT => K::Left,
                     winuser::VK_RIGHT => K::Right,
@@ -242,14 +247,30 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
                     winuser::VK_F10 => K::F(10),
                     winuser::VK_F11 => K::F(11),
                     winuser::VK_F12 => K::F(12),
-                    // winuser::VK_BACK is correctly handled because the key_event.UnicodeChar
-                    // isalso set.
-                    _ => continue,
-                },
-                mods,
-            )
+                    winuser::VK_BACK => K::Backspace, // vs Ctrl-h
+                winuser::VK_RETURN => K::Enter,   // vs Ctrl-m
+                winuser::VK_ESCAPE => K::Esc,
+                winuser::VK_TAB => {
+                    if mods.contains(M::SHIFT) {
+                        mods.remove(M::SHIFT);
+                        K::BackTab
+                    } else {
+                        K::Tab // vs Ctrl-i
+                    }
+                    }
+                    _ => {
+                    if utf16 == 0 {
+                        continue;
+                }else {
+                        K::UnknownEscSeq
+                }
+                }
+            };
+            let key = if key_code != K::UnknownEscSeq {
+                KeyEvent(key_code, mods)
+
         } else if utf16 == 27 {
-            KeyEvent(K::Esc, mods)
+            KeyEvent(K::Esc, mods)// FIXME dead code ?
         } else {
             if (0xD800..0xDC00).contains(&utf16) {
                 surrogate = utf16;
@@ -268,7 +289,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             let c = rc?;
             KeyEvent::new(c, mods)
         };
-        debug!(target: "rustyline", "key: {:?}", key);
+        debug!(target: "rustyline", "wVirtualKeyCode: {:#x}, utf16: {:#x}, dwControlKeyState: {:#x} => key: {:?}", key_event.wVirtualKeyCode, utf16, key_event.dwControlKeyState,key);
         return Ok(key);
     }
 }
@@ -598,6 +619,7 @@ impl Console {
 
 impl Term for Console {
     type ExternalPrinter = ExternalPrinter;
+    type KeyMap = ConsoleKeyMap;
     type Mode = ConsoleMode;
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
@@ -664,7 +686,7 @@ impl Term for Console {
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
+    fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
         if !self.stdin_isatty {
             Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -692,7 +714,7 @@ impl Term for Console {
                 mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
                 debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
                 unsafe {
-                    assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                    assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
                 }
             }
             // To enable ANSI colors (Windows 10 only):
@@ -703,7 +725,7 @@ impl Term for Console {
                     mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                     debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
                     unsafe {
-                        assert!(consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0);
+                        assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
                     }
                 } else {
                     debug!(target: "rustyline", "ANSI colors already enabled");
@@ -728,16 +750,18 @@ impl Term for Console {
             }
         }*/
 
-        Ok(ConsoleMode {
+        Ok((ConsoleMode {
             original_stdin_mode,
             stdin_handle: self.stdin_handle,
             original_stdstream_mode,
             stdstream_handle: self.stdstream_handle,
             raw_mode: self.raw_mode.clone(),
-        })
+        },
+            (),
+        ))
     }
 
-    fn create_reader(&self, _: &Config) -> Result<ConsoleRawReader> {
+    fn create_reader(&self, _: &Config, _: ConsoleKeyMap) -> Result<ConsoleRawReader> {
         ConsoleRawReader::create(self.pipe_reader.clone())
     }
 

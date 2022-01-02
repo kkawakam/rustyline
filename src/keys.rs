@@ -33,7 +33,11 @@ impl KeyEvent {
             '\x05' => E(K::Char('E'), mods | M::CTRL),
             '\x06' => E(K::Char('F'), mods | M::CTRL),
             '\x07' => E(K::Char('G'), mods | M::CTRL), // '\a'
-            '\x08' => E(K::Backspace, mods),           // '\b'
+            #[cfg(unix)]
+            '\x08' => E(K::Backspace, mods), // '\b'
+            #[cfg(windows)]
+            '\x08' => E(K::Char('H'), mods | M::CTRL),
+            #[cfg(unix)]
             '\x09' => {
                 // '\t'
                 if mods.contains(M::SHIFT) {
@@ -43,10 +47,15 @@ impl KeyEvent {
                     E(K::Tab, mods)
                 }
             }
+            #[cfg(windows)]
+            '\x09' => E(K::Char('I'), mods | M::CTRL),
             '\x0a' => E(K::Char('J'), mods | M::CTRL), // '\n' (10)
             '\x0b' => E(K::Char('K'), mods | M::CTRL),
             '\x0c' => E(K::Char('L'), mods | M::CTRL),
+            #[cfg(unix)]
             '\x0d' => E(K::Enter, mods), // '\r' (13)
+            #[cfg(windows)]
+            '\x0d' => E(K::Char('M'), mods | M::CTRL),
             '\x0e' => E(K::Char('N'), mods | M::CTRL),
             '\x0f' => E(K::Char('O'), mods | M::CTRL),
             '\x10' => E(K::Char('P'), mods | M::CTRL),
@@ -188,8 +197,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn from() {
         assert_eq!(E(K::Tab, M::NONE), E::from('\t'));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn from() {
+        assert_eq!(E(K::Char('I'), M::CTRL), E::from('\t'));
     }
 
     #[test]

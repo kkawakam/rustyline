@@ -10,7 +10,7 @@ use unicode_width::UnicodeWidthChar;
 use super::{Context, Helper, Result};
 use crate::highlight::Highlighter;
 use crate::hint::Hint;
-use crate::history::Direction;
+use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
@@ -131,6 +131,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         Ok(())
     }
 
+    pub fn move_cursor_to_end(&mut self) -> Result<()> {
+        if self.layout.cursor == self.layout.end {
+            return Ok(());
+        }
+        self.out.move_cursor(self.layout.cursor, self.layout.end)?;
+        self.layout.cursor = self.layout.end;
+        Ok(())
+    }
+
     pub fn move_cursor_at_leftmost(&mut self, rdr: &mut <Terminal as Term>::Reader) -> Result<()> {
         self.out.move_cursor_at_leftmost(rdr)
     }
@@ -175,9 +184,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn hint(&mut self) {
         if let Some(hinter) = self.helper {
             let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
-            self.hint = hint.map(|val| Box::new(val) as Box<dyn Hint>)
+            self.hint = match hint {
+                Some(val) if !val.display().is_empty() => Some(Box::new(val) as Box<dyn Hint>),
+                _ => None,
+            };
         } else {
-            self.hint = None
+            self.hint = None;
         }
     }
 
@@ -280,7 +292,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 
     fn hint_text(&self) -> Option<&str> {
-        self.hint.as_ref().map(|hint| hint.completion()).flatten()
+        self.hint.as_ref().and_then(|hint| hint.completion())
     }
 
     fn line(&self) -> &str {
@@ -605,30 +617,29 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     // Non-incremental, anchored search
-    pub fn edit_history_search(&mut self, dir: Direction) -> Result<()> {
+    pub fn edit_history_search(&mut self, dir: SearchDirection) -> Result<()> {
         let history = self.ctx.history;
         if history.is_empty() {
             return self.out.beep();
         }
-        if self.ctx.history_index == history.len() && dir == Direction::Forward
-            || self.ctx.history_index == 0 && dir == Direction::Reverse
+        if self.ctx.history_index == history.len() && dir == SearchDirection::Forward
+            || self.ctx.history_index == 0 && dir == SearchDirection::Reverse
         {
             return self.out.beep();
         }
-        if dir == Direction::Reverse {
+        if dir == SearchDirection::Reverse {
             self.ctx.history_index -= 1;
         } else {
             self.ctx.history_index += 1;
         }
-        if let Some(history_index) = history.starts_with(
+        if let Some(sr) = history.starts_with(
             &self.line.as_str()[..self.line.pos()],
             self.ctx.history_index,
             dir,
         ) {
-            self.ctx.history_index = history_index;
-            let buf = history.get(history_index).unwrap();
+            self.ctx.history_index = sr.idx;
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(sr.entry, sr.pos);
             self.changes.borrow_mut().end();
             self.refresh_line()
         } else {

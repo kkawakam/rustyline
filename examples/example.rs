@@ -113,11 +113,11 @@ fn main() -> rustyline::Result<()> {
                 println!("Line: {}", line);
             }
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                println!("Interrupted");
                 break;
             }
             Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
+                println!("Encountered Eof");
                 break;
             }
             Err(err) => {

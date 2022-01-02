@@ -10,8 +10,9 @@ use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{Cmd, Result};
 
+pub type KeyMap = ();
 pub type Mode = ();
 
 impl RawMode for Mode {
@@ -40,6 +41,10 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
     fn read_pasted_text(&mut self) -> Result<String> {
         unimplemented!()
     }
+
+    fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
+    }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
@@ -66,6 +71,10 @@ impl RawReader for IntoIter<KeyEvent> {
 
     fn read_pasted_text(&mut self) -> Result<String> {
         unimplemented!()
+    }
+
+    fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
     }
 }
 
@@ -161,6 +170,7 @@ pub struct DummyTerminal {
 
 impl Term for DummyTerminal {
     type ExternalPrinter = DummyExternalPrinter;
+    type KeyMap = KeyMap;
     type Mode = Mode;
     type Reader = IntoIter<KeyEvent>;
     type Writer = Sink;
@@ -202,11 +212,11 @@ impl Term for DummyTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<Mode> {
-        Ok(())
+    fn enable_raw_mode(&mut self) -> Result<(Mode, KeyMap)> {
+        Ok(((), ()))
     }
 
-    fn create_reader(&self, _: &Config) -> Result<IntoIter<KeyEvent>> {
+    fn create_reader(&self, _: &Config, _: KeyMap) -> Result<Self::Reader> {
         Ok(self.keys.clone().into_iter())
     }
 

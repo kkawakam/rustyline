@@ -700,9 +700,7 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != ::nix::errno::Errno::EINTR
-                    || SIGWINCH.load(Ordering::Relaxed)
-                {
+                if err != ::nix::errno::Errno::EINTR || SIGWINCH.load(Ordering::Relaxed) {
                     return Err(err.into());
                 } else {
                     continue;
@@ -1264,18 +1262,23 @@ impl Term for PosixTerminal {
             }
         }
 
-        Ok((PosixMode {
-            termios: original_mode,
-            out,
-            raw_mode: self.raw_mode.clone(),
-        },
+        Ok((
+            PosixMode {
+                termios: original_mode,
+                out,
+                raw_mode: self.raw_mode.clone(),
+            },
             key_map,
         ))
     }
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> Result<PosixRawReader> {
-        Ok(PosixRawReader::new(config, key_map, self.pipe_reader.clone()))
+        Ok(PosixRawReader::new(
+            config,
+            key_map,
+            self.pipe_reader.clone(),
+        ))
     }
 
     fn create_writer(&self) -> PosixRenderer {

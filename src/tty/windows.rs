@@ -211,11 +211,11 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 
         let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
             == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
-        let  mut mods = M::NONE;
+        let mut mods = M::NONE;
         if !alt_gr && key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED) != 0 {
             mods |= M::CTRL;
         }
-        if !alt_gr && key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0{
+        if !alt_gr && key_event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED) != 0 {
             mods |= M::ALT;
         }
         if key_event.dwControlKeyState & SHIFT_PRESSED != 0 {
@@ -223,54 +223,52 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         }
 
         let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-        let key_code =
-                match i32::from(key_event.wVirtualKeyCode) {
-                    winuser::VK_LEFT => K::Left,
-                    winuser::VK_RIGHT => K::Right,
-                    winuser::VK_UP => K::Up,
-                    winuser::VK_DOWN => K::Down,
-                    winuser::VK_DELETE => K::Delete,
-                    winuser::VK_HOME => K::Home,
-                    winuser::VK_END => K::End,
-                    winuser::VK_PRIOR => K::PageUp,
-                    winuser::VK_NEXT => K::PageDown,
-                    winuser::VK_INSERT => K::Insert,
-                    winuser::VK_F1 => K::F(1),
-                    winuser::VK_F2 => K::F(2),
-                    winuser::VK_F3 => K::F(3),
-                    winuser::VK_F4 => K::F(4),
-                    winuser::VK_F5 => K::F(5),
-                    winuser::VK_F6 => K::F(6),
-                    winuser::VK_F7 => K::F(7),
-                    winuser::VK_F8 => K::F(8),
-                    winuser::VK_F9 => K::F(9),
-                    winuser::VK_F10 => K::F(10),
-                    winuser::VK_F11 => K::F(11),
-                    winuser::VK_F12 => K::F(12),
-                    winuser::VK_BACK => K::Backspace, // vs Ctrl-h
-                winuser::VK_RETURN => K::Enter,   // vs Ctrl-m
-                winuser::VK_ESCAPE => K::Esc,
-                winuser::VK_TAB => {
-                    if mods.contains(M::SHIFT) {
-                        mods.remove(M::SHIFT);
-                        K::BackTab
-                    } else {
-                        K::Tab // vs Ctrl-i
-                    }
-                    }
-                    _ => {
-                    if utf16 == 0 {
-                        continue;
-                }else {
-                        K::UnknownEscSeq
+        let key_code = match i32::from(key_event.wVirtualKeyCode) {
+            winuser::VK_LEFT => K::Left,
+            winuser::VK_RIGHT => K::Right,
+            winuser::VK_UP => K::Up,
+            winuser::VK_DOWN => K::Down,
+            winuser::VK_DELETE => K::Delete,
+            winuser::VK_HOME => K::Home,
+            winuser::VK_END => K::End,
+            winuser::VK_PRIOR => K::PageUp,
+            winuser::VK_NEXT => K::PageDown,
+            winuser::VK_INSERT => K::Insert,
+            winuser::VK_F1 => K::F(1),
+            winuser::VK_F2 => K::F(2),
+            winuser::VK_F3 => K::F(3),
+            winuser::VK_F4 => K::F(4),
+            winuser::VK_F5 => K::F(5),
+            winuser::VK_F6 => K::F(6),
+            winuser::VK_F7 => K::F(7),
+            winuser::VK_F8 => K::F(8),
+            winuser::VK_F9 => K::F(9),
+            winuser::VK_F10 => K::F(10),
+            winuser::VK_F11 => K::F(11),
+            winuser::VK_F12 => K::F(12),
+            winuser::VK_BACK => K::Backspace, // vs Ctrl-h
+            winuser::VK_RETURN => K::Enter,   // vs Ctrl-m
+            winuser::VK_ESCAPE => K::Esc,
+            winuser::VK_TAB => {
+                if mods.contains(M::SHIFT) {
+                    mods.remove(M::SHIFT);
+                    K::BackTab
+                } else {
+                    K::Tab // vs Ctrl-i
                 }
+            }
+            _ => {
+                if utf16 == 0 {
+                    continue;
+                } else {
+                    K::UnknownEscSeq
                 }
-            };
-            let key = if key_code != K::UnknownEscSeq {
-                KeyEvent(key_code, mods)
-
+            }
+        };
+        let key = if key_code != K::UnknownEscSeq {
+            KeyEvent(key_code, mods)
         } else if utf16 == 27 {
-            KeyEvent(K::Esc, mods)// FIXME dead code ?
+            KeyEvent(K::Esc, mods) // FIXME dead code ?
         } else {
             if (0xD800..0xDC00).contains(&utf16) {
                 surrogate = utf16;
@@ -750,13 +748,14 @@ impl Term for Console {
             }
         }*/
 
-        Ok((ConsoleMode {
-            original_stdin_mode,
-            stdin_handle: self.stdin_handle,
-            original_stdstream_mode,
-            stdstream_handle: self.stdstream_handle,
-            raw_mode: self.raw_mode.clone(),
-        },
+        Ok((
+            ConsoleMode {
+                original_stdin_mode,
+                stdin_handle: self.stdin_handle,
+                original_stdstream_mode,
+                stdstream_handle: self.stdstream_handle,
+                raw_mode: self.raw_mode.clone(),
+            },
             (),
         ))
     }

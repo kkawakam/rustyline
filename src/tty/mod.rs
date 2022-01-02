@@ -8,7 +8,7 @@ use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{Cmd, Result};
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -25,6 +25,8 @@ pub trait RawReader {
     fn next_char(&mut self) -> Result<char>;
     /// Bracketed paste
     fn read_pasted_text(&mut self) -> Result<String>;
+    /// Check if `key` is bound to a peculiar command
+    fn find_binding(&self, key: &KeyEvent) -> Option<Cmd>;
     /// Poll input
     fn poll(&mut self, timeout: Duration) -> Result<bool>;
 }
@@ -202,6 +204,7 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
 
 /// Terminal contract
 pub trait Term {
+    type KeyMap;
     type Reader: RawReader; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
@@ -221,9 +224,9 @@ pub trait Term {
     /// check if output stream is connected to a terminal.
     fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<Self::Mode>;
+    fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config) -> Result<Self::Reader>;
+    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
 }

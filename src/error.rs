@@ -14,9 +14,9 @@ use std::io;
 pub enum ReadlineError {
     /// I/O Error
     Io(io::Error),
-    /// EOF (Ctrl-D)
+    /// EOF (VEOF / Ctrl-D)
     Eof,
-    /// Ctrl-C
+    /// Interrupt signal (VINTR / VQUIT / Ctrl-C)
     Interrupted,
     /// Chars Error
     #[cfg(unix)]

@@ -42,6 +42,7 @@ History
 each line input session.
 - [X] append_history
 - [ ] history_truncate_file
+- [ ] custom persistent storage
 
 Input
 - [ ] Password input (#58) (https://github.com/conradkdotcom/rpassword) (https://github.com/antirez/linenoise/issues/125)

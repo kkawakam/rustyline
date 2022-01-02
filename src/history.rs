@@ -1,5 +1,6 @@
 //! History API
 
+use fd_lock::RwLock;
 use log::{debug, warn};
 use std::collections::vec_deque;
 use std::collections::VecDeque;
@@ -15,12 +16,29 @@ use crate::config::{Config, HistoryDuplicates};
 
 /// Search direction
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
+pub enum SearchDirection {
     /// Search history forward
     Forward,
     /// Search history backward
     Reverse,
 }
+
+/// History search result
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SearchResult<'a> {
+    /// history entry
+    pub entry: &'a str,
+    /// history index
+    pub idx: usize,
+    /// match position in `entry`
+    pub pos: usize,
+}
+
+// HistoryEntry: text + timestamp
+// TODO Make possible to customize how history is stored / loaded.
+// https://github.com/kkawakam/rustyline/issues/442
+// https://github.com/kkawakam/rustyline/issues/127
+// See https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html#prompt_toolkit.history.History abstract methods
 
 /// Current state of the history.
 #[derive(Default)]
@@ -139,9 +157,11 @@ impl History {
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        self.save_to(&file, false)?;
+        let mut lock = RwLock::new(file);
+        let lock_guard = lock.write()?;
+        self.save_to(&lock_guard, false)?;
         self.new_entries = 0;
-        self.update_path(path, self.len())
+        self.update_path(path, &lock_guard, self.len())
     }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
@@ -179,7 +199,6 @@ impl History {
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use fd_lock::FdLock;
         use std::io::Seek;
 
         if self.is_empty() || self.new_entries == 0 {
@@ -188,9 +207,13 @@ impl History {
         let path = path.as_ref();
         if !path.exists() || self.new_entries == self.max_len {
             return self.save(path);
-        } else if self.can_just_append(path)? {
-            let file = OpenOptions::new().append(true).open(path)?;
-            self.save_to(&file, true)?;
+        }
+        let file = OpenOptions::new().write(true).read(true).open(path)?;
+        let mut lock = RwLock::new(file);
+        let mut lock_guard = lock.write()?;
+        if self.can_just_append(path, &lock_guard)? {
+            lock_guard.seek(SeekFrom::End(0))?;
+            self.save_to(&lock_guard, true)?;
             let size = self
                 .path_info
                 .as_ref()
@@ -198,11 +221,8 @@ impl History {
                 .2
                 .saturating_add(self.new_entries);
             self.new_entries = 0;
-            return self.update_path(path, size);
+            return self.update_path(path, &lock_guard, size);
         }
-        let file = OpenOptions::new().write(true).read(true).open(path)?;
-        let mut lock = FdLock::new(file);
-        let mut lock_guard = lock.lock()?;
         // we may need to truncate file before appending new entries
         let mut other = Self {
             entries: VecDeque::new(),
@@ -218,9 +238,9 @@ impl History {
             other.add(entry);
         }
         lock_guard.seek(SeekFrom::Start(0))?;
+        lock_guard.set_len(0)?; // if new size < old size
         other.save_to(&lock_guard, false)?;
-        drop(lock_guard);
-        self.update_path(path, other.len())?;
+        self.update_path(path, &lock_guard, other.len())?;
         self.new_entries = 0;
         Ok(())
     }
@@ -232,9 +252,11 @@ impl History {
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         let path = path.as_ref();
         let file = File::open(path)?;
+        let lock = RwLock::new(file);
+        let lock_guard = lock.read()?;
         let len = self.len();
-        if self.load_from(&file)? {
-            self.update_path(path, self.len() - len)
+        if self.load_from(&lock_guard)? {
+            self.update_path(path, &lock_guard, self.len() - len)
         } else {
             // discard old version on next save
             self.path_info = None;
@@ -256,6 +278,7 @@ impl History {
                 self.add(line);
             }
         }
+        let mut appendable = v2;
         for line in lines {
             let mut line = line?;
             if line.is_empty() {
@@ -297,14 +320,14 @@ impl History {
                     line = s;
                 }
             }
-            self.add(line); // TODO truncate to MAX_LINE
+            appendable &= self.add(line); // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
-        Ok(v2)
+        Ok(appendable)
     }
 
-    fn update_path(&mut self, path: &Path, size: usize) -> Result<()> {
-        let modified = File::open(&path)?.metadata()?.modified()?;
+    fn update_path(&mut self, path: &Path, file: &File, size: usize) -> Result<()> {
+        let modified = file.metadata()?.modified()?;
         if let Some(PathInfo(
             ref mut previous_path,
             ref mut previous_modified,
@@ -323,7 +346,7 @@ impl History {
         Ok(())
     }
 
-    fn can_just_append(&self, path: &Path) -> Result<bool> {
+    fn can_just_append(&self, path: &Path, file: &File) -> Result<bool> {
         if let Some(PathInfo(ref previous_path, ref previous_modified, ref previous_size)) =
             self.path_info
         {
@@ -331,7 +354,7 @@ impl History {
                 debug!(target: "rustyline", "cannot append: {:?} <> {:?}", previous_path, path);
                 return Ok(false);
             }
-            let modified = File::open(&path)?.metadata()?.modified()?;
+            let modified = file.metadata()?.modified()?;
             if *previous_modified != modified
                 || self.max_len <= *previous_size
                 || self.max_len < (*previous_size).saturating_add(self.new_entries)
@@ -361,37 +384,107 @@ impl History {
     /// Return None if no entry contains `term` between [start, len -1] for
     /// forward search
     /// or between [0, start] for reverse search.
-    pub fn search(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
-        let test = |entry: &String| entry.contains(term);
-        self.search_match(term, start, dir, test)
+    pub fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| entry.find(term);
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| re.find(entry).map(|m| m.start());
+                self.search_match(term, start, dir, test)
+            } else {
+                None
+            }
+        }
     }
 
     /// Anchored search
-    pub fn starts_with(&self, term: &str, start: usize, dir: Direction) -> Option<usize> {
-        let test = |entry: &String| entry.starts_with(term);
-        self.search_match(term, start, dir, test)
+    pub fn starts_with(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Option<SearchResult> {
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| {
+                if entry.starts_with(term) {
+                    Some(term.len())
+                } else {
+                    None
+                }
+            };
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| {
+                    re.find(entry)
+                        .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                        .map(|m| m.end())
+                };
+                self.search_match(term, start, dir, test)
+            } else {
+                None
+            }
+        }
     }
 
-    fn search_match<F>(&self, term: &str, start: usize, dir: Direction, test: F) -> Option<usize>
+    fn search_match<F>(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+        test: F,
+    ) -> Option<SearchResult>
     where
-        F: Fn(&String) -> bool,
+        F: Fn(&str) -> Option<usize>,
     {
         if term.is_empty() || start >= self.len() {
             return None;
         }
         match dir {
-            Direction::Reverse => {
-                let index = self
+            SearchDirection::Reverse => {
+                for (idx, entry) in self
                     .entries
                     .iter()
                     .rev()
                     .skip(self.entries.len() - 1 - start)
-                    .position(test);
-                index.map(|index| start - index)
+                    .enumerate()
+                {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: start - idx,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
             }
-            Direction::Forward => {
-                let index = self.entries.iter().skip(start).position(test);
-                index.map(|index| index + start)
+            SearchDirection::Forward => {
+                for (idx, entry) in self.entries.iter().skip(start).enumerate() {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: idx + start,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
             }
         }
     }
@@ -471,7 +564,7 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{Direction, History};
+    use super::{History, SearchDirection, SearchResult};
     use crate::config::Config;
     use crate::Result;
 
@@ -516,12 +609,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `open` not available when isolation is enabled
     fn save_windows_path() -> Result<()> {
         let path = "cd source\\repos\\forks\\nushell\\";
         check_save(path)
     }
 
-    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn check_save(line: &str) -> Result<()> {
         let mut history = init();
         assert!(history.add(line));
@@ -588,26 +681,111 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
+    fn truncate() -> Result<()> {
+        let tf = tempfile::NamedTempFile::new()?;
+
+        let config = Config::builder().history_ignore_dups(false).build();
+        let mut history = History::with_config(config);
+        history.add("line1");
+        history.add("line1");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        history.add("l");
+        history.append(tf.path())?;
+
+        let mut history = History::new();
+        history.load(tf.path())?;
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.entries[1], "l");
+
+        tf.close()?;
+        Ok(())
+    }
+
+    #[test]
     fn search() {
         let history = init();
-        assert_eq!(None, history.search("", 0, Direction::Forward));
-        assert_eq!(None, history.search("none", 0, Direction::Forward));
-        assert_eq!(None, history.search("line", 3, Direction::Forward));
+        assert_eq!(None, history.search("", 0, SearchDirection::Forward));
+        assert_eq!(None, history.search("none", 0, SearchDirection::Forward));
+        assert_eq!(None, history.search("line", 3, SearchDirection::Forward));
 
-        assert_eq!(Some(0), history.search("line", 0, Direction::Forward));
-        assert_eq!(Some(1), history.search("line", 1, Direction::Forward));
-        assert_eq!(Some(2), history.search("line3", 1, Direction::Forward));
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: history.get(0).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 0, SearchDirection::Forward)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: history.get(1).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 1, SearchDirection::Forward)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 0
+            }),
+            history.search("line3", 1, SearchDirection::Forward)
+        );
     }
 
     #[test]
     fn reverse_search() {
         let history = init();
-        assert_eq!(None, history.search("", 2, Direction::Reverse));
-        assert_eq!(None, history.search("none", 2, Direction::Reverse));
-        assert_eq!(None, history.search("line", 3, Direction::Reverse));
+        assert_eq!(None, history.search("", 2, SearchDirection::Reverse));
+        assert_eq!(None, history.search("none", 2, SearchDirection::Reverse));
+        assert_eq!(None, history.search("line", 3, SearchDirection::Reverse));
 
-        assert_eq!(Some(2), history.search("line", 2, Direction::Reverse));
-        assert_eq!(Some(1), history.search("line", 1, Direction::Reverse));
-        assert_eq!(Some(0), history.search("line1", 1, Direction::Reverse));
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 2, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: history.get(1).unwrap(),
+                pos: 0
+            }),
+            history.search("line", 1, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: history.get(0).unwrap(),
+                pos: 0
+            }),
+            history.search("line1", 1, SearchDirection::Reverse)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "case_insensitive_history_search")]
+    fn anchored_search() {
+        let history = init();
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: history.get(2).unwrap(),
+                pos: 4
+            }),
+            history.starts_with("LiNe", 2, SearchDirection::Reverse)
+        );
+        assert_eq!(
+            None,
+            history.starts_with("iNe", 2, SearchDirection::Reverse)
+        );
     }
 }

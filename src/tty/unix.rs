@@ -7,22 +7,23 @@ use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use buf_redux::BufReader;
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios;
-use nix::sys::termios::SetArg;
+use nix::sys::termios::{SetArg, SpecialCharacterIndices as SCI, Termios};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
-use crate::error;
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::Result;
+use crate::{error, Cmd, Result};
+use std::collections::HashMap;
 
 const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
@@ -58,14 +59,14 @@ fn get_win_size<T: AsRawFd + ?Sized>(fileno: &T) -> (usize, usize) {
                 // In linux pseudo-terminals are created with dimensions of
                 // zero. If host application didn't initialize the correct
                 // size before start we treat zero size as 80 columns and
-                // inifinite rows
+                // infinite rows
                 let cols = if size.ws_col == 0 {
                     80
                 } else {
                     size.ws_col as usize
                 };
                 let rows = if size.ws_row == 0 {
-                    usize::max_value()
+                    usize::MAX
                 } else {
                     size.ws_row as usize
                 };
@@ -96,6 +97,10 @@ fn is_unsupported_term() -> bool {
 fn is_a_tty(fd: RawFd) -> bool {
     unsafe { libc::isatty(fd) != 0 }
 }
+
+pub type PosixKeyMap = HashMap<KeyEvent, Cmd>;
+#[cfg(not(test))]
+pub type KeyMap = PosixKeyMap;
 
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
@@ -147,11 +152,12 @@ impl Read for StdinRaw {
 
 /// Console input reader
 pub struct PosixRawReader {
-    stdin: StdinRaw,
+    stdin: BufReader<StdinRaw>,
     timeout_ms: i32,
     buf: [u8; 1],
     parser: Parser,
     receiver: Utf8,
+    key_map: PosixKeyMap,
 }
 
 struct Utf8 {
@@ -186,9 +192,9 @@ const RXVT_CTRL: char = '\x1e';
 const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
-    fn new(config: &Config) -> Self {
+    fn new(config: &Config, key_map: PosixKeyMap) -> Self {
         Self {
-            stdin: StdinRaw {},
+            stdin: BufReader::with_capacity(1024, StdinRaw {}),
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
             parser: Parser::new(),
@@ -196,6 +202,7 @@ impl PosixRawReader {
                 c: None,
                 valid: true,
             },
+            key_map,
         }
     }
 
@@ -229,7 +236,7 @@ impl PosixRawReader {
             // key, but has a wrinkle in that `ESC ESC` without anything
             // following should be interpreted as the the escape key.
             //
-            // We hanlde this by polling to see if there's anything coming
+            // We handle this by polling to see if there's anything coming
             // within our timeout, and if so, recursing once, but adding alt to
             // what we read.
             if !allow_recurse {
@@ -640,11 +647,15 @@ impl PosixRawReader {
     }
 
     fn poll_input(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+        let n = self.stdin.buf_len();
+        if n > 0 {
+            return Ok(n as i32);
+        }
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
             Ok(_) => r,
-            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+            Err(nix::errno::Errno::EINTR) => {
                 if SIGWINCH.load(Ordering::Relaxed) {
                     r
                 } else {
@@ -662,6 +673,9 @@ impl RawReader for PosixRawReader {
 
         let mut key = KeyEvent::new(c, M::NONE);
         if key == E::ESC {
+            if self.stdin.buf_len() > 0 {
+                debug!(target: "rustyline", "read buffer {:?}", self.stdin.buffer());
+            }
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
             } else {
@@ -679,7 +693,7 @@ impl RawReader for PosixRawReader {
                 Err(e) => return Err(e.into()),
             }
         }
-        debug!(target: "rustyline", "key: {:?}", key);
+        debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);
         Ok(key)
     }
 
@@ -715,8 +729,16 @@ impl RawReader for PosixRawReader {
             };
         }
         let buffer = buffer.replace("\r\n", "\n");
-        let buffer = buffer.replace("\r", "\n");
+        let buffer = buffer.replace('\r', "\n");
         Ok(buffer)
+    }
+
+    fn find_binding(&self, key: &KeyEvent) -> Option<Cmd> {
+        let cmd = self.key_map.get(key).cloned();
+        if let Some(ref cmd) = cmd {
+            debug!(target: "rustyline", "terminal key binding: {:?} => {:?}", key, cmd);
+        }
+        cmd
     }
 
     fn poll(&mut self, timeout: Duration) -> Result<bool> {
@@ -994,7 +1016,7 @@ impl Renderer for PosixRenderer {
         }
         let col = read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", col);
-        if col.is_some() && col != Some(1) {
+        if col != Some(1) {
             self.write_and_flush(b"\n")?;
         }
         Ok(())
@@ -1037,6 +1059,13 @@ extern "C" fn sigwinch_handler(_: libc::c_int) {
     debug!(target: "rustyline", "SIGWINCH");
 }
 
+fn map_key(key_map: &mut HashMap<KeyEvent, Cmd>, raw: &Termios, index: SCI, name: &str, cmd: Cmd) {
+    let cc = char::from(raw.control_chars[index as usize]);
+    let key = KeyEvent::new(cc, M::NONE);
+    debug!(target: "rustyline", "{}: {:?}", name, key);
+    key_map.insert(key, cmd);
+}
+
 #[cfg(not(test))]
 pub type Terminal = PosixTerminal;
 
@@ -1063,6 +1092,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type KeyMap = PosixKeyMap;
     type Mode = PosixMode;
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
@@ -1109,11 +1139,11 @@ impl Term for PosixTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<Self::Mode> {
+    fn enable_raw_mode(&mut self) -> Result<(Self::Mode, PosixKeyMap)> {
         use nix::errno::Errno::ENOTTY;
-        use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, SpecialCharacterIndices};
+        use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
         if !self.stdin_isatty {
-            return Err(nix::Error::from_errno(ENOTTY).into());
+            return Err(ENOTTY.into());
         }
         let original_mode = termios::tcgetattr(STDIN_FILENO)?;
         let mut raw = original_mode.clone();
@@ -1133,8 +1163,15 @@ impl Term for PosixTerminal {
         // disable echoing, canonical mode, extended input processing and signals
         raw.local_flags &=
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
-        raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1; // One character-at-a-time input
-        raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0; // with blocking read
+        raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
+        raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
+
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
+        map_key(&mut key_map, &raw, SCI::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, &raw, SCI::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
+
         termios::tcsetattr(STDIN_FILENO, SetArg::TCSADRAIN, &raw)?;
 
         // enable bracketed paste
@@ -1146,15 +1183,18 @@ impl Term for PosixTerminal {
         } else {
             Some(self.stream_type)
         };
-        Ok(PosixMode {
-            termios: original_mode,
-            out,
-        })
+        Ok((
+            PosixMode {
+                termios: original_mode,
+                out,
+            },
+            key_map,
+        ))
     }
 
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config) -> Result<PosixRawReader> {
-        Ok(PosixRawReader::new(config))
+    fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> Result<PosixRawReader> {
+        Ok(PosixRawReader::new(config, key_map))
     }
 
     fn create_writer(&self) -> PosixRenderer {

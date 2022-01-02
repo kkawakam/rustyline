@@ -52,6 +52,8 @@ pub(crate) trait ChangeListener: DeleteListener {
     fn replace(&mut self, idx: usize, old: &str, new: &str);
 }
 
+// TODO split / cache lines ?
+
 /// Represent the current input (text and cursor position).
 ///
 /// The methods do text manipulations or/and cursor movements.

@@ -211,7 +211,7 @@ pub enum BellStyle {
     Visible,
 }
 
-/// `Audible` by default on unix (overriden by current Terminal settings).
+/// `Audible` by default on unix (overridden by current Terminal settings).
 /// `None` on windows.
 impl Default for BellStyle {
     #[cfg(any(windows, target_arch = "wasm32"))]
@@ -301,6 +301,7 @@ impl Builder {
     }
 
     /// Set the maximum length for the history.
+    #[must_use]
     pub fn max_history_size(mut self, max_size: usize) -> Self {
         self.set_max_history_size(max_size);
         self
@@ -310,6 +311,7 @@ impl Builder {
     /// in the history list.
     ///
     /// By default, they are ignored.
+    #[must_use]
     pub fn history_ignore_dups(mut self, yes: bool) -> Self {
         self.set_history_ignore_dups(yes);
         self
@@ -319,12 +321,14 @@ impl Builder {
     /// the history list.
     ///
     /// By default, they are saved.
+    #[must_use]
     pub fn history_ignore_space(mut self, yes: bool) -> Self {
         self.set_history_ignore_space(yes);
         self
     }
 
     /// Set `completion_type`.
+    #[must_use]
     pub fn completion_type(mut self, completion_type: CompletionType) -> Self {
         self.set_completion_type(completion_type);
         self
@@ -332,6 +336,7 @@ impl Builder {
 
     /// The number of possible completions that determines when the user is
     /// asked whether the list of possibilities should be displayed.
+    #[must_use]
     pub fn completion_prompt_limit(mut self, completion_prompt_limit: usize) -> Self {
         self.set_completion_prompt_limit(completion_prompt_limit);
         self
@@ -342,12 +347,14 @@ impl Builder {
     /// sequence.
     /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another
     /// byte.
+    #[must_use]
     pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Self {
         self.set_keyseq_timeout(keyseq_timeout_ms);
         self
     }
 
     /// Choose between Emacs or Vi mode.
+    #[must_use]
     pub fn edit_mode(mut self, edit_mode: EditMode) -> Self {
         self.set_edit_mode(edit_mode);
         self
@@ -356,12 +363,14 @@ impl Builder {
     /// Tell if lines are automatically added to the history.
     ///
     /// By default, they are not.
+    #[must_use]
     pub fn auto_add_history(mut self, yes: bool) -> Self {
         self.set_auto_add_history(yes);
         self
     }
 
     /// Set bell style: beep, flash or nothing.
+    #[must_use]
     pub fn bell_style(mut self, bell_style: BellStyle) -> Self {
         self.set_bell_style(bell_style);
         self
@@ -370,6 +379,7 @@ impl Builder {
     /// Forces colorization on or off.
     ///
     /// By default, colorization is on except if stdout is not a TTY.
+    #[must_use]
     pub fn color_mode(mut self, color_mode: ColorMode) -> Self {
         self.set_color_mode(color_mode);
         self
@@ -378,6 +388,7 @@ impl Builder {
     /// Whether to use stdout or stderr.
     ///
     /// Be default, use stdout
+    #[must_use]
     pub fn output_stream(mut self, stream: OutputStreamType) -> Self {
         self.set_output_stream(stream);
         self
@@ -386,6 +397,7 @@ impl Builder {
     /// Horizontal space taken by a tab.
     ///
     /// By default, `8`
+    #[must_use]
     pub fn tab_stop(mut self, tab_stop: usize) -> Self {
         self.set_tab_stop(tab_stop);
         self
@@ -394,6 +406,7 @@ impl Builder {
     /// Check if cursor position is at leftmost before displaying prompt.
     ///
     /// By default, we don't check.
+    #[must_use]
     pub fn check_cursor_position(mut self, yes: bool) -> Self {
         self.set_check_cursor_position(yes);
         self
@@ -402,6 +415,7 @@ impl Builder {
     /// Indentation size
     ///
     /// By default, `2`
+    #[must_use]
     pub fn indent_size(mut self, indent_size: usize) -> Self {
         self.set_indent_size(indent_size);
         self
@@ -410,6 +424,7 @@ impl Builder {
     /// Enable or disable bracketed paste on unix platform
     ///
     /// By default, it's enabled.
+    #[must_use]
     pub fn bracketed_paste(mut self, enabled: bool) -> Self {
         self.enable_bracketed_paste(enabled);
         self

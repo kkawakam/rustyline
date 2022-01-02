@@ -45,11 +45,11 @@ pub enum Cmd {
     EndOfFile,
     /// end-of-history
     EndOfHistory,
-    /// forward-search-history
+    /// forward-search-history (incremental search)
     ForwardSearchHistory,
-    /// history-search-backward
+    /// history-search-backward (common prefix search)
     HistorySearchBackward,
-    /// history-search-forward
+    /// history-search-forward (common prefix search)
     HistorySearchForward,
     /// Indent current line
     Indent(Movement),
@@ -79,7 +79,7 @@ pub enum Cmd {
     ReplaceChar(RepeatCount, char),
     /// vi-change-to, vi-substitute
     Replace(Movement, Option<String>),
-    /// reverse-search-history
+    /// reverse-search-history (incremental search)
     ReverseSearchHistory,
     /// self-insert
     SelfInsert(RepeatCount, char),
@@ -434,6 +434,7 @@ impl InputState {
         }
     }
 
+    /// Application customized binding
     fn custom_binding(
         &self,
         wrt: &mut dyn Refresher,
@@ -453,6 +454,20 @@ impl InputState {
             }
         } else {
             None
+        }
+    }
+
+    /// Terminal peculiar binding
+    fn term_binding<R: RawReader>(
+        rdr: &mut R,
+        wrt: &mut dyn Refresher,
+        key: &KeyEvent,
+    ) -> Option<Cmd> {
+        let cmd = rdr.find_binding(key);
+        if cmd == Some(Cmd::EndOfFile) && !wrt.line().is_empty() {
+            None // ReadlineError::Eof only if line is empty
+        } else {
+            cmd
         }
     }
 
@@ -550,6 +565,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -578,7 +595,7 @@ impl InputState {
                 Movement::ForwardChar(n)
             }),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            E(K::Tab, M::NONE) => {
+            E(K::Char('I'), M::CTRL) | E(K::Tab, M::NONE) => {
                 if positive {
                     Cmd::Complete
                 } else {
@@ -725,6 +742,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
@@ -896,6 +915,8 @@ impl InputState {
             } else {
                 cmd
             });
+        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+            return Ok(cmd);
         }
         let cmd = match key {
             E(K::Char(c), M::NONE) => {
@@ -907,7 +928,7 @@ impl InputState {
             }
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(Movement::BackwardChar(1)),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
-            E(K::Tab, M::NONE) => Cmd::Complete,
+            E(K::Char('I'), M::CTRL) | E(K::Tab, M::NONE) => Cmd::Complete,
             // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             E(K::Char(k), M::ALT) => {
@@ -927,6 +948,7 @@ impl InputState {
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
+            #[allow(clippy::if_same_then_else)]
             if let (Cmd::Replace(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
                 // replacing...
             } else if let (Cmd::SelfInsert(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
@@ -1037,6 +1059,7 @@ impl InputState {
             } else {
                 Movement::ForwardChar(n)
             }),
+            #[cfg(any(windows, test))]
             E(K::Char('C'), M::CTRL) => Cmd::Interrupt,
             E(K::Char('D'), M::CTRL) => {
                 if self.is_emacs_mode() && !wrt.line().is_empty() {
@@ -1045,8 +1068,10 @@ impl InputState {
                     } else {
                         Movement::BackwardChar(n)
                     })
-                } else {
+                } else if cfg!(windows) || cfg!(test) || !wrt.line().is_empty() {
                     Cmd::EndOfFile
+                } else {
+                    Cmd::Unknown
                 }
             }
             E(K::Delete, M::NONE) => Cmd::Kill(if positive {
@@ -1060,9 +1085,11 @@ impl InputState {
             } else {
                 Movement::BackwardChar(n)
             }),
-            E(K::Char('J'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
-                accept_in_the_middle: true,
-            },
+            E(K::Char('J'), M::CTRL) | E(K::Char('M'), M::CTRL) | E::ENTER => {
+                Cmd::AcceptOrInsertLine {
+                    accept_in_the_middle: true,
+                }
+            }
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,
@@ -1092,7 +1119,6 @@ impl InputState {
                     Cmd::Unknown // TODO Validate
                 }
             }
-            E(K::Char('Z'), M::CTRL) => Cmd::Suspend,
             E(K::Char('_'), M::CTRL) => Cmd::Undo(n),
             E(K::UnknownEscSeq, M::NONE) => Cmd::Noop,
             E(K::BracketedPasteStart, M::NONE) => {
@@ -1121,7 +1147,7 @@ impl InputState {
             if let (n, false) = num_args.overflowing_abs() {
                 (n as RepeatCount, false)
             } else {
-                (RepeatCount::max_value(), false)
+                (RepeatCount::MAX, false)
             }
         } else {
             (num_args as RepeatCount, true)

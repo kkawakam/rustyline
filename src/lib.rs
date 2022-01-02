@@ -55,7 +55,7 @@ pub use crate::config::{
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::{Direction, History};
+use crate::history::{History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
@@ -265,8 +265,7 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     } else {
         s.out.beep()?;
     }
-    s.refresh_line_with_msg(None)?;
-    Ok(())
+    s.refresh_line()
 }
 
 fn page_completions<C: Candidate, H: Helper>(
@@ -366,7 +365,7 @@ fn reverse_incremental_search<H: Helper>(
 
     let mut search_buf = String::new();
     let mut history_idx = history.len() - 1;
-    let mut direction = Direction::Reverse;
+    let mut direction = SearchDirection::Reverse;
     let mut success = true;
 
     let mut cmd;
@@ -389,7 +388,7 @@ fn reverse_incremental_search<H: Helper>(
                     continue;
                 }
                 Cmd::ReverseSearchHistory => {
-                    direction = Direction::Reverse;
+                    direction = SearchDirection::Reverse;
                     if history_idx > 0 {
                         history_idx -= 1;
                     } else {
@@ -398,7 +397,7 @@ fn reverse_incremental_search<H: Helper>(
                     }
                 }
                 Cmd::ForwardSearchHistory => {
-                    direction = Direction::Forward;
+                    direction = SearchDirection::Forward;
                     if history_idx < history.len() - 1 {
                         history_idx += 1;
                     } else {
@@ -421,11 +420,9 @@ fn reverse_incremental_search<H: Helper>(
             }
         }
         success = match history.search(&search_buf, history_idx, direction) {
-            Some(idx) => {
-                history_idx = idx;
-                let entry = history.get(idx).unwrap();
-                let pos = entry.find(&search_buf).unwrap();
-                s.line.update(entry, pos);
+            Some(sr) => {
+                history_idx = sr.idx;
+                s.line.update(sr.entry, sr.pos);
                 true
             }
             _ => false,
@@ -443,6 +440,7 @@ fn readline_edit<H: Helper>(
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
     original_mode: &tty::Mode,
+    term_key_map: tty::KeyMap,
 ) -> Result<String> {
     let mut stdout = editor.term.create_writer();
 
@@ -460,7 +458,7 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    let mut rdr = editor.term.create_reader(&editor.config)?;
+    let mut rdr = editor.term.create_reader(&editor.config, term_key_map)?;
     if editor.term.is_output_tty() && editor.config.check_cursor_position() {
         if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
             if s.out.sigwinch() {
@@ -569,9 +567,9 @@ fn readline_raw<H: Helper>(
     initial: Option<(&str, &str)>,
     editor: &mut Editor<H>,
 ) -> Result<String> {
-    let original_mode = editor.term.enable_raw_mode()?;
+    let (original_mode, term_key_map) = editor.term.enable_raw_mode()?;
     let guard = Guard(&original_mode);
-    let user_input = readline_edit(prompt, initial, editor, &original_mode);
+    let user_input = readline_edit(prompt, initial, editor, &original_mode, term_key_map);
     if editor.config.auto_add_history() {
         if let Ok(ref line) = user_input {
             editor.add_history_entry(line.as_str());

@@ -1,6 +1,6 @@
 [package]
 name = "rustyline-derive"
-version = "0.4.0"
+version = "0.6.0"
 authors = ["gwenn"]
 edition = "2018"
 description = "Rustyline macros implementation of #[derive(Completer, Helper, Hinter, Highlighter)]"
@@ -19,5 +19,5 @@ maintenance = { status = "actively-developed" }
 proc-macro = true
 
 [dependencies]
-syn = "1.0"
-quote = "1.0"
+syn = { version = "1.0", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
+quote = { version = "1.0", default-features = false }

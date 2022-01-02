@@ -12,24 +12,23 @@ on:
       - '**.rs'
       - '**.toml'
       - '.github/workflows/rust.yml'
-
+      - '*.md'
+env:
+  RUST_BACKTRACE: 1
 jobs:
   build:
 
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
+    runs-on: ${{ matrix.os }}
+
     steps:
     - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
+    - uses: hecrj/setup-rust-action@v1
       with:
-        default: true
-        profile: minimal
-        toolchain: stable
         components: rustfmt, clippy
-        override: true
     - name: Build
       run: cargo build --workspace --all-targets
     - name: Run tests
@@ -43,6 +42,3 @@ jobs:
       run: cargo clippy --workspace -- -D warnings
     - name: Format
       run: cargo fmt --all -- --check
-
-    env:
-      RUST_BACKTRACE: 1

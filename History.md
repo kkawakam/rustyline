@@ -17,14 +17,17 @@
     - if path used to save history is the same:
         + if timestamp is still the same => we can append only new lines if history has not been truncated.
 
+```
 HistoryInfo
   first_add_index: Option<usize>, // first line inserted by this session
   truncated: bool //
   path_info: Option<PathInfo>,
-
+```
+```
 PathInfo
   path: Path,
   modified: SystemTime,
+```
 
 ---
 With `termwiz`, you can define your own `History` backend.

@@ -700,7 +700,7 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != ::nix::Error::Sys(::nix::errno::Errno::EINTR)
+                if err != ::nix::errno::Errno::EINTR
                     || SIGWINCH.load(Ordering::Relaxed)
                 {
                     return Err(err.into());
@@ -1296,8 +1296,7 @@ impl Term for PosixTerminal {
             });
         }
         if self.unsupported || !self.is_stdin_tty() || !self.is_output_tty() {
-            use nix::errno::Errno::ENOTTY;
-            return Err(nix::Error::from_errno(ENOTTY).into());
+            return Err(nix::Error::ENOTTY.into());
         }
         use nix::unistd::pipe;
         use std::os::unix::io::FromRawFd;

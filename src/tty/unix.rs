@@ -5,6 +5,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use buf_redux::BufReader;
 use log::{debug, warn};
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
@@ -149,7 +150,7 @@ impl Read for StdinRaw {
 
 /// Console input reader
 pub struct PosixRawReader {
-    stdin: StdinRaw,
+    stdin: BufReader<StdinRaw>,
     timeout_ms: i32,
     buf: [u8; 1],
     parser: Parser,
@@ -191,7 +192,7 @@ const RXVT_CTRL_SHIFT: char = '@';
 impl PosixRawReader {
     fn new(config: &Config, key_map: PosixKeyMap) -> Self {
         Self {
-            stdin: StdinRaw {},
+            stdin: BufReader::with_capacity(1024, StdinRaw {}),
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
             parser: Parser::new(),
@@ -644,6 +645,10 @@ impl PosixRawReader {
     }
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+        let n = self.stdin.buf_len();
+        if n > 0 {
+            return Ok(n as i32);
+        }
         let mut fds = [poll::PollFd::new(STDIN_FILENO, PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
@@ -666,6 +671,9 @@ impl RawReader for PosixRawReader {
 
         let mut key = KeyEvent::new(c, M::NONE);
         if key == E::ESC {
+            if self.stdin.buf_len() > 0 {
+                debug!(target: "rustyline", "read buffer {:?}", self.stdin.buffer());
+            }
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
                 0
             } else {

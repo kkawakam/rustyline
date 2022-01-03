@@ -63,7 +63,7 @@ impl KillRing {
                 self.index += 1;
             }
             if self.index == self.slots.len() {
-                self.slots.push(String::from(text))
+                self.slots.push(String::from(text));
             } else {
                 self.slots[self.index] = String::from(text);
             }

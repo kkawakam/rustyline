@@ -38,11 +38,13 @@ pub struct Config {
 
 impl Config {
     /// Returns a `Config` builder.
+    #[must_use]
     pub fn builder() -> Builder {
         Builder::new()
     }
 
     /// Tell the maximum length (i.e. number of entries) for the history.
+    #[must_use]
     pub fn max_history_size(&self) -> usize {
         self.max_history_size
     }
@@ -55,6 +57,7 @@ impl Config {
     /// in the history list.
     ///
     /// By default, they are ignored.
+    #[must_use]
     pub fn history_duplicates(&self) -> HistoryDuplicates {
         self.history_duplicates
     }
@@ -71,6 +74,7 @@ impl Config {
     /// the history list.
     ///
     /// By default, they are saved.
+    #[must_use]
     pub fn history_ignore_space(&self) -> bool {
         self.history_ignore_space
     }
@@ -82,6 +86,7 @@ impl Config {
     /// Completion behaviour.
     ///
     /// By default, `CompletionType::Circular`.
+    #[must_use]
     pub fn completion_type(&self) -> CompletionType {
         self.completion_type
     }
@@ -89,6 +94,7 @@ impl Config {
     /// When listing completion alternatives, only display
     /// one screen of possibilities at a time (used for `CompletionType::List`
     /// mode).
+    #[must_use]
     pub fn completion_prompt_limit(&self) -> usize {
         self.completion_prompt_limit
     }
@@ -98,11 +104,13 @@ impl Config {
     /// platform).
     ///
     /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
+    #[must_use]
     pub fn keyseq_timeout(&self) -> i32 {
         self.keyseq_timeout
     }
 
     /// Emacs or Vi mode
+    #[must_use]
     pub fn edit_mode(&self) -> EditMode {
         self.edit_mode
     }
@@ -110,11 +118,13 @@ impl Config {
     /// Tell if lines are automatically added to the history.
     ///
     /// By default, they are not.
+    #[must_use]
     pub fn auto_add_history(&self) -> bool {
         self.auto_add_history
     }
 
     /// Bell style: beep, flash or nothing.
+    #[must_use]
     pub fn bell_style(&self) -> BellStyle {
         self.bell_style
     }
@@ -122,6 +132,7 @@ impl Config {
     /// Tell if colors should be enabled.
     ///
     /// By default, they are except if stdout is not a TTY.
+    #[must_use]
     pub fn color_mode(&self) -> ColorMode {
         self.color_mode
     }
@@ -133,6 +144,7 @@ impl Config {
     /// Tell which output stream should be used: stdout or stderr.
     ///
     /// By default, stdout is used.
+    #[must_use]
     pub fn output_stream(&self) -> OutputStreamType {
         self.output_stream
     }
@@ -144,6 +156,7 @@ impl Config {
     /// Horizontal space taken by a tab.
     ///
     /// By default, 8.
+    #[must_use]
     pub fn tab_stop(&self) -> usize {
         self.tab_stop
     }
@@ -155,6 +168,7 @@ impl Config {
     /// Check if cursor position is at leftmost before displaying prompt.
     ///
     /// By default, we don't check.
+    #[must_use]
     pub fn check_cursor_position(&self) -> bool {
         self.check_cursor_position
     }
@@ -162,6 +176,7 @@ impl Config {
     /// Indentation size used by indentation commands
     ///
     /// By default, 2.
+    #[must_use]
     pub fn indent_size(&self) -> usize {
         self.indent_size
     }
@@ -173,6 +188,7 @@ impl Config {
     /// Bracketed paste on unix platform
     ///
     /// By default, it's enabled.
+    #[must_use]
     pub fn enable_bracketed_paste(&self) -> bool {
         self.enable_bracketed_paste
     }
@@ -294,6 +310,7 @@ pub struct Builder {
 
 impl Builder {
     /// Returns a `Config` builder.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             p: Config::default(),
@@ -431,6 +448,7 @@ impl Builder {
     }
 
     /// Builds a `Config` with the settings specified so far.
+    #[must_use]
     pub fn build(self) -> Config {
         self.p
     }

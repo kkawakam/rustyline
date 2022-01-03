@@ -128,10 +128,11 @@ pub enum Cmd {
 
 impl Cmd {
     /// Tells if current command should reset kill ring.
+    #[must_use]
     pub fn should_reset_kill_ring(&self) -> bool {
         #[allow(clippy::match_same_arms)]
         match *self {
-            Cmd::Kill(Movement::BackwardChar(_)) | Cmd::Kill(Movement::ForwardChar(_)) => true,
+            Cmd::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
             Cmd::ClearScreen
             | Cmd::Kill(_)
             | Cmd::Replace(..)
@@ -588,7 +589,7 @@ impl InputState {
             } else {
                 Movement::BackwardChar(n)
             }),
-            E(K::Char('G'), M::CTRL) | E::ESC | E(K::Char('G'), M::CTRL_ALT) => Cmd::Abort,
+            E(K::Char('G'), M::CTRL | M::CTRL_ALT) | E::ESC => Cmd::Abort,
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(if positive {
                 Movement::BackwardChar(n)
             } else {
@@ -634,7 +635,7 @@ impl InputState {
                 }
             }
             // character-search, character-search-backward
-            E(K::Char(']'), m @ M::CTRL) | E(K::Char(']'), m @ M::CTRL_ALT) => {
+            E(K::Char(']'), m @ (M::CTRL | M::CTRL_ALT)) => {
                 let ch = rdr.next_key(false)?;
                 match ch {
                     E(K::Char(ch), M::NONE) => Cmd::Move(Movement::ViCharSearch(
@@ -661,33 +662,31 @@ impl InputState {
             }),
             E(K::Char('<'), M::ALT) => Cmd::BeginningOfHistory,
             E(K::Char('>'), M::ALT) => Cmd::EndOfHistory,
-            E(K::Char('B'), M::ALT)
-            | E(K::Char('b'), M::ALT)
-            | E(K::Left, M::CTRL)
-            | E(K::Left, M::ALT) => Cmd::Move(if positive {
-                Movement::BackwardWord(n, Word::Emacs)
-            } else {
-                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-            }),
-            E(K::Char('C'), M::ALT) | E(K::Char('c'), M::ALT) => Cmd::CapitalizeWord,
-            E(K::Char('D'), M::ALT) | E(K::Char('d'), M::ALT) => Cmd::Kill(if positive {
-                Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
-            } else {
-                Movement::BackwardWord(n, Word::Emacs)
-            }),
-            E(K::Char('F'), M::ALT)
-            | E(K::Char('f'), M::ALT)
-            | E(K::Right, M::CTRL)
-            | E(K::Right, M::ALT) => Cmd::Move(if positive {
+            E(K::Char('B' | 'b') | K::Left, M::ALT) | E(K::Left, M::CTRL) => {
+                Cmd::Move(if positive {
+                    Movement::BackwardWord(n, Word::Emacs)
+                } else {
+                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+                })
+            }
+            E(K::Char('C' | 'c'), M::ALT) => Cmd::CapitalizeWord,
+            E(K::Char('D' | 'd'), M::ALT) => Cmd::Kill(if positive {
                 Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
             } else {
                 Movement::BackwardWord(n, Word::Emacs)
             }),
-            E(K::Char('L'), M::ALT) | E(K::Char('l'), M::ALT) => Cmd::DowncaseWord,
-            E(K::Char('T'), M::ALT) | E(K::Char('t'), M::ALT) => Cmd::TransposeWords(n),
+            E(K::Char('F' | 'f') | K::Right, M::ALT) | E(K::Right, M::CTRL) => {
+                Cmd::Move(if positive {
+                    Movement::ForwardWord(n, At::AfterEnd, Word::Emacs)
+                } else {
+                    Movement::BackwardWord(n, Word::Emacs)
+                })
+            }
+            E(K::Char('L' | 'l'), M::ALT) => Cmd::DowncaseWord,
+            E(K::Char('T' | 't'), M::ALT) => Cmd::TransposeWords(n),
             // TODO ESC-R (r): Undo all changes made to this line.
-            E(K::Char('U'), M::ALT) | E(K::Char('u'), M::ALT) => Cmd::UpcaseWord,
-            E(K::Char('Y'), M::ALT) | E(K::Char('y'), M::ALT) => Cmd::YankPop,
+            E(K::Char('U' | 'u'), M::ALT) => Cmd::UpcaseWord,
+            E(K::Char('Y' | 'y'), M::ALT) => Cmd::YankPop,
             _ => self.common(rdr, wrt, evt, key, n, positive)?,
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
@@ -746,7 +745,7 @@ impl InputState {
             return Ok(cmd);
         }
         let cmd = match key {
-            E(K::Char('$'), M::NONE) | E(K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
+            E(K::Char('$') | K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
             E(K::Char('.'), M::NONE) => {
                 // vi-redo (repeat last command)
                 if no_num_args {
@@ -866,14 +865,12 @@ impl InputState {
                 Cmd::Move(Movement::BackwardChar(n))
             }
             E(K::Char('G'), M::CTRL) => Cmd::Abort,
-            E(K::Char('l'), M::NONE) | E(K::Char(' '), M::NONE) => {
-                Cmd::Move(Movement::ForwardChar(n))
-            }
+            E(K::Char('l' | ' '), M::NONE) => Cmd::Move(Movement::ForwardChar(n)),
             E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
-            E(K::Char('+'), M::NONE) | E(K::Char('j'), M::NONE) => Cmd::LineDownOrNextHistory(n),
+            E(K::Char('+' | 'j'), M::NONE) => Cmd::LineDownOrNextHistory(n),
             // TODO: move to the start of the line.
             E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
-            E(K::Char('-'), M::NONE) | E(K::Char('k'), M::NONE) => Cmd::LineUpOrPreviousHistory(n),
+            E(K::Char('-' | 'k'), M::NONE) => Cmd::LineUpOrPreviousHistory(n),
             // TODO: move to the start of the line.
             E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
             E(K::Char('R'), M::CTRL) => {
@@ -998,9 +995,9 @@ impl InputState {
             E(K::Char('h'), M::NONE) | E(K::Char('H'), M::CTRL) | E::BACKSPACE => {
                 Some(Movement::BackwardChar(n))
             }
-            E(K::Char('l'), M::NONE) | E(K::Char(' '), M::NONE) => Some(Movement::ForwardChar(n)),
-            E(K::Char('j'), M::NONE) | E(K::Char('+'), M::NONE) => Some(Movement::LineDown(n)),
-            E(K::Char('k'), M::NONE) | E(K::Char('-'), M::NONE) => Some(Movement::LineUp(n)),
+            E(K::Char('l' | ' '), M::NONE) => Some(Movement::ForwardChar(n)),
+            E(K::Char('j' | '+'), M::NONE) => Some(Movement::LineDown(n)),
+            E(K::Char('k' | '-'), M::NONE) => Some(Movement::LineUp(n)),
             E(K::Char('w'), M::NONE) => {
                 // 'cw' is 'ce'
                 if key == E(K::Char('c'), M::NONE) {
@@ -1085,11 +1082,9 @@ impl InputState {
             } else {
                 Movement::BackwardChar(n)
             }),
-            E(K::Char('J'), M::CTRL) | E(K::Char('M'), M::CTRL) | E::ENTER => {
-                Cmd::AcceptOrInsertLine {
-                    accept_in_the_middle: true,
-                }
-            }
+            E(K::Char('J' | 'M'), M::CTRL) | E::ENTER => Cmd::AcceptOrInsertLine {
+                accept_in_the_middle: true,
+            },
             E(K::Down, M::NONE) => Cmd::LineDownOrNextHistory(1),
             E(K::Up, M::NONE) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('R'), M::CTRL) => Cmd::ReverseSearchHistory,

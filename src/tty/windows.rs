@@ -192,9 +192,8 @@ impl RawReader for ConsoleRawReader {
                 _ => {
                     if utf16 == 0 {
                         continue;
-                    } else {
-                        K::UnknownEscSeq
                     }
+                    K::UnknownEscSeq
                 }
             };
             let key = if key_code != K::UnknownEscSeq {
@@ -209,7 +208,7 @@ impl RawReader for ConsoleRawReader {
                 let orc = if surrogate == 0 {
                     decode_utf16(Some(utf16)).next()
                 } else {
-                    decode_utf16([surrogate, utf16].iter().cloned()).next()
+                    decode_utf16([surrogate, utf16].iter().copied()).next()
                 };
                 let rc = if let Some(rc) = orc {
                     rc

@@ -31,6 +31,7 @@ impl Event {
     }
 
     /// Return `i`th key event
+    #[must_use]
     pub fn get(&self, i: usize) -> Option<&KeyEvent> {
         if let Event::KeySeq(ref ks) = self {
             ks.get(i)
@@ -46,10 +47,10 @@ impl From<KeyEvent> for Event {
     }
 }
 
-const BASE: u32 = 0x0010ffff + 1;
-const BASE_CONTROL: u32 = 0x02000000;
-const BASE_META: u32 = 0x04000000;
-const BASE_SHIFT: u32 = 0x01000000;
+const BASE: u32 = 0x0010_ffff + 1;
+const BASE_CONTROL: u32 = 0x0200_0000;
+const BASE_META: u32 = 0x0400_0000;
+const BASE_SHIFT: u32 = 0x0100_0000;
 const ESCAPE: u32 = 27;
 const PAGE_UP: u32 = BASE + 1;
 const PAGE_DOWN: u32 = PAGE_UP + 1;
@@ -70,7 +71,7 @@ const ANY: u32 = PASTE_FINISH + 1;
 impl KeyEvent {
     fn encode(&self) -> u32 {
         let mut u = match self.0 {
-            KeyCode::UnknownEscSeq => 0,
+            KeyCode::UnknownEscSeq | KeyCode::Null => 0,
             KeyCode::Backspace => u32::from('\x7f'),
             KeyCode::BackTab => u32::from('\t') | BASE_SHIFT,
             KeyCode::BracketedPasteStart => PASTE_START,
@@ -80,12 +81,11 @@ impl KeyEvent {
             KeyCode::Down => DOWN,
             KeyCode::End => END,
             KeyCode::Enter => u32::from('\r'),
-            KeyCode::F(i) => INSERT + i as u32,
+            KeyCode::F(i) => INSERT + u32::from(i),
             KeyCode::Esc => ESCAPE,
             KeyCode::Home => HOME,
             KeyCode::Insert => INSERT,
             KeyCode::Left => LEFT,
-            KeyCode::Null => 0,
             KeyCode::PageDown => PAGE_DOWN,
             KeyCode::PageUp => PAGE_UP,
             KeyCode::Right => RIGHT,
@@ -154,31 +154,37 @@ impl<'r> EventContext<'r> {
     }
 
     /// emacs or vi mode
+    #[must_use]
     pub fn mode(&self) -> EditMode {
         self.mode
     }
 
     /// vi input mode
+    #[must_use]
     pub fn input_mode(&self) -> InputMode {
         self.input_mode
     }
 
     /// Returns `true` if there is a hint displayed.
+    #[must_use]
     pub fn has_hint(&self) -> bool {
         self.wrt.has_hint()
     }
 
     /// Returns the hint text that is shown after the current cursor position.
+    #[must_use]
     pub fn hint_text(&self) -> Option<&str> {
         self.wrt.hint_text()
     }
 
     /// currently edited line
+    #[must_use]
     pub fn line(&self) -> &str {
         self.wrt.line()
     }
 
     /// Current cursor position (byte position)
+    #[must_use]
     pub fn pos(&self) -> usize {
         self.wrt.pos()
     }

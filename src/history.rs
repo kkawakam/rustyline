@@ -62,6 +62,7 @@ impl History {
     const FILE_VERSION_V2: &'static str = "#V2";
 
     /// Default constructor
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(Config::default())
     }
@@ -70,6 +71,7 @@ impl History {
     /// - `Config::max_history_size()`,
     /// - `Config::history_ignore_space()`,
     /// - `Config::history_duplicates()`.
+    #[must_use]
     pub fn with_config(config: Config) -> Self {
         Self {
             entries: VecDeque::new(),
@@ -82,11 +84,13 @@ impl History {
     }
 
     /// Return the history entry at position `index`, starting from 0.
+    #[must_use]
     pub fn get(&self, index: usize) -> Option<&String> {
         self.entries.get(index)
     }
 
     /// Return the last history entry (i.e. previous command)
+    #[must_use]
     pub fn last(&self) -> Option<&String> {
         self.entries.back()
     }
@@ -122,11 +126,13 @@ impl History {
     }
 
     /// Return the number of entries in the history.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Return true if the history has no entry.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -384,6 +390,7 @@ impl History {
     /// Return None if no entry contains `term` between [start, len -1] for
     /// forward search
     /// or between [0, start] for reverse search.
+    #[must_use]
     pub fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
         #[cfg(not(feature = "case_insensitive_history_search"))]
         {
@@ -406,6 +413,7 @@ impl History {
     }
 
     /// Anchored search
+    #[must_use]
     pub fn starts_with(
         &self,
         term: &str,
@@ -490,6 +498,7 @@ impl History {
     }
 
     /// Return a forward iterator.
+    #[must_use]
     pub fn iter(&self) -> Iter<'_> {
         Iter(self.entries.iter())
     }

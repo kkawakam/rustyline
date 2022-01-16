@@ -1,5 +1,6 @@
 //! Command processor
 
+use crate::Config;
 use log::debug;
 use std::cell::RefCell;
 use std::fmt;
@@ -20,17 +21,17 @@ use crate::tty::{RawReader, Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 
-const REFRESH_RATE_LIMIT: Duration = Duration::from_millis(500);
-
 struct RefreshRateLimit {
+    limit: Duration,
     last_refresh_time: Instant,
     refresh_skipped: bool,
     forced: bool,
 }
 
-impl Default for RefreshRateLimit {
-    fn default() -> RefreshRateLimit {
+impl RefreshRateLimit {
+    fn new(limit: Duration) -> RefreshRateLimit {
         RefreshRateLimit {
+            limit,
             last_refresh_time: Instant::now(),
             refresh_skipped: false,
             forced: true,
@@ -49,8 +50,7 @@ impl RefreshRateLimit {
             self.forced = false;
             return false;
         }
-        // TODO make REFRESH_RATE_LIMIT configurable
-        if self.last_refresh_time.elapsed() < REFRESH_RATE_LIMIT {
+        if self.last_refresh_time.elapsed() < self.limit {
             debug!(target: "rustyline", "refresh skipped");
             //self.last_refresh_time = now;
             self.refresh_skipped = true;
@@ -92,6 +92,7 @@ enum Info<'m> {
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
+        config: &Config,
         out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
         helper: Option<&'out H>,
@@ -111,7 +112,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
-            refresh_rate_limit: RefreshRateLimit::default(),
+            refresh_rate_limit: RefreshRateLimit::new(config.refresh_rate_limit()),
         }
     }
 
@@ -130,7 +131,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         single_esc_abort: bool,
     ) -> Result<Cmd> {
         loop {
-            if self.refresh_rate_limit.refresh_skipped && !rdr.poll(REFRESH_RATE_LIMIT)? {
+            if self.refresh_rate_limit.refresh_skipped
+                && !rdr.poll(self.refresh_rate_limit.limit)?
+            {
                 self.refresh_line()?;
             }
             let rc = input_state.next_cmd(rdr, self, single_esc_abort);
@@ -757,7 +760,7 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
-        refresh_rate_limit: RefreshRateLimit::default(),
+        refresh_rate_limit: RefreshRateLimit::new(Duration::from_millis(0)),
     }
 }
 

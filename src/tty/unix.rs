@@ -14,7 +14,10 @@ use nix::sys::termios::{SetArg, SpecialCharacterIndices as SCI, Termios};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{
+    width, write_and_flush, RawMode, RawReader, Renderer, Term, BRACKETED_PASTE_OFF,
+    BRACKETED_PASTE_ON,
+};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
@@ -27,9 +30,6 @@ const STDIN_FILENO: RawFd = libc::STDIN_FILENO;
 
 /// Unsupported Terminals that don't support RAW mode
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
-
-const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
-const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
 
 impl AsRawFd for OutputStreamType {
     fn as_raw_fd(&self) -> RawFd {
@@ -1204,20 +1204,6 @@ pub fn suspend() -> Result<()> {
     use nix::unistd::Pid;
     // suspend the whole process group
     signal::kill(Pid::from_raw(0), signal::SIGTSTP)?;
-    Ok(())
-}
-
-fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
-    match out {
-        OutputStreamType::Stdout => {
-            io::stdout().write_all(buf)?;
-            io::stdout().flush()?;
-        }
-        OutputStreamType::Stderr => {
-            io::stderr().write_all(buf)?;
-            io::stderr().flush()?;
-        }
-    }
     Ok(())
 }
 

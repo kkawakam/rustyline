@@ -9,6 +9,9 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
+const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
+const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
+
 /// Terminal state
 pub trait RawMode: Sized {
     /// Disable RAW mode for the terminal.
@@ -197,6 +200,21 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     } else {
         s.width()
     }
+}
+
+fn write_and_flush(out: OutputStreamType, buf: &[u8]) -> Result<()> {
+    use std::io::{self, Write};
+    match out {
+        OutputStreamType::Stdout => {
+            io::stdout().write_all(buf)?;
+            io::stdout().flush()?;
+        }
+        OutputStreamType::Stderr => {
+            io::stderr().write_all(buf)?;
+            io::stderr().flush()?;
+        }
+    }
+    Ok(())
 }
 
 /// Terminal contract

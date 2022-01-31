@@ -32,7 +32,7 @@ pub struct Config {
     indent_size: usize,
     /// Check if cursor position is at leftmost before displaying prompt
     check_cursor_position: bool,
-    /// Bracketed paste on unix platform
+    /// Bracketed paste
     enable_bracketed_paste: bool,
 }
 
@@ -185,7 +185,7 @@ impl Config {
         self.indent_size = indent_size;
     }
 
-    /// Bracketed paste on unix platform
+    /// Bracketed paste
     ///
     /// By default, it's enabled.
     #[must_use]
@@ -438,7 +438,7 @@ impl Builder {
         self
     }
 
-    /// Enable or disable bracketed paste on unix platform
+    /// Enable or disable bracketed paste
     ///
     /// By default, it's enabled.
     #[must_use]
@@ -556,7 +556,7 @@ pub trait Configurer {
         self.config_mut().set_indent_size(size);
     }
 
-    /// Enable or disable bracketed paste on unix platform
+    /// Enable or disable bracketed paste
     ///
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {

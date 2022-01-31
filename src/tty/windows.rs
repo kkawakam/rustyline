@@ -15,7 +15,10 @@ use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
-use super::{width, RawMode, RawReader, Renderer, Term};
+use super::{
+    width, write_and_flush, RawMode, RawReader, Renderer, Term, BRACKETED_PASTE_OFF,
+    BRACKETED_PASTE_ON,
+};
 use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
@@ -79,6 +82,7 @@ pub struct ConsoleMode {
     stdin_handle: HANDLE,
     original_stdstream_mode: Option<DWORD>,
     stdstream_handle: HANDLE,
+    out: Option<OutputStreamType>,
 }
 
 impl RawMode for ConsoleMode {
@@ -86,6 +90,9 @@ impl RawMode for ConsoleMode {
     fn disable_raw_mode(&self) -> Result<()> {
         check(unsafe { consoleapi::SetConsoleMode(self.stdin_handle, self.original_stdin_mode) })?;
         if let Some(original_stdstream_mode) = self.original_stdstream_mode {
+            if let Some(out) = self.out {
+                write_and_flush(out, BRACKETED_PASTE_OFF)?;
+            }
             check(unsafe {
                 consoleapi::SetConsoleMode(self.stdstream_handle, original_stdstream_mode)
             })?;
@@ -408,17 +415,7 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
-        match self.out {
-            OutputStreamType::Stdout => {
-                io::stdout().write_all(buf)?;
-                io::stdout().flush()?;
-            }
-            OutputStreamType::Stderr => {
-                io::stderr().write_all(buf)?;
-                io::stderr().flush()?;
-            }
-        }
-        Ok(())
+        write_and_flush(self.out, buf)
     }
 
     /// Characters with 2 column width are correctly handled (not split).
@@ -528,6 +525,7 @@ pub struct Console {
     ansi_colors_supported: bool,
     stream_type: OutputStreamType,
     bell_style: BellStyle,
+    enable_bracketed_paste: bool,
 }
 
 impl Console {
@@ -552,7 +550,7 @@ impl Term for Console {
         stream_type: OutputStreamType,
         _tab_stop: usize,
         bell_style: BellStyle,
-        _enable_bracketed_paste: bool,
+        enable_bracketed_paste: bool,
     ) -> Console {
         use std::ptr;
         let stdin_handle = get_std_handle(STDIN_FILENO);
@@ -586,6 +584,7 @@ impl Term for Console {
             ansi_colors_supported: false,
             stream_type,
             bell_style,
+            enable_bracketed_paste,
         }
     }
 
@@ -627,6 +626,7 @@ impl Term for Console {
         raw |= wincon::ENABLE_WINDOW_INPUT;
         check(unsafe { consoleapi::SetConsoleMode(self.stdin_handle, raw) })?;
 
+        let mut out = None;
         let original_stdstream_mode = if self.stdstream_isatty {
             let original_stdstream_mode = get_console_mode(self.stdstream_handle)?;
 
@@ -657,6 +657,10 @@ impl Term for Console {
                     unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0 };
                 debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
             }
+            if self.ansi_colors_supported && self.enable_bracketed_paste {
+                write_and_flush(self.stream_type, BRACKETED_PASTE_ON)?;
+                out = Some(self.stream_type);
+            }
             Some(original_stdstream_mode)
         } else {
             None
@@ -668,6 +672,7 @@ impl Term for Console {
                 stdin_handle: self.stdin_handle,
                 original_stdstream_mode,
                 stdstream_handle: self.stdstream_handle,
+                out,
             },
             (),
         ))

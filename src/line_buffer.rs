@@ -794,7 +794,7 @@ impl LineBuffer {
                     .collect::<String>();
                 let result = match a {
                     WordAction::Capitalize => {
-                        let ch = (&word).graphemes(true).next().unwrap();
+                        let ch = word.graphemes(true).next().unwrap();
                         let cap = ch.to_uppercase();
                         cap + &word[ch.len()..].to_lowercase()
                     }

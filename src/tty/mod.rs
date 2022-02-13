@@ -2,7 +2,7 @@
 
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
@@ -208,7 +208,6 @@ pub trait Term {
 
     fn new(
         color_mode: ColorMode,
-        stream: OutputStreamType,
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
@@ -216,16 +215,18 @@ pub trait Term {
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
-    /// check if stdin is connected to a terminal.
-    fn is_stdin_tty(&self) -> bool;
+    /// check if input stream is connected to a terminal.
+    fn is_input_tty(&self) -> bool;
     /// check if output stream is connected to a terminal.
     fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Result<Self::Reader>;
+    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Self::Reader;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+    ///
+    fn writeln(&self) -> Result<()>;
 }
 
 // If on Windows platform import Windows TTY module

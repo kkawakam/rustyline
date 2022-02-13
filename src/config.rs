@@ -24,8 +24,6 @@ pub struct Config {
     bell_style: BellStyle,
     /// if colors should be enabled.
     color_mode: ColorMode,
-    /// Whether to use stdout or stderr
-    output_stream: OutputStreamType,
     /// Horizontal space taken by a tab.
     tab_stop: usize,
     /// Indentation size for indent/dedent commands
@@ -141,18 +139,6 @@ impl Config {
         self.color_mode = color_mode;
     }
 
-    /// Tell which output stream should be used: stdout or stderr.
-    ///
-    /// By default, stdout is used.
-    #[must_use]
-    pub fn output_stream(&self) -> OutputStreamType {
-        self.output_stream
-    }
-
-    pub(crate) fn set_output_stream(&mut self, stream: OutputStreamType) {
-        self.output_stream = stream;
-    }
-
     /// Horizontal space taken by a tab.
     ///
     /// By default, 8.
@@ -207,7 +193,6 @@ impl Default for Config {
             auto_add_history: false,
             bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
-            output_stream: OutputStreamType::Stdout,
             tab_stop: 8,
             indent_size: 2,
             check_cursor_position: false,
@@ -289,17 +274,6 @@ pub enum ColorMode {
     Forced,
     /// Deactivate highlighting even if platform/terminal is supported.
     Disabled,
-}
-
-/// Should the editor use stdout or stderr
-// TODO console term::TermTarget
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum OutputStreamType {
-    /// Use stderr
-    Stderr,
-    /// Use stdout
-    Stdout,
 }
 
 /// Configuration builder
@@ -399,15 +373,6 @@ impl Builder {
     #[must_use]
     pub fn color_mode(mut self, color_mode: ColorMode) -> Self {
         self.set_color_mode(color_mode);
-        self
-    }
-
-    /// Whether to use stdout or stderr.
-    ///
-    /// Be default, use stdout
-    #[must_use]
-    pub fn output_stream(mut self, stream: OutputStreamType) -> Self {
-        self.set_output_stream(stream);
         self
     }
 
@@ -527,13 +492,6 @@ pub trait Configurer {
     /// By default, colorization is on except if stdout is not a TTY.
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
-    }
-
-    /// Whether to use stdout or stderr
-    ///
-    /// By default, use stdout
-    fn set_output_stream(&mut self, stream: OutputStreamType) {
-        self.config_mut().set_output_stream(stream);
     }
 
     /// Horizontal space taken by a tab.

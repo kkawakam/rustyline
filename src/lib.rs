@@ -49,9 +49,7 @@ use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
-pub use crate::config::{
-    ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
-};
+pub use crate::config::{ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -458,7 +456,7 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    let mut rdr = editor.term.create_reader(&editor.config, term_key_map)?;
+    let mut rdr = editor.term.create_reader(&editor.config, term_key_map);
     if editor.term.is_output_tty() && editor.config.check_cursor_position() {
         if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
             if s.out.sigwinch() {
@@ -576,10 +574,7 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;
-    match editor.config.output_stream() {
-        OutputStreamType::Stdout => writeln!(io::stdout())?,
-        OutputStreamType::Stderr => writeln!(io::stderr())?,
-    };
+    editor.term.writeln()?;
     user_input
 }
 
@@ -735,7 +730,6 @@ impl<H: Helper> Editor<H> {
     pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(
             config.color_mode(),
-            config.output_stream(),
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),
@@ -780,7 +774,7 @@ impl<H: Helper> Editor<H> {
             stdout.flush()?;
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
-        } else if self.term.is_stdin_tty() {
+        } else if self.term.is_input_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");

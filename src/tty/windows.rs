@@ -16,16 +16,16 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::config::{BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
-const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
-const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
-const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
+//const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
+//const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
+//const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
@@ -75,20 +75,18 @@ pub type Mode = ConsoleMode;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConsoleMode {
-    original_stdin_mode: DWORD,
-    stdin_handle: HANDLE,
-    original_stdstream_mode: Option<DWORD>,
-    stdstream_handle: HANDLE,
+    original_conin_mode: DWORD,
+    conin: HANDLE,
+    original_conout_mode: Option<DWORD>,
+    conout: HANDLE,
 }
 
 impl RawMode for ConsoleMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        check(unsafe { consoleapi::SetConsoleMode(self.stdin_handle, self.original_stdin_mode) })?;
-        if let Some(original_stdstream_mode) = self.original_stdstream_mode {
-            check(unsafe {
-                consoleapi::SetConsoleMode(self.stdstream_handle, original_stdstream_mode)
-            })?;
+        check(unsafe { consoleapi::SetConsoleMode(self.conin, self.original_conin_mode) })?;
+        if let Some(original_stdstream_mode) = self.original_conout_mode {
+            check(unsafe { consoleapi::SetConsoleMode(self.conout, original_stdstream_mode) })?;
         }
         Ok(())
     }
@@ -96,13 +94,12 @@ impl RawMode for ConsoleMode {
 
 /// Console input reader
 pub struct ConsoleRawReader {
-    handle: HANDLE,
+    conin: HANDLE,
 }
 
 impl ConsoleRawReader {
-    pub fn create() -> Result<ConsoleRawReader> {
-        let handle = get_std_handle(STDIN_FILENO)?;
-        Ok(ConsoleRawReader { handle })
+    pub fn create(conin: HANDLE) -> ConsoleRawReader {
+        ConsoleRawReader { conin }
     }
 }
 
@@ -119,7 +116,7 @@ impl RawReader for ConsoleRawReader {
         let mut surrogate = 0;
         loop {
             // TODO GetNumberOfConsoleInputEvents
-            check(unsafe { consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
+            check(unsafe { consoleapi::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count) })?;
 
             if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
                 SIGWINCH.store(true, Ordering::SeqCst);
@@ -233,8 +230,7 @@ impl RawReader for ConsoleRawReader {
 }
 
 pub struct ConsoleRenderer {
-    out: OutputStreamType,
-    handle: HANDLE,
+    conout: HANDLE,
     cols: usize, // Number of columns in terminal
     buffer: String,
     colors_enabled: bool,
@@ -242,17 +238,11 @@ pub struct ConsoleRenderer {
 }
 
 impl ConsoleRenderer {
-    fn new(
-        handle: HANDLE,
-        out: OutputStreamType,
-        colors_enabled: bool,
-        bell_style: BellStyle,
-    ) -> ConsoleRenderer {
+    fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
-        let (cols, _) = get_win_size(handle);
+        let (cols, _) = get_win_size(conout);
         ConsoleRenderer {
-            out,
-            handle,
+            conout,
             cols,
             buffer: String::with_capacity(1024),
             colors_enabled,
@@ -262,26 +252,26 @@ impl ConsoleRenderer {
 
     fn get_console_screen_buffer_info(&self) -> Result<CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
-        check(unsafe { wincon::GetConsoleScreenBufferInfo(self.handle, &mut info) })?;
+        check(unsafe { wincon::GetConsoleScreenBufferInfo(self.conout, &mut info) })?;
         Ok(info)
     }
 
     fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
-        check(unsafe { wincon::SetConsoleCursorPosition(self.handle, pos) })
+        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, pos) })
     }
 
     fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
-            wincon::FillConsoleOutputCharacterA(self.handle, ' ' as CHAR, length, pos, &mut _count)
+            wincon::FillConsoleOutputCharacterA(self.conout, ' ' as CHAR, length, pos, &mut _count)
         })?;
         check(unsafe {
-            wincon::FillConsoleOutputAttribute(self.handle, attr, length, pos, &mut _count)
+            wincon::FillConsoleOutputAttribute(self.conout, attr, length, pos, &mut _count)
         })
     }
 
     fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
-        set_cursor_visible(self.handle, visible)
+        set_cursor_visible(self.conout, visible)
     }
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
@@ -389,7 +379,7 @@ impl Renderer for ConsoleRenderer {
         }
         let info = self.get_console_screen_buffer_info()?;
         self.set_cursor_visible(FALSE)?; // just to avoid flickering
-        let handle = self.handle;
+        let handle = self.conout;
         scopeguard::defer! {
             let _ = set_cursor_visible(handle, TRUE);
         }
@@ -459,7 +449,7 @@ impl Renderer for ConsoleRenderer {
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
         let coord = COORD { X: 0, Y: 0 };
-        check(unsafe { wincon::SetConsoleCursorPosition(self.handle, coord) })?;
+        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, coord) })?;
         let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
         self.clear(n, coord, info.wAttributes)
     }
@@ -473,7 +463,7 @@ impl Renderer for ConsoleRenderer {
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {
-        let (cols, _) = get_win_size(self.handle);
+        let (cols, _) = get_win_size(self.conout);
         self.cols = cols;
     }
 
@@ -484,7 +474,7 @@ impl Renderer for ConsoleRenderer {
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> usize {
-        let (_, rows) = get_win_size(self.handle);
+        let (_, rows) = get_win_size(self.conout);
         rows
     }
 
@@ -520,13 +510,12 @@ pub type Terminal = Console;
 
 #[derive(Clone, Debug)]
 pub struct Console {
-    stdin_isatty: bool,
-    stdin_handle: HANDLE,
-    stdstream_isatty: bool,
-    stdstream_handle: HANDLE,
+    conin_isatty: bool,
+    conin: HANDLE,
+    conout_isatty: bool,
+    conout: HANDLE,
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
-    stream_type: OutputStreamType,
     bell_style: BellStyle,
 }
 
@@ -534,7 +523,7 @@ impl Console {
     fn colors_enabled(&self) -> bool {
         // TODO ANSI Colors & Windows <10
         match self.color_mode {
-            ColorMode::Enabled => self.stdstream_isatty && self.ansi_colors_supported,
+            ColorMode::Enabled => self.conout_isatty && self.ansi_colors_supported,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
         }
@@ -549,7 +538,6 @@ impl Term for Console {
 
     fn new(
         color_mode: ColorMode,
-        stream_type: OutputStreamType,
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
@@ -564,12 +552,12 @@ impl Term for Console {
             Err(_) => false,
         };
 
-        let stdstream_handle = get_std_handle(if stream_type == OutputStreamType::Stdout {
+        let conout_handle = get_std_handle(if stream_type == OutputStreamType::Stdout {
             STDOUT_FILENO
         } else {
             STDERR_FILENO
         });
-        let stdstream_isatty = match stdstream_handle {
+        let conout_isatty = match conout_handle {
             Ok(handle) => {
                 // If this function doesn't fail then fd is a TTY
                 get_console_mode(handle).is_ok()
@@ -578,13 +566,12 @@ impl Term for Console {
         };
 
         Console {
-            stdin_isatty,
-            stdin_handle: stdin_handle.unwrap_or(ptr::null_mut()),
-            stdstream_isatty,
-            stdstream_handle: stdstream_handle.unwrap_or(ptr::null_mut()),
+            conin_isatty: stdin_isatty,
+            conin: stdin_handle.unwrap_or(ptr::null_mut()),
+            conout_isatty,
+            conout: conout_handle.unwrap_or(ptr::null_mut()),
             color_mode,
             ansi_colors_supported: false,
-            stream_type,
             bell_style,
         }
     }
@@ -594,12 +581,12 @@ impl Term for Console {
         false
     }
 
-    fn is_stdin_tty(&self) -> bool {
-        self.stdin_isatty
+    fn is_input_tty(&self) -> bool {
+        self.conin_isatty
     }
 
     fn is_output_tty(&self) -> bool {
-        self.stdstream_isatty
+        self.conout_isatty
     }
 
     // pub fn install_sigwinch_handler(&mut self) {
@@ -608,15 +595,15 @@ impl Term for Console {
 
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
-        if !self.stdin_isatty {
+        if !self.conin_isatty {
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 "no stdio handle available for this process",
             ))?;
         }
-        let original_stdin_mode = get_console_mode(self.stdin_handle)?;
+        let original_conin_mode = get_console_mode(self.conin)?;
         // Disable these modes
-        let mut raw = original_stdin_mode
+        let mut raw = original_conin_mode
             & !(wincon::ENABLE_LINE_INPUT
                 | wincon::ENABLE_ECHO_INPUT
                 | wincon::ENABLE_PROCESSED_INPUT);
@@ -625,17 +612,17 @@ impl Term for Console {
         raw |= wincon::ENABLE_INSERT_MODE;
         raw |= wincon::ENABLE_QUICK_EDIT_MODE;
         raw |= wincon::ENABLE_WINDOW_INPUT;
-        check(unsafe { consoleapi::SetConsoleMode(self.stdin_handle, raw) })?;
+        check(unsafe { consoleapi::SetConsoleMode(self.conin, raw) })?;
 
-        let original_stdstream_mode = if self.stdstream_isatty {
-            let original_stdstream_mode = get_console_mode(self.stdstream_handle)?;
+        let original_conout_mode = if self.conout_isatty {
+            let original_conout_mode = get_console_mode(self.conout)?;
 
-            let mut mode = original_stdstream_mode;
+            let mut mode = original_conout_mode;
             if mode & wincon::ENABLE_WRAP_AT_EOL_OUTPUT == 0 {
                 mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
                 debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
                 unsafe {
-                    assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
+                    assert_ne!(consoleapi::SetConsoleMode(self.conout, mode), 0);
                 }
             }
             // To enable ANSI colors (Windows 10 only):
@@ -646,7 +633,7 @@ impl Term for Console {
                     mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                     debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
                     unsafe {
-                        assert_ne!(consoleapi::SetConsoleMode(self.stdstream_handle, mode), 0);
+                        assert_ne!(consoleapi::SetConsoleMode(self.conout, mode), 0);
                     }
                 } else {
                     debug!(target: "rustyline", "ANSI colors already enabled");
@@ -654,36 +641,35 @@ impl Term for Console {
             } else if self.color_mode != ColorMode::Disabled {
                 mode |= wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    unsafe { consoleapi::SetConsoleMode(self.stdstream_handle, mode) != 0 };
+                    unsafe { consoleapi::SetConsoleMode(self.conout, mode) != 0 };
                 debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
             }
-            Some(original_stdstream_mode)
+            Some(original_conout_mode)
         } else {
             None
         };
 
         Ok((
             ConsoleMode {
-                original_stdin_mode,
-                stdin_handle: self.stdin_handle,
-                original_stdstream_mode,
-                stdstream_handle: self.stdstream_handle,
+                original_conin_mode,
+                conin: self.conin,
+                original_conout_mode,
+                conout: self.conout,
             },
             (),
         ))
     }
 
-    fn create_reader(&self, _: &Config, _: ConsoleKeyMap) -> Result<ConsoleRawReader> {
-        ConsoleRawReader::create()
+    fn create_reader(&self, _: &Config, _: ConsoleKeyMap) -> ConsoleRawReader {
+        ConsoleRawReader::create(self.conin)
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(
-            self.stdstream_handle,
-            self.stream_type,
-            self.colors_enabled(),
-            self.bell_style,
-        )
+        ConsoleRenderer::new(self.conout, self.colors_enabled(), self.bell_style)
+    }
+
+    fn writeln(&self) -> Result<()> {
+        todo!()
     }
 }
 

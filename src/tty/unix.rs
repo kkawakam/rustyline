@@ -27,8 +27,8 @@ use crate::{error, Cmd, Result};
 /// Unsupported Terminals that don't support RAW mode
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
-const BRACKETED_PASTE_ON: &[u8] = b"\x1b[?2004h";
-const BRACKETED_PASTE_OFF: &[u8] = b"\x1b[?2004l";
+const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
+const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
@@ -106,7 +106,7 @@ impl RawMode for PosixMode {
         termios::tcsetattr(self.tty_in, SetArg::TCSADRAIN, &self.termios)?;
         // disable bracketed paste
         if let Some(out) = self.tty_out {
-            write(out, BRACKETED_PASTE_OFF)?;
+            write_all(out, BRACKETED_PASTE_OFF)?;
         }
         Ok(())
     }
@@ -838,7 +838,7 @@ impl Renderer for PosixRenderer {
                 write!(self.buffer, "\x1b[{}D", col_shift).unwrap();
             }
         }
-        self.write_and_flush(self.buffer.as_bytes())
+        self.write_and_flush(self.buffer.as_str())
     }
 
     fn refresh_line(
@@ -902,13 +902,13 @@ impl Renderer for PosixRenderer {
             self.buffer.push('\r');
         }
 
-        self.write_and_flush(self.buffer.as_bytes())?;
+        self.write_and_flush(self.buffer.as_str())?;
 
         Ok(())
     }
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
-        write(self.out, buf)?;
+    fn write_and_flush(&self, buf: &str) -> Result<()> {
+        write_all(self.out, buf)?;
         Ok(())
     }
 
@@ -954,7 +954,7 @@ impl Renderer for PosixRenderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
-        self.write_and_flush(b"\x1b[H\x1b[2J")
+        self.write_and_flush("\x1b[H\x1b[2J")
     }
 
     /// Check if a SIGWINCH signal has been received
@@ -991,7 +991,7 @@ impl Renderer for PosixRenderer {
             return Ok(());
         }
         /* Report cursor location */
-        self.write_and_flush(b"\x1b[6n")?;
+        self.write_and_flush("\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
         if rdr.poll(100)? == 0
             || rdr.next_char()? != '\x1b'
@@ -1004,7 +1004,7 @@ impl Renderer for PosixRenderer {
         let col = read_digits_until(rdr, 'R')?;
         debug!(target: "rustyline", "initial cursor location: {:?}", col);
         if col != Some(1) {
-            self.write_and_flush(b"\n")?;
+            self.write_and_flush("\n")?;
         }
         Ok(())
     }
@@ -1091,6 +1091,7 @@ impl Term for PosixTerminal {
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
     ) -> Self {
+        // TODO Prefer stdio over /dev/tty
         let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty) = if let Ok(tty) = tty {
             let fd = tty.into_raw_fd(); // FIXME close fd
@@ -1177,7 +1178,7 @@ impl Term for PosixTerminal {
         // enable bracketed paste
         let out = if !self.enable_bracketed_paste {
             None
-        } else if let Err(e) = write(self.tty_out, BRACKETED_PASTE_ON) {
+        } else if let Err(e) = write_all(self.tty_out, BRACKETED_PASTE_ON) {
             debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
             None
         } else {
@@ -1208,9 +1209,22 @@ impl Term for PosixTerminal {
     }
 
     fn writeln(&self) -> Result<()> {
-        write(self.tty_out, b"\n")?;
+        write_all(self.tty_out, "\n")?;
         Ok(())
     }
+}
+
+fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
+    let mut bytes = buf.as_bytes();
+    while !bytes.is_empty() {
+        match write(fd, bytes) {
+            Ok(0) => return Err(nix::errno::Errno::EIO),
+            Ok(n) => bytes = &bytes[n..],
+            Err(nix::errno::Errno::EINTR) => {}
+            Err(r) => return Err(r),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(not(test))]

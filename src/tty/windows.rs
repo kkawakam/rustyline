@@ -1,14 +1,17 @@
 //! Windows specific definitions
 #![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::mem;
+use std::os::windows::io::IntoRawHandle;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, LPCVOID, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
@@ -22,10 +25,6 @@ use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
-
-//const STDIN_FILENO: DWORD = winbase::STD_INPUT_HANDLE;
-//const STDOUT_FILENO: DWORD = winbase::STD_OUTPUT_HANDLE;
-//const STDERR_FILENO: DWORD = winbase::STD_ERROR_HANDLE;
 
 fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
     let handle = unsafe { processenv::GetStdHandle(fd) };
@@ -386,7 +385,7 @@ impl Renderer for ConsoleRenderer {
         // position at the start of the prompt, clear to end of previous input
         self.clear_old_rows(&info, old_layout)?;
         // display prompt, input line and hint
-        self.write_and_flush(self.buffer.as_bytes())?;
+        self.write_and_flush(self.buffer.as_str())?;
 
         // position the cursor
         let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
@@ -397,18 +396,8 @@ impl Renderer for ConsoleRenderer {
         Ok(())
     }
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
-        match self.out {
-            OutputStreamType::Stdout => {
-                io::stdout().write_all(buf)?;
-                io::stdout().flush()?;
-            }
-            OutputStreamType::Stderr => {
-                io::stderr().write_all(buf)?;
-                io::stderr().flush()?;
-            }
-        }
-        Ok(())
+    fn write_and_flush(&self, buf: &str) -> Result<()> {
+        write_all(self.conout, buf)
     }
 
     /// Characters with 2 column width are correctly handled (not split).
@@ -483,7 +472,7 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
-        self.write_and_flush(b"")?; // we must do this otherwise the cursor position is not reported correctly
+        self.write_and_flush("")?; // we must do this otherwise the cursor position is not reported correctly
         let mut info = self.get_console_screen_buffer_info()?;
         if info.dwCursorPosition.X == 0 {
             return Ok(());
@@ -501,6 +490,28 @@ impl Renderer for ConsoleRenderer {
         }
         res
     }
+}
+
+// See write_valid_utf8_to_console
+// /src/rust/library/std/src/sys/windows/stdio.rs:171
+// https://github.com/judah/haskeline/blob/c03e7029b2d9c3d16da5480306b42b8d4ebe03cf/System/Console/Haskeline/Backend/Win32.hsc#L238-L240
+fn write_all(handle: HANDLE, s: &str) -> Result<()> {
+    let utf16: Vec<u16> = s.encode_utf16().collect(); // FIXME MAX_BUFFER_SIZE (4096) / alloc
+    let mut data: &[u16] = utf16.as_slice();
+    while !data.is_empty() {
+        let mut written = 0;
+        check(unsafe {
+            consoleapi::WriteConsoleW(
+                handle,
+                data.as_ptr() as LPCVOID,
+                data.len() as u32,
+                &mut written,
+                ptr::null_mut(),
+            )
+        })?;
+        data = &data[(written as usize)..]; // TODO check written > 0
+    }
+    Ok(())
 }
 
 static SIGWINCH: AtomicBool = AtomicBool::new(false);
@@ -542,9 +553,20 @@ impl Term for Console {
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
     ) -> Console {
-        use std::ptr;
-        let stdin_handle = get_std_handle(STDIN_FILENO);
-        let stdin_isatty = match stdin_handle {
+        // TODO Prefer stdio over /dev/tty
+        let (conin, conout) =
+            if let (Ok(conin), Ok(conout)) = (
+                OpenOptions::new().read(true).write(true).open("CONIN$"),
+                OpenOptions::new().read(true).write(true).open("CONOUT$"),
+            ) {
+                (Ok(conin.into_raw_handle()), Ok(conout.into_raw_handle())) // FIXME close handles
+            } else {
+                (
+                    get_std_handle(winbase::STD_INPUT_HANDLE),
+                    get_std_handle(winbase::STD_OUTPUT_HANDLE),
+                )
+            };
+        let conin_isatty = match conin {
             Ok(handle) => {
                 // If this function doesn't fail then fd is a TTY
                 get_console_mode(handle).is_ok()
@@ -552,12 +574,7 @@ impl Term for Console {
             Err(_) => false,
         };
 
-        let conout_handle = get_std_handle(if stream_type == OutputStreamType::Stdout {
-            STDOUT_FILENO
-        } else {
-            STDERR_FILENO
-        });
-        let conout_isatty = match conout_handle {
+        let conout_isatty = match conout {
             Ok(handle) => {
                 // If this function doesn't fail then fd is a TTY
                 get_console_mode(handle).is_ok()
@@ -566,10 +583,10 @@ impl Term for Console {
         };
 
         Console {
-            conin_isatty: stdin_isatty,
-            conin: stdin_handle.unwrap_or(ptr::null_mut()),
+            conin_isatty,
+            conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
-            conout: conout_handle.unwrap_or(ptr::null_mut()),
+            conout: conout.unwrap_or(ptr::null_mut()),
             color_mode,
             ansi_colors_supported: false,
             bell_style,
@@ -669,7 +686,7 @@ impl Term for Console {
     }
 
     fn writeln(&self) -> Result<()> {
-        todo!()
+        write_all(self.conout, "\n")
     }
 }
 

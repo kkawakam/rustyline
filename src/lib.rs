@@ -166,7 +166,7 @@ fn complete_line<H: Helper>(
         // we got a second tab, maybe show list of possible completions
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
-            s.out.write_and_flush(msg.as_bytes())?;
+            s.out.write_and_flush(msg.as_str())?;
             s.layout.end.row += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -292,7 +292,7 @@ fn page_completions<C: Candidate, H: Helper>(
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
-            s.out.write_and_flush(b"\n--More--")?;
+            s.out.write_and_flush("\n--More--")?;
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -318,7 +318,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 _ => break,
             }
         }
-        s.out.write_and_flush(b"\n")?;
+        s.out.write_and_flush("\n")?;
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
@@ -337,9 +337,9 @@ fn page_completions<C: Candidate, H: Helper>(
                 }
             }
         }
-        s.out.write_and_flush(ab.as_bytes())?;
+        s.out.write_and_flush(ab.as_str())?;
     }
-    s.out.write_and_flush(b"\n")?;
+    s.out.write_and_flush("\n")?;
     s.layout.end.row = 0; // dirty way to make clear_old_rows do nothing
     s.layout.cursor.row = 0;
     s.refresh_line()?;

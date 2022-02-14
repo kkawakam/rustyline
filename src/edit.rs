@@ -344,7 +344,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
-                    let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)
                 } else {
                     self.refresh(self.prompt, prompt_size, true, Info::Hint)

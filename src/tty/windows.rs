@@ -13,7 +13,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, LPCVOID, TRUE, WORD};
 use winapi::shared::winerror;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+use winapi::um::handleapi::{self, INVALID_HANDLE_VALUE};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
@@ -525,6 +525,7 @@ pub struct Console {
     conin: HANDLE,
     conout_isatty: bool,
     conout: HANDLE,
+    close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
     ansi_colors_supported: bool,
     bell_style: BellStyle,
@@ -554,18 +555,22 @@ impl Term for Console {
         _enable_bracketed_paste: bool,
     ) -> Console {
         // TODO Prefer stdio over /dev/tty
-        let (conin, conout) =
-            if let (Ok(conin), Ok(conout)) = (
-                OpenOptions::new().read(true).write(true).open("CONIN$"),
-                OpenOptions::new().read(true).write(true).open("CONOUT$"),
-            ) {
-                (Ok(conin.into_raw_handle()), Ok(conout.into_raw_handle())) // FIXME close handles
-            } else {
-                (
-                    get_std_handle(winbase::STD_INPUT_HANDLE),
-                    get_std_handle(winbase::STD_OUTPUT_HANDLE),
-                )
-            };
+        let (conin, conout, close_on_drop) = if let (Ok(conin), Ok(conout)) = (
+            OpenOptions::new().read(true).write(true).open("CONIN$"),
+            OpenOptions::new().read(true).write(true).open("CONOUT$"),
+        ) {
+            (
+                Ok(conin.into_raw_handle()),
+                Ok(conout.into_raw_handle()),
+                true,
+            )
+        } else {
+            (
+                get_std_handle(winbase::STD_INPUT_HANDLE),
+                get_std_handle(winbase::STD_OUTPUT_HANDLE),
+                false,
+            )
+        };
         let conin_isatty = match conin {
             Ok(handle) => {
                 // If this function doesn't fail then fd is a TTY
@@ -587,6 +592,7 @@ impl Term for Console {
             conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
             conout: conout.unwrap_or(ptr::null_mut()),
+            close_on_drop,
             color_mode,
             ansi_colors_supported: false,
             bell_style,
@@ -687,6 +693,15 @@ impl Term for Console {
 
     fn writeln(&self) -> Result<()> {
         write_all(self.conout, "\n")
+    }
+}
+
+impl Drop for Console {
+    fn drop(&mut self) {
+        if self.close_on_drop {
+            unsafe { handleapi::CloseHandle(self.conin) };
+            unsafe { handleapi::CloseHandle(self.conout) };
+        }
     }
 }
 

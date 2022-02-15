@@ -9,10 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use buf_redux::BufReader;
 use log::{debug, warn};
+use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
 use nix::sys::signal;
 use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
-use nix::unistd::{isatty, write};
+use nix::unistd::{close, isatty, write};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
@@ -652,7 +653,7 @@ impl PosixRawReader {
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
             Ok(_) => r,
-            Err(nix::errno::Errno::EINTR) => {
+            Err(Errno::EINTR) => {
                 if SIGWINCH.load(Ordering::Relaxed) {
                     r
                 } else {
@@ -1027,6 +1028,19 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
     Ok(Some(num))
 }
 
+fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
+    let mut bytes = buf.as_bytes();
+    while !bytes.is_empty() {
+        match write(fd, bytes) {
+            Ok(0) => return Err(Errno::EIO),
+            Ok(n) => bytes = &bytes[n..],
+            Err(Errno::EINTR) => {}
+            Err(r) => return Err(r),
+        }
+    }
+    Ok(())
+}
+
 static SIGWINCH_ONCE: sync::Once = sync::Once::new();
 static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
@@ -1060,9 +1074,10 @@ pub type Terminal = PosixTerminal;
 pub struct PosixTerminal {
     unsupported: bool,
     tty_in: RawFd,
-    tty_out: RawFd,
     is_in_a_tty: bool,
+    tty_out: RawFd,
     is_out_a_tty: bool,
+    close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
     tab_stop: usize,
     bell_style: BellStyle,
@@ -1093,24 +1108,26 @@ impl Term for PosixTerminal {
     ) -> Self {
         // TODO Prefer stdio over /dev/tty
         let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
-        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty) = if let Ok(tty) = tty {
-            let fd = tty.into_raw_fd(); // FIXME close fd
+        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) = if let Ok(tty) = tty {
+            let fd = tty.into_raw_fd();
             let is_a_tty = is_a_tty(fd); // TODO: useless ?
-            (fd, is_a_tty, fd, is_a_tty)
+            (fd, is_a_tty, fd, is_a_tty, true)
         } else {
             (
                 libc::STDIN_FILENO,
                 is_a_tty(libc::STDIN_FILENO),
                 libc::STDOUT_FILENO,
                 is_a_tty(libc::STDOUT_FILENO),
+                false,
             )
         };
         let term = Self {
             unsupported: is_unsupported_term(),
             tty_in,
-            tty_out,
             is_in_a_tty,
+            tty_out,
             is_out_a_tty,
+            close_on_drop,
             color_mode,
             tab_stop,
             bell_style,
@@ -1214,17 +1231,14 @@ impl Term for PosixTerminal {
     }
 }
 
-fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
-    let mut bytes = buf.as_bytes();
-    while !bytes.is_empty() {
-        match write(fd, bytes) {
-            Ok(0) => return Err(nix::errno::Errno::EIO),
-            Ok(n) => bytes = &bytes[n..],
-            Err(nix::errno::Errno::EINTR) => {}
-            Err(r) => return Err(r),
+#[allow(unused_must_use)]
+impl Drop for PosixTerminal {
+    fn drop(&mut self) {
+        if self.close_on_drop {
+            close(self.tty_in);
+            debug_assert_eq!(self.tty_in, self.tty_out);
         }
     }
-    Ok(())
 }
 
 #[cfg(not(test))]

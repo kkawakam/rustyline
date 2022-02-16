@@ -2,7 +2,7 @@
 
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{BellStyle, ColorMode, Config};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
@@ -208,6 +208,7 @@ pub trait Term {
 
     fn new(
         color_mode: ColorMode,
+        behavior: Behavior,
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,

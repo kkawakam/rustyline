@@ -24,6 +24,8 @@ pub struct Config {
     bell_style: BellStyle,
     /// if colors should be enabled.
     color_mode: ColorMode,
+    /// Whether to use stdio or not
+    behavior: Behavior,
     /// Horizontal space taken by a tab.
     tab_stop: usize,
     /// Indentation size for indent/dedent commands
@@ -139,6 +141,18 @@ impl Config {
         self.color_mode = color_mode;
     }
 
+    /// Whether to use stdio or not
+    ///
+    /// By default, stdio is used.
+    #[must_use]
+    pub fn behavior(&self) -> Behavior {
+        self.behavior
+    }
+
+    pub(crate) fn set_behavior(&mut self, behavior: Behavior) {
+        self.behavior = behavior;
+    }
+
     /// Horizontal space taken by a tab.
     ///
     /// By default, 8.
@@ -193,6 +207,7 @@ impl Default for Config {
             auto_add_history: false,
             bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
+            behavior: Behavior::default(),
             tab_stop: 8,
             indent_size: 2,
             check_cursor_position: false,
@@ -274,6 +289,26 @@ pub enum ColorMode {
     Forced,
     /// Deactivate highlighting even if platform/terminal is supported.
     Disabled,
+}
+
+/// Should the editor use stdio
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Behavior {
+    /// Use stdin / stdout
+    Stdio,
+    /// Use terminal-style interaction whenever possible, even if 'stdin' and/or
+    /// 'stdout' are not terminals.
+    PreferTerm,
+    // TODO
+    // Use file-style interaction, reading input from the given file.
+    // useFile
+}
+
+impl Default for Behavior {
+    fn default() -> Self {
+        Behavior::Stdio
+    }
 }
 
 /// Configuration builder
@@ -373,6 +408,15 @@ impl Builder {
     #[must_use]
     pub fn color_mode(mut self, color_mode: ColorMode) -> Self {
         self.set_color_mode(color_mode);
+        self
+    }
+
+    /// Whether to use stdio or not
+    ///
+    /// By default, stdio is used.
+    #[must_use]
+    pub fn behavior(mut self, behavior: Behavior) -> Self {
+        self.set_behavior(behavior);
         self
     }
 
@@ -492,6 +536,13 @@ pub trait Configurer {
     /// By default, colorization is on except if stdout is not a TTY.
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
+    }
+
+    /// Whether to use stdio or not
+    ///
+    /// By default, stdio is used.
+    fn set_behavior(&mut self, behavior: Behavior) {
+        self.config_mut().set_behavior(behavior);
     }
 
     /// Horizontal space taken by a tab.

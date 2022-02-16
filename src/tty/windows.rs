@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use winapi::shared::minwindef::{BOOL, DWORD, FALSE, LPCVOID, TRUE, WORD};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::{self, INVALID_HANDLE_VALUE};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
@@ -19,7 +19,7 @@ use winapi::um::winnt::{CHAR, HANDLE};
 use winapi::um::{consoleapi, processenv, winbase, winuser};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{Layout, Position};
@@ -503,7 +503,7 @@ fn write_all(handle: HANDLE, s: &str) -> Result<()> {
         check(unsafe {
             consoleapi::WriteConsoleW(
                 handle,
-                data.as_ptr() as LPCVOID,
+                data.as_ptr().cast::<std::ffi::c_void>(),
                 data.len() as u32,
                 &mut written,
                 ptr::null_mut(),
@@ -550,20 +550,28 @@ impl Term for Console {
 
     fn new(
         color_mode: ColorMode,
+        behavior: Behavior,
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
     ) -> Console {
-        // TODO Prefer stdio over /dev/tty
-        let (conin, conout, close_on_drop) = if let (Ok(conin), Ok(conout)) = (
-            OpenOptions::new().read(true).write(true).open("CONIN$"),
-            OpenOptions::new().read(true).write(true).open("CONOUT$"),
-        ) {
-            (
-                Ok(conin.into_raw_handle()),
-                Ok(conout.into_raw_handle()),
-                true,
-            )
+        let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
+            if let (Ok(conin), Ok(conout)) = (
+                OpenOptions::new().read(true).write(true).open("CONIN$"),
+                OpenOptions::new().read(true).write(true).open("CONOUT$"),
+            ) {
+                (
+                    Ok(conin.into_raw_handle()),
+                    Ok(conout.into_raw_handle()),
+                    true,
+                )
+            } else {
+                (
+                    get_std_handle(winbase::STD_INPUT_HANDLE),
+                    get_std_handle(winbase::STD_OUTPUT_HANDLE),
+                    false,
+                )
+            }
         } else {
             (
                 get_std_handle(winbase::STD_INPUT_HANDLE),

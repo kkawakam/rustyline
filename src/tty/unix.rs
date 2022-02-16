@@ -18,7 +18,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
 use super::{width, RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
@@ -1102,25 +1102,36 @@ impl Term for PosixTerminal {
 
     fn new(
         color_mode: ColorMode,
+        behavior: Behavior,
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
     ) -> Self {
-        // TODO Prefer stdio over /dev/tty
-        let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
-        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) = if let Ok(tty) = tty {
-            let fd = tty.into_raw_fd();
-            let is_a_tty = is_a_tty(fd); // TODO: useless ?
-            (fd, is_a_tty, fd, is_a_tty, true)
-        } else {
-            (
-                libc::STDIN_FILENO,
-                is_a_tty(libc::STDIN_FILENO),
-                libc::STDOUT_FILENO,
-                is_a_tty(libc::STDOUT_FILENO),
-                false,
-            )
-        };
+        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
+            if behavior == Behavior::PreferTerm {
+                let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
+                if let Ok(tty) = tty {
+                    let fd = tty.into_raw_fd();
+                    let is_a_tty = is_a_tty(fd); // TODO: useless ?
+                    (fd, is_a_tty, fd, is_a_tty, true)
+                } else {
+                    (
+                        libc::STDIN_FILENO,
+                        is_a_tty(libc::STDIN_FILENO),
+                        libc::STDOUT_FILENO,
+                        is_a_tty(libc::STDOUT_FILENO),
+                        false,
+                    )
+                }
+            } else {
+                (
+                    libc::STDIN_FILENO,
+                    is_a_tty(libc::STDIN_FILENO),
+                    libc::STDOUT_FILENO,
+                    is_a_tty(libc::STDOUT_FILENO),
+                    false,
+                )
+            };
         let term = Self {
             unsupported: is_unsupported_term(),
             tty_in,

@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
@@ -156,6 +156,7 @@ impl Term for DummyTerminal {
 
     fn new(
         color_mode: ColorMode,
+        _behavior: Behavior,
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,

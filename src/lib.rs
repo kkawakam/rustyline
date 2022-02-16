@@ -49,7 +49,7 @@ use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
-pub use crate::config::{ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
+pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -730,6 +730,7 @@ impl<H: Helper> Editor<H> {
     pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(
             config.color_mode(),
+            config.behavior(),
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),

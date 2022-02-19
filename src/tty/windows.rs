@@ -261,9 +261,9 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
                 if utf16 == 0 {
                     continue;
                 }
-                    K::UnknownEscSeq
-                }
-            };
+                K::UnknownEscSeq
+            }
+        };
 
         let key = if key_code != K::UnknownEscSeq {
             KeyEvent(key_code, mods)

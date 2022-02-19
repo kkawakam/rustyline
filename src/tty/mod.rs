@@ -84,7 +84,7 @@ pub trait Renderer {
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
-    fn write_and_flush(&self, buf: &str) -> Result<()>;
+    fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
@@ -131,7 +131,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).calculate_position(s, orig)
     }
 
-    fn write_and_flush(&self, buf: &str) -> Result<()> {
+    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
         (**self).write_and_flush(buf)
     }
 

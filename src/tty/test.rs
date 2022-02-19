@@ -103,7 +103,7 @@ impl Renderer for Sink {
         pos
     }
 
-    fn write_and_flush(&self, _: &str) -> Result<()> {
+    fn write_and_flush(&mut self, _: &str) -> Result<()> {
         Ok(())
     }
 

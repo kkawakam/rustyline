@@ -2,7 +2,7 @@
 #![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
 use std::fs::OpenOptions;
-use std::io::{self, Write};
+use std::io;
 use std::mem;
 use std::os::windows::io::IntoRawHandle;
 use std::ptr;
@@ -232,6 +232,7 @@ pub struct ConsoleRenderer {
     conout: HANDLE,
     cols: usize, // Number of columns in terminal
     buffer: String,
+    utf16: Vec<u16>,
     colors_enabled: bool,
     bell_style: BellStyle,
 }
@@ -244,6 +245,7 @@ impl ConsoleRenderer {
             conout,
             cols,
             buffer: String::with_capacity(1024),
+            utf16: Vec::with_capacity(1024),
             colors_enabled,
             bell_style,
         }
@@ -385,7 +387,7 @@ impl Renderer for ConsoleRenderer {
         // position at the start of the prompt, clear to end of previous input
         self.clear_old_rows(&info, old_layout)?;
         // display prompt, input line and hint
-        self.write_and_flush(self.buffer.as_str())?;
+        write_to_console(self.conout, self.buffer.as_str(), &mut self.utf16)?;
 
         // position the cursor
         let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
@@ -396,8 +398,8 @@ impl Renderer for ConsoleRenderer {
         Ok(())
     }
 
-    fn write_and_flush(&self, buf: &str) -> Result<()> {
-        write_all(self.conout, buf)
+    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
+        write_to_console(self.conout, buf, &mut self.utf16)
     }
 
     /// Characters with 2 column width are correctly handled (not split).
@@ -425,11 +427,7 @@ impl Renderer for ConsoleRenderer {
 
     fn beep(&mut self) -> Result<()> {
         match self.bell_style {
-            BellStyle::Audible => {
-                io::stderr().write_all(b"\x07")?;
-                io::stderr().flush()?;
-                Ok(())
-            }
+            BellStyle::Audible => write_all(self.conout, &[7; 1]),
             _ => Ok(()),
         }
     }
@@ -472,7 +470,7 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
-        self.write_and_flush("")?; // we must do this otherwise the cursor position is not reported correctly
+        //self.write_and_flush("")?; // we must do this otherwise the cursor position is not reported correctly
         let mut info = self.get_console_screen_buffer_info()?;
         if info.dwCursorPosition.X == 0 {
             return Ok(());
@@ -492,12 +490,16 @@ impl Renderer for ConsoleRenderer {
     }
 }
 
+fn write_to_console(handle: HANDLE, s: &str, utf16: &mut Vec<u16>) -> Result<()> {
+    utf16.clear();
+    utf16.extend(s.encode_utf16());
+    write_all(handle, utf16.as_slice())
+}
+
 // See write_valid_utf8_to_console
 // /src/rust/library/std/src/sys/windows/stdio.rs:171
 // https://github.com/judah/haskeline/blob/c03e7029b2d9c3d16da5480306b42b8d4ebe03cf/System/Console/Haskeline/Backend/Win32.hsc#L238-L240
-fn write_all(handle: HANDLE, s: &str) -> Result<()> {
-    let utf16: Vec<u16> = s.encode_utf16().collect(); // FIXME MAX_BUFFER_SIZE (4096) / alloc
-    let mut data: &[u16] = utf16.as_slice();
+fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
     while !data.is_empty() {
         let mut written = 0;
         check(unsafe {
@@ -700,7 +702,7 @@ impl Term for Console {
     }
 
     fn writeln(&self) -> Result<()> {
-        write_all(self.conout, "\n")
+        write_all(self.conout, &[10; 1])
     }
 }
 

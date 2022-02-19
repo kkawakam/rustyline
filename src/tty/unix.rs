@@ -2,7 +2,7 @@
 use std::cmp;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -839,7 +839,8 @@ impl Renderer for PosixRenderer {
                 write!(self.buffer, "\x1b[{}D", col_shift).unwrap();
             }
         }
-        self.write_and_flush(self.buffer.as_str())
+        write_all(self.out, self.buffer.as_str())?;
+        Ok(())
     }
 
     fn refresh_line(
@@ -903,12 +904,11 @@ impl Renderer for PosixRenderer {
             self.buffer.push('\r');
         }
 
-        self.write_and_flush(self.buffer.as_str())?;
-
+        write_all(self.out, self.buffer.as_str())?;
         Ok(())
     }
 
-    fn write_and_flush(&self, buf: &str) -> Result<()> {
+    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
         write_all(self.out, buf)?;
         Ok(())
     }
@@ -944,11 +944,7 @@ impl Renderer for PosixRenderer {
 
     fn beep(&mut self) -> Result<()> {
         match self.bell_style {
-            BellStyle::Audible => {
-                io::stderr().write_all(b"\x07")?;
-                io::stderr().flush()?;
-                Ok(())
-            }
+            BellStyle::Audible => self.write_and_flush("\x07"),
             _ => Ok(()),
         }
     }

@@ -23,7 +23,7 @@ pub fn execute<H: Helper>(
     kill_ring: &Arc<Mutex<KillRing>>,
     config: &Config,
 ) -> Result<Status> {
-    use Status::*;
+    use Status::{Proceed, Submit};
 
     match cmd {
         Cmd::CompleteHint => {
@@ -37,21 +37,21 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::BeginningOfLine) => {
             // Move to the beginning of line.
-            s.edit_move_home()?
+            s.edit_move_home()?;
         }
         Cmd::Move(Movement::ViFirstPrint) => {
             s.edit_move_home()?;
-            s.edit_move_to_next_word(At::Start, Word::Big, 1)?
+            s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
         }
         Cmd::Move(Movement::BackwardChar(n)) => {
             // Move back a character.
-            s.edit_move_backward(n)?
+            s.edit_move_backward(n)?;
         }
         Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
         Cmd::Replace(mvt, text) => {
             s.edit_kill(&mvt)?;
             if let Some(text) = text {
-                s.edit_insert_text(&text)?
+                s.edit_insert_text(&text)?;
             }
         }
         Cmd::Overwrite(c) => {
@@ -71,52 +71,52 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::EndOfLine) => {
             // Move to the end of line.
-            s.edit_move_end()?
+            s.edit_move_end()?;
         }
         Cmd::Move(Movement::ForwardChar(n)) => {
             // Move forward a character.
-            s.edit_move_forward(n)?
+            s.edit_move_forward(n)?;
         }
         Cmd::ClearScreen => {
             // Clear the screen leaving the current line at the top of the screen.
             s.clear_screen()?;
-            s.refresh_line()?
+            s.refresh_line()?;
         }
         Cmd::NextHistory => {
             // Fetch the next command from the history list.
-            s.edit_history_next(false)?
+            s.edit_history_next(false)?;
         }
         Cmd::PreviousHistory => {
             // Fetch the previous command from the history list.
-            s.edit_history_next(true)?
+            s.edit_history_next(true)?;
         }
         Cmd::LineUpOrPreviousHistory(n) => {
             if !s.edit_move_line_up(n)? {
-                s.edit_history_next(true)?
+                s.edit_history_next(true)?;
             }
         }
         Cmd::LineDownOrNextHistory(n) => {
             if !s.edit_move_line_down(n)? {
-                s.edit_history_next(false)?
+                s.edit_history_next(false)?;
             }
         }
         Cmd::HistorySearchBackward => s.edit_history_search(SearchDirection::Reverse)?,
         Cmd::HistorySearchForward => s.edit_history_search(SearchDirection::Forward)?,
         Cmd::TransposeChars => {
             // Exchange the char before cursor with the character at cursor.
-            s.edit_transpose_chars()?
+            s.edit_transpose_chars()?;
         }
         Cmd::Yank(n, anchor) => {
             // retrieve (yank) last item killed
             let mut kill_ring = kill_ring.lock().unwrap();
             if let Some(text) = kill_ring.yank() {
-                s.edit_yank(input_state, text, anchor, n)?
+                s.edit_yank(input_state, text, anchor, n)?;
             }
         }
         Cmd::ViYankTo(ref mvt) => {
             if let Some(text) = s.line.copy(mvt) {
                 let mut kill_ring = kill_ring.lock().unwrap();
-                kill_ring.kill(&text, Mode::Append)
+                kill_ring.kill(&text, Mode::Append);
             }
         }
         Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
@@ -152,26 +152,26 @@ pub fn execute<H: Helper>(
         }
         Cmd::BeginningOfHistory => {
             // move to first entry in history
-            s.edit_history(true)?
+            s.edit_history(true)?;
         }
         Cmd::EndOfHistory => {
             // move to last entry in history
-            s.edit_history(false)?
+            s.edit_history(false)?;
         }
         Cmd::Move(Movement::BackwardWord(n, word_def)) => {
             // move backwards one word
-            s.edit_move_to_prev_word(word_def, n)?
+            s.edit_move_to_prev_word(word_def, n)?;
         }
         Cmd::CapitalizeWord => {
             // capitalize word after point
-            s.edit_word(WordAction::Capitalize)?
+            s.edit_word(WordAction::Capitalize)?;
         }
         Cmd::Kill(ref mvt) => {
             s.edit_kill(mvt)?;
         }
         Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
             // move forwards one word
-            s.edit_move_to_next_word(at, word_def, n)?
+            s.edit_move_to_next_word(at, word_def, n)?;
         }
         Cmd::Move(Movement::LineUp(n)) => {
             s.edit_move_line_up(n)?;
@@ -181,29 +181,29 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::BeginningOfBuffer) => {
             // Move to the start of the buffer.
-            s.edit_move_buffer_start()?
+            s.edit_move_buffer_start()?;
         }
         Cmd::Move(Movement::EndOfBuffer) => {
             // Move to the end of the buffer.
-            s.edit_move_buffer_end()?
+            s.edit_move_buffer_end()?;
         }
         Cmd::DowncaseWord => {
             // lowercase word after point
-            s.edit_word(WordAction::Lowercase)?
+            s.edit_word(WordAction::Lowercase)?;
         }
         Cmd::TransposeWords(n) => {
             // transpose words
-            s.edit_transpose_words(n)?
+            s.edit_transpose_words(n)?;
         }
         Cmd::UpcaseWord => {
             // uppercase word after point
-            s.edit_word(WordAction::Uppercase)?
+            s.edit_word(WordAction::Uppercase)?;
         }
         Cmd::YankPop => {
             // yank-pop
             let mut kill_ring = kill_ring.lock().unwrap();
             if let Some((yank_size, text)) = kill_ring.yank_pop() {
-                s.edit_yank_pop(yank_size, text)?
+                s.edit_yank_pop(yank_size, text)?;
             }
         }
         Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,

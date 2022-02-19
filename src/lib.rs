@@ -178,7 +178,7 @@ fn complete_line<H: Helper>(
             {
                 cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
-            matches!(cmd, Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y'))
+            matches!(cmd, Cmd::SelfInsert(1, 'y' | 'Y'))
         } else {
             true
         };
@@ -311,7 +311,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
             match cmd {
-                Cmd::SelfInsert(1, 'y') | Cmd::SelfInsert(1, 'Y') | Cmd::SelfInsert(1, ' ') => {
+                Cmd::SelfInsert(1, 'y' | 'Y' | ' ') => {
                     pause_row += s.out.get_rows() - 1;
                 }
                 Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. } => {
@@ -595,18 +595,15 @@ fn apply_backspace_direct(input: &str) -> String {
     let mut grapheme_sizes: Vec<u8> = Vec::with_capacity(input.len());
 
     for g in unicode_segmentation::UnicodeSegmentation::graphemes(input, true) {
-        match g {
+        if g == "\u{0008}" {
             // backspace char
-            "\u{0008}" => {
-                if let Some(n) = grapheme_sizes.pop() {
-                    // Remove the last grapheme
-                    out.truncate(out.len() - n as usize);
-                }
+            if let Some(n) = grapheme_sizes.pop() {
+                // Remove the last grapheme
+                out.truncate(out.len() - n as usize);
             }
-            _ => {
-                out.push_str(g);
-                grapheme_sizes.push(g.len() as u8);
-            }
+        } else {
+            out.push_str(g);
+            grapheme_sizes.push(g.len() as u8);
         }
     }
 
@@ -621,53 +618,51 @@ fn readline_direct(
     let mut input = String::new();
 
     loop {
-        match reader.read_line(&mut input)? {
-            0 => return Err(error::ReadlineError::Eof),
-            _ => {
-                // Remove trailing newline
-                let trailing_n = input.ends_with('\n');
-                let trailing_r;
+        if reader.read_line(&mut input)? == 0 {
+            return Err(error::ReadlineError::Eof);
+        }
+        // Remove trailing newline
+        let trailing_n = input.ends_with('\n');
+        let trailing_r;
 
-                if trailing_n {
-                    input.pop();
-                    trailing_r = input.ends_with('\r');
-                    if trailing_r {
-                        input.pop();
+        if trailing_n {
+            input.pop();
+            trailing_r = input.ends_with('\r');
+            if trailing_r {
+                input.pop();
+            }
+        } else {
+            trailing_r = false;
+        }
+
+        input = apply_backspace_direct(&input);
+
+        match validator.as_ref() {
+            None => return Ok(input),
+            Some(v) => {
+                let mut ctx = input.as_str();
+                let mut ctx = validate::ValidationContext::new(&mut ctx);
+
+                match v.validate(&mut ctx)? {
+                    validate::ValidationResult::Valid(msg) => {
+                        if let Some(msg) = msg {
+                            writer.write_all(msg.as_bytes())?;
+                        }
+                        return Ok(input);
                     }
-                } else {
-                    trailing_r = false;
-                }
-
-                input = apply_backspace_direct(&input);
-
-                match validator.as_ref() {
-                    None => return Ok(input),
-                    Some(v) => {
-                        let mut ctx = input.as_str();
-                        let mut ctx = validate::ValidationContext::new(&mut ctx);
-
-                        match v.validate(&mut ctx)? {
-                            validate::ValidationResult::Valid(msg) => {
-                                if let Some(msg) = msg {
-                                    writer.write_all(msg.as_bytes())?;
-                                }
-                                return Ok(input);
-                            }
-                            validate::ValidationResult::Invalid(Some(msg)) => {
-                                writer.write_all(msg.as_bytes())?;
-                            }
-                            validate::ValidationResult::Incomplete => {
-                                // Add newline and keep on taking input
-                                if trailing_r {
-                                    input.push('\r');
-                                }
-                                if trailing_n {
-                                    input.push('\n');
-                                }
-                            }
-                            _ => {}
+                    validate::ValidationResult::Invalid(Some(msg)) => {
+                        writer.write_all(msg.as_bytes())?;
+                    }
+                    validate::ValidationResult::Incomplete => {
+                        // Add newline and keep on taking input
+                        if trailing_r {
+                            input.push('\r');
+                        }
+                        if trailing_n {
+                            input.push('\n');
                         }
                     }
+                    _ => {}
                 }
             }
         }
@@ -696,6 +691,7 @@ pub struct Context<'h> {
 
 impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
+    #[must_use]
     pub fn new(history: &'h History) -> Self {
         Context {
             history,
@@ -704,11 +700,13 @@ impl<'h> Context<'h> {
     }
 
     /// Return an immutable reference to the history object.
+    #[must_use]
     pub fn history(&self) -> &History {
         self.history
     }
 
     /// The history index we are currently editing
+    #[must_use]
     pub fn history_index(&self) -> usize {
         self.history_index
     }
@@ -727,11 +725,13 @@ pub struct Editor<H: Helper> {
 #[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
+    #[must_use]
     pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(
             config.color_mode(),
@@ -811,7 +811,7 @@ impl<H: Helper> Editor<H> {
 
     /// Clear history.
     pub fn clear_history(&mut self) {
-        self.history.clear()
+        self.history.clear();
     }
 
     /// Return a mutable reference to the history object.

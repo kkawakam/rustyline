@@ -162,7 +162,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
     }
 
     fn update_size(&mut self) {
-        (**self).update_size()
+        (**self).update_size();
     }
 
     fn get_columns(&self) -> usize {

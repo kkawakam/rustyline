@@ -39,6 +39,7 @@ impl<'i> ValidationContext<'i> {
     }
 
     /// Returns user input.
+    #[must_use]
     pub fn input(&self) -> &str {
         self.i.input()
     }
@@ -105,6 +106,7 @@ pub struct MatchingBracketValidator {
 
 impl MatchingBracketValidator {
     /// Constructor
+    #[must_use]
     pub fn new() -> Self {
         Self { _priv: () }
     }

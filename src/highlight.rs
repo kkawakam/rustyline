@@ -94,7 +94,7 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
 const OPENS: &[u8; 3] = b"{[(";
 const CLOSES: &[u8; 3] = b"}])";
 
-/// TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
+// TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.
 #[derive(Default)]
@@ -104,6 +104,7 @@ pub struct MatchingBracketHighlighter {
 
 impl MatchingBracketHighlighter {
     /// Constructor
+    #[must_use]
     pub fn new() -> Self {
         Self {
             bracket: Cell::new(None),

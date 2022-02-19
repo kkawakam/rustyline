@@ -13,6 +13,7 @@ impl KeyEvent {
     pub(crate) const ESC: Self = Self(KeyCode::Esc, Modifiers::NONE);
 
     /// Constructor from `char` and modifiers
+    #[must_use]
     pub fn new(c: char, mut mods: Modifiers) -> Self {
         use {KeyCode as K, KeyEvent as E, Modifiers as M};
 
@@ -81,18 +82,21 @@ impl KeyEvent {
     }
 
     /// Constructor from `char` with Ctrl modifier
+    #[must_use]
     pub fn ctrl(c: char) -> Self {
         Self::new(c, Modifiers::CTRL)
     }
 
     /// Constructor from `char` with Alt modifier
+    #[must_use]
     pub fn alt(c: char) -> Self {
         Self::new(c, Modifiers::ALT)
     }
 
     /// ctrl-a => ctrl-A (uppercase)
     /// shift-A => A (no SHIFT modifier)
-    /// shift-Tab => BackTab
+    /// shift-Tab => `BackTab`
+    #[must_use]
     pub fn normalize(e: Self) -> Self {
         use {KeyCode as K, KeyEvent as E, Modifiers as M};
 

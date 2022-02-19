@@ -91,7 +91,7 @@ pub trait Completer {
     /// Updates the edited `line` with the `elected` candidate.
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
         let end = line.pos();
-        line.replace(start..end, elected)
+        line.replace(start..end, elected);
     }
 }
 
@@ -99,7 +99,7 @@ impl Completer for () {
     type Candidate = String;
 
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
-        unreachable!()
+        unreachable!();
     }
 }
 
@@ -116,7 +116,7 @@ impl<'c, C: ?Sized + Completer> Completer for &'c C {
     }
 
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
-        (**self).update(line, start, elected)
+        (**self).update(line, start, elected);
     }
 }
 macro_rules! box_completer {
@@ -187,6 +187,7 @@ pub enum Quote {
 
 impl FilenameCompleter {
     /// Constructor
+    #[must_use]
     pub fn new() -> Self {
         Self {
             break_chars: &DEFAULT_BREAK_CHARS,
@@ -245,6 +246,7 @@ impl Completer for FilenameCompleter {
 }
 
 /// Remove escape char
+#[must_use]
 pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
     let esc_char = if let Some(c) = esc_char {
         c
@@ -277,6 +279,7 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
 /// Escape any `break_chars` in `input` string with `esc_char`.
 /// For example, '/User Information' becomes '/User\ Information'
 /// when space is a breaking char and '\\' the escape char.
+#[must_use]
 pub fn escape(
     mut input: String,
     esc_char: Option<char>,
@@ -404,6 +407,7 @@ fn normalize(s: &str) -> Cow<str> {
 /// try to find backward the start of a word.
 /// Return (0, `line[..pos]`) if no break char has been found.
 /// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
+#[must_use]
 pub fn extract_word<'l>(
     line: &'l str,
     pos: usize,
@@ -421,9 +425,8 @@ pub fn extract_word<'l>(
                 // escaped break char
                 start = None;
                 continue;
-            } else {
-                break;
             }
+            break;
         }
         if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
             start = Some(i + c.len_utf8());

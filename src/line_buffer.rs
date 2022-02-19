@@ -76,6 +76,7 @@ impl fmt::Debug for LineBuffer {
 
 impl LineBuffer {
     /// Create a new line buffer with the given maximum `capacity`.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             buf: String::with_capacity(capacity),
@@ -118,16 +119,19 @@ impl LineBuffer {
     }
 
     /// Extracts a string slice containing the entire buffer.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.buf
     }
 
     /// Converts a buffer into a `String` without copying or allocating.
+    #[must_use]
     pub fn into_string(self) -> String {
         self.buf
     }
 
     /// Current cursor position (byte position)
+    #[must_use]
     pub fn pos(&self) -> usize {
         self.pos
     }
@@ -139,11 +143,13 @@ impl LineBuffer {
     }
 
     /// Returns the length of this buffer, in bytes.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.buf.len()
     }
 
     /// Returns `true` if this buffer has a length of zero.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
     }
@@ -195,6 +201,7 @@ impl LineBuffer {
 
     /// Returns the position of the character just after the current cursor
     /// position.
+    #[must_use]
     pub fn next_pos(&self, n: RepeatCount) -> Option<usize> {
         if self.pos == self.buf.len() {
             return None;
@@ -341,6 +348,7 @@ impl LineBuffer {
     }
 
     /// Is cursor at the end of input (whitespaces after cursor is discarded)
+    #[must_use]
     pub fn is_end_of_input(&self) -> bool {
         self.pos >= self.buf.trim_end().len()
     }
@@ -570,20 +578,20 @@ impl LineBuffer {
             Some(off) => {
                 let column = self.buf[off + 1..self.pos].graphemes(true).count();
 
-                let mut dest_start = self.buf[..off].rfind('\n').map(|n| n + 1).unwrap_or(0);
+                let mut dest_start = self.buf[..off].rfind('\n').map_or(0, |n| n + 1);
                 let mut dest_end = off;
                 for _ in 1..n {
                     if dest_start == 0 {
                         break;
                     }
                     dest_end = dest_start - 1;
-                    dest_start = self.buf[..dest_end].rfind('\n').map(|n| n + 1).unwrap_or(0);
+                    dest_start = self.buf[..dest_end].rfind('\n').map_or(0, |n| n + 1);
                 }
                 let gidx = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
                     .nth(column);
 
-                self.pos = gidx.map(|(idx, _)| dest_start + idx).unwrap_or(off); // if there's no enough columns
+                self.pos = gidx.map_or(off, |(idx, _)| dest_start + idx); // if there's no enough columns
                 true
             }
             None => false,
@@ -601,11 +609,10 @@ impl LineBuffer {
         };
         let end = self.buf[self.pos..]
             .find('\n')
-            .map(|x| self.pos + x + 1)
-            .unwrap_or_else(|| self.buf.len());
+            .map_or_else(|| self.buf.len(), |x| self.pos + x + 1);
         for _ in 0..n {
             if let Some(off) = self.buf[..start - 1].rfind('\n') {
-                start = off + 1
+                start = off + 1;
             } else {
                 start = 0;
                 break;
@@ -626,7 +633,7 @@ impl LineBuffer {
         let start = self.buf[..self.pos].rfind('\n').unwrap_or(0);
         for _ in 0..n {
             if let Some(off) = self.buf[end..].find('\n') {
-                end = end + off + 1
+                end = end + off + 1;
             } else {
                 end = self.buf.len();
                 break;
@@ -639,13 +646,12 @@ impl LineBuffer {
     pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
         match self.buf[self.pos..].find('\n') {
             Some(off) => {
-                let line_start = self.buf[..self.pos].rfind('\n').map(|n| n + 1).unwrap_or(0);
+                let line_start = self.buf[..self.pos].rfind('\n').map_or(0, |n| n + 1);
                 let column = self.buf[line_start..self.pos].graphemes(true).count();
                 let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
-                    .map(|v| dest_start + v)
-                    .unwrap_or_else(|| self.buf.len());
+                    .map_or_else(|| self.buf.len(), |v| dest_start + v);
                 for _ in 1..n {
                     if dest_end == self.buf.len() {
                         break;
@@ -653,14 +659,12 @@ impl LineBuffer {
                     dest_start = dest_end + 1;
                     dest_end = self.buf[dest_start..]
                         .find('\n')
-                        .map(|v| dest_start + v)
-                        .unwrap_or_else(|| self.buf.len());
+                        .map_or_else(|| self.buf.len(), |v| dest_start + v);
                 }
                 self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
                     .nth(column)
-                    .map(|(idx, _)| dest_start + idx)
-                    .unwrap_or(dest_end); // if there's no enough columns
+                    .map_or(dest_end, |(idx, _)| dest_start + idx); // if there's no enough columns
                 debug_assert!(self.pos <= self.buf.len());
                 true
             }
@@ -768,14 +772,13 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .filter_map(|(i, ch)| {
+            .find_map(|(i, ch)| {
                 if ch.chars().all(char::is_alphanumeric) {
                     Some(i)
                 } else {
                     None
                 }
             })
-            .next()
             .map(|i| i + self.pos)
     }
 
@@ -791,7 +794,7 @@ impl LineBuffer {
                     .collect::<String>();
                 let result = match a {
                     WordAction::Capitalize => {
-                        let ch = (&word).graphemes(true).next().unwrap();
+                        let ch = word.graphemes(true).next().unwrap();
                         let cap = ch.to_uppercase();
                         cap + &word[ch.len()..].to_lowercase()
                     }
@@ -896,6 +899,7 @@ impl LineBuffer {
 
     /// Return the content between current cursor position and `mvt` position.
     /// Return `None` when the buffer is empty or when the movement fails.
+    #[must_use]
     pub fn copy(&self, mvt: &Movement) -> Option<String> {
         if self.is_empty() {
             return None;
@@ -1003,7 +1007,7 @@ impl LineBuffer {
         if notify {
             if let Some(dl) = self.dl.as_ref() {
                 let mut dl = dl.lock().unwrap();
-                dl.start_killing()
+                dl.start_killing();
             }
         }
         let killed = match *mvt {
@@ -1071,7 +1075,7 @@ impl LineBuffer {
         if notify {
             if let Some(dl) = self.dl.as_ref() {
                 let mut dl = dl.lock().unwrap();
-                dl.stop_killing()
+                dl.stop_killing();
             }
         }
         killed
@@ -1101,20 +1105,16 @@ impl LineBuffer {
             Movement::LineDown(n) => self.n_lines_down(n),
         };
         let (start, end) = pair.unwrap_or((self.pos, self.pos));
-        let start = self.buf[..start]
-            .rfind('\n')
-            .map(|pos| pos + 1)
-            .unwrap_or(0);
+        let start = self.buf[..start].rfind('\n').map_or(0, |pos| pos + 1);
         let end = self.buf[end..]
             .rfind('\n')
-            .map(|pos| end + pos)
-            .unwrap_or_else(|| self.buf.len());
+            .map_or_else(|| self.buf.len(), |pos| end + pos);
         let mut index = start;
         if dedent {
             for line in self.buf[start..end].to_string().split('\n') {
                 let max = line.len() - line.trim_start().len();
                 let deleting = min(max, amount);
-                self.drain(index..index + deleting, Default::default());
+                self.drain(index..index + deleting, Direction::default());
                 if self.pos >= index {
                     if self.pos.saturating_sub(index) < deleting {
                         // don't wrap into the previous line

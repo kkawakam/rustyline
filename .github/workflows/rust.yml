@@ -14,7 +14,8 @@ on:
       - '.github/workflows/rust.yml'
       - '*.md'
 env:
-  RUST_BACKTRACE: 1
+  RUST_BACKTRACE: short
+  RUSTFLAGS: -Cdebuginfo=1
 jobs:
   build:
 
@@ -29,6 +30,7 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@v1
     - name: Build
       run: cargo build --workspace --all-targets
     - name: Run tests

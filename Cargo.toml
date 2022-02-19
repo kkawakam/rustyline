@@ -11,6 +11,11 @@ keywords = ["readline"]
 license = "MIT"
 categories = ["command-line-interface"]
 
+exclude = [
+  "/.github/*",
+  "/rustfmt.toml",
+]
+
 [badges]
 maintenance = { status = "actively-developed" }
 
@@ -40,7 +45,7 @@ regex = { version = "1.5.4", optional = true }
 nix = "0.23"
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
-buf_redux = "0.8"
+buf_redux = { version = "0.8", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "std", "synchapi", "winbase", "wincon", "winerror", "winuser"] }

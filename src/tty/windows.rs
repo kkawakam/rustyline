@@ -503,12 +503,10 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
     while !data.is_empty() {
         let slice = if data.len() < 8192 {
             data
+        } else if (0xD800..0xDC00).contains(&data[8191]) {
+            &data[..8191]
         } else {
-            if (0xD800..0xDC00).contains(&data[8191]) {
-                &data[..8191]
-            } else {
-                &data[..8192]
-            }
+            &data[..8192]
         };
         let mut written = 0;
         check(unsafe {

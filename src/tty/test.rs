@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
@@ -103,7 +103,7 @@ impl Renderer for Sink {
         pos
     }
 
-    fn write_and_flush(&self, _: &[u8]) -> Result<()> {
+    fn write_and_flush(&mut self, _: &str) -> Result<()> {
         Ok(())
     }
 
@@ -156,7 +156,7 @@ impl Term for DummyTerminal {
 
     fn new(
         color_mode: ColorMode,
-        _stream: OutputStreamType,
+        _behavior: Behavior,
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
@@ -181,7 +181,7 @@ impl Term for DummyTerminal {
         true
     }
 
-    fn is_stdin_tty(&self) -> bool {
+    fn is_input_tty(&self) -> bool {
         true
     }
 
@@ -195,12 +195,16 @@ impl Term for DummyTerminal {
         Ok(((), ()))
     }
 
-    fn create_reader(&self, _: &Config, _: KeyMap) -> Result<Self::Reader> {
-        Ok(self.keys.clone().into_iter())
+    fn create_reader(&self, _: &Config, _: KeyMap) -> Self::Reader {
+        self.keys.clone().into_iter()
     }
 
     fn create_writer(&self) -> Sink {
         Sink::new()
+    }
+
+    fn writeln(&self) -> Result<()> {
+        Ok(())
     }
 }
 

@@ -24,8 +24,8 @@ pub struct Config {
     bell_style: BellStyle,
     /// if colors should be enabled.
     color_mode: ColorMode,
-    /// Whether to use stdout or stderr
-    output_stream: OutputStreamType,
+    /// Whether to use stdio or not
+    behavior: Behavior,
     /// Horizontal space taken by a tab.
     tab_stop: usize,
     /// Indentation size for indent/dedent commands
@@ -141,16 +141,16 @@ impl Config {
         self.color_mode = color_mode;
     }
 
-    /// Tell which output stream should be used: stdout or stderr.
+    /// Whether to use stdio or not
     ///
-    /// By default, stdout is used.
+    /// By default, stdio is used.
     #[must_use]
-    pub fn output_stream(&self) -> OutputStreamType {
-        self.output_stream
+    pub fn behavior(&self) -> Behavior {
+        self.behavior
     }
 
-    pub(crate) fn set_output_stream(&mut self, stream: OutputStreamType) {
-        self.output_stream = stream;
+    pub(crate) fn set_behavior(&mut self, behavior: Behavior) {
+        self.behavior = behavior;
     }
 
     /// Horizontal space taken by a tab.
@@ -207,7 +207,7 @@ impl Default for Config {
             auto_add_history: false,
             bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
-            output_stream: OutputStreamType::Stdout,
+            behavior: Behavior::default(),
             tab_stop: 8,
             indent_size: 2,
             check_cursor_position: false,
@@ -291,15 +291,24 @@ pub enum ColorMode {
     Disabled,
 }
 
-/// Should the editor use stdout or stderr
-// TODO console term::TermTarget
+/// Should the editor use stdio
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum OutputStreamType {
-    /// Use stderr
-    Stderr,
-    /// Use stdout
-    Stdout,
+pub enum Behavior {
+    /// Use stdin / stdout
+    Stdio,
+    /// Use terminal-style interaction whenever possible, even if 'stdin' and/or
+    /// 'stdout' are not terminals.
+    PreferTerm,
+    // TODO
+    // Use file-style interaction, reading input from the given file.
+    // useFile
+}
+
+impl Default for Behavior {
+    fn default() -> Self {
+        Behavior::Stdio
+    }
 }
 
 /// Configuration builder
@@ -402,12 +411,12 @@ impl Builder {
         self
     }
 
-    /// Whether to use stdout or stderr.
+    /// Whether to use stdio or not
     ///
-    /// Be default, use stdout
+    /// By default, stdio is used.
     #[must_use]
-    pub fn output_stream(mut self, stream: OutputStreamType) -> Self {
-        self.set_output_stream(stream);
+    pub fn behavior(mut self, behavior: Behavior) -> Self {
+        self.set_behavior(behavior);
         self
     }
 
@@ -529,11 +538,11 @@ pub trait Configurer {
         self.config_mut().set_color_mode(color_mode);
     }
 
-    /// Whether to use stdout or stderr
+    /// Whether to use stdio or not
     ///
-    /// By default, use stdout
-    fn set_output_stream(&mut self, stream: OutputStreamType) {
-        self.config_mut().set_output_stream(stream);
+    /// By default, stdio is used.
+    fn set_behavior(&mut self, behavior: Behavior) {
+        self.config_mut().set_behavior(behavior);
     }
 
     /// Horizontal space taken by a tab.

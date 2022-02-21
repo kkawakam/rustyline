@@ -498,15 +498,23 @@ fn write_to_console(handle: HANDLE, s: &str, utf16: &mut Vec<u16>) -> Result<()>
 
 // See write_valid_utf8_to_console
 // /src/rust/library/std/src/sys/windows/stdio.rs:171
-// https://github.com/judah/haskeline/blob/c03e7029b2d9c3d16da5480306b42b8d4ebe03cf/System/Console/Haskeline/Backend/Win32.hsc#L238-L240
 fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
     while !data.is_empty() {
+        let slice = if data.len() < 8192 {
+            data
+        } else {
+            if (0xD800..0xDC00).contains(&data[8191]) {
+                &data[..8191]
+            } else {
+                &data[..8192]
+            }
+        };
         let mut written = 0;
         check(unsafe {
             consoleapi::WriteConsoleW(
                 handle,
-                data.as_ptr().cast::<std::ffi::c_void>(),
-                data.len() as u32,
+                slice.as_ptr().cast::<std::ffi::c_void>(),
+                slice.len() as u32,
                 &mut written,
                 ptr::null_mut(),
             )

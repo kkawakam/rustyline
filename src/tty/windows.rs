@@ -500,6 +500,7 @@ fn write_to_console(handle: HANDLE, s: &str, utf16: &mut Vec<u16>) -> Result<()>
 // See write_valid_utf8_to_console
 // /src/rust/library/std/src/sys/windows/stdio.rs:171
 fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
+    use std::io::{Error, ErrorKind};
     while !data.is_empty() {
         let slice = if data.len() < 8192 {
             data
@@ -518,7 +519,10 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
                 ptr::null_mut(),
             )
         })?;
-        data = &data[(written as usize)..]; // TODO check written > 0
+        if written == 0 {
+            return Err(Error::new(ErrorKind::WriteZero, "WriteConsoleW"))?;
+        }
+        data = &data[(written as usize)..];
     }
     Ok(())
 }

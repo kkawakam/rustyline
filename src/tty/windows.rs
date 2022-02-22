@@ -257,8 +257,14 @@ impl ConsoleRenderer {
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, pos: COORD) -> Result<()> {
-        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, pos) })
+    fn set_console_cursor_position(&mut self, mut pos: COORD, size: COORD) -> Result<COORD> {
+        use std::cmp::{max, min};
+        // https://docs.microsoft.com/en-us/windows/console/setconsolecursorposition
+        // > The coordinates must be within the boundaries of the console screen buffer.
+        // pos.X = max(0, min(size.X - 1, pos.X));
+        pos.Y = max(0, min(size.Y - 1, pos.Y));
+        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, pos) })?;
+        Ok(pos)
     }
 
     fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
@@ -306,7 +312,7 @@ impl ConsoleRenderer {
         let mut coord = info.dwCursorPosition;
         coord.X = 0;
         coord.Y -= current_row as i16;
-        self.set_console_cursor_position(coord)?;
+        let coord = self.set_console_cursor_position(coord, info.dwSize)?;
         self.clear(
             (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
             coord,
@@ -329,7 +335,8 @@ impl Renderer for ConsoleRenderer {
     type Reader = ConsoleRawReader;
 
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
-        let mut cursor = self.get_console_screen_buffer_info()?.dwCursorPosition;
+        let info = self.get_console_screen_buffer_info()?;
+        let mut cursor = info.dwCursorPosition;
         if new.row > old.row {
             cursor.Y += (new.row - old.row) as i16;
         } else {
@@ -340,7 +347,8 @@ impl Renderer for ConsoleRenderer {
         } else {
             cursor.X -= (old.col - new.col) as i16;
         }
-        self.set_console_cursor_position(cursor)
+        self.set_console_cursor_position(cursor, info.dwSize)
+            .map(|_| ())
     }
 
     fn refresh_line(
@@ -390,10 +398,11 @@ impl Renderer for ConsoleRenderer {
         write_to_console(self.conout, self.buffer.as_str(), &mut self.utf16)?;
 
         // position the cursor
-        let mut coord = self.get_console_screen_buffer_info()?.dwCursorPosition;
+        let info = self.get_console_screen_buffer_info()?;
+        let mut coord = info.dwCursorPosition;
         coord.X = cursor.col as i16;
         coord.Y -= (end_pos.row - cursor.row) as i16;
-        self.set_console_cursor_position(coord)?;
+        self.set_console_cursor_position(coord, info.dwSize)?;
 
         Ok(())
     }
@@ -470,24 +479,23 @@ impl Renderer for ConsoleRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
-        //self.write_and_flush("")?; // we must do this otherwise the cursor position
-        // is not reported correctly
-        let mut info = self.get_console_screen_buffer_info()?;
-        if info.dwCursorPosition.X == 0 {
+        let info = self.get_console_screen_buffer_info()?;
+        let mut cursor = info.dwCursorPosition;
+        if cursor.X == 0 {
             return Ok(());
         }
-        debug!(target: "rustyline", "initial cursor location: {:?}, {:?}", info.dwCursorPosition.X, info.dwCursorPosition.Y);
-        info.dwCursorPosition.X = 0;
-        info.dwCursorPosition.Y += 1;
-        let res = self.set_console_cursor_position(info.dwCursorPosition);
+        debug!(target: "rustyline", "initial cursor location: {:?}, {:?}", cursor.X, cursor.Y);
+        cursor.X = 0;
+        cursor.Y += 1;
+        let res = self.set_console_cursor_position(cursor, info.dwSize);
         if let Err(error::ReadlineError::Io(ref e)) = res {
             if e.raw_os_error() == Some(winerror::ERROR_INVALID_PARAMETER as i32) {
-                warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", info.dwCursorPosition.X, info.dwCursorPosition.Y, info.dwSize.X, info.dwSize.Y);
-                println!();
+                warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", cursor.X, cursor.Y, info.dwSize.X, info.dwSize.Y);
+                write_all(self.conout, &[10; 1])?;
                 return Ok(());
             }
         }
-        res
+        res.map(|_| ())
     }
 }
 

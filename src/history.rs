@@ -648,11 +648,21 @@ impl History for FileHistory {
     }
 
     fn add(&mut self, line: &str) -> bool {
-        self.mem.add(line)
+        if self.mem.add(line) {
+            self.new_entries = self.new_entries.saturating_add(1).min(self.len());
+            true
+        } else {
+            false
+        }
     }
 
     fn add_owned(&mut self, line: String) -> bool {
-        self.mem.add_owned(line)
+        if self.mem.add_owned(line) {
+            self.new_entries = self.new_entries.saturating_add(1).min(self.len());
+            true
+        } else {
+            false
+        }
     }
 
     fn len(&self) -> usize {

@@ -34,12 +34,6 @@ pub struct SearchResult<'a> {
     pub pos: usize,
 }
 
-// HistoryEntry: text + timestamp
-// TODO Make possible to customize how history is stored / loaded.
-// https://github.com/kkawakam/rustyline/issues/442
-// https://github.com/kkawakam/rustyline/issues/127
-// See https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html#prompt_toolkit.history.History abstract methods
-
 /// Interface for navigating/loading/storing history
 // TODO Split navigation part from backend part
 pub trait History {
@@ -69,14 +63,12 @@ pub trait History {
     where
         Self: Sized;
 
-    // jline3: String get(int index);
     // termwiz: fn get(&self, idx: HistoryIndex) -> Option<Cow<str>>;
 
     /// Return the history entry at position `index`, starting from 0.
     #[must_use]
     fn get(&self, index: usize) -> Option<&String>;
 
-    // jline3: int last();
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
     /// Return the last history entry (i.e. previous command)
@@ -87,29 +79,17 @@ pub trait History {
     //         add(Instant.now(), line);
     //     }
     // jline3: void add(Instant time, String line);
-    // ppt: def append_string(self, string: str) -> None:
-    // liner: fn push(&mut self, new_item: Buffer) -> io::Result<()>
     // termwiz: fn add(&mut self, line: &str);
     // reedline: fn append(&mut self, entry: &str);
-    // replxx: history_add( std::string const& line );
 
     /// Add a new entry in the history.
     fn add(&mut self, line: &str) -> bool;
     /// Add a new entry in the history.
-    fn add_owned(&mut self, line: String) -> bool;
-
-    // jline3: int size();
-    // liner: fn len(&self) -> usize
-    // replxx: int history_size( void ) const;
+    fn add_owned(&mut self, line: String) -> bool; // TODO check AsRef<str> + Into<String> vs object safe
 
     /// Return the number of entries in the history.
     #[must_use]
     fn len(&self) -> usize;
-
-    // jline3: default boolean isEmpty() {
-    //         return size() == 0;
-    //     }
-    // liner: fn is_empty(&self) -> bool
 
     /// Return true if the history has no entry.
     #[must_use]
@@ -134,9 +114,6 @@ pub trait History {
     //         return true;
     //     }
 
-    // liner: fn set_max_buffers_size(&mut self, size: usize)
-    // liner: fn set_max_file_size(&mut self, size: usize)
-
     /// Set the maximum length for the history. This function can be called even
     /// if there is already some history, the function will make sure to retain
     /// just the latest `len` elements if the new history length value is
@@ -151,36 +128,14 @@ pub trait History {
     /// Ignore lines which begin with a space or not
     fn ignore_space(&mut self, yes: bool);
 
-    // jline3: void save() throws IOException;
-    // jline3: void write(Path file, boolean incremental) throws IOException;
-    // ppt: def store_string(self, string: str) -> None:
-    // liner: fn commit_to_file_path<P: AsRef<Path>>(&mut self, path: P) ->
-    // io::Result<String> liner: fn commit_to_file(&mut self)
-    // replxx: bool history_save( std::string const& filename );
-    // replxx: void history_save( std::ostream& out );
-
     /// Save the history in the specified file.
     // TODO history_truncate_file
     // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
     fn save(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
 
-    // jline3: void append(Path file, boolean incremental) throws IOException;
-
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
     fn append(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
-
-    // jline3: void load() throws IOException;
-    // jline3: void read(Path file, boolean checkDuplicates) throws IOException;
-    // ppt: async def load(self) -> AsyncGenerator[str, None]:
-    // ppt: def load_history_strings(self) -> Iterable[str]:
-    // liner: fn load_history(&mut self, append: bool) -> io::Result<u64>
-    // liner: fn load_history_file<P: AsRef<Path>>(&mut self, path: P, append: bool)
-    // -> io::Result<u64> liner: fn set_file_name_and_load_history<P:
-    // AsRef<Path>>(&mut self, path: P) -> io::Result<u64> replxx: bool
-    // history_sync( std::string const& filename ); replxx: bool history_load(
-    // std::string const& filename ); replxx: void history_load( std::istream&
-    // in );
 
     /// Load the history from the specified file.
     ///
@@ -188,20 +143,9 @@ pub trait History {
     /// Will return `Err` if path does not already exist or could not be read.
     fn load(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
 
-    // jline3: void purge() throws IOException;
-    // liner: fn clear_history(&mut self);
-    // replxx: void history_clear( void );
-
     /// Clear in-memory history
     fn clear(&mut self);
 
-    // liner: fn get_newest_match(
-    //         &self,
-    //         curr_position: Option<usize>,
-    //         new_buff: &Buffer,
-    //     ) -> Option<usize>
-    // liner: fn get_history_subset(&self, search_term: &Buffer) -> Vec<usize>
-    // liner: fn search_index(&self, search_term: &Buffer) -> Vec<usize>
     // termwiz: fn search(
     //         &self,
     //         idx: HistoryIndex,
@@ -235,7 +179,6 @@ pub trait History {
     // TODO jline3: default Iterator<Entry> reverseIterator() {
     //         return reverseIterator(last());
     //     }
-    // ppt: def get_strings(self) -> List[str]:
     // reedline: fn iter_chronologic(&self) -> std::collections::vec_deque::Iter<'_,
     // String>; replxx: HistoryScan history_scan( void ) const;
 }
@@ -476,6 +419,8 @@ pub struct FileHistory {
     /// last path used by either `load` or `save`
     path_info: Option<PathInfo>,
 }
+
+// TODO impl Deref<MemHistory> for FileHistory ?
 
 /// Last histo path, modified timestamp and size
 struct PathInfo(PathBuf, SystemTime, usize);

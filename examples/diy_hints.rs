@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use rustyline::hint::{Hint, Hinter};
+use rustyline::history::FileHistory;
 use rustyline::Context;
 use rustyline::{Editor, Result};
 use rustyline_derive::{Completer, Helper, Highlighter, Validator};
@@ -85,7 +86,7 @@ fn main() -> Result<()> {
     println!("This is a DIY hint hack of rustyline");
     let h = DIYHinter { hints: diy_hints() };
 
-    let mut rl: Editor<DIYHinter> = Editor::new();
+    let mut rl: Editor<DIYHinter, FileHistory> = Editor::new();
     rl.set_helper(Some(h));
 
     loop {

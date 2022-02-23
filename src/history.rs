@@ -40,13 +40,437 @@ pub struct SearchResult<'a> {
 // https://github.com/kkawakam/rustyline/issues/127
 // See https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html#prompt_toolkit.history.History abstract methods
 
-/// Current state of the history.
+/// Interface for navigating/loading/storing history
+// TODO Split navigation part from backend part
+pub trait History {
+    // TODO jline3: interface Entry {
+    //         int index();
+    //         Instant time();
+    //         String line();
+    //     }
+    // replxx: HistoryEntry {
+    // 		std::string _timestamp;
+    // 		std::string _text;
+
+    /// Default constructor
+    #[must_use]
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
+        Self::with_config(Config::default())
+    }
+    /// Customized constructor with:
+    /// - `Config::max_history_size()`,
+    /// - `Config::history_ignore_space()`,
+    /// - `Config::history_duplicates()`.
+    #[must_use]
+    fn with_config(config: Config) -> Self
+    where
+        Self: Sized;
+
+    // jline3: String get(int index);
+    // termwiz: fn get(&self, idx: HistoryIndex) -> Option<Cow<str>>;
+
+    /// Return the history entry at position `index`, starting from 0.
+    #[must_use]
+    fn get(&self, index: usize) -> Option<&String>;
+
+    // jline3: int last();
+    // termwiz: fn last(&self) -> Option<HistoryIndex>;
+
+    /// Return the last history entry (i.e. previous command)
+    #[must_use]
+    fn last(&self) -> Option<&String>;
+
+    // jline3: default void add(String line) {
+    //         add(Instant.now(), line);
+    //     }
+    // jline3: void add(Instant time, String line);
+    // ppt: def append_string(self, string: str) -> None:
+    // liner: fn push(&mut self, new_item: Buffer) -> io::Result<()>
+    // termwiz: fn add(&mut self, line: &str);
+    // reedline: fn append(&mut self, entry: &str);
+    // replxx: history_add( std::string const& line );
+
+    /// Add a new entry in the history.
+    fn add(&mut self, line: &str) -> bool;
+    /// Add a new entry in the history.
+    fn add_owned(&mut self, line: String) -> bool;
+
+    // jline3: int size();
+    // liner: fn len(&self) -> usize
+    // replxx: int history_size( void ) const;
+
+    /// Return the number of entries in the history.
+    #[must_use]
+    fn len(&self) -> usize;
+
+    // jline3: default boolean isEmpty() {
+    //         return size() == 0;
+    //     }
+    // liner: fn is_empty(&self) -> bool
+
+    /// Return true if the history has no entry.
+    #[must_use]
+    fn is_empty(&self) -> bool;
+
+    // TODO jline3: int index();
+    // TODO jline3: String current();
+    // reedline: fn string_at_cursor(&self) -> Option<String>;
+    // TODO jline3: boolean previous();
+    // reedline: fn back(&mut self);
+    // TODO jline3: boolean next();
+    // reedline: fn forward(&mut self);
+    // TODO jline3: boolean moveToFirst();
+    // TODO jline3: boolean moveToFirst();
+    // TODO jline3: boolean moveToLast();
+    // TODO jline3: boolean moveTo(int index);
+    // TODO jline3: void moveToEnd();
+    // TODO jline3: void resetIndex();
+
+    // TODO jline3: int first();
+    // TODO jline3: default boolean isPersistable(Entry entry) {
+    //         return true;
+    //     }
+
+    // liner: fn set_max_buffers_size(&mut self, size: usize)
+    // liner: fn set_max_file_size(&mut self, size: usize)
+
+    /// Set the maximum length for the history. This function can be called even
+    /// if there is already some history, the function will make sure to retain
+    /// just the latest `len` elements if the new history length value is
+    /// smaller than the amount of items already inside the history.
+    ///
+    /// Like [stifle_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX11).
+    fn set_max_len(&mut self, len: usize);
+
+    /// Ignore consecutive duplicates
+    fn ignore_dups(&mut self, yes: bool);
+
+    /// Ignore lines which begin with a space or not
+    fn ignore_space(&mut self, yes: bool);
+
+    // jline3: void save() throws IOException;
+    // jline3: void write(Path file, boolean incremental) throws IOException;
+    // ppt: def store_string(self, string: str) -> None:
+    // liner: fn commit_to_file_path<P: AsRef<Path>>(&mut self, path: P) ->
+    // io::Result<String> liner: fn commit_to_file(&mut self)
+    // replxx: bool history_save( std::string const& filename );
+    // replxx: void history_save( std::ostream& out );
+
+    /// Save the history in the specified file.
+    // TODO history_truncate_file
+    // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
+    fn save(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
+
+    // jline3: void append(Path file, boolean incremental) throws IOException;
+
+    /// Append new entries in the specified file.
+    // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
+    fn append(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
+
+    // jline3: void load() throws IOException;
+    // jline3: void read(Path file, boolean checkDuplicates) throws IOException;
+    // ppt: async def load(self) -> AsyncGenerator[str, None]:
+    // ppt: def load_history_strings(self) -> Iterable[str]:
+    // liner: fn load_history(&mut self, append: bool) -> io::Result<u64>
+    // liner: fn load_history_file<P: AsRef<Path>>(&mut self, path: P, append: bool)
+    // -> io::Result<u64> liner: fn set_file_name_and_load_history<P:
+    // AsRef<Path>>(&mut self, path: P) -> io::Result<u64> replxx: bool
+    // history_sync( std::string const& filename ); replxx: bool history_load(
+    // std::string const& filename ); replxx: void history_load( std::istream&
+    // in );
+
+    /// Load the history from the specified file.
+    ///
+    /// # Errors
+    /// Will return `Err` if path does not already exist or could not be read.
+    fn load(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
+
+    // jline3: void purge() throws IOException;
+    // liner: fn clear_history(&mut self);
+    // replxx: void history_clear( void );
+
+    /// Clear in-memory history
+    fn clear(&mut self);
+
+    // liner: fn get_newest_match(
+    //         &self,
+    //         curr_position: Option<usize>,
+    //         new_buff: &Buffer,
+    //     ) -> Option<usize>
+    // liner: fn get_history_subset(&self, search_term: &Buffer) -> Vec<usize>
+    // liner: fn search_index(&self, search_term: &Buffer) -> Vec<usize>
+    // termwiz: fn search(
+    //         &self,
+    //         idx: HistoryIndex,
+    //         style: SearchStyle,
+    //         direction: SearchDirection,
+    //         pattern: &str,
+    //     ) -> Option<SearchResult>;
+    // reedline: fn set_navigation(&mut self, navigation: HistoryNavigationQuery);
+    // reedline: fn get_navigation(&self) -> HistoryNavigationQuery;
+
+    /// Search history (start position inclusive [0, len-1]).
+    ///
+    /// Return the absolute index of the nearest history entry that matches
+    /// `term`.
+    ///
+    /// Return None if no entry contains `term` between [start, len -1] for
+    /// forward search
+    /// or between [0, start] for reverse search.
+    #[must_use]
+    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult>;
+
+    /// Anchored search
+    #[must_use]
+    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult>;
+
+    // TODO jline3: ListIterator<Entry> iterator(int index);
+    // TODO jline3: default ListIterator<Entry> iterator() {
+    //         return iterator(first());
+    //     }
+    // TODO jline3: default Iterator<Entry> reverseIterator(int index) {
+    // TODO jline3: default Iterator<Entry> reverseIterator() {
+    //         return reverseIterator(last());
+    //     }
+    // ppt: def get_strings(self) -> List[str]:
+    // reedline: fn iter_chronologic(&self) -> std::collections::vec_deque::Iter<'_,
+    // String>; replxx: HistoryScan history_scan( void ) const;
+}
+
+/// Transient in-memory history implementation.
 #[derive(Default)]
-pub struct History {
+pub struct MemHistory {
     entries: VecDeque<String>,
     max_len: usize,
-    pub(crate) ignore_space: bool,
-    pub(crate) ignore_dups: bool,
+    ignore_space: bool,
+    ignore_dups: bool,
+}
+
+impl MemHistory {
+    fn search_match<F>(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+        test: F,
+    ) -> Option<SearchResult>
+    where
+        F: Fn(&str) -> Option<usize>,
+    {
+        if term.is_empty() || start >= self.len() {
+            return None;
+        }
+        match dir {
+            SearchDirection::Reverse => {
+                for (idx, entry) in self
+                    .entries
+                    .iter()
+                    .rev()
+                    .skip(self.len() - 1 - start)
+                    .enumerate()
+                {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: start - idx,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
+            }
+            SearchDirection::Forward => {
+                for (idx, entry) in self.entries.iter().skip(start).enumerate() {
+                    if let Some(cursor) = test(entry) {
+                        return Some(SearchResult {
+                            idx: idx + start,
+                            entry,
+                            pos: cursor,
+                        });
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    fn ignore(&self, line: &str) -> bool {
+        if self.max_len == 0 {
+            return true;
+        }
+        if line.is_empty()
+            || (self.ignore_space && line.chars().next().map_or(true, char::is_whitespace))
+        {
+            return true;
+        }
+        if self.ignore_dups {
+            if let Some(s) = self.entries.back() {
+                if s == line {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn insert(&mut self, line: String) {
+        if self.entries.len() == self.max_len {
+            self.entries.pop_front();
+        }
+        self.entries.push_back(line);
+    }
+}
+
+impl History for MemHistory {
+    fn with_config(config: Config) -> Self {
+        Self {
+            entries: VecDeque::new(),
+            max_len: config.max_history_size(),
+            ignore_space: config.history_ignore_space(),
+            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+        }
+    }
+
+    fn get(&self, index: usize) -> Option<&String> {
+        self.entries.get(index)
+    }
+
+    fn last(&self) -> Option<&String> {
+        self.entries.back()
+    }
+
+    fn add(&mut self, line: &str) -> bool {
+        if self.ignore(line) {
+            return false;
+        }
+        self.insert(line.to_owned());
+        true
+    }
+
+    fn add_owned(&mut self, line: String) -> bool {
+        if self.ignore(&line) {
+            return false;
+        }
+        self.insert(line);
+        true
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn set_max_len(&mut self, len: usize) {
+        self.max_len = len;
+        if self.len() > len {
+            self.entries.drain(..self.len() - len);
+        }
+    }
+
+    fn ignore_dups(&mut self, yes: bool) {
+        self.ignore_dups = yes;
+    }
+
+    fn ignore_space(&mut self, yes: bool) {
+        self.ignore_space = yes;
+    }
+
+    fn save(&mut self, _: &Path) -> Result<()> {
+        unimplemented!();
+    }
+
+    fn append(&mut self, _: &Path) -> Result<()> {
+        unimplemented!();
+    }
+
+    fn load(&mut self, _: &Path) -> Result<()> {
+        unimplemented!();
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear()
+    }
+
+    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| entry.find(term);
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| re.find(entry).map(|m| m.start());
+                self.search_match(term, start, dir, test)
+            } else {
+                None
+            }
+        }
+    }
+
+    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        #[cfg(not(feature = "case_insensitive_history_search"))]
+        {
+            let test = |entry: &str| {
+                if entry.starts_with(term) {
+                    Some(term.len())
+                } else {
+                    None
+                }
+            };
+            self.search_match(term, start, dir, test)
+        }
+        #[cfg(feature = "case_insensitive_history_search")]
+        {
+            use regex::{escape, RegexBuilder};
+            if let Ok(re) = RegexBuilder::new(&escape(term))
+                .case_insensitive(true)
+                .build()
+            {
+                let test = |entry: &str| {
+                    re.find(entry)
+                        .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                        .map(|m| m.end())
+                };
+                self.search_match(term, start, dir, test)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+impl Index<usize> for MemHistory {
+    type Output = String;
+
+    fn index(&self, index: usize) -> &String {
+        &self.entries[index]
+    }
+}
+
+impl<'a> IntoIterator for &'a MemHistory {
+    type IntoIter = vec_deque::Iter<'a, String>;
+    type Item = &'a String;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
+
+/// Current state of the history stored in a file.
+#[derive(Default)]
+pub struct FileHistory {
+    mem: MemHistory,
     /// Number of entries inputed by user and not saved yet
     new_entries: usize,
     /// last path used by either `load` or `save`
@@ -56,119 +480,10 @@ pub struct History {
 /// Last histo path, modified timestamp and size
 struct PathInfo(PathBuf, SystemTime, usize);
 
-impl History {
+impl FileHistory {
     // New multiline-aware history files start with `#V2\n` and have newlines
     // and backslashes escaped in them.
     const FILE_VERSION_V2: &'static str = "#V2";
-
-    /// Default constructor
-    #[must_use]
-    pub fn new() -> Self {
-        Self::with_config(Config::default())
-    }
-
-    /// Customized constructor with:
-    /// - `Config::max_history_size()`,
-    /// - `Config::history_ignore_space()`,
-    /// - `Config::history_duplicates()`.
-    #[must_use]
-    pub fn with_config(config: Config) -> Self {
-        Self {
-            entries: VecDeque::new(),
-            max_len: config.max_history_size(),
-            ignore_space: config.history_ignore_space(),
-            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
-            new_entries: 0,
-            path_info: None,
-        }
-    }
-
-    /// Return the history entry at position `index`, starting from 0.
-    #[must_use]
-    pub fn get(&self, index: usize) -> Option<&String> {
-        self.entries.get(index)
-    }
-
-    /// Return the last history entry (i.e. previous command)
-    #[must_use]
-    pub fn last(&self) -> Option<&String> {
-        self.entries.back()
-    }
-
-    /// Add a new entry in the history.
-    pub fn add<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
-        if self.max_len == 0 {
-            return false;
-        }
-        if line.as_ref().is_empty()
-            || (self.ignore_space
-                && line
-                    .as_ref()
-                    .chars()
-                    .next()
-                    .map_or(true, char::is_whitespace))
-        {
-            return false;
-        }
-        if self.ignore_dups {
-            if let Some(s) = self.entries.back() {
-                if s == line.as_ref() {
-                    return false;
-                }
-            }
-        }
-        if self.entries.len() == self.max_len {
-            self.entries.pop_front();
-        }
-        self.entries.push_back(line.into());
-        self.new_entries = self.new_entries.saturating_add(1).min(self.len());
-        true
-    }
-
-    /// Return the number of entries in the history.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Return true if the history has no entry.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Set the maximum length for the history. This function can be called even
-    /// if there is already some history, the function will make sure to retain
-    /// just the latest `len` elements if the new history length value is
-    /// smaller than the amount of items already inside the history.
-    ///
-    /// Like [stifle_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX11).
-    pub fn set_max_len(&mut self, len: usize) {
-        self.max_len = len;
-        if self.len() > len {
-            self.entries.drain(..self.len() - len);
-            self.new_entries = self.new_entries.min(len);
-        }
-    }
-
-    /// Save the history in the specified file.
-    // TODO history_truncate_file
-    // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
-    pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        if self.is_empty() || self.new_entries == 0 {
-            return Ok(());
-        }
-        let path = path.as_ref();
-        let old_umask = umask();
-        let f = File::create(path);
-        restore_umask(old_umask);
-        let file = f?;
-        let mut lock = RwLock::new(file);
-        let lock_guard = lock.write()?;
-        self.save_to(&lock_guard, false)?;
-        self.new_entries = 0;
-        self.update_path(path, &lock_guard, self.len())
-    }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
         use std::io::{BufWriter, Write};
@@ -176,13 +491,13 @@ impl History {
         fix_perm(file);
         let mut wtr = BufWriter::new(file);
         let first_new_entry = if append {
-            self.entries.len().saturating_sub(self.new_entries)
+            self.mem.len().saturating_sub(self.new_entries)
         } else {
             wtr.write_all(Self::FILE_VERSION_V2.as_bytes())?;
             wtr.write_all(b"\n")?;
             0
         };
-        for entry in self.entries.iter().skip(first_new_entry) {
+        for entry in self.mem.entries.iter().skip(first_new_entry) {
             let mut bytes = entry.as_bytes();
             while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
                 wtr.write_all(&bytes[..i])?;
@@ -202,74 +517,6 @@ impl History {
         Ok(())
     }
 
-    /// Append new entries in the specified file.
-    // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
-    pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        use std::io::Seek;
-
-        if self.is_empty() || self.new_entries == 0 {
-            return Ok(());
-        }
-        let path = path.as_ref();
-        if !path.exists() || self.new_entries == self.max_len {
-            return self.save(path);
-        }
-        let file = OpenOptions::new().write(true).read(true).open(path)?;
-        let mut lock = RwLock::new(file);
-        let mut lock_guard = lock.write()?;
-        if self.can_just_append(path, &lock_guard)? {
-            lock_guard.seek(SeekFrom::End(0))?;
-            self.save_to(&lock_guard, true)?;
-            let size = self
-                .path_info
-                .as_ref()
-                .unwrap()
-                .2
-                .saturating_add(self.new_entries);
-            self.new_entries = 0;
-            return self.update_path(path, &lock_guard, size);
-        }
-        // we may need to truncate file before appending new entries
-        let mut other = Self {
-            entries: VecDeque::new(),
-            max_len: self.max_len,
-            ignore_space: self.ignore_space,
-            ignore_dups: self.ignore_dups,
-            new_entries: 0,
-            path_info: None,
-        };
-        other.load_from(&lock_guard)?;
-        let first_new_entry = self.entries.len().saturating_sub(self.new_entries);
-        for entry in self.entries.iter().skip(first_new_entry) {
-            other.add(entry);
-        }
-        lock_guard.seek(SeekFrom::Start(0))?;
-        lock_guard.set_len(0)?; // if new size < old size
-        other.save_to(&lock_guard, false)?;
-        self.update_path(path, &lock_guard, other.len())?;
-        self.new_entries = 0;
-        Ok(())
-    }
-
-    /// Load the history from the specified file.
-    ///
-    /// # Errors
-    /// Will return `Err` if path does not already exist or could not be read.
-    pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        let path = path.as_ref();
-        let file = File::open(path)?;
-        let lock = RwLock::new(file);
-        let lock_guard = lock.read()?;
-        let len = self.len();
-        if self.load_from(&lock_guard)? {
-            self.update_path(path, &lock_guard, self.len() - len)
-        } else {
-            // discard old version on next save
-            self.path_info = None;
-            Ok(())
-        }
-    }
-
     fn load_from(&mut self, file: &File) -> Result<bool> {
         use std::io::{BufRead, BufReader};
 
@@ -281,7 +528,7 @@ impl History {
             if line == Self::FILE_VERSION_V2 {
                 v2 = true;
             } else {
-                self.add(line);
+                self.add_owned(line);
             }
         }
         let mut appendable = v2;
@@ -326,7 +573,7 @@ impl History {
                     line = s;
                 }
             }
-            appendable &= self.add(line); // TODO truncate to MAX_LINE
+            appendable &= self.add_owned(line); // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
         Ok(appendable)
@@ -362,11 +609,11 @@ impl History {
             }
             let modified = file.metadata()?.modified()?;
             if *previous_modified != modified
-                || self.max_len <= *previous_size
-                || self.max_len < (*previous_size).saturating_add(self.new_entries)
+                || self.mem.max_len <= *previous_size
+                || self.mem.max_len < (*previous_size).saturating_add(self.new_entries)
             {
                 debug!(target: "rustyline", "cannot append: {:?} < {:?} or {} < {} + {}",
-                       previous_modified, modified, self.max_len, previous_size, self.new_entries);
+                       previous_modified, modified, self.mem.max_len, previous_size, self.new_entries);
                 Ok(false)
             } else {
                 Ok(true)
@@ -376,143 +623,159 @@ impl History {
         }
     }
 
-    /// Clear history
-    pub fn clear(&mut self) {
-        self.entries.clear();
+    /// Return a forward iterator.
+    #[must_use]
+    fn iter(&self) -> Iter<'_> {
+        Iter(self.mem.entries.iter())
+    }
+}
+
+impl History for FileHistory {
+    fn with_config(config: Config) -> Self {
+        Self {
+            mem: MemHistory::with_config(config),
+            new_entries: 0,
+            path_info: None,
+        }
+    }
+
+    fn get(&self, index: usize) -> Option<&String> {
+        self.mem.get(index)
+    }
+
+    fn last(&self) -> Option<&String> {
+        self.mem.last()
+    }
+
+    fn add(&mut self, line: &str) -> bool {
+        self.mem.add(line)
+    }
+
+    fn add_owned(&mut self, line: String) -> bool {
+        self.mem.add_owned(line)
+    }
+
+    fn len(&self) -> usize {
+        self.mem.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.mem.is_empty()
+    }
+
+    fn set_max_len(&mut self, len: usize) {
+        self.mem.set_max_len(len);
+        self.new_entries = self.new_entries.min(len);
+    }
+
+    fn ignore_dups(&mut self, yes: bool) {
+        self.mem.ignore_dups(yes);
+    }
+
+    fn ignore_space(&mut self, yes: bool) {
+        self.mem.ignore_space(yes);
+    }
+
+    fn save(&mut self, path: &Path) -> Result<()> {
+        if self.is_empty() || self.new_entries == 0 {
+            return Ok(());
+        }
+        let old_umask = umask();
+        let f = File::create(path);
+        restore_umask(old_umask);
+        let file = f?;
+        let mut lock = RwLock::new(file);
+        let lock_guard = lock.write()?;
+        self.save_to(&lock_guard, false)?;
+        self.new_entries = 0;
+        self.update_path(path, &lock_guard, self.len())
+    }
+
+    fn append(&mut self, path: &Path) -> Result<()> {
+        use std::io::Seek;
+
+        if self.is_empty() || self.new_entries == 0 {
+            return Ok(());
+        }
+        if !path.exists() || self.new_entries == self.mem.max_len {
+            return self.save(path);
+        }
+        let file = OpenOptions::new().write(true).read(true).open(path)?;
+        let mut lock = RwLock::new(file);
+        let mut lock_guard = lock.write()?;
+        if self.can_just_append(path, &lock_guard)? {
+            lock_guard.seek(SeekFrom::End(0))?;
+            self.save_to(&lock_guard, true)?;
+            let size = self
+                .path_info
+                .as_ref()
+                .unwrap()
+                .2
+                .saturating_add(self.new_entries);
+            self.new_entries = 0;
+            return self.update_path(path, &lock_guard, size);
+        }
+        // we may need to truncate file before appending new entries
+        let mut other = Self {
+            mem: MemHistory {
+                entries: VecDeque::new(),
+                max_len: self.mem.max_len,
+                ignore_space: self.mem.ignore_space,
+                ignore_dups: self.mem.ignore_dups,
+            },
+            new_entries: 0,
+            path_info: None,
+        };
+        other.load_from(&lock_guard)?;
+        let first_new_entry = self.mem.len().saturating_sub(self.new_entries);
+        for entry in self.mem.entries.iter().skip(first_new_entry) {
+            other.add(entry);
+        }
+        lock_guard.seek(SeekFrom::Start(0))?;
+        lock_guard.set_len(0)?; // if new size < old size
+        other.save_to(&lock_guard, false)?;
+        self.update_path(path, &lock_guard, other.len())?;
+        self.new_entries = 0;
+        Ok(())
+    }
+
+    fn load(&mut self, path: &Path) -> Result<()> {
+        let file = File::open(path)?;
+        let lock = RwLock::new(file);
+        let lock_guard = lock.read()?;
+        let len = self.len();
+        if self.load_from(&lock_guard)? {
+            self.update_path(path, &lock_guard, self.len() - len)
+        } else {
+            // discard old version on next save
+            self.path_info = None;
+            Ok(())
+        }
+    }
+
+    fn clear(&mut self) {
+        self.mem.clear();
         self.new_entries = 0;
     }
 
-    /// Search history (start position inclusive [0, len-1]).
-    ///
-    /// Return the absolute index of the nearest history entry that matches
-    /// `term`.
-    ///
-    /// Return None if no entry contains `term` between [start, len -1] for
-    /// forward search
-    /// or between [0, start] for reverse search.
-    #[must_use]
-    pub fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| entry.find(term);
-            self.search_match(term, start, dir, test)
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            if let Ok(re) = RegexBuilder::new(&escape(term))
-                .case_insensitive(true)
-                .build()
-            {
-                let test = |entry: &str| re.find(entry).map(|m| m.start());
-                self.search_match(term, start, dir, test)
-            } else {
-                None
-            }
-        }
+    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        self.mem.search(term, start, dir)
     }
 
-    /// Anchored search
-    #[must_use]
-    pub fn starts_with(
-        &self,
-        term: &str,
-        start: usize,
-        dir: SearchDirection,
-    ) -> Option<SearchResult> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| {
-                if entry.starts_with(term) {
-                    Some(term.len())
-                } else {
-                    None
-                }
-            };
-            self.search_match(term, start, dir, test)
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            if let Ok(re) = RegexBuilder::new(&escape(term))
-                .case_insensitive(true)
-                .build()
-            {
-                let test = |entry: &str| {
-                    re.find(entry)
-                        .and_then(|m| if m.start() == 0 { Some(m) } else { None })
-                        .map(|m| m.end())
-                };
-                self.search_match(term, start, dir, test)
-            } else {
-                None
-            }
-        }
-    }
-
-    fn search_match<F>(
-        &self,
-        term: &str,
-        start: usize,
-        dir: SearchDirection,
-        test: F,
-    ) -> Option<SearchResult>
-    where
-        F: Fn(&str) -> Option<usize>,
-    {
-        if term.is_empty() || start >= self.len() {
-            return None;
-        }
-        match dir {
-            SearchDirection::Reverse => {
-                for (idx, entry) in self
-                    .entries
-                    .iter()
-                    .rev()
-                    .skip(self.entries.len() - 1 - start)
-                    .enumerate()
-                {
-                    if let Some(cursor) = test(entry) {
-                        return Some(SearchResult {
-                            idx: start - idx,
-                            entry,
-                            pos: cursor,
-                        });
-                    }
-                }
-                None
-            }
-            SearchDirection::Forward => {
-                for (idx, entry) in self.entries.iter().skip(start).enumerate() {
-                    if let Some(cursor) = test(entry) {
-                        return Some(SearchResult {
-                            idx: idx + start,
-                            entry,
-                            pos: cursor,
-                        });
-                    }
-                }
-                None
-            }
-        }
-    }
-
-    /// Return a forward iterator.
-    #[must_use]
-    pub fn iter(&self) -> Iter<'_> {
-        Iter(self.entries.iter())
+    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+        self.mem.starts_with(term, start, dir)
     }
 }
 
-impl Index<usize> for History {
+impl Index<usize> for FileHistory {
     type Output = String;
 
     fn index(&self, index: usize) -> &String {
-        &self.entries[index]
+        &self.mem.entries[index]
     }
 }
 
-impl<'a> IntoIterator for &'a History {
+impl<'a> IntoIterator for &'a FileHistory {
     type IntoIter = Iter<'a>;
     type Item = &'a String;
 
@@ -573,12 +836,12 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{History, SearchDirection, SearchResult};
+    use super::{FileHistory, History, SearchDirection, SearchResult};
     use crate::config::Config;
     use crate::Result;
 
-    fn init() -> History {
-        let mut history = History::new();
+    fn init() -> FileHistory {
+        let mut history = FileHistory::new();
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
@@ -587,15 +850,15 @@ mod tests {
 
     #[test]
     fn new() {
-        let history = History::new();
-        assert_eq!(0, history.entries.len());
+        let history = FileHistory::new();
+        assert_eq!(0, history.len());
     }
 
     #[test]
     fn add() {
         let config = Config::builder().history_ignore_space(true).build();
-        let mut history = History::with_config(config);
-        assert_eq!(config.max_history_size(), history.max_len);
+        let mut history = FileHistory::with_config(config);
+        assert_eq!(config.max_history_size(), history.mem.max_len);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(!history.add("line2"));
@@ -607,7 +870,7 @@ mod tests {
     fn set_max_len() {
         let mut history = init();
         history.set_max_len(1);
-        assert_eq!(1, history.entries.len());
+        assert_eq!(1, history.len());
         assert_eq!(Some(&"line3".to_owned()), history.last());
     }
 
@@ -630,9 +893,9 @@ mod tests {
         let tf = tempfile::NamedTempFile::new()?;
 
         history.save(tf.path())?;
-        let mut history2 = History::new();
+        let mut history2 = FileHistory::new();
         history2.load(tf.path())?;
-        for (a, b) in history.entries.iter().zip(history2.entries.iter()) {
+        for (a, b) in history.iter().zip(history2.iter()) {
             assert_eq!(a, b);
         }
         tf.close()?;
@@ -655,11 +918,11 @@ mod tests {
             legacy.write_all(data)?;
             legacy.flush()?;
         }
-        let mut history = History::new();
+        let mut history = FileHistory::new();
         history.load(tf.path())?;
-        assert_eq!(history.entries[0], "test\\n \\abc \\123");
-        assert_eq!(history.entries[1], "123\\n\\\\n");
-        assert_eq!(history.entries[2], "abcde");
+        assert_eq!(history[0], "test\\n \\abc \\123");
+        assert_eq!(history[1], "123\\n\\\\n");
+        assert_eq!(history[2], "abcde");
 
         tf.close()?;
         Ok(())
@@ -673,7 +936,7 @@ mod tests {
 
         history.append(tf.path())?;
 
-        let mut history2 = History::new();
+        let mut history2 = FileHistory::new();
         history2.load(tf.path())?;
         history2.add("line4");
         history2.append(tf.path())?;
@@ -681,7 +944,7 @@ mod tests {
         history.add("line5");
         history.append(tf.path())?;
 
-        let mut history3 = History::new();
+        let mut history3 = FileHistory::new();
         history3.load(tf.path())?;
         assert_eq!(history3.len(), 5);
 
@@ -695,20 +958,20 @@ mod tests {
         let tf = tempfile::NamedTempFile::new()?;
 
         let config = Config::builder().history_ignore_dups(false).build();
-        let mut history = History::with_config(config);
+        let mut history = FileHistory::with_config(config);
         history.add("line1");
         history.add("line1");
         history.append(tf.path())?;
 
-        let mut history = History::new();
+        let mut history = FileHistory::new();
         history.load(tf.path())?;
         history.add("l");
         history.append(tf.path())?;
 
-        let mut history = History::new();
+        let mut history = FileHistory::new();
         history.load(tf.path())?;
         assert_eq!(history.len(), 2);
-        assert_eq!(history.entries[1], "l");
+        assert_eq!(history[1], "l");
 
         tf.close()?;
         Ok(())

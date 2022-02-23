@@ -8,7 +8,7 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::<()>::new();
+//! let mut rl = rustyline::DefaultEditor::new();
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}", line),
@@ -53,7 +53,7 @@ pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, H
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::{History, SearchDirection};
+use crate::history::{FileHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
@@ -347,11 +347,11 @@ fn page_completions<C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<H: Helper>(
+fn reverse_incremental_search<H: Helper, I: History>(
     rdr: &mut <Terminal as Term>::Reader,
     s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
-    history: &History,
+    history: &I,
 ) -> Result<Option<Cmd>> {
     if history.is_empty() {
         return Ok(None);
@@ -433,10 +433,10 @@ fn reverse_incremental_search<H: Helper>(
 /// Handles reading and editing the readline buffer.
 /// It will also handle special inputs in an appropriate fashion
 /// (e.g., C-c will exit readline)
-fn readline_edit<H: Helper>(
+fn readline_edit<H: Helper, I: History>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
+    editor: &mut Editor<H, I>,
     original_mode: &tty::Mode,
     term_key_map: tty::KeyMap,
 ) -> Result<String> {
@@ -560,10 +560,10 @@ impl Drop for Guard<'_> {
 
 /// Readline method that will enable RAW mode, call the `readline_edit()`
 /// method and disable raw mode
-fn readline_raw<H: Helper>(
+fn readline_raw<H: Helper, I: History>(
     prompt: &str,
     initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
+    editor: &mut Editor<H, I>,
 ) -> Result<String> {
     let (original_mode, term_key_map) = editor.term.enable_raw_mode()?;
     let guard = Guard(&original_mode);
@@ -680,14 +680,14 @@ impl<'h, H: ?Sized + Helper> Helper for &'h H {}
 
 /// Completion/suggestion context
 pub struct Context<'h> {
-    history: &'h History,
+    history: &'h dyn History,
     history_index: usize,
 }
 
 impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
     #[must_use]
-    pub fn new(history: &'h History) -> Self {
+    pub fn new(history: &'h dyn History) -> Self {
         Context {
             history,
             history_index: history.len(),
@@ -696,7 +696,7 @@ impl<'h> Context<'h> {
 
     /// Return an immutable reference to the history object.
     #[must_use]
-    pub fn history(&self) -> &History {
+    pub fn history(&self) -> &dyn History {
         self.history
     }
 
@@ -708,17 +708,20 @@ impl<'h> Context<'h> {
 }
 
 /// Line editor
-pub struct Editor<H: Helper> {
+pub struct Editor<H: Helper, I: History> {
     term: Terminal,
-    history: History,
+    history: I,
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
     custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
 }
 
+/// Default editor with no helper and `FileHistory`
+pub type DefaultEditor = Editor<(), FileHistory>;
+
 #[allow(clippy::new_without_default)]
-impl<H: Helper> Editor<H> {
+impl<H: Helper> Editor<H, FileHistory> {
     /// Create an editor with the default configuration
     #[must_use]
     pub fn new() -> Self {
@@ -728,6 +731,14 @@ impl<H: Helper> Editor<H> {
     /// Create an editor with a specific configuration.
     #[must_use]
     pub fn with_config(config: Config) -> Self {
+        Self::with_history(config, FileHistory::with_config(config))
+    }
+}
+
+impl<H: Helper, I: History> Editor<H, I> {
+    /// Create an editor with a custom history impl.
+    #[must_use]
+    pub fn with_history(config: Config, history: I) -> Self {
         let term = Terminal::new(
             config.color_mode(),
             config.behavior(),
@@ -737,7 +748,7 @@ impl<H: Helper> Editor<H> {
         );
         Self {
             term,
-            history: History::with_config(config),
+            history,
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
@@ -786,22 +797,22 @@ impl<H: Helper> Editor<H> {
 
     /// Load the history from the specified file.
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.load(path)
+        self.history.load(path.as_ref())
     }
 
     /// Save the history in the specified file.
     pub fn save_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.save(path)
+        self.history.save(path.as_ref())
     }
 
     /// Append new entries in the specified file.
     pub fn append_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.append(path)
+        self.history.append(path.as_ref())
     }
 
     /// Add a new entry in the history.
     pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
-        self.history.add(line)
+        self.history.add(line.as_ref())
     }
 
     /// Clear history.
@@ -810,12 +821,12 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Return a mutable reference to the history object.
-    pub fn history_mut(&mut self) -> &mut History {
+    pub fn history_mut(&mut self) -> &mut I {
         &mut self.history
     }
 
     /// Return an immutable reference to the history object.
-    pub fn history(&self) -> &History {
+    pub fn history(&self) -> &I {
         &self.history
     }
 
@@ -859,7 +870,7 @@ impl<H: Helper> Editor<H> {
 
     /// Returns an iterator over edited lines
     /// ```
-    /// let mut rl = rustyline::Editor::<()>::new();
+    /// let mut rl = rustyline::DefaultEditor::new();
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -896,7 +907,7 @@ impl<H: Helper> Editor<H> {
     }
 }
 
-impl<H: Helper> config::Configurer for Editor<H> {
+impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
     fn config_mut(&mut self) -> &mut Config {
         &mut self.config
     }
@@ -908,12 +919,12 @@ impl<H: Helper> config::Configurer for Editor<H> {
 
     fn set_history_ignore_dups(&mut self, yes: bool) {
         self.config_mut().set_history_ignore_dups(yes);
-        self.history.ignore_dups = yes;
+        self.history.ignore_dups(yes);
     }
 
     fn set_history_ignore_space(&mut self, yes: bool) {
         self.config_mut().set_history_ignore_space(yes);
-        self.history.ignore_space = yes;
+        self.history.ignore_space(yes);
     }
 
     fn set_color_mode(&mut self, color_mode: ColorMode) {
@@ -922,7 +933,7 @@ impl<H: Helper> config::Configurer for Editor<H> {
     }
 }
 
-impl<H: Helper> fmt::Debug for Editor<H> {
+impl<H: Helper, I: History> fmt::Debug for Editor<H, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
@@ -931,12 +942,12 @@ impl<H: Helper> fmt::Debug for Editor<H> {
     }
 }
 
-struct Iter<'a, H: Helper> {
-    editor: &'a mut Editor<H>,
+struct Iter<'a, H: Helper, I: History> {
+    editor: &'a mut Editor<H, I>,
     prompt: &'a str,
 }
 
-impl<'a, H: Helper> Iterator for Iter<'a, H> {
+impl<'a, H: Helper, I: History> Iterator for Iter<'a, H, I> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {

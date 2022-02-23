@@ -80,12 +80,12 @@ impl Hinter for HistoryHinter {
 #[cfg(test)]
 mod test {
     use super::{Hinter, HistoryHinter};
-    use crate::history::History;
+    use crate::history::{FileHistory, History};
     use crate::Context;
 
     #[test]
     pub fn empty_history() {
-        let history = History::new();
+        let history = FileHistory::new();
         let ctx = Context::new(&history);
         let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);

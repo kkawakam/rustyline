@@ -8,11 +8,12 @@ use crate::config::{Config, EditMode};
 use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
+use crate::history::History;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
-use crate::{apply_backspace_direct, readline_direct, Context, Editor, Helper, Result};
+use crate::{apply_backspace_direct, readline_direct, Context, DefaultEditor, Helper, Result};
 
 mod common;
 mod emacs;
@@ -20,9 +21,9 @@ mod history;
 mod vi_cmd;
 mod vi_insert;
 
-fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> Editor<()> {
+fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> DefaultEditor {
     let config = Config::builder().edit_mode(mode).build();
-    let mut editor = Editor::<()>::with_config(config);
+    let mut editor = DefaultEditor::with_config(config);
     editor.term.keys.extend(keys.iter().cloned());
     editor
 }
@@ -55,7 +56,7 @@ impl Validator for SimpleCompleter {}
 #[test]
 fn complete_line() {
     let mut out = Sink::new();
-    let history = crate::history::History::new();
+    let history = crate::history::FileHistory::new();
     let helper = Some(SimpleCompleter);
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
@@ -136,13 +137,13 @@ fn unknown_esc_key() {
 #[test]
 fn test_send() {
     fn assert_send<T: Send>() {}
-    assert_send::<Editor<()>>();
+    assert_send::<DefaultEditor>();
 }
 
 #[test]
 fn test_sync() {
     fn assert_sync<T: Sync>() {}
-    assert_sync::<Editor<()>>();
+    assert_sync::<DefaultEditor>();
 }
 
 #[test]

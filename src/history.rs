@@ -570,8 +570,8 @@ impl FileHistory {
 
     /// Return a forward iterator.
     #[must_use]
-    fn iter(&self) -> Iter<'_> {
-        Iter(self.mem.entries.iter())
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &String> + '_ {
+        self.mem.entries.iter()
     }
 }
 
@@ -731,32 +731,11 @@ impl Index<usize> for FileHistory {
 }
 
 impl<'a> IntoIterator for &'a FileHistory {
-    type IntoIter = Iter<'a>;
+    type IntoIter = vec_deque::Iter<'a, String>;
     type Item = &'a String;
 
-    fn into_iter(self) -> Iter<'a> {
-        self.iter()
-    }
-}
-
-/// History iterator.
-pub struct Iter<'a>(vec_deque::Iter<'a, String>);
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = &'a String;
-
-    fn next(&mut self) -> Option<&'a String> {
-        self.0.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a> DoubleEndedIterator for Iter<'a> {
-    fn next_back(&mut self) -> Option<&'a String> {
-        self.0.next_back()
+    fn into_iter(self) -> Self::IntoIter {
+        self.mem.entries.iter()
     }
 }
 

@@ -171,16 +171,11 @@ pub trait History {
     #[must_use]
     fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult>;
 
-    // TODO jline3: ListIterator<Entry> iterator(int index);
-    // TODO jline3: default ListIterator<Entry> iterator() {
-    //         return iterator(first());
-    //     }
-    // TODO jline3: default Iterator<Entry> reverseIterator(int index) {
-    // TODO jline3: default Iterator<Entry> reverseIterator() {
-    //         return reverseIterator(last());
-    //     }
-    // reedline: fn iter_chronologic(&self) -> std::collections::vec_deque::Iter<'_,
-    // String>; replxx: HistoryScan history_scan( void ) const;
+    /* TODO How ? DoubleEndedIterator may be difficult to implement (for an SQLite backend)
+    /// Return a iterator.
+    #[must_use]
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &String> + '_;
+     */
 }
 
 /// Transient in-memory history implementation.

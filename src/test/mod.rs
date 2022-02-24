@@ -56,7 +56,7 @@ impl Validator for SimpleCompleter {}
 #[test]
 fn complete_line() {
     let mut out = Sink::new();
-    let history = crate::history::FileHistory::new();
+    let history = crate::history::DefaultHistory::new();
     let helper = Some(SimpleCompleter);
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();

@@ -682,7 +682,7 @@ pub fn init_state<'out, H: Helper>(
     line: &str,
     pos: usize,
     helper: Option<&'out H>,
-    history: &'out crate::history::FileHistory,
+    history: &'out crate::history::DefaultHistory,
 ) -> State<'out, 'static, H> {
     State {
         out,
@@ -703,13 +703,13 @@ pub fn init_state<'out, H: Helper>(
 #[cfg(test)]
 mod test {
     use super::init_state;
-    use crate::history::{FileHistory, History};
+    use crate::history::{DefaultHistory, History};
     use crate::tty::Sink;
 
     #[test]
     fn edit_history_next() {
         let mut out = Sink::new();
-        let mut history = FileHistory::new();
+        let mut history = DefaultHistory::new();
         history.add("line0");
         history.add("line1");
         let line = "current edited line";

@@ -1,14 +1,20 @@
 //! History API
 
+#[cfg(feature = "with-file-history")]
 use fd_lock::RwLock;
+#[cfg(feature = "with-file-history")]
 use log::{debug, warn};
 use std::collections::vec_deque;
 use std::collections::VecDeque;
+#[cfg(feature = "with-file-history")]
 use std::fs::{File, OpenOptions};
+#[cfg(feature = "with-file-history")]
 use std::io::SeekFrom;
+#[cfg(feature = "with-file-history")]
 use std::iter::DoubleEndedIterator;
 use std::ops::Index;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "with-file-history")]
 use std::time::SystemTime;
 
 use super::Result;
@@ -407,6 +413,7 @@ impl<'a> IntoIterator for &'a MemHistory {
 
 /// Current state of the history stored in a file.
 #[derive(Default)]
+#[cfg(feature = "with-file-history")]
 pub struct FileHistory {
     mem: MemHistory,
     /// Number of entries inputed by user and not saved yet
@@ -418,8 +425,10 @@ pub struct FileHistory {
 // TODO impl Deref<MemHistory> for FileHistory ?
 
 /// Last histo path, modified timestamp and size
-struct PathInfo(PathBuf, SystemTime, usize);
+#[cfg(feature = "with-file-history")]
+struct PathInfo(std::path::PathBuf, SystemTime, usize);
 
+#[cfg(feature = "with-file-history")]
 impl FileHistory {
     // New multiline-aware history files start with `#V2\n` and have newlines
     // and backslashes escaped in them.
@@ -570,6 +579,14 @@ impl FileHistory {
     }
 }
 
+/// Default transient in-memory history implementation
+#[cfg(not(feature = "with-file-history"))]
+pub type DefaultHistory = MemHistory;
+/// Default file-based history implementation
+#[cfg(feature = "with-file-history")]
+pub type DefaultHistory = FileHistory;
+
+#[cfg(feature = "with-file-history")]
 impl History for FileHistory {
     fn with_config(config: Config) -> Self {
         Self {
@@ -717,6 +734,7 @@ impl History for FileHistory {
     }
 }
 
+#[cfg(feature = "with-file-history")]
 impl Index<usize> for FileHistory {
     type Output = String;
 
@@ -725,6 +743,7 @@ impl Index<usize> for FileHistory {
     }
 }
 
+#[cfg(feature = "with-file-history")]
 impl<'a> IntoIterator for &'a FileHistory {
     type IntoIter = vec_deque::Iter<'a, String>;
     type Item = &'a String;
@@ -734,6 +753,7 @@ impl<'a> IntoIterator for &'a FileHistory {
     }
 }
 
+#[cfg(feature = "with-file-history")]
 cfg_if::cfg_if! {
     if #[cfg(any(windows, target_arch = "wasm32"))] {
         fn umask() -> u16 {
@@ -765,12 +785,13 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{FileHistory, History, SearchDirection, SearchResult};
+    use super::{DefaultHistory, History, SearchDirection, SearchResult};
     use crate::config::Config;
+    #[cfg(feature = "with-file-history")]
     use crate::Result;
 
-    fn init() -> FileHistory {
-        let mut history = FileHistory::new();
+    fn init() -> DefaultHistory {
+        let mut history = DefaultHistory::new();
         assert!(history.add("line1"));
         assert!(history.add("line2"));
         assert!(history.add("line3"));
@@ -779,14 +800,15 @@ mod tests {
 
     #[test]
     fn new() {
-        let history = FileHistory::new();
+        let history = DefaultHistory::new();
         assert_eq!(0, history.len());
     }
 
     #[test]
     fn add() {
         let config = Config::builder().history_ignore_space(true).build();
-        let mut history = FileHistory::with_config(config);
+        let mut history = DefaultHistory::with_config(config);
+        #[cfg(feature = "with-file-history")]
         assert_eq!(config.max_history_size(), history.mem.max_len);
         assert!(history.add("line1"));
         assert!(history.add("line2"));
@@ -804,25 +826,28 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn save() -> Result<()> {
         check_save("line\nfour \\ abc")
     }
 
     #[test]
+    #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `open` not available when isolation is enabled
     fn save_windows_path() -> Result<()> {
         let path = "cd source\\repos\\forks\\nushell\\";
         check_save(path)
     }
 
+    #[cfg(feature = "with-file-history")]
     fn check_save(line: &str) -> Result<()> {
         let mut history = init();
         assert!(history.add(line));
         let tf = tempfile::NamedTempFile::new()?;
 
         history.save(tf.path())?;
-        let mut history2 = FileHistory::new();
+        let mut history2 = DefaultHistory::new();
         history2.load(tf.path())?;
         for (a, b) in history.iter().zip(history2.iter()) {
             assert_eq!(a, b);
@@ -832,6 +857,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn load_legacy() -> Result<()> {
         use std::io::Write;
@@ -847,7 +873,7 @@ mod tests {
             legacy.write_all(data)?;
             legacy.flush()?;
         }
-        let mut history = FileHistory::new();
+        let mut history = DefaultHistory::new();
         history.load(tf.path())?;
         assert_eq!(history[0], "test\\n \\abc \\123");
         assert_eq!(history[1], "123\\n\\\\n");
@@ -858,6 +884,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn append() -> Result<()> {
         let mut history = init();
@@ -865,7 +892,7 @@ mod tests {
 
         history.append(tf.path())?;
 
-        let mut history2 = FileHistory::new();
+        let mut history2 = DefaultHistory::new();
         history2.load(tf.path())?;
         history2.add("line4");
         history2.append(tf.path())?;
@@ -873,7 +900,7 @@ mod tests {
         history.add("line5");
         history.append(tf.path())?;
 
-        let mut history3 = FileHistory::new();
+        let mut history3 = DefaultHistory::new();
         history3.load(tf.path())?;
         assert_eq!(history3.len(), 5);
 
@@ -882,22 +909,23 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn truncate() -> Result<()> {
         let tf = tempfile::NamedTempFile::new()?;
 
         let config = Config::builder().history_ignore_dups(false).build();
-        let mut history = FileHistory::with_config(config);
+        let mut history = DefaultHistory::with_config(config);
         history.add("line1");
         history.add("line1");
         history.append(tf.path())?;
 
-        let mut history = FileHistory::new();
+        let mut history = DefaultHistory::new();
         history.load(tf.path())?;
         history.add("l");
         history.append(tf.path())?;
 
-        let mut history = FileHistory::new();
+        let mut history = DefaultHistory::new();
         history.load(tf.path())?;
         assert_eq!(history.len(), 2);
         assert_eq!(history[1], "l");

@@ -53,7 +53,7 @@ pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, H
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::{FileHistory, History, SearchDirection};
+use crate::history::{DefaultHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
@@ -717,11 +717,11 @@ pub struct Editor<H: Helper, I: History> {
     custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
 }
 
-/// Default editor with no helper and `FileHistory`
-pub type DefaultEditor = Editor<(), FileHistory>;
+/// Default editor with no helper and `DefaultHistory`
+pub type DefaultEditor = Editor<(), DefaultHistory>;
 
 #[allow(clippy::new_without_default)]
-impl<H: Helper> Editor<H, FileHistory> {
+impl<H: Helper> Editor<H, DefaultHistory> {
     /// Create an editor with the default configuration
     #[must_use]
     pub fn new() -> Self {
@@ -731,7 +731,7 @@ impl<H: Helper> Editor<H, FileHistory> {
     /// Create an editor with a specific configuration.
     #[must_use]
     pub fn with_config(config: Config) -> Self {
-        Self::with_history(config, FileHistory::with_config(config))
+        Self::with_history(config, DefaultHistory::with_config(config))
     }
 }
 

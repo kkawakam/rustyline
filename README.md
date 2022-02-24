@@ -25,6 +25,7 @@ use rustyline::DefaultEditor;
 fn main() {
     // `()` can be used when no completer is required
     let mut rl = DefaultEditor::new();
+    #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
@@ -49,6 +50,7 @@ fn main() {
             }
         }
     }
+    #[cfg(feature = "with-file-history")]
     rl.save_history("history.txt").unwrap();
 }
 ```

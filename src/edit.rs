@@ -307,7 +307,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.out.clear_rows(&self.layout)?;
         self.layout.end.row = 0;
         self.layout.cursor.row = 0;
-        self.out.write_and_flush(msg.as_bytes())?;
+        self.out.write_and_flush(msg.as_str())?;
         self.move_cursor_at_leftmost(rdr)?;
         self.refresh_line()
     }
@@ -354,7 +354,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
-                    let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)
                 } else {
                     self.refresh(self.prompt, prompt_size, true, Info::Hint)

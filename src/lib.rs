@@ -49,9 +49,7 @@ use crate::tty::{RawMode, Renderer, Term, Terminal};
 
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
-pub use crate::config::{
-    ColorMode, CompletionType, Config, EditMode, HistoryDuplicates, OutputStreamType,
-};
+pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -168,7 +166,7 @@ fn complete_line<H: Helper>(
         // we got a second tab, maybe show list of possible completions
         let show_completions = if candidates.len() > config.completion_prompt_limit() {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
-            s.out.write_and_flush(msg.as_bytes())?;
+            s.out.write_and_flush(msg.as_str())?;
             s.layout.end.row += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -294,7 +292,7 @@ fn page_completions<C: Candidate, H: Helper>(
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
-            s.out.write_and_flush(b"\n--More--")?;
+            s.out.write_and_flush("\n--More--")?;
             let mut cmd = Cmd::Noop;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
@@ -320,7 +318,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 _ => break,
             }
         }
-        s.out.write_and_flush(b"\n")?;
+        s.out.write_and_flush("\n")?;
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
@@ -339,9 +337,9 @@ fn page_completions<C: Candidate, H: Helper>(
                 }
             }
         }
-        s.out.write_and_flush(ab.as_bytes())?;
+        s.out.write_and_flush(ab.as_str())?;
     }
-    s.out.write_and_flush(b"\n")?;
+    s.out.write_and_flush("\n")?;
     s.layout.end.row = 0; // dirty way to make clear_old_rows do nothing
     s.layout.cursor.row = 0;
     s.refresh_line()?;
@@ -458,7 +456,7 @@ fn readline_edit<H: Helper>(
             .update((left.to_owned() + right).as_ref(), left.len());
     }
 
-    let mut rdr = editor.term.create_reader(&editor.config, term_key_map)?;
+    let mut rdr = editor.term.create_reader(&editor.config, term_key_map);
     if editor.term.is_output_tty() && editor.config.check_cursor_position() {
         if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
             if s.out.sigwinch() {
@@ -576,10 +574,7 @@ fn readline_raw<H: Helper>(
         }
     }
     drop(guard); // disable_raw_mode(original_mode)?;
-    match editor.config.output_stream() {
-        OutputStreamType::Stdout => writeln!(io::stdout())?,
-        OutputStreamType::Stderr => writeln!(io::stderr())?,
-    };
+    editor.term.writeln()?;
     user_input
 }
 
@@ -735,7 +730,7 @@ impl<H: Helper> Editor<H> {
     pub fn with_config(config: Config) -> Self {
         let term = Terminal::new(
             config.color_mode(),
-            config.output_stream(),
+            config.behavior(),
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),
@@ -780,7 +775,7 @@ impl<H: Helper> Editor<H> {
             stdout.flush()?;
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
-        } else if self.term.is_stdin_tty() {
+        } else if self.term.is_input_tty() {
             readline_raw(prompt, initial, self)
         } else {
             debug!(target: "rustyline", "stdin is not a tty");

@@ -2,7 +2,7 @@
 
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
@@ -92,7 +92,7 @@ pub trait Renderer {
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
+    fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
@@ -141,7 +141,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).calculate_position(s, orig)
     }
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
+    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
         (**self).write_and_flush(buf)
     }
 
@@ -229,7 +229,7 @@ pub trait Term {
 
     fn new(
         color_mode: ColorMode,
-        stream: OutputStreamType,
+        behavior: Behavior,
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
@@ -237,16 +237,17 @@ pub trait Term {
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
-    /// check if stdin is connected to a terminal.
-    fn is_stdin_tty(&self) -> bool;
+    /// check if input stream is connected to a terminal.
+    fn is_input_tty(&self) -> bool;
     /// check if output stream is connected to a terminal.
     fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Result<Self::Reader>;
+    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Self::Reader;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+    fn writeln(&self) -> Result<()>;
     /// Create an external printer
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }

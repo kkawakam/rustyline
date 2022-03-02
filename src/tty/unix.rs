@@ -1294,11 +1294,9 @@ impl Term for PosixTerminal {
         };
 
         // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
-        if let Some((ref arc, _)) = self.pipe_writer {
-            if Arc::strong_count(arc) == 1 {
-                self.pipe_writer = None;
-                self.pipe_reader = None;
-            }
+        if Arc::strong_count(&self.raw_mode) == 1 {
+            self.pipe_writer = None;
+            self.pipe_reader = None;
         }
 
         Ok((

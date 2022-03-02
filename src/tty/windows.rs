@@ -775,12 +775,10 @@ impl Term for Console {
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
-        /*if let Some(ref arc) = self.pipe_writer { FIXME
-            if Arc::strong_count(arc) == 1 {
-                self.pipe_writer = None;
-                self.pipe_reader = None;
-            }
-        }*/
+        if Arc::strong_count(&self.raw_mode) == 1 {
+            self.pipe_writer = None;
+            self.pipe_reader = None;
+        }
 
         Ok((
             ConsoleMode {
@@ -809,7 +807,7 @@ impl Term for Console {
     fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
         if let Some(ref sender) = self.pipe_writer {
             return Ok(ExternalPrinter {
-                event: INVALID_HANDLE_VALUE, // FIXME
+                event: self.pipe_reader.as_ref().unwrap().event.0,
                 sender: sender.clone(),
                 raw_mode: self.raw_mode.clone(),
                 conout: self.conout,

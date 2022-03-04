@@ -502,6 +502,9 @@ fn readline_edit<H: Helper>(
             original_mode.disable_raw_mode()?;
             tty::suspend()?;
             let _ = editor.term.enable_raw_mode()?; // TODO original_mode may have changed
+            if s.out.sigwinch() {
+                s.out.update_size();
+            }
             s.refresh_line()?;
             continue;
         }

@@ -4,16 +4,18 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
-use std::sync;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use buf_redux::BufReader;
 use log::{debug, warn};
 use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
+#[cfg(not(test))]
 use nix::sys::signal;
 use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
 use nix::unistd::{close, isatty, write};
+#[cfg(feature = "signal-hook")]
+use signal_hook::{self, SigId};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
@@ -117,6 +119,7 @@ impl RawMode for PosixMode {
 // So we use low-level stuff instead...
 struct TtyIn {
     fd: RawFd,
+    sigwinch: SigWinCh,
 }
 
 impl Read for TtyIn {
@@ -131,7 +134,7 @@ impl Read for TtyIn {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != ErrorKind::Interrupted || SIGWINCH.load(Ordering::Relaxed) {
+                if error.kind() != ErrorKind::Interrupted || self.sigwinch.load(Ordering::Relaxed) {
                     return Err(error);
                 }
             } else {
@@ -190,9 +193,9 @@ const RXVT_CTRL: char = '\x1e';
 const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
-    fn new(fd: RawFd, config: &Config, key_map: PosixKeyMap) -> Self {
+    fn new(fd: RawFd, sigwinch: SigWinCh, config: &Config, key_map: PosixKeyMap) -> Self {
         Self {
-            tty_in: BufReader::with_capacity(1024, TtyIn { fd }),
+            tty_in: BufReader::with_capacity(1024, TtyIn { fd, sigwinch }),
             timeout_ms: config.keyseq_timeout(),
             buf: [0; 1],
             parser: Parser::new(),
@@ -654,7 +657,7 @@ impl PosixRawReader {
         match r {
             Ok(_) => r,
             Err(Errno::EINTR) => {
-                if SIGWINCH.load(Ordering::Relaxed) {
+                if self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed) {
                     r
                 } else {
                     Ok(0) // Ignore EINTR while polling
@@ -757,6 +760,7 @@ impl Receiver for Utf8 {
 /// Console output writer
 pub struct PosixRenderer {
     out: RawFd,
+    sigwinch: SigWinCh,
     cols: usize, // Number of columns in terminal
     buffer: String,
     tab_stop: usize,
@@ -765,10 +769,17 @@ pub struct PosixRenderer {
 }
 
 impl PosixRenderer {
-    fn new(out: RawFd, tab_stop: usize, colors_enabled: bool, bell_style: BellStyle) -> Self {
+    fn new(
+        out: RawFd,
+        sigwinch: SigWinCh,
+        tab_stop: usize,
+        colors_enabled: bool,
+        bell_style: BellStyle,
+    ) -> Self {
         let (cols, _) = get_win_size(out);
         Self {
             out,
+            sigwinch,
             cols,
             buffer: String::with_capacity(1024),
             tab_stop,
@@ -956,7 +967,7 @@ impl Renderer for PosixRenderer {
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool {
-        SIGWINCH
+        self.sigwinch
             .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
             .unwrap_or(false)
     }
@@ -1037,23 +1048,61 @@ fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
     Ok(())
 }
 
-static SIGWINCH_ONCE: sync::Once = sync::Once::new();
-static SIGWINCH: AtomicBool = AtomicBool::new(false);
+cfg_if::cfg_if! {
+    if #[cfg(not(feature = "signal-hook"))] {
+        static SIGWINCH_ONCE: std::sync::Once = std::sync::Once::new();
+        static SIGWINCH: AtomicBool = AtomicBool::new(false);
+        fn install_sigwinch_handler() -> (SigWinCh, Option<()>) {
+            use nix::sys::signal;
+            SIGWINCH_ONCE.call_once(|| unsafe {
+                let sigwinch = signal::SigAction::new(
+                    signal::SigHandler::Handler(sigwinch_handler),
+                    signal::SaFlags::empty(),
+                    signal::SigSet::empty(),
+                );
+                let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
+            });
+            (new_sigwinch(), None)
+        }
+        extern "C" fn sigwinch_handler(_: libc::c_int) {
+            SIGWINCH.store(true, Ordering::SeqCst);
+            debug!(target: "rustyline", "SIGWINCH");
+        }
+        #[derive(Clone, Debug)]
+        struct SigWinCh;
+        fn new_sigwinch() -> SigWinCh {
+            SigWinCh {}
+        }
+        impl SigWinCh {
+            fn load(&self, order: Ordering) -> bool {
+                SIGWINCH.load(order)
+            }
 
-fn install_sigwinch_handler() {
-    SIGWINCH_ONCE.call_once(|| unsafe {
-        let sigwinch = signal::SigAction::new(
-            signal::SigHandler::Handler(sigwinch_handler),
-            signal::SaFlags::empty(),
-            signal::SigSet::empty(),
-        );
-        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
-    });
-}
-
-extern "C" fn sigwinch_handler(_: libc::c_int) {
-    SIGWINCH.store(true, Ordering::SeqCst);
-    debug!(target: "rustyline", "SIGWINCH");
+            fn compare_exchange(
+                &self,
+                current: bool,
+                new: bool,
+                success: Ordering,
+                failure: Ordering,
+            ) -> std::result::Result<bool, bool> {
+                SIGWINCH.compare_exchange(current, new, success, failure)
+            }
+        }
+    } else {
+        fn install_sigwinch_handler() -> (SigWinCh, Option<SigId>) {
+            let sigwinch = new_sigwinch();
+            let flag = sigwinch.clone();
+            (
+                sigwinch,
+                signal_hook::flag::register(libc::SIGWINCH, flag).ok(),
+            )
+        }
+        use std::sync::Arc;
+        type SigWinCh = Arc<AtomicBool>;
+        fn new_sigwinch() -> SigWinCh {
+            Arc::new(AtomicBool::new(false))
+        }
+    }
 }
 
 fn map_key(key_map: &mut HashMap<KeyEvent, Cmd>, raw: &Termios, index: SCI, name: &str, cmd: Cmd) {
@@ -1078,6 +1127,9 @@ pub struct PosixTerminal {
     tab_stop: usize,
     bell_style: BellStyle,
     enable_bracketed_paste: bool,
+    sigwinch: SigWinCh,
+    #[cfg(feature = "signal-hook")]
+    sigwinch_id: Option<SigId>,
 }
 
 impl PosixTerminal {
@@ -1128,8 +1180,15 @@ impl Term for PosixTerminal {
                     false,
                 )
             };
-        let term = Self {
-            unsupported: is_unsupported_term(),
+        let unsupported = is_unsupported_term();
+        #[allow(unused_variables)]
+        let (sigwinch, sigwinch_id) = if !unsupported && is_in_a_tty && is_out_a_tty {
+            install_sigwinch_handler()
+        } else {
+            (new_sigwinch(), None)
+        };
+        Self {
+            unsupported,
             tty_in,
             is_in_a_tty,
             tty_out,
@@ -1139,11 +1198,10 @@ impl Term for PosixTerminal {
             tab_stop,
             bell_style,
             enable_bracketed_paste,
-        };
-        if !term.unsupported && term.is_in_a_tty && term.is_out_a_tty {
-            install_sigwinch_handler();
+            sigwinch,
+            #[cfg(feature = "signal-hook")]
+            sigwinch_id,
         }
-        term
     }
 
     // Init checks:
@@ -1220,12 +1278,13 @@ impl Term for PosixTerminal {
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> PosixRawReader {
-        PosixRawReader::new(self.tty_in, config, key_map)
+        PosixRawReader::new(self.tty_in, self.sigwinch.clone(), config, key_map)
     }
 
     fn create_writer(&self) -> PosixRenderer {
         PosixRenderer::new(
             self.tty_out,
+            self.sigwinch.clone(),
             self.tab_stop,
             self.colors_enabled(),
             self.bell_style,
@@ -1245,6 +1304,10 @@ impl Drop for PosixTerminal {
             close(self.tty_in);
             debug_assert_eq!(self.tty_in, self.tty_out);
         }
+        #[cfg(feature = "signal-hook")]
+        if let Some(sigwinch_id) = self.sigwinch_id {
+            signal_hook::low_level::unregister(sigwinch_id);
+        }
     }
 }
 
@@ -1258,14 +1321,15 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
+    use super::{new_sigwinch, Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
     use crate::line_buffer::LineBuffer;
 
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
+        let sigwinch = new_sigwinch();
+        let out = PosixRenderer::new(libc::STDOUT_FILENO, sigwinch, 4, true, BellStyle::default());
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
@@ -1294,7 +1358,9 @@ mod test {
 
     #[test]
     fn test_line_wrap() {
-        let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
+        let sigwinch = new_sigwinch();
+        let mut out =
+            PosixRenderer::new(libc::STDOUT_FILENO, sigwinch, 4, true, BellStyle::default());
         let prompt = "> ";
         let default_prompt = true;
         let prompt_size = out.calculate_position(prompt, Position::default());

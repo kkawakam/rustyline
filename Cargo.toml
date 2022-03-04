@@ -46,6 +46,7 @@ nix = "0.23"
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 buf_redux = { version = "0.8", default-features = false }
+signal-hook = { version = "0.3", optional = true, default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "minwindef", "processenv", "std", "winbase", "wincon", "winuser"] }
@@ -60,7 +61,7 @@ assert_matches = "1.2"
 rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
-default = ["with-dirs"]
+default = ["with-dirs", "signal-hook"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]

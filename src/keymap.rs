@@ -6,7 +6,7 @@ use radix_trie::Trie;
 
 use super::Result;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::tty::{RawReader, Term, Terminal};
+use crate::tty::{self, RawReader, Term, Terminal};
 use crate::{Config, EditMode, Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
@@ -392,6 +392,8 @@ pub trait Refresher {
     fn line(&self) -> &str;
     /// Current cursor position (byte position)
     fn pos(&self) -> usize;
+    /// Display `msg` above currently edited line.
+    fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()>;
 }
 
 impl InputState {
@@ -418,20 +420,37 @@ impl InputState {
         rdr: &mut <Terminal as Term>::Reader,
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
+        ignore_external_print: bool,
     ) -> Result<Cmd> {
+        let single_esc_abort = self.single_esc_abort(single_esc_abort);
+        let key;
+        if ignore_external_print {
+            key = rdr.next_key(single_esc_abort)?;
+        } else {
+            loop {
+                let event = rdr.wait_for_input(single_esc_abort)?;
+                match event {
+                    tty::Event::KeyPress(k) => {
+                        key = k;
+                        break;
+                    }
+                    tty::Event::ExternalPrint(msg) => {
+                        wrt.external_print(rdr, msg)?;
+                    }
+                }
+            }
+        }
         match self.mode {
-            EditMode::Emacs => {
-                let key = rdr.next_key(single_esc_abort)?;
-                self.emacs(rdr, wrt, key)
-            }
-            EditMode::Vi if self.input_mode != InputMode::Command => {
-                let key = rdr.next_key(false)?;
-                self.vi_insert(rdr, wrt, key)
-            }
-            EditMode::Vi => {
-                let key = rdr.next_key(false)?;
-                self.vi_command(rdr, wrt, key)
-            }
+            EditMode::Emacs => self.emacs(rdr, wrt, key),
+            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt, key),
+            EditMode::Vi => self.vi_command(rdr, wrt, key),
+        }
+    }
+
+    fn single_esc_abort(&self, single_esc_abort: bool) -> bool {
+        match self.mode {
+            EditMode::Emacs => single_esc_abort,
+            EditMode::Vi => false,
         }
     }
 

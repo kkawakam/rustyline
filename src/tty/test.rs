@@ -3,7 +3,7 @@ use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use super::{RawMode, RawReader, Renderer, Term};
+use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
@@ -22,6 +22,10 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyEvent> {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.next_key(single_esc_abort).map(Event::KeyPress)
+    }
+
     fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         match self.next() {
             Some(key) => Ok(*key),
@@ -44,6 +48,10 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
 }
 
 impl RawReader for IntoIter<KeyEvent> {
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.next_key(single_esc_abort).map(Event::KeyPress)
+    }
+
     fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
         match self.next() {
             Some(key) => Ok(key),
@@ -70,13 +78,8 @@ impl RawReader for IntoIter<KeyEvent> {
     }
 }
 
+#[derive(Default)]
 pub struct Sink {}
-
-impl Sink {
-    pub fn new() -> Sink {
-        Sink {}
-    }
-}
 
 impl Renderer for Sink {
     type Reader = IntoIter<KeyEvent>;
@@ -115,6 +118,10 @@ impl Renderer for Sink {
         Ok(())
     }
 
+    fn clear_rows(&mut self, _: &Layout) -> Result<()> {
+        Ok(())
+    }
+
     fn sigwinch(&self) -> bool {
         false
     }
@@ -138,6 +145,14 @@ impl Renderer for Sink {
     }
 }
 
+pub struct DummyExternalPrinter {}
+
+impl ExternalPrinter for DummyExternalPrinter {
+    fn print(&mut self, _msg: String) -> Result<()> {
+        Ok(())
+    }
+}
+
 pub type Terminal = DummyTerminal;
 
 #[derive(Clone, Debug)]
@@ -149,6 +164,7 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type ExternalPrinter = DummyExternalPrinter;
     type KeyMap = KeyMap;
     type Mode = Mode;
     type Reader = IntoIter<KeyEvent>;
@@ -200,7 +216,11 @@ impl Term for DummyTerminal {
     }
 
     fn create_writer(&self) -> Sink {
-        Sink::new()
+        Sink::default()
+    }
+
+    fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
+        Ok(DummyExternalPrinter {})
     }
 
     fn writeln(&self) -> Result<()> {

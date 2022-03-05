@@ -58,7 +58,7 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, Repeat
 use crate::keymap::{InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
-
+pub use crate::tty::ExternalPrinter;
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
@@ -107,7 +107,7 @@ fn complete_line<H: Helper>(
             }
             s.refresh_line()?;
 
-            cmd = s.next_cmd(input_state, rdr, true)?;
+            cmd = s.next_cmd(input_state, rdr, true, true)?;
             match cmd {
                 Cmd::Complete => {
                     i = (i + 1) % (candidates.len() + 1); // Circular
@@ -154,7 +154,7 @@ fn complete_line<H: Helper>(
             return Ok(None);
         }
         // we can't complete any further, wait for second tab
-        let mut cmd = s.next_cmd(input_state, rdr, true)?;
+        let mut cmd = s.next_cmd(input_state, rdr, true, true)?;
         // if any character other than tab, pass it to the main loop
         if cmd != Cmd::Complete {
             return Ok(Some(cmd));
@@ -174,7 +174,7 @@ fn complete_line<H: Helper>(
                 && cmd != Cmd::SelfInsert(1, 'N')
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
-                cmd = s.next_cmd(input_state, rdr, false)?;
+                cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
             matches!(cmd, Cmd::SelfInsert(1, 'y' | 'Y'))
         } else {
@@ -306,7 +306,7 @@ fn page_completions<C: Candidate, H: Helper>(
                 && cmd != Cmd::Newline
                 && !matches!(cmd, Cmd::AcceptOrInsertLine { .. })
             {
-                cmd = s.next_cmd(input_state, rdr, false)?;
+                cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
             match cmd {
                 Cmd::SelfInsert(1, 'y' | 'Y' | ' ') => {
@@ -376,7 +376,7 @@ fn reverse_incremental_search<H: Helper>(
         };
         s.refresh_prompt_and_line(&prompt)?;
 
-        cmd = s.next_cmd(input_state, rdr, true)?;
+        cmd = s.next_cmd(input_state, rdr, true, true)?;
         if let Cmd::SelfInsert(_, c) = cmd {
             search_buf.push(c);
         } else {
@@ -469,7 +469,7 @@ fn readline_edit<H: Helper>(
     s.refresh_line()?;
 
     loop {
-        let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false)?;
+        let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
 
         if cmd.should_reset_kill_ring() {
             editor.reset_kill_ring();
@@ -893,6 +893,11 @@ impl<H: Helper> Editor<H> {
         } else {
             None
         }
+    }
+
+    /// Create an external printer
+    pub fn create_external_printer(&mut self) -> Result<<Terminal as Term>::ExternalPrinter> {
+        self.term.create_external_printer()
     }
 }
 

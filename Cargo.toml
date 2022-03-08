@@ -29,7 +29,7 @@ cfg-if = "1.0"
 # https://rustsec.org/advisories/RUSTSEC-2020-0053.html
 dirs-next = { version = "2.0", optional = true }
 # For History
-fd-lock = "3.0.0"
+fd-lock = { version = "3.0.0", optional = true }
 libc = "0.2"
 log = "0.4"
 unicode-width = "0.1"
@@ -58,11 +58,12 @@ assert_matches = "1.2"
 rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
-default = ["custom-bindings", "with-dirs"]
+default = ["custom-bindings", "with-dirs", "fd-lock"]
 custom-bindings = ["radix_trie"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+wasm = [ ]
 
 [package.metadata.docs.rs]
 features = ["custom-bindings", "with-dirs", "with-fuzzy"]

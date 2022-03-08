@@ -1,5 +1,6 @@
 //! History API
 
+#[cfg(feature = "fd-lock")]
 use fd_lock::RwLock;
 use log::{debug, warn};
 use std::collections::vec_deque;
@@ -154,6 +155,7 @@ impl History {
     /// Save the history in the specified file.
     // TODO history_truncate_file
     // https://tiswww.case.edu/php/chet/readline/history.html#IDX31
+    #[cfg(feature = "fd-lock")]
     pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
@@ -168,6 +170,12 @@ impl History {
         self.save_to(&lock_guard, false)?;
         self.new_entries = 0;
         self.update_path(path, &lock_guard, self.len())
+    }
+
+    #[cfg(not(feature = "fd-lock"))]
+    pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        // TODO
+        Ok(())
     }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
@@ -204,6 +212,7 @@ impl History {
 
     /// Append new entries in the specified file.
     // Like [append_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX30).
+    #[cfg(feature = "fd-lock")]
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         use std::io::Seek;
 
@@ -251,10 +260,17 @@ impl History {
         Ok(())
     }
 
+    #[cfg(not(feature = "fd-lock"))]
+    pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+
     /// Load the history from the specified file.
     ///
     /// # Errors
     /// Will return `Err` if path does not already exist or could not be read.
+    #[cfg(feature = "fd-lock")]
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
         let path = path.as_ref();
         let file = File::open(path)?;
@@ -268,6 +284,12 @@ impl History {
             self.path_info = None;
             Ok(())
         }
+    }
+
+    #[cfg(not(feature = "fd-lock"))]
+    pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
+        // TODO
+        Ok(())
     }
 
     fn load_from(&mut self, file: &File) -> Result<bool> {

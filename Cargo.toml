@@ -30,6 +30,7 @@ cfg-if = "1.0"
 dirs-next = { version = "2.0", optional = true }
 # For History
 fd-lock = { version = "3.0.0", optional = true }
+rusqlite = { version = "0.27.0", optional = true, default-features = false, features = ["bundled"] }
 libc = "0.2"
 log = "0.4"
 unicode-width = "0.1"
@@ -63,6 +64,7 @@ rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 default = ["with-dirs", "with-file-history"]
 with-dirs = ["dirs-next"]
 with-file-history = ["fd-lock"]
+with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 

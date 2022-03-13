@@ -26,6 +26,8 @@ pub mod error;
 pub mod highlight;
 pub mod hint;
 pub mod history;
+#[cfg(feature = "with-sqlite-history")]
+pub mod sqlite_history;
 mod keymap;
 mod keys;
 mod kill_ring;

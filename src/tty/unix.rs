@@ -155,9 +155,7 @@ type PipeWriter = (Arc<Mutex<File>>, SyncSender<String>);
 pub struct PosixRawReader {
     tty_in: BufReader<TtyIn>,
     timeout_ms: i32,
-    buf: [u8; 1],
     parser: Parser,
-    receiver: Utf8,
     key_map: PosixKeyMap,
     // external print reader
     pipe_reader: Option<PipeReader>,
@@ -211,12 +209,7 @@ impl PosixRawReader {
         Self {
             tty_in: BufReader::with_capacity(1024, TtyIn { fd }),
             timeout_ms: config.keyseq_timeout(),
-            buf: [0; 1],
             parser: Parser::new(),
-            receiver: Utf8 {
-                c: None,
-                valid: true,
-            },
             key_map,
             pipe_reader,
             fds: FdSet::new(),
@@ -716,7 +709,8 @@ impl PosixRawReader {
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else {
                 let mut guard = self.pipe_reader.as_ref().unwrap().lock().unwrap();
-                guard.0.read_exact(&mut self.buf)?;
+                let mut buf = [0; 1];
+                guard.0.read_exact(&mut buf)?;
                 if let Ok(msg) = guard.1.try_recv() {
                     return Ok(Event::ExternalPrint(msg));
                 }
@@ -763,16 +757,21 @@ impl RawReader for PosixRawReader {
     }
 
     fn next_char(&mut self) -> Result<char> {
+        let mut buf = [0; 1];
+        let mut receiver = Utf8 {
+            c: None,
+            valid: true,
+        };
         loop {
-            let n = self.tty_in.read(&mut self.buf)?;
+            let n = self.tty_in.read(&mut buf)?;
             if n == 0 {
                 return Err(error::ReadlineError::Eof);
             }
-            let b = self.buf[0];
-            self.parser.advance(&mut self.receiver, b);
-            if !self.receiver.valid {
+            let b = buf[0];
+            self.parser.advance(&mut receiver, b);
+            if !receiver.valid {
                 return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
-            } else if let Some(c) = self.receiver.c.take() {
+            } else if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }
         }

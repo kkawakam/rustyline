@@ -213,7 +213,7 @@ fn check_bracket(line: &str, pos: usize) -> Option<(u8, usize)> {
     }
 }
 
-fn matching_bracket(bracket: u8) -> u8 {
+const fn matching_bracket(bracket: u8) -> u8 {
     match bracket {
         b'{' => b'}',
         b'}' => b'{',

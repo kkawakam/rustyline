@@ -129,7 +129,7 @@ pub enum Cmd {
 impl Cmd {
     /// Tells if current command should reset kill ring.
     #[must_use]
-    pub fn should_reset_kill_ring(&self) -> bool {
+    pub const fn should_reset_kill_ring(&self) -> bool {
         #[allow(clippy::match_same_arms)]
         match *self {
             Cmd::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
@@ -144,7 +144,7 @@ impl Cmd {
         }
     }
 
-    fn is_repeatable_change(&self) -> bool {
+    const fn is_repeatable_change(&self) -> bool {
         matches!(
             *self,
             Cmd::Dedent(..)
@@ -159,7 +159,7 @@ impl Cmd {
         )
     }
 
-    fn is_repeatable(&self) -> bool {
+    const fn is_repeatable(&self) -> bool {
         match *self {
             Cmd::Move(_) => true,
             _ => self.is_repeatable_change(),
@@ -208,7 +208,7 @@ impl Cmd {
     }
 }
 
-fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount {
+const fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount {
     match new {
         Some(n) => n,
         None => previous,
@@ -260,7 +260,7 @@ pub enum CharSearch {
 }
 
 impl CharSearch {
-    fn opposite(self) -> Self {
+    const fn opposite(self) -> Self {
         match self {
             CharSearch::Forward(c) => CharSearch::Backward(c),
             CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
@@ -306,7 +306,7 @@ pub enum Movement {
 
 impl Movement {
     // Replay this movement with a possible different `RepeatCount`.
-    fn redo(&self, new: Option<RepeatCount>) -> Self {
+    const fn redo(&self, new: Option<RepeatCount>) -> Self {
         match *self {
             Movement::WholeLine => Movement::WholeLine,
             Movement::BeginningOfLine => Movement::BeginningOfLine,

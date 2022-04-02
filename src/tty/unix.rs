@@ -1182,33 +1182,49 @@ impl Term for PosixTerminal {
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
     ) -> Self {
-        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
-            if behavior == Behavior::PreferTerm {
-                let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
-                if let Ok(tty) = tty {
-                    let fd = tty.into_raw_fd();
-                    let is_a_tty = is_a_tty(fd); // TODO: useless ?
-                    (fd, is_a_tty, fd, is_a_tty, true)
-                } else {
-                    (
-                        libc::STDIN_FILENO,
-                        is_a_tty(libc::STDIN_FILENO),
-                        libc::STDOUT_FILENO,
-                        is_a_tty(libc::STDOUT_FILENO),
-                        false,
-                    )
+        let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop, use_controlling_terminal) =
+            match behavior {
+                #[cfg(feature = "arbitrary-file-descriptors")]
+                #[cfg(all(unix, not(target_arch = "wasm32")))]
+                Behavior::ArbitraryFileDescriptors { input, output } => (
+                    input,
+                    is_a_tty(input),
+                    output,
+                    is_a_tty(output),
+                    false,
+                    false,
+                ),
+                Behavior::PreferTerm => {
+                    let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
+                    if let Ok(tty) = tty {
+                        let fd = tty.into_raw_fd();
+                        let is_a_tty = is_a_tty(fd); // TODO: useless ?
+                        (fd, is_a_tty, fd, is_a_tty, true, true)
+                    } else {
+                        (
+                            libc::STDIN_FILENO,
+                            is_a_tty(libc::STDIN_FILENO),
+                            libc::STDOUT_FILENO,
+                            is_a_tty(libc::STDOUT_FILENO),
+                            false,
+                            true,
+                        )
+                    }
                 }
-            } else {
-                (
+                Behavior::Stdio => (
                     libc::STDIN_FILENO,
                     is_a_tty(libc::STDIN_FILENO),
                     libc::STDOUT_FILENO,
                     is_a_tty(libc::STDOUT_FILENO),
                     false,
-                )
+                    true,
+                ),
             };
         let term = Self {
-            unsupported: is_unsupported_term(),
+            // if we are not using the controlling terminal of the process,
+            // the identity of the terminal used cannot be determined.
+            // So just assume the it is supported
+            unsupported: use_controlling_terminal && is_unsupported_term(),
             tty_in,
             is_in_a_tty,
             tty_out,

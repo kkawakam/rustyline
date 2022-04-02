@@ -300,6 +300,17 @@ pub enum Behavior {
     /// Use terminal-style interaction whenever possible, even if 'stdin' and/or
     /// 'stdout' are not terminals.
     PreferTerm,
+
+    /// Use the provided file descriptors.
+    /// rustyline will not automatically close these file descriptors.
+    #[cfg(feature = "arbitrary-file-descriptors")]
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    ArbitraryFileDescriptors {
+        /// the file descriptor for input
+        input: std::os::unix::io::RawFd,
+        /// the file descriptor for output
+        output: std::os::unix::io::RawFd,
+    },
     // TODO
     // Use file-style interaction, reading input from the given file.
     // useFile

@@ -65,9 +65,14 @@ default = ["with-dirs"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+arbitrary-file-descriptors=[]
 
 [package.metadata.docs.rs]
 features = ["with-dirs", "with-fuzzy"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"
+
+[[example]]
+name = "arbitrary_file_descriptors"
+required-features = ["arbitrary-file-descriptors"]

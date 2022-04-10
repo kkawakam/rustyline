@@ -16,6 +16,7 @@
 //! }
 //! ```
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
 mod binding;

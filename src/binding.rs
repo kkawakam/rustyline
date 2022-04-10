@@ -214,6 +214,8 @@ pub trait ConditionalEventHandler: Send + Sync {
 
 #[cfg(test)]
 mod test {
+    use core::mem::size_of;
+
     use super::{Event, EventHandler};
     use crate::{Cmd, KeyCode, KeyEvent, Modifiers};
     use radix_trie::Trie;
@@ -246,5 +248,10 @@ mod test {
         trie.insert(E::from(K(C::Backspace, M::CTRL)), H::from(Cmd::Noop));
         trie.insert(E::from(K(C::Enter, M::CTRL)), H::from(Cmd::Noop));
         trie.insert(E::from(K(C::Tab, M::CTRL)), H::from(Cmd::Noop));
+    }
+
+    #[test]
+    fn size_of_event() {
+        assert_eq!(size_of::<Event>(), 40);
     }
 }

@@ -2,13 +2,12 @@
 use std::cmp;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, BufReader, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{self, Arc, Mutex};
 
-use buf_redux::BufReader;
 use log::{debug, warn};
 use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
@@ -657,7 +656,7 @@ impl PosixRawReader {
     }
 
     fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
-        let n = self.tty_in.buf_len();
+        let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
         }
@@ -732,7 +731,7 @@ impl RawReader for PosixRawReader {
 
         let mut key = KeyEvent::new(c, M::NONE);
         if key == E::ESC {
-            if self.tty_in.buf_len() > 0 {
+            if !self.tty_in.buffer().is_empty() {
                 debug!(target: "rustyline", "read buffer {:?}", self.tty_in.buffer());
             }
             let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {

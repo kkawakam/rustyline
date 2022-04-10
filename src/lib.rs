@@ -835,6 +835,7 @@ impl<H: Helper> Editor<H> {
 
     /// Bind a sequence to a command.
     #[cfg(feature = "custom-bindings")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
         &mut self,
         key_seq: E,
@@ -846,6 +847,7 @@ impl<H: Helper> Editor<H> {
 
     /// Remove a binding for the given sequence.
     #[cfg(feature = "custom-bindings")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))

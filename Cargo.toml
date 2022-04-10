@@ -36,8 +36,6 @@ unicode-width = "0.1"
 unicode-segmentation = "1.0"
 memchr = "2.0"
 # For custom bindings
-# https://rustsec.org/advisories/RUSTSEC-2021-0003.html
-smallvec = "1.6.1"
 radix_trie = "0.2"
 regex = { version = "1.5.4", optional = true }
 

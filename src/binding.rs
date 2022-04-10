@@ -249,6 +249,6 @@ mod test {
 
     #[test]
     fn size_of_event() {
-        assert_eq!(size_of::<Event>(), 40);
+        assert_eq!(size_of::<Event>(), 32);
     }
 }

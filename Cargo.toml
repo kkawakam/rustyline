@@ -65,7 +65,7 @@ with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 
 [package.metadata.docs.rs]
-features = ["with-dirs", "with-fuzzy"]
+features = ["custom-bindings", "with-dirs", "with-fuzzy"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"

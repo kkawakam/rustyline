@@ -15,8 +15,16 @@ pub trait RawMode: Sized {
     fn disable_raw_mode(&self) -> Result<()>;
 }
 
+/// Input event
+pub enum Event {
+    KeyPress(KeyEvent),
+    ExternalPrint(String),
+}
+
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
+    /// Blocking wait for either a key press or an external print
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent>;
     /// For CTRL-V support
@@ -92,6 +100,8 @@ pub trait Renderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()>;
+    /// Clear rows used by prompt and edited line
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()>;
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
@@ -141,6 +151,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn clear_screen(&mut self) -> Result<()> {
         (**self).clear_screen()
+    }
+
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
+        (**self).clear_rows(layout)
     }
 
     fn sigwinch(&self) -> bool {
@@ -199,12 +213,19 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     }
 }
 
+/// External printer
+pub trait ExternalPrinter {
+    /// Print message to stdout
+    fn print(&mut self, msg: String) -> Result<()>;
+}
+
 /// Terminal contract
 pub trait Term {
     type KeyMap;
     type Reader: RawReader; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
+    type ExternalPrinter: ExternalPrinter;
 
     fn new(
         color_mode: ColorMode,
@@ -227,6 +248,8 @@ pub trait Term {
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
     fn writeln(&self) -> Result<()>;
+    /// Create an external printer
+    fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }
 
 // If on Windows platform import Windows TTY module

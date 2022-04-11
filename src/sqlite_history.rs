@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
-use crate::{Config, History, SearchDirection};
 use crate::history::SearchResult;
+use crate::{Config, History, SearchDirection};
+use std::path::{Path, PathBuf};
 
 // FIXME history_index (src/lib.rs:686)
 
-struct SQLiteHistory{
+struct SQLiteHistory {
     // TODO db: Connection,
     path: Option<PathBuf>,
     session_id: usize,
@@ -24,7 +24,10 @@ The VACUUM command may change the ROWIDs of entries in any tables that do not ha
 
 impl History for SQLiteHistory {
     /// Transient in-memory database
-    fn with_config(config: Config) -> Self where Self: Sized {
+    fn with_config(config: Config) -> Self
+    where
+        Self: Sized,
+    {
         // -- if PRAGMA user_version == 0:
         // PRAGMA auto_vacuum = INCREMENTAL;
         // CREATE TABLE session (
@@ -74,8 +77,8 @@ impl History for SQLiteHistory {
     fn add(&mut self, line: &str) -> bool {
         // TODO ignore_space
         // INSERT INTO session (id) VALUES (NULL) RETURNING id; -- if session_id = 0
-        // INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;
-        // ignore SQLITE_CONSTRAINT_UNIQUE
+        // INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING
+        // rowid; ignore SQLITE_CONSTRAINT_UNIQUE
         todo!()
     }
 
@@ -94,7 +97,8 @@ impl History for SQLiteHistory {
 
     fn set_max_len(&mut self, len: usize) {
         // SELECT count(1) FROM history;
-        // DELETE FROM history WHERE rowid IN (SELECT rowid FROM history ORDER BY rowid ASC LIMIT ?);
+        // DELETE FROM history WHERE rowid IN (SELECT rowid FROM history ORDER BY rowid
+        // ASC LIMIT ?);
         todo!()
     }
 

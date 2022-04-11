@@ -764,21 +764,18 @@ cfg_if::cfg_if! {
 
         fn fix_perm(_: &File) {}
     } else if #[cfg(unix)] {
-        fn umask() -> libc::mode_t {
-            unsafe { libc::umask(libc::S_IXUSR | libc::S_IRWXG | libc::S_IRWXO) }
+        use nix::sys::stat::{self, Mode, fchmod};
+        fn umask() -> Mode {
+            stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)
         }
 
-        fn restore_umask(old_umask: libc::mode_t) {
-            unsafe {
-                libc::umask(old_umask);
-            }
+        fn restore_umask(old_umask: Mode) {
+            stat::umask(old_umask);
         }
 
         fn fix_perm(file: &File) {
             use std::os::unix::io::AsRawFd;
-            unsafe {
-                libc::fchmod(file.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
-            }
+            let _ = fchmod(file.as_raw_fd(), Mode::S_IRUSR | Mode::S_IWUSR);
         }
     }
 }

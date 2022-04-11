@@ -147,7 +147,7 @@ impl ConsoleRawReader {
 
     fn get_number_of_events(&mut self) -> Result<u32> {
         let mut count = 0;
-        check(unsafe { consoleapi::GetNumberOfConsoleInputEvents(self.handle, &mut count) })?;
+        check(unsafe { consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
         Ok(count)
     }
 }
@@ -184,7 +184,7 @@ impl RawReader for ConsoleRawReader {
             if noe == 0 {
                 let rc = unsafe {
                     WaitForSingleObject(
-                        self.handle,
+                        self.conin,
                         u32::try_from(timeout.as_millis()).expect("invalid timeout"),
                     )
                 };
@@ -202,7 +202,7 @@ impl RawReader for ConsoleRawReader {
             let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
             let mut count = 0;
             while noe > 0 {
-                check(unsafe { wincon::PeekConsoleInputW(self.handle, &mut rec, 1, &mut count) })?;
+                check(unsafe { wincon::PeekConsoleInputW(self.conin, &mut rec, 1, &mut count) })?;
                 if count > 0 {
                     noe -= count;
                     if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
@@ -210,7 +210,7 @@ impl RawReader for ConsoleRawReader {
                     } else if rec.EventType != wincon::KEY_EVENT {
                         // read the event to unsignal the handle
                         check(unsafe {
-                            consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
+                            consoleapi::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
                         })?;
                     } else {
                         let key_event = unsafe { rec.Event.KeyEvent() };
@@ -219,7 +219,7 @@ impl RawReader for ConsoleRawReader {
                         {
                             // read the event to unsignal the handle
                             check(unsafe {
-                                consoleapi::ReadConsoleInputW(self.handle, &mut rec, 1, &mut count)
+                                consoleapi::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
                             })?;
                         } else {
                             return Ok(true);

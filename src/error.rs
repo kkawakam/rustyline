@@ -18,9 +18,6 @@ pub enum ReadlineError {
     Eof,
     /// Interrupt signal (VINTR / VQUIT / Ctrl-C)
     Interrupted,
-    /// Chars Error
-    #[cfg(unix)]
-    Utf8Error,
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
@@ -42,8 +39,6 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
             ReadlineError::Interrupted => write!(f, "Interrupted"),
-            #[cfg(unix)]
-            ReadlineError::Utf8Error => write!(f, "invalid utf-8: corrupt contents"),
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.fmt(f),
             #[cfg(windows)]
@@ -80,7 +75,21 @@ impl From<nix::Error> for ReadlineError {
 #[cfg(windows)]
 impl From<char::DecodeUtf16Error> for ReadlineError {
     fn from(err: char::DecodeUtf16Error) -> Self {
-        ReadlineError::Decode(err)
+        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+}
+
+#[cfg(windows)]
+impl From<std::string::FromUtf8Error> for ReadlineError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+}
+
+#[cfg(unix)]
+impl From<fmt::Error> for ReadlineError {
+    fn from(err: fmt::Error) -> Self {
+        ReadlineError::Io(io::Error::new(io::ErrorKind::Other, err))
     }
 }
 

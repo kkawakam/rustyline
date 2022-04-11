@@ -3,7 +3,7 @@
 use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{BellStyle, ColorMode, Config, OutputStreamType};
+use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{Layout, Position};
@@ -16,8 +16,16 @@ pub trait RawMode: Sized {
     fn disable_raw_mode(&self) -> Result<()>;
 }
 
+/// Input event
+pub enum Event {
+    KeyPress(KeyEvent),
+    ExternalPrint(String),
+}
+
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
+    /// Blocking wait for either a key press or an external print
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent>;
     /// For CTRL-V support
@@ -87,7 +95,7 @@ pub trait Renderer {
     /// `cols` width terminal starting at `orig`.
     fn calculate_position(&self, s: &str, orig: Position) -> Position;
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()>;
+    fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 
     /// Beep, used for completion when there is nothing to complete or when all
     /// the choices were already shown.
@@ -95,6 +103,8 @@ pub trait Renderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()>;
+    /// Clear rows used by prompt and edited line
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()>;
 
     /// Check if a SIGWINCH signal has been received
     fn sigwinch(&self) -> bool;
@@ -134,7 +144,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).calculate_position(s, orig)
     }
 
-    fn write_and_flush(&self, buf: &[u8]) -> Result<()> {
+    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
         (**self).write_and_flush(buf)
     }
 
@@ -144,6 +154,10 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn clear_screen(&mut self) -> Result<()> {
         (**self).clear_screen()
+    }
+
+    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
+        (**self).clear_rows(layout)
     }
 
     fn sigwinch(&self) -> bool {
@@ -202,16 +216,23 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     }
 }
 
+/// External printer
+pub trait ExternalPrinter {
+    /// Print message to stdout
+    fn print(&mut self, msg: String) -> Result<()>;
+}
+
 /// Terminal contract
 pub trait Term {
     type KeyMap;
     type Reader: RawReader; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
+    type ExternalPrinter: ExternalPrinter;
 
     fn new(
         color_mode: ColorMode,
-        stream: OutputStreamType,
+        behavior: Behavior,
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
@@ -219,16 +240,19 @@ pub trait Term {
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;
-    /// check if stdin is connected to a terminal.
-    fn is_stdin_tty(&self) -> bool;
+    /// check if input stream is connected to a terminal.
+    fn is_input_tty(&self) -> bool;
     /// check if output stream is connected to a terminal.
     fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Result<Self::Reader>;
+    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Self::Reader;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
+    fn writeln(&self) -> Result<()>;
+    /// Create an external printer
+    fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
 }
 
 // If on Windows platform import Windows TTY module

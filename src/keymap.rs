@@ -1,12 +1,10 @@
 //! Bindings from keys to command for Emacs and Vi modes
-use std::sync::{Arc, RwLock};
-
 use log::debug;
 use radix_trie::Trie;
 
 use super::Result;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::tty::{RawReader, Term, Terminal};
+use crate::tty::{self, RawReader, Term, Terminal};
 use crate::{Config, EditMode, Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
@@ -129,7 +127,7 @@ pub enum Cmd {
 impl Cmd {
     /// Tells if current command should reset kill ring.
     #[must_use]
-    pub fn should_reset_kill_ring(&self) -> bool {
+    pub const fn should_reset_kill_ring(&self) -> bool {
         #[allow(clippy::match_same_arms)]
         match *self {
             Cmd::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
@@ -144,7 +142,7 @@ impl Cmd {
         }
     }
 
-    fn is_repeatable_change(&self) -> bool {
+    const fn is_repeatable_change(&self) -> bool {
         matches!(
             *self,
             Cmd::Dedent(..)
@@ -159,7 +157,7 @@ impl Cmd {
         )
     }
 
-    fn is_repeatable(&self) -> bool {
+    const fn is_repeatable(&self) -> bool {
         match *self {
             Cmd::Move(_) => true,
             _ => self.is_repeatable_change(),
@@ -208,7 +206,7 @@ impl Cmd {
     }
 }
 
-fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount {
+const fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> RepeatCount {
     match new {
         Some(n) => n,
         None => previous,
@@ -260,7 +258,7 @@ pub enum CharSearch {
 }
 
 impl CharSearch {
-    fn opposite(self) -> Self {
+    const fn opposite(self) -> Self {
         match self {
             CharSearch::Forward(c) => CharSearch::Backward(c),
             CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
@@ -306,7 +304,7 @@ pub enum Movement {
 
 impl Movement {
     // Replay this movement with a possible different `RepeatCount`.
-    fn redo(&self, new: Option<RepeatCount>) -> Self {
+    const fn redo(&self, new: Option<RepeatCount>) -> Self {
         match *self {
             Movement::WholeLine => Movement::WholeLine,
             Movement::BeginningOfLine => Movement::BeginningOfLine,
@@ -344,9 +342,9 @@ pub enum InputMode {
 }
 
 /// Transform key(s) to commands based on current input mode
-pub struct InputState {
+pub struct InputState<'b> {
     pub(crate) mode: EditMode,
-    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
+    custom_bindings: &'b Trie<Event, EventHandler>,
     pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
@@ -392,10 +390,12 @@ pub trait Refresher {
     fn line(&self) -> &str;
     /// Current cursor position (byte position)
     fn pos(&self) -> usize;
+    /// Display `msg` above currently edited line.
+    fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()>;
 }
 
-impl InputState {
-    pub fn new(config: &Config, custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>) -> Self {
+impl<'b> InputState<'b> {
+    pub fn new(config: &Config, custom_bindings: &'b Trie<Event, EventHandler>) -> Self {
         Self {
             mode: config.edit_mode(),
             custom_bindings,
@@ -418,20 +418,37 @@ impl InputState {
         rdr: &mut <Terminal as Term>::Reader,
         wrt: &mut dyn Refresher,
         single_esc_abort: bool,
+        ignore_external_print: bool,
     ) -> Result<Cmd> {
+        let single_esc_abort = self.single_esc_abort(single_esc_abort);
+        let key;
+        if ignore_external_print {
+            key = rdr.next_key(single_esc_abort)?;
+        } else {
+            loop {
+                let event = rdr.wait_for_input(single_esc_abort)?;
+                match event {
+                    tty::Event::KeyPress(k) => {
+                        key = k;
+                        break;
+                    }
+                    tty::Event::ExternalPrint(msg) => {
+                        wrt.external_print(rdr, msg)?;
+                    }
+                }
+            }
+        }
         match self.mode {
-            EditMode::Emacs => {
-                let key = rdr.next_key(single_esc_abort)?;
-                self.emacs(rdr, wrt, key)
-            }
-            EditMode::Vi if self.input_mode != InputMode::Command => {
-                let key = rdr.next_key(false)?;
-                self.vi_insert(rdr, wrt, key)
-            }
-            EditMode::Vi => {
-                let key = rdr.next_key(false)?;
-                self.vi_command(rdr, wrt, key)
-            }
+            EditMode::Emacs => self.emacs(rdr, wrt, key),
+            EditMode::Vi if self.input_mode != InputMode::Command => self.vi_insert(rdr, wrt, key),
+            EditMode::Vi => self.vi_command(rdr, wrt, key),
+        }
+    }
+
+    fn single_esc_abort(&self, single_esc_abort: bool) -> bool {
+        match self.mode {
+            EditMode::Emacs => single_esc_abort,
+            EditMode::Vi => false,
         }
     }
 
@@ -443,7 +460,7 @@ impl InputState {
         n: RepeatCount,
         positive: bool,
     ) -> Option<Cmd> {
-        let bindings = self.custom_bindings.read().unwrap();
+        let bindings = self.custom_bindings;
         let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
         if let Some(handler) = handler {
             match handler {
@@ -480,8 +497,7 @@ impl InputState {
         n: RepeatCount,
         positive: bool,
     ) -> Result<Option<Cmd>> {
-        let bindings = self.custom_bindings.read().unwrap();
-        while let Some(subtrie) = bindings.get_raw_descendant(evt) {
+        while let Some(subtrie) = self.custom_bindings.get_raw_descendant(evt) {
             let snd_key = rdr.next_key(true)?;
             if let Event::KeySeq(ref mut key_seq) = evt {
                 key_seq.push(snd_key);

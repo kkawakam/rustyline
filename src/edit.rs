@@ -129,6 +129,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         input_state: &mut InputState,
         rdr: &mut <Terminal as Term>::Reader,
         single_esc_abort: bool,
+        ignore_external_print: bool,
     ) -> Result<Cmd> {
         loop {
             if self.refresh_rate_limit.refresh_skipped
@@ -136,7 +137,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             {
                 self.refresh_line()?;
             }
-            let rc = input_state.next_cmd(rdr, self, single_esc_abort);
+            let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if rc.is_err() && self.out.sigwinch() {
                 self.out.update_size();
                 self.prompt_size = self
@@ -360,6 +361,15 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn pos(&self) -> usize {
         self.line.pos()
     }
+
+    fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()> {
+        self.out.clear_rows(&self.layout)?;
+        self.layout.end.row = 0;
+        self.layout.cursor.row = 0;
+        self.out.write_and_flush(msg.as_str())?;
+        self.move_cursor_at_leftmost(rdr)?;
+        self.refresh_line()
+    }
 }
 
 impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
@@ -404,7 +414,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
-                    let bits = bits.as_bytes();
                     self.out.write_and_flush(bits)?;
                     self.refresh_rate_limit.reset();
                     Ok(())
@@ -772,7 +781,7 @@ mod test {
 
     #[test]
     fn edit_history_next() {
-        let mut out = Sink::new();
+        let mut out = Sink::default();
         let mut history = History::new();
         history.add("line0");
         history.add("line1");

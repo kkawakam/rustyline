@@ -1,13 +1,11 @@
 use std::vec::IntoIter;
 
-use radix_trie::Trie;
-
 use crate::completion::Completer;
 use crate::config::{Config, EditMode};
 use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::keymap::{Cmd, InputState};
+use crate::keymap::{Cmd, CustomBindings, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
@@ -58,7 +56,7 @@ fn complete_line() {
     let helper = Some(SimpleCompleter);
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
-    let bindings = Trie::new();
+    let bindings = CustomBindings::new();
     let mut input_state = InputState::new(&config, &bindings);
     let keys = vec![E::ENTER];
     let mut rdr: IntoIter<KeyEvent> = keys.into_iter();

@@ -3,6 +3,7 @@ use crate::{
     Cmd, EditMode, InputMode, InputState, KeyCode, KeyEvent, Modifiers, Refresher, RepeatCount,
 };
 
+#[cfg(feature = "radix_trie")]
 use radix_trie::TrieKey;
 
 /// Input event
@@ -103,6 +104,7 @@ impl KeyEvent {
     }
 }
 
+#[cfg(feature = "radix_trie")]
 impl TrieKey for Event {
     fn encode_bytes(&self) -> Vec<u8> {
         match self {

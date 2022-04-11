@@ -1,11 +1,15 @@
 //! Bindings from keys to command for Emacs and Vi modes
+
 use log::debug;
+#[cfg(feature = "custom-bindings")]
 use radix_trie::Trie;
 
 use super::Result;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::{self, RawReader, Term, Terminal};
-use crate::{Config, EditMode, Event, EventContext, EventHandler};
+use crate::{Config, EditMode, Event};
+#[cfg(feature = "custom-bindings")]
+use crate::{EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
 pub type RepeatCount = usize;
@@ -344,12 +348,15 @@ pub enum InputMode {
 /// Transform key(s) to commands based on current input mode
 pub struct InputState<'b> {
     pub(crate) mode: EditMode,
+    #[cfg(feature = "custom-bindings")]
     custom_bindings: &'b Trie<Event, EventHandler>,
     pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
     last_cmd: Cmd,                        // vi only
     last_char_search: Option<CharSearch>, // vi only
+    #[cfg(not(feature = "custom-bindings"))]
+    _phantom: std::marker::PhantomData<&'b ()>, // keep the lifetime
 }
 
 /// Provide indirect mutation to user input.
@@ -395,6 +402,7 @@ pub trait Refresher {
 }
 
 impl<'b> InputState<'b> {
+    #[cfg(feature = "custom-bindings")]
     pub fn new(config: &Config, custom_bindings: &'b Trie<Event, EventHandler>) -> Self {
         Self {
             mode: config.edit_mode(),
@@ -403,6 +411,18 @@ impl<'b> InputState<'b> {
             num_args: 0,
             last_cmd: Cmd::Noop,
             last_char_search: None,
+        }
+    }
+
+    #[cfg(not(feature = "custom-bindings"))]
+    pub fn new(config: &Config) -> Self {
+        Self {
+            mode: config.edit_mode(),
+            input_mode: InputMode::Insert,
+            num_args: 0,
+            last_cmd: Cmd::Noop,
+            last_char_search: None,
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -453,6 +473,7 @@ impl<'b> InputState<'b> {
     }
 
     /// Application customized binding
+    #[cfg(feature = "custom-bindings")]
     fn custom_binding(
         &self,
         wrt: &mut dyn Refresher,
@@ -475,6 +496,17 @@ impl<'b> InputState<'b> {
         }
     }
 
+    #[cfg(not(feature = "custom-bindings"))]
+    fn custom_binding(
+        &self,
+        _wrt: &mut dyn Refresher,
+        _evt: &Event,
+        _n: RepeatCount,
+        _positive: bool,
+    ) -> Option<Cmd> {
+        None
+    }
+
     /// Terminal peculiar binding
     fn term_binding<R: RawReader>(
         rdr: &mut R,
@@ -489,6 +521,7 @@ impl<'b> InputState<'b> {
         }
     }
 
+    #[cfg(feature = "custom-bindings")]
     fn custom_seq_binding<R: RawReader>(
         &self,
         rdr: &mut R,
@@ -518,6 +551,18 @@ impl<'b> InputState<'b> {
                 }
             }
         }
+        Ok(None)
+    }
+
+    #[cfg(not(feature = "custom-bindings"))]
+    fn custom_seq_binding<R: RawReader>(
+        &self,
+        _rdr: &mut R,
+        _wrt: &mut dyn Refresher,
+        _evt: &mut Event,
+        _n: RepeatCount,
+        _positive: bool,
+    ) -> Result<Option<Cmd>> {
         Ok(None)
     }
 

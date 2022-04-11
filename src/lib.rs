@@ -17,6 +17,7 @@
 //! ```
 #![warn(missing_docs)]
 
+#[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
 mod binding;
 mod command;
 pub mod completion;
@@ -42,6 +43,7 @@ use std::result;
 use std::sync::{Arc, Mutex};
 
 use log::debug;
+#[cfg(feature = "custom-bindings")]
 use radix_trie::Trie;
 use unicode_width::UnicodeWidthStr;
 
@@ -576,6 +578,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
+    #[cfg(feature = "custom-bindings")]
     custom_bindings: Trie<Event, EventHandler>,
 }
 
@@ -603,6 +606,7 @@ impl<H: Helper> Editor<H> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
+            #[cfg(feature = "custom-bindings")]
             custom_bindings: Trie::new(),
         }
     }
@@ -672,7 +676,10 @@ impl<H: Helper> Editor<H> {
         let ctx = Context::new(&self.history);
         let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
 
+        #[cfg(feature = "custom-bindings")]
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
+        #[cfg(not(feature = "custom-bindings"))]
+        let mut input_state = InputState::new(&self.config);
 
         s.line.set_delete_listener(self.kill_ring.clone());
         s.line.set_change_listener(s.changes.clone());
@@ -826,6 +833,7 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Bind a sequence to a command.
+    #[cfg(feature = "custom-bindings")]
     pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
         &mut self,
         key_seq: E,
@@ -836,6 +844,7 @@ impl<H: Helper> Editor<H> {
     }
 
     /// Remove a binding for the given sequence.
+    #[cfg(feature = "custom-bindings")]
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))

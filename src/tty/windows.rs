@@ -124,10 +124,7 @@ impl ConsoleRawReader {
         loop {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 {
-                let mut count = 0;
-                check(unsafe {
-                    consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count)
-                })?;
+                let count = self.get_number_of_events()?;
                 match read_input(self.conin, count)? {
                     KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
@@ -145,7 +142,7 @@ impl ConsoleRawReader {
         }
     }
 
-    fn get_number_of_events(&mut self) -> Result<u32> {
+    fn get_number_of_events(&self) -> Result<u32> {
         let mut count = 0;
         check(unsafe { consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
         Ok(count)

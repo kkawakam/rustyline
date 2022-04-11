@@ -39,7 +39,7 @@ use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::result;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use log::debug;
 use radix_trie::Trie;
@@ -430,124 +430,6 @@ fn reverse_incremental_search<H: Helper>(
     Ok(Some(cmd))
 }
 
-/// Handles reading and editing the readline buffer.
-/// It will also handle special inputs in an appropriate fashion
-/// (e.g., C-c will exit readline)
-fn readline_edit<H: Helper>(
-    prompt: &str,
-    initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
-    original_mode: &tty::Mode,
-    term_key_map: tty::KeyMap,
-) -> Result<String> {
-    let mut stdout = editor.term.create_writer();
-
-    editor.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
-    let ctx = Context::new(&editor.history);
-    let mut s = State::new(&mut stdout, prompt, editor.helper.as_ref(), ctx);
-
-    let mut input_state = InputState::new(&editor.config, Arc::clone(&editor.custom_bindings));
-
-    s.line.set_delete_listener(editor.kill_ring.clone());
-    s.line.set_change_listener(s.changes.clone());
-
-    if let Some((left, right)) = initial {
-        s.line
-            .update((left.to_owned() + right).as_ref(), left.len());
-    }
-
-    let mut rdr = editor.term.create_reader(&editor.config, term_key_map);
-    if editor.term.is_output_tty() && editor.config.check_cursor_position() {
-        if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-            if s.out.sigwinch() {
-                s.out.update_size();
-            } else {
-                return Err(e);
-            }
-        }
-    }
-    s.refresh_line()?;
-
-    loop {
-        let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
-
-        if cmd.should_reset_kill_ring() {
-            editor.reset_kill_ring();
-        }
-
-        // First trigger commands that need extra input
-
-        if cmd == Cmd::Complete && s.helper.is_some() {
-            let next = complete_line(&mut rdr, &mut s, &mut input_state, &editor.config)?;
-            if let Some(next) = next {
-                cmd = next;
-            } else {
-                continue;
-            }
-        }
-
-        if cmd == Cmd::ReverseSearchHistory {
-            // Search history backward
-            let next =
-                reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &editor.history)?;
-            if let Some(next) = next {
-                cmd = next;
-            } else {
-                continue;
-            }
-        }
-
-        #[cfg(unix)]
-        if cmd == Cmd::Suspend {
-            original_mode.disable_raw_mode()?;
-            tty::suspend()?;
-            let _ = editor.term.enable_raw_mode()?; // TODO original_mode may have changed
-            s.refresh_line()?;
-            continue;
-        }
-
-        #[cfg(unix)]
-        if cmd == Cmd::QuotedInsert {
-            // Quoted insert
-            use crate::tty::RawReader;
-            let c = rdr.next_char()?;
-            s.edit_insert(c, 1)?;
-            continue;
-        }
-
-        #[cfg(windows)]
-        if cmd == Cmd::PasteFromClipboard {
-            use crate::tty::RawReader;
-            let clipboard = rdr.read_pasted_text()?;
-            s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
-        }
-
-        // Tiny test quirk
-        #[cfg(test)]
-        if matches!(
-            cmd,
-            Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
-        ) {
-            editor.term.cursor = s.layout.cursor.col;
-        }
-
-        // Execute things can be done solely on a state object
-        match command::execute(cmd, &mut s, &input_state, &editor.kill_ring, &editor.config)? {
-            command::Status::Proceed => continue,
-            command::Status::Submit => break,
-        }
-    }
-
-    // Move to end, in case cursor was in the middle of the line, so that
-    // next thing application prints goes after the input
-    s.edit_move_buffer_end()?;
-
-    if cfg!(windows) {
-        let _ = original_mode; // silent warning
-    }
-    Ok(s.line.into_string())
-}
-
 struct Guard<'m>(&'m tty::Mode);
 
 #[allow(unused_must_use)]
@@ -556,26 +438,6 @@ impl Drop for Guard<'_> {
         let Guard(mode) = *self;
         mode.disable_raw_mode();
     }
-}
-
-/// Readline method that will enable RAW mode, call the `readline_edit()`
-/// method and disable raw mode
-fn readline_raw<H: Helper>(
-    prompt: &str,
-    initial: Option<(&str, &str)>,
-    editor: &mut Editor<H>,
-) -> Result<String> {
-    let (original_mode, term_key_map) = editor.term.enable_raw_mode()?;
-    let guard = Guard(&original_mode);
-    let user_input = readline_edit(prompt, initial, editor, &original_mode, term_key_map);
-    if editor.config.auto_add_history() {
-        if let Ok(ref line) = user_input {
-            editor.add_history_entry(line.as_str());
-        }
-    }
-    drop(guard); // disable_raw_mode(original_mode)?;
-    editor.term.writeln()?;
-    user_input
 }
 
 // Helper to handle backspace characters in a direct input
@@ -714,7 +576,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
+    custom_bindings: Trie<Event, EventHandler>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -741,7 +603,7 @@ impl<H: Helper> Editor<H> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: Arc::new(RwLock::new(Trie::new())),
+            custom_bindings: Trie::new(),
         }
     }
 
@@ -776,12 +638,140 @@ impl<H: Helper> Editor<H> {
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         } else if self.term.is_input_tty() {
-            readline_raw(prompt, initial, self)
+            let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
+            let guard = Guard(&original_mode);
+            let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
+            if self.config.auto_add_history() {
+                if let Ok(ref line) = user_input {
+                    self.add_history_entry(line.as_str());
+                }
+            }
+            drop(guard); // disable_raw_mode(original_mode)?;
+            self.term.writeln()?;
+            user_input
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         }
+    }
+
+    /// Handles reading and editing the readline buffer.
+    /// It will also handle special inputs in an appropriate fashion
+    /// (e.g., C-c will exit readline)
+    fn readline_edit(
+        &mut self,
+        prompt: &str,
+        initial: Option<(&str, &str)>,
+        original_mode: &tty::Mode,
+        term_key_map: tty::KeyMap,
+    ) -> Result<String> {
+        let mut stdout = self.term.create_writer();
+
+        self.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
+        let ctx = Context::new(&self.history);
+        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
+
+        let mut input_state = InputState::new(&self.config, &self.custom_bindings);
+
+        s.line.set_delete_listener(self.kill_ring.clone());
+        s.line.set_change_listener(s.changes.clone());
+
+        if let Some((left, right)) = initial {
+            s.line
+                .update((left.to_owned() + right).as_ref(), left.len());
+        }
+
+        let mut rdr = self.term.create_reader(&self.config, term_key_map);
+        if self.term.is_output_tty() && self.config.check_cursor_position() {
+            if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
+                if s.out.sigwinch() {
+                    s.out.update_size();
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+        s.refresh_line()?;
+
+        loop {
+            let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
+
+            if cmd.should_reset_kill_ring() {
+                self.reset_kill_ring();
+            }
+
+            // First trigger commands that need extra input
+
+            if cmd == Cmd::Complete && s.helper.is_some() {
+                let next = complete_line(&mut rdr, &mut s, &mut input_state, &self.config)?;
+                if let Some(next) = next {
+                    cmd = next;
+                } else {
+                    continue;
+                }
+            }
+
+            if cmd == Cmd::ReverseSearchHistory {
+                // Search history backward
+                let next =
+                    reverse_incremental_search(&mut rdr, &mut s, &mut input_state, &self.history)?;
+                if let Some(next) = next {
+                    cmd = next;
+                } else {
+                    continue;
+                }
+            }
+
+            #[cfg(unix)]
+            if cmd == Cmd::Suspend {
+                original_mode.disable_raw_mode()?;
+                tty::suspend()?;
+                let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed
+                s.refresh_line()?;
+                continue;
+            }
+
+            #[cfg(unix)]
+            if cmd == Cmd::QuotedInsert {
+                // Quoted insert
+                use crate::tty::RawReader;
+                let c = rdr.next_char()?;
+                s.edit_insert(c, 1)?;
+                continue;
+            }
+
+            #[cfg(windows)]
+            if cmd == Cmd::PasteFromClipboard {
+                use crate::tty::RawReader;
+                let clipboard = rdr.read_pasted_text()?;
+                s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
+            }
+
+            // Tiny test quirk
+            #[cfg(test)]
+            if matches!(
+                cmd,
+                Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
+            ) {
+                self.term.cursor = s.layout.cursor.col;
+            }
+
+            // Execute things can be done solely on a state object
+            match command::execute(cmd, &mut s, &input_state, &self.kill_ring, &self.config)? {
+                command::Status::Proceed => continue,
+                command::Status::Submit => break,
+            }
+        }
+
+        // Move to end, in case cursor was in the middle of the line, so that
+        // next thing application prints goes after the input
+        s.edit_move_buffer_end()?;
+
+        if cfg!(windows) {
+            let _ = original_mode; // silent warning
+        }
+        Ok(s.line.into_string())
     }
 
     /// Load the history from the specified file.
@@ -841,20 +831,14 @@ impl<H: Helper> Editor<H> {
         key_seq: E,
         handler: R,
     ) -> Option<EventHandler> {
-        if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.insert(Event::normalize(key_seq.into()), handler.into())
-        } else {
-            None
-        }
+        self.custom_bindings
+            .insert(Event::normalize(key_seq.into()), handler.into())
     }
 
     /// Remove a binding for the given sequence.
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
-        if let Ok(mut bindings) = self.custom_bindings.write() {
-            bindings.remove(&Event::normalize(key_seq.into()))
-        } else {
-            None
-        }
+        self.custom_bindings
+            .remove(&Event::normalize(key_seq.into()))
     }
 
     /// Returns an iterator over edited lines

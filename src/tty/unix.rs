@@ -855,10 +855,10 @@ impl PosixRenderer {
         }
         // clear old rows
         for _ in 0..old_rows {
-            self.buffer.push_str("\r\x1b[0K\x1b[A");
+            self.buffer.push_str("\r\x1b[K\x1b[A");
         }
         // clear the line
-        self.buffer.push_str("\r\x1b[0K");
+        self.buffer.push_str("\r\x1b[K");
     }
 }
 
@@ -1016,7 +1016,7 @@ impl Renderer for PosixRenderer {
 
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
-        self.write_and_flush("\x1b[H\x1b[2J")
+        self.write_and_flush("\x1b[H\x1b[J")
     }
 
     fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
@@ -1457,7 +1457,7 @@ mod test {
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(
-            "\r\u{1b}[0K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
+            "\r\u{1b}[K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
     }

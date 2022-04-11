@@ -4,7 +4,6 @@ use crate::{
 };
 
 use radix_trie::TrieKey;
-use smallvec::{smallvec, SmallVec};
 
 /// Input event
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -13,8 +12,7 @@ pub enum Event {
     /// Useful if you want to filter out some keys.
     Any,
     /// Key sequence
-    // TODO Validate 2 ?
-    KeySeq(SmallVec<[KeyEvent; 2]>),
+    KeySeq(Vec<KeyEvent>),
     /// TODO Mouse event
     Mouse(),
 }
@@ -43,7 +41,7 @@ impl Event {
 
 impl From<KeyEvent> for Event {
     fn from(k: KeyEvent) -> Event {
-        Event::KeySeq(smallvec![k])
+        Event::KeySeq(vec![k])
     }
 }
 
@@ -214,15 +212,16 @@ pub trait ConditionalEventHandler: Send + Sync {
 
 #[cfg(test)]
 mod test {
+    use core::mem::size_of;
+
     use super::{Event, EventHandler};
     use crate::{Cmd, KeyCode, KeyEvent, Modifiers};
     use radix_trie::Trie;
-    use smallvec::smallvec;
 
     #[test]
     fn encode() {
         let mut trie = Trie::new();
-        let evt = Event::KeySeq(smallvec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]);
+        let evt = Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]);
         trie.insert(evt.clone(), EventHandler::from(Cmd::Noop));
         let prefix = Event::from(KeyEvent::ctrl('X'));
         let subtrie = trie.get_raw_descendant(&prefix);
@@ -246,5 +245,10 @@ mod test {
         trie.insert(E::from(K(C::Backspace, M::CTRL)), H::from(Cmd::Noop));
         trie.insert(E::from(K(C::Enter, M::CTRL)), H::from(Cmd::Noop));
         trie.insert(E::from(K(C::Tab, M::CTRL)), H::from(Cmd::Noop));
+    }
+
+    #[test]
+    fn size_of_event() {
+        assert_eq!(size_of::<Event>(), 32);
     }
 }

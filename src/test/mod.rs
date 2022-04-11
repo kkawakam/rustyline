@@ -1,4 +1,3 @@
-use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
 use radix_trie::Trie;
@@ -54,12 +53,13 @@ impl Validator for SimpleCompleter {}
 
 #[test]
 fn complete_line() {
-    let mut out = Sink::new();
+    let mut out = Sink::default();
     let history = crate::history::History::new();
     let helper = Some(SimpleCompleter);
     let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
     let config = Config::default();
-    let mut input_state = InputState::new(&config, Arc::new(RwLock::new(Trie::new())));
+    let bindings = Trie::new();
+    let mut input_state = InputState::new(&config, &bindings);
     let keys = vec![E::ENTER];
     let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
     let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();

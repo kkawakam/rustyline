@@ -1,6 +1,4 @@
 //! Bindings from keys to command for Emacs and Vi modes
-use std::sync::{Arc, RwLock};
-
 use log::debug;
 use radix_trie::Trie;
 
@@ -344,9 +342,9 @@ pub enum InputMode {
 }
 
 /// Transform key(s) to commands based on current input mode
-pub struct InputState {
+pub struct InputState<'b> {
     pub(crate) mode: EditMode,
-    custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>,
+    custom_bindings: &'b Trie<Event, EventHandler>,
     pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
     num_args: i16,
@@ -396,8 +394,8 @@ pub trait Refresher {
     fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()>;
 }
 
-impl InputState {
-    pub fn new(config: &Config, custom_bindings: Arc<RwLock<Trie<Event, EventHandler>>>) -> Self {
+impl<'b> InputState<'b> {
+    pub fn new(config: &Config, custom_bindings: &'b Trie<Event, EventHandler>) -> Self {
         Self {
             mode: config.edit_mode(),
             custom_bindings,
@@ -462,7 +460,7 @@ impl InputState {
         n: RepeatCount,
         positive: bool,
     ) -> Option<Cmd> {
-        let bindings = self.custom_bindings.read().unwrap();
+        let bindings = self.custom_bindings;
         let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
         if let Some(handler) = handler {
             match handler {
@@ -499,8 +497,7 @@ impl InputState {
         n: RepeatCount,
         positive: bool,
     ) -> Result<Option<Cmd>> {
-        let bindings = self.custom_bindings.read().unwrap();
-        while let Some(subtrie) = bindings.get_raw_descendant(evt) {
+        while let Some(subtrie) = self.custom_bindings.get_raw_descendant(evt) {
             let snd_key = rdr.next_key(true)?;
             if let Event::KeySeq(ref mut key_seq) = evt {
                 key_seq.push(snd_key);

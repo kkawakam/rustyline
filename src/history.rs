@@ -552,20 +552,17 @@ cfg_if::cfg_if! {
 
         fn fix_perm(_: &File) {}
     } else if #[cfg(unix)] {
-        fn umask() -> nix::sys::stat::Mode {
-            use nix::sys::stat::Mode;
-
-            nix::sys::stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)
+        use nix::sys::stat::{self, Mode, fchmod};
+        fn umask() -> Mode {
+            stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)
         }
 
-        fn restore_umask(old_umask: nix::sys::stat::Mode) {
-            nix::sys::stat::umask(old_umask);
+        fn restore_umask(old_umask: Mode) {
+            stat::umask(old_umask);
         }
 
         fn fix_perm(file: &File) {
             use std::os::unix::io::AsRawFd;
-            use nix::sys::stat::{fchmod, Mode};
-
             let _ = fchmod(file.as_raw_fd(), Mode::S_IRUSR | Mode::S_IWUSR);
         }
     }

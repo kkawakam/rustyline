@@ -1,9 +1,24 @@
 use std::cmp::{Ord, Ordering, PartialOrd};
+use std::convert::TryFrom;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+#[inline]
+pub fn try_from(w: usize) -> u16 {
+    u16::try_from(w).unwrap()
+}
+#[inline]
+pub fn width(s: &str) -> u16 {
+    u16::try_from(s.width()).unwrap()
+}
+#[inline]
+pub fn cwidth(ch: char) -> u16 {
+    ch.width().map(|w| w as u16).unwrap_or(0)
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Position {
-    pub col: usize, // The leftmost column is number 0.
-    pub row: usize, // The highest row is number 0.
+    pub col: u16, // The leftmost column is number 0.
+    pub row: u16, // The highest row is number 0.
 }
 
 impl PartialOrd for Position {

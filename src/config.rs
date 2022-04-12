@@ -27,7 +27,7 @@ pub struct Config {
     /// Whether to use stdio or not
     behavior: Behavior,
     /// Horizontal space taken by a tab.
-    tab_stop: usize,
+    tab_stop: u16,
     /// Indentation size for indent/dedent commands
     indent_size: usize,
     /// Check if cursor position is at leftmost before displaying prompt
@@ -157,11 +157,11 @@ impl Config {
     ///
     /// By default, 8.
     #[must_use]
-    pub fn tab_stop(&self) -> usize {
+    pub fn tab_stop(&self) -> u16 {
         self.tab_stop
     }
 
-    pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
+    pub(crate) fn set_tab_stop(&mut self, tab_stop: u16) {
         self.tab_stop = tab_stop;
     }
 
@@ -424,7 +424,7 @@ impl Builder {
     ///
     /// By default, `8`
     #[must_use]
-    pub fn tab_stop(mut self, tab_stop: usize) -> Self {
+    pub fn tab_stop(mut self, tab_stop: u16) -> Self {
         self.set_tab_stop(tab_stop);
         self
     }
@@ -548,7 +548,7 @@ pub trait Configurer {
     /// Horizontal space taken by a tab.
     ///
     /// By default, `8`
-    fn set_tab_stop(&mut self, tab_stop: usize) {
+    fn set_tab_stop(&mut self, tab_stop: u16) {
         self.config_mut().set_tab_stop(tab_stop);
     }
 

@@ -1,11 +1,9 @@
 //! This module implements and describes common TTY methods & traits
 
-use unicode_width::UnicodeWidthStr;
-
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -108,9 +106,9 @@ pub trait Renderer {
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
-    fn get_columns(&self) -> usize;
+    fn get_columns(&self) -> u16;
     /// Get the number of rows in the current terminal.
-    fn get_rows(&self) -> usize;
+    fn get_rows(&self) -> u16;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
 
@@ -165,11 +163,11 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).update_size();
     }
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> u16 {
         (**self).get_columns()
     }
 
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> u16 {
         (**self).get_rows()
     }
 
@@ -183,7 +181,7 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 }
 
 // ignore ANSI escape sequence
-fn width(s: &str, esc_seq: &mut u8) -> usize {
+fn width(s: &str, esc_seq: &mut u8) -> u16 {
     if *esc_seq == 1 {
         if s == "[" {
             // CSI
@@ -209,7 +207,7 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     } else if s == "\n" {
         0
     } else {
-        s.width()
+        layout::width(s)
     }
 }
 
@@ -230,7 +228,7 @@ pub trait Term {
     fn new(
         color_mode: ColorMode,
         behavior: Behavior,
-        tab_stop: usize,
+        tab_stop: u16,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
     ) -> Self;

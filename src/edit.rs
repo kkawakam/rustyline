@@ -5,7 +5,6 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::highlight::Highlighter;
@@ -13,7 +12,7 @@ use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
@@ -341,7 +340,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
-                let width = ch.width().unwrap_or(0);
+                let width = layout::cwidth(ch);
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()

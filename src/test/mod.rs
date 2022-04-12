@@ -9,6 +9,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::keymap::{Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
+use crate::layout;
 use crate::tty::Sink;
 use crate::validate::Validator;
 use crate::{apply_backspace_direct, readline_direct, Context, Editor, Helper, Result};
@@ -102,7 +103,7 @@ fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyEvent], expec
     let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline_with_initial("", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    assert_eq!(expected.0.len(), editor.term.cursor);
+    assert_eq!(layout::try_from(expected.0.len()), editor.term.cursor);
 }
 
 // `entries`: history entries before `keys` pressed
@@ -122,7 +123,7 @@ fn assert_history(
     let actual_line = editor.readline(prompt).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
     if prompt.is_empty() {
-        assert_eq!(expected.0.len(), editor.term.cursor);
+        assert_eq!(layout::try_from(expected.0.len()), editor.term.cursor);
     }
 }
 

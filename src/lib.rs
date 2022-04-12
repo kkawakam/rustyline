@@ -43,7 +43,6 @@ use std::sync::{Arc, Mutex};
 
 use log::debug;
 use radix_trie::Trie;
-use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
@@ -280,15 +279,16 @@ fn page_completions<C: Candidate, H: Helper>(
         cols,
         candidates
             .iter()
-            .map(|s| s.display().width())
+            .map(|s| layout::width(s.display()))
             .max()
             .unwrap()
             + min_col_pad,
     );
     let num_cols = cols / max_width;
+    let nbc: u16 = layout::try_from(candidates.len());
 
     let mut pause_row = s.out.get_rows() - 1;
-    let num_rows = (candidates.len() + num_cols - 1) / num_cols;
+    let num_rows = (nbc + num_cols - 1) / num_cols;
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
@@ -322,15 +322,15 @@ fn page_completions<C: Candidate, H: Helper>(
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
-            if i < candidates.len() {
-                let candidate = &candidates[i].display();
-                let width = candidate.width();
+            if i < nbc {
+                let candidate = &candidates[i as usize].display();
+                let width = layout::width(candidate);
                 if let Some(highlighter) = s.highlighter() {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
                 }
-                if ((col + 1) * num_rows) + row < candidates.len() {
+                if ((col + 1) * num_rows) + row < nbc {
                     for _ in width..max_width {
                         ab.push(' ');
                     }
@@ -870,7 +870,7 @@ impl<H: Helper> Editor<H> {
 
     /// If output stream is a tty, this function returns its width and height as
     /// a number of characters.
-    pub fn dimensions(&mut self) -> Option<(usize, usize)> {
+    pub fn dimensions(&mut self) -> Option<(u16, u16)> {
         if self.term.is_output_tty() {
             let out = self.term.create_writer();
             Some((out.get_columns(), out.get_rows()))

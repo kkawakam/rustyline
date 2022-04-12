@@ -819,6 +819,7 @@ impl Receiver for Utf8 {
 pub struct PosixRenderer {
     out: RawFd,
     cols: u16, // Number of columns in terminal
+    rows: u16, // Number of rows in terminal
     buffer: String,
     tab_stop: u16,
     colors_enabled: bool,
@@ -827,10 +828,11 @@ pub struct PosixRenderer {
 
 impl PosixRenderer {
     fn new(out: RawFd, tab_stop: u16, colors_enabled: bool, bell_style: BellStyle) -> Self {
-        let (cols, _) = get_win_size(out);
+        let (cols, rows) = get_win_size(out);
         Self {
             out,
             cols,
+            rows,
             buffer: String::with_capacity(1024),
             tab_stop,
             colors_enabled,
@@ -1031,8 +1033,9 @@ impl Renderer for PosixRenderer {
 
     /// Try to update the number of columns in the current terminal,
     fn update_size(&mut self) {
-        let (cols, _) = get_win_size(self.out);
+        let (cols, rows) = get_win_size(self.out);
         self.cols = cols;
+        self.rows = rows;
     }
 
     fn get_columns(&self) -> u16 {
@@ -1042,8 +1045,7 @@ impl Renderer for PosixRenderer {
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> u16 {
-        let (_, rows) = get_win_size(self.out);
-        rows
+        self.rows
     }
 
     fn colors_enabled(&self) -> bool {

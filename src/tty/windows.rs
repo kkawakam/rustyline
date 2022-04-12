@@ -287,6 +287,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 pub struct ConsoleRenderer {
     conout: HANDLE,
     cols: u16, // Number of columns in terminal
+    rows: u16, // Number of rows in terminal
     buffer: String,
     utf16: Vec<u16>,
     colors_enabled: bool,
@@ -296,10 +297,11 @@ pub struct ConsoleRenderer {
 impl ConsoleRenderer {
     fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
-        let (cols, _) = get_win_size(conout);
+        let (cols, rows) = get_win_size(conout);
         ConsoleRenderer {
             conout,
             cols,
+            rows,
             buffer: String::with_capacity(1024),
             utf16: Vec::with_capacity(1024),
             colors_enabled,
@@ -522,8 +524,9 @@ impl Renderer for ConsoleRenderer {
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {
-        let (cols, _) = get_win_size(self.conout);
+        let (cols, rows) = get_win_size(self.conout);
         self.cols = cols;
+        self.rows = rows;
     }
 
     fn get_columns(&self) -> u16 {
@@ -533,8 +536,7 @@ impl Renderer for ConsoleRenderer {
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
     fn get_rows(&self) -> u16 {
-        let (_, rows) = get_win_size(self.conout);
-        rows
+        self.rows
     }
 
     fn colors_enabled(&self) -> bool {

@@ -18,7 +18,7 @@
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-#[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
+#[cfg(feature = "custom-bindings")]
 mod binding;
 mod command;
 pub mod completion;
@@ -48,6 +48,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
+#[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
@@ -56,7 +57,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
-use crate::keymap::{CustomBindings, InputState, Refresher};
+use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::tty::ExternalPrinter;
@@ -577,7 +578,7 @@ pub struct Editor<H: Helper> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: CustomBindings,
+    custom_bindings: Bindings,
 }
 
 #[allow(clippy::new_without_default)]
@@ -604,7 +605,7 @@ impl<H: Helper> Editor<H> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: CustomBindings::new(),
+            custom_bindings: Bindings::new(),
         }
     }
 

@@ -365,8 +365,8 @@ impl ConsoleRenderer {
 
     // position at the start of the prompt, clear to end of previous input
     fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
-        let current_row = layout.cursor.row;
-        let old_rows = layout.end.row;
+        let current_row = layout.cursor.row.saturating_sub(layout.first_row);
+        let old_rows = layout.last_row.saturating_sub(layout.first_row);
         let mut coord = info.dwCursorPosition;
         coord.X = 0;
         coord.Y -= current_row as i16;
@@ -426,12 +426,14 @@ impl Renderer for ConsoleRenderer {
 
         self.buffer.clear();
         let mut col = 0;
+        let prompt = new_layout.visible_prompt(prompt);
+        let (line, pos) = new_layout.visible_line(line, line.pos());
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
             col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
             // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+            col = self.wrap_at_eol(&highlighter.highlight(line, pos), col);
         } else {
             // append the prompt
             self.buffer.push_str(prompt);
@@ -440,6 +442,7 @@ impl Renderer for ConsoleRenderer {
         }
         // append hint
         if let Some(hint) = hint {
+            let hint = new_layout.visible_hint(hint);
             if let Some(highlighter) = highlighter {
                 self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
             } else {
@@ -472,24 +475,38 @@ impl Renderer for ConsoleRenderer {
     }
 
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        breaks: Option<&mut Vec<usize>>,
+    ) -> Position {
         let mut pos = orig;
-        for c in s.graphemes(true) {
+        for (offset, c) in s.grapheme_indices(true) {
             if c == "\n" {
                 pos.col = 0;
                 pos.row += 1;
+                if let Some(ref mut breaks) = breaks {
+                    breaks.push(offset + 1);
+                }
             } else {
                 let cw = c.width();
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;
                     pos.col = cw;
+                    if let Some(ref mut breaks) = breaks {
+                        breaks.push(offset);
+                    }
                 }
             }
         }
         if pos.col == self.cols {
             pos.col = 0;
             pos.row += 1;
+            if let Some(ref mut breaks) = breaks {
+                breaks.push(s.len());
+            }
         }
         pos
     }

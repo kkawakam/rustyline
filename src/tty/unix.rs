@@ -842,17 +842,13 @@ impl PosixRenderer {
 
     fn clear_old_rows(&mut self, layout: &Layout) {
         use std::fmt::Write;
-        let current_row = layout.cursor.row;
-        let old_rows = layout.end.row;
-        // old_rows < cursor_row if the prompt spans multiple lines and if
-        // this is the default State.
-        let cursor_row_movement = old_rows.saturating_sub(current_row);
+        let cursor_row_movement = layout.lines_below_cursor();
         // move the cursor down as required
         if cursor_row_movement > 0 {
             write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
         }
         // clear old rows
-        for _ in 0..old_rows {
+        for _ in layout.first_row..layout.last_row {
             self.buffer.push_str("\r\x1b[K\x1b[A");
         }
         // clear the line
@@ -923,14 +919,14 @@ impl Renderer for PosixRenderer {
         let end_pos = new_layout.end;
 
         self.clear_old_rows(old_layout);
-
+        let prompt = new_layout.visible_prompt(prompt);
+        let (line, pos) = new_layout.visible_line(line, line.pos());
         if let Some(highlighter) = highlighter {
             // display the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
             // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            self.buffer.push_str(&highlighter.highlight(line, pos));
         } else {
             // display the prompt
             self.buffer.push_str(prompt);
@@ -939,6 +935,7 @@ impl Renderer for PosixRenderer {
         }
         // display hint
         if let Some(hint) = hint {
+            let hint = new_layout.visible_hint(hint);
             if let Some(highlighter) = highlighter {
                 self.buffer.push_str(&highlighter.highlight_hint(hint));
             } else {
@@ -955,7 +952,7 @@ impl Renderer for PosixRenderer {
             self.buffer.push('\n');
         }
         // position the cursor
-        let new_cursor_row_movement = end_pos.row - cursor.row;
+        let new_cursor_row_movement = new_layout.lines_below_cursor();
         // move the cursor up as required
         if new_cursor_row_movement > 0 {
             write!(self.buffer, "\x1b[{}A", new_cursor_row_movement)?;
@@ -978,13 +975,21 @@ impl Renderer for PosixRenderer {
 
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        mut breaks: Option<&mut Vec<usize>>,
+    ) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
-        for c in s.graphemes(true) {
+        for (offset, c) in s.grapheme_indices(true) {
             if c == "\n" {
                 pos.row += 1;
                 pos.col = 0;
+                if let Some(ref mut breaks) = breaks {
+                    breaks.push(offset + 1);
+                }
                 continue;
             }
             let cw = if c == "\t" {
@@ -996,11 +1001,17 @@ impl Renderer for PosixRenderer {
             if pos.col > self.cols {
                 pos.row += 1;
                 pos.col = cw;
+                if let Some(ref mut breaks) = breaks {
+                    breaks.push(offset);
+                }
             }
         }
         if pos.col == self.cols {
             pos.col = 0;
             pos.row += 1;
+            if let Some(ref mut breaks) = breaks {
+                breaks.push(s.len());
+            }
         }
         pos
     }
@@ -1409,7 +1420,7 @@ mod test {
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), None);
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }
@@ -1440,7 +1451,7 @@ mod test {
         let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
         let prompt = "> ";
         let default_prompt = true;
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), None);
 
         let mut line = LineBuffer::init("", 0, None);
         let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);

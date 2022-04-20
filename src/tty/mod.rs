@@ -62,33 +62,61 @@ pub trait Renderer {
         line: &LineBuffer,
         info: Option<&str>,
     ) -> Layout {
+        let max_rows = self.get_rows();
+        let mut breaks = Vec::with_capacity(max_rows as usize); // FIXME prompt breaks missing
+        breaks.push(0);
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let cursor = self.calculate_position(&line[..pos], prompt_size);
+        let cursor = self.calculate_position(&line[..pos], prompt_size, Some(&mut breaks));
         // calculate the position of the end of the input line
-        let mut end = if pos == line.len() {
+        let end_input = if pos == line.len() {
             cursor
         } else {
-            self.calculate_position(&line[pos..], cursor)
+            self.calculate_position(&line[pos..], cursor, Some(&mut breaks))
         };
-        if let Some(info) = info {
-            end = self.calculate_position(info, end);
+        let end = if let Some(info) = info {
+            self.calculate_position(info, end_input, Some(&mut breaks))
+        } else {
+            end_input
+        };
+
+        let rows = end.row + 1;
+        // ensure cursor is visible
+        let mut first_row = 0;
+        let mut last_row = end.row;
+        if max_rows <= 1 {
+            first_row = cursor.row;
+            last_row = first_row;
+        } else if rows > max_rows {
+            first_row = cursor.row.saturating_sub(max_rows - 1);
+            last_row = (first_row + max_rows).saturating_sub(1);
         }
+        debug_assert!(last_row - first_row < max_rows);
 
         let new_layout = Layout {
             prompt_size,
             default_prompt,
             cursor,
+            end_input,
             end,
+            first_row,
+            last_row,
+            breaks,
         };
         debug_assert!(new_layout.prompt_size <= new_layout.cursor);
-        debug_assert!(new_layout.cursor <= new_layout.end);
+        debug_assert!(new_layout.cursor <= new_layout.end_input);
+        debug_assert!(new_layout.end_input <= new_layout.end);
         new_layout
     }
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position) -> Position;
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        breaks: Option<&mut Vec<usize>>,
+    ) -> Position;
 
     fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 
@@ -135,8 +163,13 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        (**self).calculate_position(s, orig)
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        breaks: Option<&mut Vec<usize>>,
+    ) -> Position {
+        (**self).calculate_position(s, orig, breaks)
     }
 
     fn write_and_flush(&mut self, buf: &str) -> Result<()> {

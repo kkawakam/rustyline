@@ -100,7 +100,7 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, _: Option<&mut Vec<usize>>) -> Position {
         let mut pos = orig;
         pos.col += layout::try_from(s.len());
         pos

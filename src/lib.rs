@@ -16,7 +16,9 @@
 //! }
 //! ```
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(feature = "custom-bindings")]
 mod binding;
 mod command;
 pub mod completion;
@@ -44,11 +46,11 @@ use std::result;
 use std::sync::{Arc, Mutex};
 
 use log::debug;
-use radix_trie::Trie;
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, Renderer, Term, Terminal};
 
+#[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
@@ -57,7 +59,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{DefaultHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Refresher};
+use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::tty::ExternalPrinter;
@@ -578,7 +580,7 @@ pub struct Editor<H: Helper, I: History> {
     helper: Option<H>,
     kill_ring: Arc<Mutex<KillRing>>,
     config: Config,
-    custom_bindings: Trie<Event, EventHandler>,
+    custom_bindings: Bindings,
 }
 
 /// Default editor with no helper and `DefaultHistory`
@@ -616,7 +618,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
-            custom_bindings: Trie::new(),
+            custom_bindings: Bindings::new(),
         }
     }
 
@@ -839,6 +841,8 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     /// Bind a sequence to a command.
+    #[cfg(feature = "custom-bindings")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
         &mut self,
         key_seq: E,
@@ -849,6 +853,8 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     /// Remove a binding for the given sequence.
+    #[cfg(feature = "custom-bindings")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))

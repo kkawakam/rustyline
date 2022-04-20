@@ -37,7 +37,7 @@ unicode-width = "0.1"
 unicode-segmentation = "1.0"
 memchr = "2.0"
 # For custom bindings
-radix_trie = "0.2"
+radix_trie = { version = "0.2", optional = true }
 regex = { version = "1.5.4", optional = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -59,7 +59,8 @@ assert_matches = "1.2"
 rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
-default = ["with-dirs", "with-file-history"]
+default = ["custom-bindings", "with-dirs", "with-file-history"]
+custom-bindings = ["radix_trie"]
 with-dirs = ["dirs-next"]
 with-file-history = ["fd-lock"]
 with-sqlite-history = ["rusqlite"]
@@ -67,7 +68,8 @@ with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 
 [package.metadata.docs.rs]
-features = ["with-dirs", "with-file-history", "with-fuzzy"]
+features = ["custom-bindings", "with-dirs", "with-file-history", "with-fuzzy"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"
+rustdoc-args = ["--cfg", "docsrs"]

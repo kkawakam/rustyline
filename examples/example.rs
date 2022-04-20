@@ -1,41 +1,23 @@
 use std::borrow::Cow::{self, Borrowed, Owned};
 
-use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::completion::FilenameCompleter;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
-use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyEvent};
-use rustyline_derive::Helper;
+use rustyline::hint::HistoryHinter;
+use rustyline::validate::MatchingBracketValidator;
+use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
+use rustyline_derive::{Completer, Helper, Hinter, Validator};
 
-#[derive(Helper)]
+#[derive(Helper, Completer, Hinter, Validator)]
 struct MyHelper {
+    #[rustyline(Completer)]
     completer: FilenameCompleter,
     highlighter: MatchingBracketHighlighter,
+    #[rustyline(Validator)]
     validator: MatchingBracketValidator,
+    #[rustyline(Hinter)]
     hinter: HistoryHinter,
     colored_prompt: String,
-}
-
-impl Completer for MyHelper {
-    type Candidate = Pair;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        self.completer.complete(line, pos, ctx)
-    }
-}
-
-impl Hinter for MyHelper {
-    type Hint = String;
-
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
-        self.hinter.hint(line, pos, ctx)
-    }
 }
 
 impl Highlighter for MyHelper {
@@ -61,19 +43,6 @@ impl Highlighter for MyHelper {
 
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
         self.highlighter.highlight_char(line, pos)
-    }
-}
-
-impl Validator for MyHelper {
-    fn validate(
-        &self,
-        ctx: &mut validate::ValidationContext,
-    ) -> rustyline::Result<validate::ValidationResult> {
-        self.validator.validate(ctx)
-    }
-
-    fn validate_while_typing(&self) -> bool {
-        self.validator.validate_while_typing()
     }
 }
 

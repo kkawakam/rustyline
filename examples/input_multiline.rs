@@ -1,18 +1,11 @@
-use rustyline::validate::{
-    MatchingBracketValidator, ValidationContext, ValidationResult, Validator,
-};
+use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Editor, Result};
-use rustyline_derive::{Completer, Helper, Highlighter, Hinter};
+use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 
-#[derive(Completer, Helper, Highlighter, Hinter)]
+#[derive(Completer, Helper, Highlighter, Hinter, Validator)]
 struct InputValidator {
+    #[rustyline(Validator)]
     brackets: MatchingBracketValidator,
-}
-
-impl Validator for InputValidator {
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
-        self.brackets.validate(ctx)
-    }
 }
 
 fn main() -> Result<()> {

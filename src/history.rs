@@ -589,18 +589,15 @@ impl<'a> DoubleEndedIterator for Iter<'a> {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(any(windows, target_arch = "wasm32"))] {
-        #[cfg(feature = "fd-lock")]
+    if #[cfg(all(any(windows, target_arch = "wasm32"), feature = "fd-lock"))] {
         fn umask() -> u16 {
             0
         }
 
-        #[cfg(feature = "fd-lock")]
         fn restore_umask(_: u16) {}
 
-        #[cfg(feature = "fd-lock")]
         fn fix_perm(_: &File) {}
-    } else if #[cfg(unix)] {
+    } else if #[cfg(all(unix, feature = "fd-lock"))] {
         use nix::sys::stat::{self, Mode, fchmod};
         fn umask() -> Mode {
             stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)

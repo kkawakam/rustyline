@@ -12,7 +12,6 @@ use std::sync::Arc;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::{self, CloseHandle, INVALID_HANDLE_VALUE};
@@ -25,7 +24,7 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
@@ -341,7 +340,7 @@ impl ConsoleRenderer {
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
+    fn wrap_at_eol(&mut self, s: &str, mut col: u16) -> u16 {
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
@@ -479,7 +478,7 @@ impl Renderer for ConsoleRenderer {
         &self,
         s: &str,
         orig: Position,
-        breaks: Option<&mut Vec<usize>>,
+        mut breaks: Option<&mut Vec<usize>>,
     ) -> Position {
         let mut pos = orig;
         for (offset, c) in s.grapheme_indices(true) {
@@ -490,7 +489,7 @@ impl Renderer for ConsoleRenderer {
                     breaks.push(offset + 1);
                 }
             } else {
-                let cw = c.width();
+                let cw = layout::width(c);
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;

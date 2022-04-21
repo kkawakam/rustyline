@@ -58,14 +58,15 @@ assert_matches = "1.2"
 rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
-default = ["custom-bindings", "with-dirs", "fd-lock"]
+default = ["custom-bindings", "with-dirs", "wasm-incompatible"]
 custom-bindings = ["radix_trie"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+wasm-incompatible = ["fd-lock"]
 
 [package.metadata.docs.rs]
-features = ["custom-bindings", "with-dirs", "with-fuzzy"]
+features = ["custom-bindings", "with-dirs", "with-fuzzy", "wasm-incompatible"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"

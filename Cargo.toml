@@ -63,7 +63,6 @@ custom-bindings = ["radix_trie"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
-wasm = [ ]
 
 [package.metadata.docs.rs]
 features = ["custom-bindings", "with-dirs", "with-fuzzy"]

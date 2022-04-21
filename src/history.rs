@@ -174,7 +174,7 @@ impl History {
 
     #[cfg(not(feature = "fd-lock"))]
     pub fn save<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        // TODO
+        todo!();
         Ok(())
     }
 
@@ -262,7 +262,7 @@ impl History {
 
     #[cfg(not(feature = "fd-lock"))]
     pub fn append<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        // TODO
+        todo!();
         Ok(())
     }
 
@@ -288,7 +288,7 @@ impl History {
 
     #[cfg(not(feature = "fd-lock"))]
     pub fn load<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        // TODO
+        todo!();
         Ok(())
     }
 

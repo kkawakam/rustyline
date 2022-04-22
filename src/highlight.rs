@@ -90,36 +90,6 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     }
 }
 
-const OPENS: &[u8; 3] = b"{[(";
-const CLOSES: &[u8; 3] = b"}])";
-
-const OPEN_BRACKETS_LOOKUP_TABLE: [bool; 256] = {
-    let mut table = [false; 256];
-    let mut idx = 0;
-    loop {
-        if idx >= OPENS.len() {
-            break;
-        }
-        let bracket = OPENS[idx];
-        table[bracket as usize] = true;
-        idx += 1;
-    }
-    table
-};
-const CLOSE_BRACKETS_LOOKUP_TABLE: [bool; 256] = {
-    let mut table = [false; 256];
-    let mut idx = 0;
-    loop {
-        if idx >= CLOSES.len() {
-            break;
-        }
-        let bracket = CLOSES[idx];
-        table[bracket as usize] = true;
-        idx += 1;
-    }
-    table
-};
-
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.
@@ -251,10 +221,10 @@ const fn matching_bracket(bracket: u8) -> u8 {
     }
 }
 fn is_open_bracket(bracket: u8) -> bool {
-    OPEN_BRACKETS_LOOKUP_TABLE[usize::from(bracket)]
+    matches!(bracket, b'{' | b'[' | b'(')
 }
 fn is_close_bracket(bracket: u8) -> bool {
-    CLOSE_BRACKETS_LOOKUP_TABLE[usize::from(bracket)]
+    matches!(bracket, b'}' | b']' | b')')
 }
 
 #[cfg(test)]

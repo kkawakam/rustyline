@@ -5,7 +5,6 @@ use std::path::{self, Path};
 
 use crate::line_buffer::LineBuffer;
 use crate::{Context, Result};
-use memchr::memchr;
 
 /// A completion candidate.
 pub trait Candidate {
@@ -289,9 +288,15 @@ pub fn escape(
     if quote == Quote::Single {
         return input; // no escape in single quotes
     }
+
+    let mut break_chars_byteset = [false; 256];
+    for &byte in break_chars {
+        break_chars_byteset[usize::from(byte)] = true;
+    }
+
     let n = input
         .bytes()
-        .filter(|b| memchr(*b, break_chars).is_some())
+        .filter(|&b| break_chars_byteset[usize::from(b)])
         .count();
     if n == 0 {
         return input; // no need to escape
@@ -308,7 +313,7 @@ pub fn escape(
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {
-        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
+        if c.is_ascii() && break_chars_byteset[c as usize] {
             result.push(esc_char);
         }
         result.push(c);
@@ -418,6 +423,12 @@ pub fn extract_word<'l>(
     if line.is_empty() {
         return (0, line);
     }
+
+    let mut break_chars_byteset = [false; 256];
+    for &byte in break_chars {
+        break_chars_byteset[usize::from(byte)] = true;
+    }
+
     let mut start = None;
     for (i, c) in line.char_indices().rev() {
         if let (Some(esc_char), true) = (esc_char, start.is_some()) {
@@ -428,7 +439,7 @@ pub fn extract_word<'l>(
             }
             break;
         }
-        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
+        if c.is_ascii() && break_chars_byteset[c as usize] {
             start = Some(i + c.len_utf8());
             if esc_char.is_none() {
                 break;

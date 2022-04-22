@@ -1118,7 +1118,7 @@ impl<'b> InputState<'b> {
         if num_args < 0 {
             unreachable!()
         } else {
-            num_args.abs() as RepeatCount
+            num_args.unsigned_abs() as RepeatCount
         }
     }
 }

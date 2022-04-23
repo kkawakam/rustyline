@@ -393,7 +393,7 @@ pub trait Refresher {
     /// Current cursor position (byte position)
     fn pos(&self) -> usize;
     /// Display `msg` above currently edited line.
-    fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()>;
+    fn external_print(&mut self, msg: String) -> Result<()>;
 }
 
 impl<'b> InputState<'b> {
@@ -435,7 +435,7 @@ impl<'b> InputState<'b> {
                         break;
                     }
                     tty::Event::ExternalPrint(msg) => {
-                        wrt.external_print(rdr, msg)?;
+                        wrt.external_print(msg)?;
                     }
                 }
             }

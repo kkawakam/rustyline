@@ -59,7 +59,7 @@ assert_matches = "1.2"
 rustyline-derive = { version = "0.6.0", path = "rustyline-derive" }
 
 [features]
-default = ["custom-bindings", "with-dirs", "signal-hook"]
+default = ["custom-bindings", "with-dirs"]
 custom-bindings = ["radix_trie"]
 with-dirs = ["dirs-next"]
 with-fuzzy = ["skim"]

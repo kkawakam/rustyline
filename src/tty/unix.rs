@@ -138,6 +138,7 @@ impl Read for TtyIn {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
+                debug!(target: "rustyline", "read error: {:?}", error);
                 if error.kind() != ErrorKind::Interrupted || self.sigwinch.load(Ordering::Relaxed) {
                     return Err(error);
                 }
@@ -1170,7 +1171,10 @@ cfg_if::cfg_if! {
             let flag = sigwinch.clone();
             (
                 sigwinch,
-                signal_hook::flag::register(libc::SIGWINCH, flag).ok(),
+                unsafe { signal_hook::low_level::register(libc::SIGWINCH, move || {
+                    flag.store(true, Ordering::SeqCst);
+                    debug!(target: "rustyline", "SIGWINCH");
+                }).ok() },
             )
         }
         type SigWinCh = Arc<AtomicBool>;

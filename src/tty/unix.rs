@@ -703,9 +703,7 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != Errno::EINTR
-                    || self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed)
-                {
+                if err != Errno::EINTR || self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed) {
                     return Err(err.into());
                 } else {
                     continue;

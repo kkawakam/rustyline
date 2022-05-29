@@ -8,12 +8,13 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::<()>::new();
+//! let mut rl = rustyline::Editor::<()>::new()?;
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}", line),
 //!     Err(_) => println!("No input"),
 //! }
+//! # Ok::<(), rustyline::error::ReadlineError>(())
 //! ```
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -572,6 +573,7 @@ impl<'h> Context<'h> {
 }
 
 /// Line editor
+#[must_use]
 pub struct Editor<H: Helper> {
     term: Terminal,
     history: History,
@@ -584,29 +586,27 @@ pub struct Editor<H: Helper> {
 #[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H> {
     /// Create an editor with the default configuration
-    #[must_use]
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    #[must_use]
-    pub fn with_config(config: Config) -> Self {
+    pub fn with_config(config: Config) -> Result<Self> {
         let term = Terminal::new(
             config.color_mode(),
             config.behavior(),
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),
-        );
-        Self {
+        )?;
+        Ok(Self {
             term,
             history: History::with_config(config),
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
             custom_bindings: Bindings::new(),
-        }
+        })
     }
 
     /// This method will read a line from STDIN and will display a `prompt`.
@@ -852,7 +852,7 @@ impl<H: Helper> Editor<H> {
 
     /// Returns an iterator over edited lines
     /// ```
-    /// let mut rl = rustyline::Editor::<()>::new();
+    /// let mut rl = rustyline::Editor::<()>::new()?;
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -864,6 +864,7 @@ impl<H: Helper> Editor<H> {
     ///         }
     ///     }
     /// }
+    /// # Ok::<(), rustyline::error::ReadlineError>(())
     /// ```
     pub fn iter<'a>(&'a mut self, prompt: &'a str) -> impl Iterator<Item = Result<String>> + 'a {
         Iter {

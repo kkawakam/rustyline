@@ -644,7 +644,7 @@ impl Term for Console {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
-    ) -> Console {
+    ) -> Result<Console> {
         let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (
                 OpenOptions::new().read(true).write(true).open("CONIN$"),
@@ -685,7 +685,7 @@ impl Term for Console {
             Err(_) => false,
         };
 
-        Console {
+        Ok(Console {
             conin_isatty,
             conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
@@ -697,7 +697,7 @@ impl Term for Console {
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
-        }
+        })
     }
 
     /// Checking for an unsupported TERM in windows is a no-op

@@ -20,11 +20,11 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 ## Example
 ```rust
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::{Editor, Result};
 
-fn main() {
+fn main() -> Result<()> {
     // `()` can be used when no completer is required
-    let mut rl = Editor::<()>::new();
+    let mut rl = Editor::<()>::new()?;
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
@@ -49,7 +49,7 @@ fn main() {
             }
         }
     }
-    rl.save_history("history.txt").unwrap();
+    rl.save_history("history.txt")
 }
 ```
 

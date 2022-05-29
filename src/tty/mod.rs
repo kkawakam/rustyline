@@ -233,7 +233,9 @@ pub trait Term {
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
-    ) -> Self;
+    ) -> Result<Self>
+    where
+        Self: Sized;
     /// Check if current terminal can provide a rich line-editing user
     /// interface.
     fn is_unsupported(&self) -> bool;

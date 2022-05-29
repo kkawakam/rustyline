@@ -1127,17 +1127,17 @@ cfg_if::cfg_if! {
     if #[cfg(not(feature = "signal-hook"))] {
         static SIGWINCH_ONCE: std::sync::Once = std::sync::Once::new();
         static SIGWINCH: AtomicBool = AtomicBool::new(false);
-        fn install_sigwinch_handler() -> (SigWinCh, Option<()>) {
+        fn install_sigwinch_handler() -> Result<(SigWinCh, Option<()>)> {
             use nix::sys::signal;
             SIGWINCH_ONCE.call_once(|| unsafe {
                 let sigwinch = signal::SigAction::new(
                     signal::SigHandler::Handler(sigwinch_handler),
-                    signal::SaFlags::empty(),
+                    signal::SaFlags::SA_RESTART,
                     signal::SigSet::empty(),
                 );
                 let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
             });
-            (new_sigwinch(), None)
+            Ok((new_sigwinch(), None))
         }
         extern "C" fn sigwinch_handler(_: libc::c_int) {
             SIGWINCH.store(true, Ordering::SeqCst);
@@ -1164,16 +1164,16 @@ cfg_if::cfg_if! {
             }
         }
     } else {
-        fn install_sigwinch_handler() -> (SigWinCh, Option<SigId>) {
+        fn install_sigwinch_handler() -> Result<(SigWinCh, Option<SigId>)> {
             let sigwinch = new_sigwinch();
             let flag = sigwinch.clone();
-            (
+            Ok((
                 sigwinch,
                 unsafe { signal_hook::low_level::register(libc::SIGWINCH, move || {
                     flag.store(true, Ordering::SeqCst);
                     debug!(target: "rustyline", "SIGWINCH");
-                }).ok() },
-            )
+                })? },
+            ))
         }
         type SigWinCh = Arc<AtomicBool>;
         fn new_sigwinch() -> SigWinCh {
@@ -1237,7 +1237,7 @@ impl Term for PosixTerminal {
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
-    ) -> Self {
+    ) -> Result<Self> {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
             if behavior == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
@@ -1266,11 +1266,11 @@ impl Term for PosixTerminal {
         let unsupported = is_unsupported_term();
         #[allow(unused_variables)]
         let (sigwinch, sigwinch_id) = if !unsupported && is_in_a_tty && is_out_a_tty {
-            install_sigwinch_handler()
+            install_sigwinch_handler()?
         } else {
             (new_sigwinch(), None)
         };
-        Self {
+        Ok(Self {
             unsupported,
             tty_in,
             is_in_a_tty,
@@ -1287,7 +1287,7 @@ impl Term for PosixTerminal {
             sigwinch,
             #[cfg(feature = "signal-hook")]
             sigwinch_id,
-        }
+        })
     }
 
     // Init checks:

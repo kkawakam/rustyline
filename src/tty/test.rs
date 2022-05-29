@@ -176,13 +176,13 @@ impl Term for DummyTerminal {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
-    ) -> DummyTerminal {
-        DummyTerminal {
+    ) -> Result<DummyTerminal> {
+        Ok(DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
             color_mode,
             bell_style,
-        }
+        })
     }
 
     // Init checks:

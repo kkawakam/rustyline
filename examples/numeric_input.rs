@@ -19,7 +19,7 @@ impl ConditionalEventHandler for FilteringEventHandler {
 }
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<()>::new();
+    let mut rl = Editor::<()>::new()?;
 
     rl.bind_sequence(
         Event::Any,

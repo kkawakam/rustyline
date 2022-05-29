@@ -19,7 +19,7 @@ mod vi_insert;
 
 fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> Editor<()> {
     let config = Config::builder().edit_mode(mode).build();
-    let mut editor = Editor::<()>::with_config(config);
+    let mut editor = Editor::<()>::with_config(config).unwrap();
     editor.term.keys.extend(keys.iter().cloned());
     editor
 }

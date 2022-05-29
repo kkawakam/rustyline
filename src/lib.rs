@@ -47,13 +47,14 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, Renderer, Term, Terminal};
+use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 #[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
+use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{History, SearchDirection};
@@ -687,7 +688,7 @@ impl<H: Helper> Editor<H> {
         let mut rdr = self.term.create_reader(&self.config, term_key_map);
         if self.term.is_output_tty() && self.config.check_cursor_position() {
             if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-                if s.out.sigwinch() {
+                if let ReadlineError::WindowResized = e {
                     s.out.update_size();
                 } else {
                     return Err(e);
@@ -730,9 +731,7 @@ impl<H: Helper> Editor<H> {
                 original_mode.disable_raw_mode()?;
                 tty::suspend()?;
                 let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed
-                if s.out.sigwinch() {
-                    s.out.update_size();
-                }
+                s.out.update_size(); // window may have been resized
                 s.refresh_line()?;
                 continue;
             }
@@ -740,7 +739,6 @@ impl<H: Helper> Editor<H> {
             #[cfg(unix)]
             if cmd == Cmd::QuotedInsert {
                 // Quoted insert
-                use crate::tty::RawReader;
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?;
                 continue;
@@ -748,7 +746,6 @@ impl<H: Helper> Editor<H> {
 
             #[cfg(windows)]
             if cmd == Cmd::PasteFromClipboard {
-                use crate::tty::RawReader;
                 let clipboard = rdr.read_pasted_text()?;
                 s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
             }

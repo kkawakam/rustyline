@@ -185,11 +185,8 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         total += count;
 
         if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-            SIGWINCH.store(true, Ordering::SeqCst);
             debug!(target: "rustyline", "SIGWINCH");
-            return Err(error::ReadlineError::WindowResize); // sigwinch +
-                                                            // err => err
-                                                            // ignored
+            return Err(error::ReadlineError::WindowResized);
         } else if rec.EventType != wincon::KEY_EVENT {
             continue;
         }
@@ -513,12 +510,6 @@ impl Renderer for ConsoleRenderer {
         self.clear_old_rows(&info, layout)
     }
 
-    fn sigwinch(&self) -> bool {
-        SIGWINCH
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .unwrap_or(false)
-    }
-
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {
@@ -597,8 +588,6 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
     }
     Ok(())
 }
-
-static SIGWINCH: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 pub type Terminal = Console;

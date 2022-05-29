@@ -1,7 +1,7 @@
 //! Contains error type for handling I/O and Errno errors
 #[cfg(windows)]
 use std::char;
-use std::error;
+use std::error::Error;
 use std::fmt;
 use std::io;
 
@@ -21,10 +21,8 @@ pub enum ReadlineError {
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
-    /// Error generated on WINDOW_BUFFER_SIZE_EVENT to mimic unix SIGWINCH
-    /// signal
-    #[cfg(windows)]
-    WindowResize,
+    /// Error generated on WINDOW_BUFFER_SIZE_EVENT / SIGWINCH signal
+    WindowResized,
     /// Like Utf8Error on unix
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
@@ -41,8 +39,7 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.fmt(f),
-            #[cfg(windows)]
-            ReadlineError::WindowResize => write!(f, "WindowResize"),
+            ReadlineError::WindowResized => write!(f, "WindowResized"),
             #[cfg(windows)]
             ReadlineError::Decode(ref err) => err.fmt(f),
             #[cfg(windows)]
@@ -51,10 +48,19 @@ impl fmt::Display for ReadlineError {
     }
 }
 
-impl error::Error for ReadlineError {}
+impl Error for ReadlineError {}
 
 impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> Self {
+        #[cfg(unix)]
+        if err.kind() == io::ErrorKind::Interrupted {
+            if let Some(e) = err.source() {
+                // FIXME cannot pattern match on e
+                if "WindowResized" == e.to_string() {
+                    return ReadlineError::WindowResized;
+                }
+            }
+        }
         ReadlineError::Io(err)
     }
 }

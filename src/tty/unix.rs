@@ -27,7 +27,7 @@ use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::{error, Cmd, Result};
+use crate::{error, Cmd, ReadlineError, Result};
 
 /// Unsupported Terminals that don't support RAW mode
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
@@ -138,8 +138,12 @@ impl Read for TtyIn {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                debug!(target: "rustyline", "read error: {:?}", error);
-                if error.kind() != ErrorKind::Interrupted || self.sigwinch.load(Ordering::Relaxed) {
+                if error.kind() == ErrorKind::Interrupted && self.sigwinch() {
+                    return Err(io::Error::new(
+                        ErrorKind::Interrupted,
+                        ReadlineError::WindowResized,
+                    ));
+                } else if error.kind() != ErrorKind::Interrupted {
                     return Err(error);
                 }
             } else {
@@ -147,6 +151,15 @@ impl Read for TtyIn {
                 return Ok(res as usize);
             }
         }
+    }
+}
+
+impl TtyIn {
+    /// Check if a SIGWINCH signal has been received
+    fn sigwinch(&self) -> bool {
+        self.sigwinch
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or(false)
     }
 }
 
@@ -661,7 +674,7 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: i32) -> nix::Result<i32> {
+    fn poll(&mut self, timeout_ms: i32) -> Result<i32> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
@@ -669,15 +682,15 @@ impl PosixRawReader {
         let mut fds = [poll::PollFd::new(self.as_raw_fd(), PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
-            Ok(_) => r,
+            Ok(n) => Ok(n),
             Err(Errno::EINTR) => {
-                if self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed) {
-                    r
+                if self.tty_in.get_ref().sigwinch() {
+                    Err(ReadlineError::WindowResized)
                 } else {
                     Ok(0) // Ignore EINTR while polling
                 }
             }
-            Err(_) => r,
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -703,7 +716,9 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != Errno::EINTR || self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed) {
+                if err == Errno::EINTR && self.tty_in.get_ref().sigwinch() {
+                    return Err(ReadlineError::WindowResized);
+                } else if err != Errno::EINTR {
                     return Err(err.into());
                 } else {
                     continue;
@@ -754,7 +769,7 @@ impl RawReader for PosixRawReader {
                     key = self.escape_sequence()?
                 }
                 // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             }
         }
         debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);
@@ -828,7 +843,6 @@ impl Receiver for Utf8 {
 /// Console output writer
 pub struct PosixRenderer {
     out: RawFd,
-    sigwinch: SigWinCh,
     cols: usize, // Number of columns in terminal
     buffer: String,
     tab_stop: usize,
@@ -837,17 +851,10 @@ pub struct PosixRenderer {
 }
 
 impl PosixRenderer {
-    fn new(
-        out: RawFd,
-        sigwinch: SigWinCh,
-        tab_stop: usize,
-        colors_enabled: bool,
-        bell_style: BellStyle,
-    ) -> Self {
+    fn new(out: RawFd, tab_stop: usize, colors_enabled: bool, bell_style: BellStyle) -> Self {
         let (cols, _) = get_win_size(out);
         Self {
             out,
-            sigwinch,
             cols,
             buffer: String::with_capacity(1024),
             tab_stop,
@@ -1040,13 +1047,6 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool {
-        self.sigwinch
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .unwrap_or(false)
-    }
-
     /// Try to update the number of columns in the current terminal,
     fn update_size(&mut self) {
         let (cols, _) = get_win_size(self.out);
@@ -1149,10 +1149,6 @@ cfg_if::cfg_if! {
             SigWinCh {}
         }
         impl SigWinCh {
-            fn load(&self, order: Ordering) -> bool {
-                SIGWINCH.load(order)
-            }
-
             fn compare_exchange(
                 &self,
                 current: bool,
@@ -1385,7 +1381,6 @@ impl Term for PosixTerminal {
     fn create_writer(&self) -> PosixRenderer {
         PosixRenderer::new(
             self.tty_out,
-            self.sigwinch.clone(),
             self.tab_stop,
             self.colors_enabled(),
             self.bell_style,
@@ -1477,15 +1472,14 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::{new_sigwinch, Position, PosixRenderer, PosixTerminal, Renderer};
+    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
     use crate::line_buffer::LineBuffer;
 
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let sigwinch = new_sigwinch();
-        let out = PosixRenderer::new(libc::STDOUT_FILENO, sigwinch, 4, true, BellStyle::default());
+        let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
@@ -1514,9 +1508,7 @@ mod test {
 
     #[test]
     fn test_line_wrap() {
-        let sigwinch = new_sigwinch();
-        let mut out =
-            PosixRenderer::new(libc::STDOUT_FILENO, sigwinch, 4, true, BellStyle::default());
+        let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
         let prompt = "> ";
         let default_prompt = true;
         let prompt_size = out.calculate_position(prompt, Position::default());

@@ -103,8 +103,6 @@ pub trait Renderer {
     /// Clear rows used by prompt and edited line
     fn clear_rows(&mut self, layout: &Layout) -> Result<()>;
 
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool;
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
@@ -155,10 +153,6 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
 
     fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
         (**self).clear_rows(layout)
-    }
-
-    fn sigwinch(&self) -> bool {
-        (**self).sigwinch()
     }
 
     fn update_size(&mut self) {

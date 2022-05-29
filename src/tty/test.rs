@@ -122,10 +122,6 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn sigwinch(&self) -> bool {
-        false
-    }
-
     fn update_size(&mut self) {}
 
     fn get_columns(&self) -> usize {

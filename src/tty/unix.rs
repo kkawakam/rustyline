@@ -97,7 +97,7 @@ pub type KeyMap = PosixKeyMap;
 
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
-    termios: termios::Termios,
+    termios: Termios,
     tty_in: RawFd,
     tty_out: Option<RawFd>,
     raw_mode: Arc<AtomicBool>,
@@ -660,7 +660,7 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+    fn poll(&mut self, timeout_ms: i32) -> nix::Result<i32> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
@@ -702,7 +702,7 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != ::nix::errno::Errno::EINTR
+                if err != Errno::EINTR
                     || self.tty_in.get_ref().sigwinch.load(Ordering::Relaxed)
                 {
                     return Err(err.into());
@@ -776,7 +776,7 @@ impl RawReader for PosixRawReader {
             let b = buf[0];
             self.parser.advance(&mut receiver, b);
             if !receiver.valid {
-                return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+                return Err(error::ReadlineError::from(ErrorKind::InvalidData));
             } else if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }
@@ -1111,7 +1111,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
     Ok(Some(num))
 }
 
-fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
+fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
     let mut bytes = buf.as_bytes();
     while !bytes.is_empty() {
         match write(fd, bytes) {
@@ -1491,10 +1491,10 @@ mod test {
 
     #[test]
     fn test_unsupported_term() {
-        ::std::env::set_var("TERM", "xterm");
+        std::env::set_var("TERM", "xterm");
         assert!(!super::is_unsupported_term());
 
-        ::std::env::set_var("TERM", "dumb");
+        std::env::set_var("TERM", "dumb");
         assert!(super::is_unsupported_term());
     }
 

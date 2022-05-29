@@ -15,7 +15,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
-use winapi::um::handleapi::{self, CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
@@ -154,7 +154,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
-        read_input(self.conin, std::u32::MAX)
+        read_input(self.conin, u32::MAX)
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
@@ -840,8 +840,8 @@ impl Term for Console {
 impl Drop for Console {
     fn drop(&mut self) {
         if self.close_on_drop {
-            unsafe { handleapi::CloseHandle(self.conin) };
-            unsafe { handleapi::CloseHandle(self.conout) };
+            unsafe { CloseHandle(self.conin) };
+            unsafe { CloseHandle(self.conout) };
         }
     }
 }

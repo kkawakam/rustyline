@@ -12,7 +12,7 @@ use crate::{Event, EventContext, EventHandler};
 pub type RepeatCount = usize;
 
 /// Commands
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Cmd {
     /// abort
@@ -215,7 +215,7 @@ const fn repeat_count(previous: RepeatCount, new: Option<RepeatCount>) -> Repeat
 }
 
 /// Different word definitions
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Word {
     /// non-blanks characters
     Big,
@@ -226,7 +226,7 @@ pub enum Word {
 }
 
 /// Where to move with respect to word boundary
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum At {
     /// Start of word.
     Start,
@@ -237,7 +237,7 @@ pub enum At {
 }
 
 /// Where to paste (relative to cursor position)
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Anchor {
     /// After cursor
     After,
@@ -246,7 +246,7 @@ pub enum Anchor {
 }
 
 /// character search
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum CharSearch {
     /// Forward search
     Forward(char),
@@ -270,7 +270,7 @@ impl CharSearch {
 }
 
 /// Where to move
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Movement {
     /// Whole current line (not really a movement but a range)
@@ -332,7 +332,7 @@ impl Movement {
 }
 
 /// Vi input modes
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum InputMode {
     /// Vi Command/Alternate
     Command,

@@ -29,7 +29,7 @@ Some keys/commands may behave differently depending on:
 
 ## More input
 Some keys/commands may ask for more input.
-I am not sure this point should be tackle here.
+I am not sure if this point should be tackled here.
 
 ## Multiple / complex actions
 For one key/command, we may want to perform multiple actions.

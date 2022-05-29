@@ -33,7 +33,7 @@ Grapheme
 - [ ] grapheme & input auto-wrap are buggy
 
 Hints Callback
-- [X] Not implemented on windows
+- [X] Not implemented on Windows
 - [X] Do an implementation based on previous history
 
 History

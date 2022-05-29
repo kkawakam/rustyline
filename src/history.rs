@@ -449,14 +449,19 @@ impl FileHistory {
         for entry in self.mem.entries.iter().skip(first_new_entry) {
             let mut bytes = entry.as_bytes();
             while let Some(i) = memchr::memchr2(b'\\', b'\n', bytes) {
-                wtr.write_all(&bytes[..i])?;
-                if bytes[i] == b'\n' {
-                    wtr.write_all(b"\\n")?; // escaped line feed
+                let (head, tail) = bytes.split_at(i);
+                wtr.write_all(head)?;
+
+                let (&escapable_byte, tail) = tail
+                    .split_first()
+                    .expect("memchr guarantees i is a valid index");
+                if escapable_byte == b'\n' {
+                    wtr.write_all(br"\n")?; // escaped line feed
                 } else {
-                    debug_assert_eq!(bytes[i], b'\\');
-                    wtr.write_all(b"\\\\")?; // escaped backslash
+                    debug_assert_eq!(escapable_byte, b'\\');
+                    wtr.write_all(br"\\")?; // escaped backslash
                 }
-                bytes = &bytes[i + 1..];
+                bytes = tail;
             }
             wtr.write_all(bytes)?; // remaining bytes with no \n or \
             wtr.write_all(b"\n")?;

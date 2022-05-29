@@ -1,24 +1,16 @@
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::highlight::Highlighter;
-use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::hint::HistoryHinter;
 use rustyline::history::DefaultHistory;
 use rustyline::{
-    Cmd, ConditionalEventHandler, Context, Editor, Event, EventContext, EventHandler, KeyEvent,
-    RepeatCount, Result,
+    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
+    Result,
 };
-use rustyline_derive::{Completer, Helper, Validator};
+use rustyline_derive::{Completer, Helper, Hinter, Validator};
 
-#[derive(Completer, Helper, Validator)]
-struct MyHelper(HistoryHinter);
-
-impl Hinter for MyHelper {
-    type Hint = String;
-
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
-        self.0.hint(line, pos, ctx)
-    }
-}
+#[derive(Completer, Helper, Hinter, Validator)]
+struct MyHelper(#[rustyline(Hinter)] HistoryHinter);
 
 impl Highlighter for MyHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(

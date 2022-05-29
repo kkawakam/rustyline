@@ -154,7 +154,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
-        read_input(self.conin, std::u32::MAX)
+        read_input(self.conin, u32::MAX)
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
@@ -840,8 +840,8 @@ impl Term for Console {
 impl Drop for Console {
     fn drop(&mut self) {
         if self.close_on_drop {
-            unsafe { handleapi::CloseHandle(self.conin) };
-            unsafe { handleapi::CloseHandle(self.conout) };
+            unsafe { CloseHandle(self.conin) };
+            unsafe { CloseHandle(self.conout) };
         }
     }
 }

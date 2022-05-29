@@ -74,10 +74,10 @@ type ConsoleKeyMap = ();
 #[cfg(not(test))]
 pub type KeyMap = ConsoleKeyMap;
 
-#[must_use = "You must restore default mode (disable_raw_mode)"]
 #[cfg(not(test))]
 pub type Mode = ConsoleMode;
 
+#[must_use = "You must restore default mode (disable_raw_mode)"]
 #[derive(Clone, Debug)]
 pub struct ConsoleMode {
     original_conin_mode: DWORD,

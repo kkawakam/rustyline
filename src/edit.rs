@@ -362,12 +362,14 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         self.line.pos()
     }
 
-    fn external_print(&mut self, rdr: &mut <Terminal as Term>::Reader, msg: String) -> Result<()> {
+    fn external_print(&mut self, msg: String) -> Result<()> {
         self.out.clear_rows(&self.layout)?;
         self.layout.end.row = 0;
         self.layout.cursor.row = 0;
         self.out.write_and_flush(msg.as_str())?;
-        self.move_cursor_at_leftmost(rdr)?;
+        if !msg.ends_with('\n') {
+            self.out.write_and_flush("\n")?;
+        }
         self.refresh_line()
     }
 }

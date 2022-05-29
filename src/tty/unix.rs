@@ -277,7 +277,7 @@ impl PosixRawReader {
     /// Handle \E[ <seq2> escape sequences
     fn escape_csi(&mut self) -> Result<KeyEvent> {
         let seq2 = self.next_char()?;
-        if seq2.is_digit(10) {
+        if seq2.is_ascii_digit() {
             match seq2 {
                 '0' | '9' => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
@@ -349,7 +349,7 @@ impl PosixRawReader {
                     E(K::UnknownEscSeq, M::NONE)
                 }
             })
-        } else if seq3.is_digit(10) {
+        } else if seq3.is_ascii_digit() {
             let seq4 = self.next_char()?;
             if seq4 == '~' {
                 Ok(match (seq2, seq3) {
@@ -375,9 +375,9 @@ impl PosixRawReader {
                 })
             } else if seq4 == ';' {
                 let seq5 = self.next_char()?;
-                if seq5.is_digit(10) {
+                if seq5.is_ascii_digit() {
                     let seq6 = self.next_char()?;
-                    if seq6.is_digit(10) {
+                    if seq6.is_ascii_digit() {
                         self.next_char()?; // 'R' expected
                         Ok(E(K::UnknownEscSeq, M::NONE))
                     } else if seq6 == 'R' {
@@ -415,7 +415,7 @@ impl PosixRawReader {
                            "unsupported esc sequence: \\E[{}{};{:?}", seq2, seq3, seq5);
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
-            } else if seq4.is_digit(10) {
+            } else if seq4.is_ascii_digit() {
                 let seq5 = self.next_char()?;
                 if seq5 == '~' {
                     Ok(match (seq2, seq3, seq4) {
@@ -439,9 +439,9 @@ impl PosixRawReader {
             }
         } else if seq3 == ';' {
             let seq4 = self.next_char()?;
-            if seq4.is_digit(10) {
+            if seq4.is_ascii_digit() {
                 let seq5 = self.next_char()?;
-                if seq5.is_digit(10) {
+                if seq5.is_ascii_digit() {
                     self.next_char()?; // 'R' expected
                                        //('1', '0', UP) => E(K::, M::), // Alt + Shift + Up
                     Ok(E(K::UnknownEscSeq, M::NONE))

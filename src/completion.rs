@@ -175,7 +175,7 @@ cfg_if::cfg_if! {
 }
 
 /// Kind of quote.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Quote {
     /// Double quote: `"`
     Double,
@@ -473,7 +473,7 @@ pub fn longest_common_prefix<C: Candidate>(candidates: &[C]) -> Option<&str> {
     Some(&candidate[0..longest_common_prefix])
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 enum ScanMode {
     DoubleQuote,
     Escape,

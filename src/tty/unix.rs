@@ -1165,10 +1165,10 @@ cfg_if::cfg_if! {
             let flag = sigwinch.clone();
             Ok((
                 sigwinch,
-                unsafe { signal_hook::low_level::register(libc::SIGWINCH, move || {
+                Some(unsafe { signal_hook::low_level::register(libc::SIGWINCH, move || {
                     flag.store(true, Ordering::SeqCst);
                     debug!(target: "rustyline", "SIGWINCH");
-                })? },
+                })? }),
             ))
         }
         type SigWinCh = Arc<AtomicBool>;

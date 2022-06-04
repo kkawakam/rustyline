@@ -141,7 +141,7 @@ impl Read for TtyIn {
                 if error.kind() == ErrorKind::Interrupted && self.sigwinch() {
                     return Err(io::Error::new(
                         ErrorKind::Interrupted,
-                        ReadlineError::WindowResized,
+                        error::WindowResizedError,
                     ));
                 } else if error.kind() != ErrorKind::Interrupted {
                     return Err(error);

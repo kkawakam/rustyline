@@ -50,13 +50,24 @@ impl fmt::Display for ReadlineError {
 
 impl Error for ReadlineError {}
 
+#[cfg(unix)]
+#[derive(Debug)]
+pub(crate) struct WindowResizedError;
+#[cfg(unix)]
+impl fmt::Display for WindowResizedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WindowResized")
+    }
+}
+#[cfg(unix)]
+impl Error for WindowResizedError {}
+
 impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> Self {
         #[cfg(unix)]
         if err.kind() == io::ErrorKind::Interrupted {
             if let Some(e) = err.source() {
-                // FIXME cannot pattern match on e
-                if "WindowResized" == e.to_string() {
+                if e.downcast_ref::<WindowResizedError>().is_some() {
                     return ReadlineError::WindowResized;
                 }
             }

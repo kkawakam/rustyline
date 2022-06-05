@@ -48,7 +48,22 @@ impl fmt::Display for ReadlineError {
     }
 }
 
-impl Error for ReadlineError {}
+impl Error for ReadlineError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            ReadlineError::Io(ref err) => Some(err),
+            ReadlineError::Eof => None,
+            ReadlineError::Interrupted => None,
+            #[cfg(unix)]
+            ReadlineError::Errno(ref err) => Some(err),
+            ReadlineError::WindowResized => None,
+            #[cfg(windows)]
+            ReadlineError::Decode(ref err) => Some(err),
+            #[cfg(windows)]
+            ReadlineError::SystemError(ref err) => Some(err),
+        }
+    }
+}
 
 #[cfg(unix)]
 #[derive(Debug)]
@@ -66,7 +81,7 @@ impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> Self {
         #[cfg(unix)]
         if err.kind() == io::ErrorKind::Interrupted {
-            if let Some(e) = err.source() {
+            if let Some(e) = err.get_ref() {
                 if e.downcast_ref::<WindowResizedError>().is_some() {
                     return ReadlineError::WindowResized;
                 }

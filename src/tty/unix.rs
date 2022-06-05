@@ -701,19 +701,21 @@ impl PosixRawReader {
 
     fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
         let tty_in = self.as_raw_fd();
+        let sigwinch_pipe = self.tty_in.get_ref().sigwinch_pipe;
+        let pipe_reader = self
+            .pipe_reader
+            .as_ref()
+            .map(|pr| pr.lock().unwrap().0.as_raw_fd());
         loop {
             let mut readfds = self.fds;
             readfds.clear();
+            if let Some(sigwinch_pipe) = sigwinch_pipe {
+                readfds.insert(sigwinch_pipe);
+            }
             readfds.insert(tty_in);
-            readfds.insert(
-                self.pipe_reader
-                    .as_ref()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .0
-                    .as_raw_fd(),
-            );
+            if let Some(pipe_reader) = pipe_reader {
+                readfds.insert(pipe_reader);
+            }
             if let Err(err) = select::select(
                 readfds.highest().map(|h| h + 1),
                 Some(&mut readfds),
@@ -729,11 +731,14 @@ impl PosixRawReader {
                     continue;
                 }
             };
-            if readfds.contains(tty_in) {
+            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
+                self.tty_in.get_ref().sigwinch()?;
+                return Err(ReadlineError::WindowResized);
+            } else if readfds.contains(tty_in) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
-            } else {
-                let mut guard = self.pipe_reader.as_ref().unwrap().lock().unwrap();
+            } else if let Some(ref pipe_reader) = self.pipe_reader {
+                let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];
                 guard.0.read_exact(&mut buf)?;
                 if let Ok(msg) = guard.1.try_recv() {
@@ -745,11 +750,17 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
+    #[cfg(not(feature = "signal-hook"))]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         match self.pipe_reader {
             Some(_) => self.select(single_esc_abort),
             None => self.next_key(single_esc_abort).map(Event::KeyPress),
         }
+    }
+
+    #[cfg(feature = "signal-hook")]
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.select(single_esc_abort)
     }
 
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
@@ -1132,7 +1143,6 @@ fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
 static mut SIGWINCH_PIPE: RawFd = -1;
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    debug!(target: "rustyline", "SIGWINCH");
     let _ = unsafe { write(SIGWINCH_PIPE, &[b's']) };
 }
 

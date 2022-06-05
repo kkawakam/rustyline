@@ -85,6 +85,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         loop {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if let Err(ReadlineError::WindowResized) = rc {
+                debug!(target: "rustyline", "SIGWINCH");
                 self.out.update_size();
                 self.prompt_size = self
                     .out

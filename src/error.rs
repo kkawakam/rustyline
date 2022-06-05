@@ -60,7 +60,7 @@ impl Error for ReadlineError {
             #[cfg(windows)]
             ReadlineError::Decode(ref err) => Some(err),
             #[cfg(windows)]
-            ReadlineError::SystemError(ref err) => Some(err),
+            ReadlineError::SystemError(_) => None,
         }
     }
 }

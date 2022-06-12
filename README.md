@@ -209,12 +209,11 @@ Library            | Lang    | OS     | Term  | Unicode | History       | Comple
 --------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
 [go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes        | Yes               |
 [Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | ?          | ?                 |
+[isocline][]       | C       | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs         | No        | Yes  | Yes        | Yes               |
 [linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
 [linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
-[linenoise-ng][]   | C       | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | ?          | ?                 |
 [Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/vi/prog | No        | Yes  | Ux         | History based     |
 [prompt_toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
-[rb-readline][]    | Ruby    | Ux/Win | ANSI  | Yes     | Yes           | only word  | Emacs/vi/conf | Yes       | Yes  | ?          | No                |
 [reedline][]       | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | No        | Yes  | Ux/Win     | Yes               |
 [replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
 Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
@@ -222,12 +221,11 @@ Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any   
 
 [go-prompt]: https://github.com/c-bata/go-prompt
 [Haskeline]: https://github.com/judah/haskeline
+[isocline]: https://github.com/daanx/isocline
 [linefeed]: https://github.com/murarth/linefeed
 [linenoise]: https://github.com/antirez/linenoise
-[linenoise-ng]: https://github.com/arangodb/linenoise-ng
 [Liner]: https://github.com/redox-os/liner
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
-[rb-readline]: https://github.com/ConnorAtherton/rb-readline
 [reedline]: https://github.com/nushell/reedline
 [replxx]: https://github.com/AmokHuginnsson/replxx
 [termwiz]: https://github.com/wez/wezterm/tree/master/termwiz

@@ -22,7 +22,7 @@ impl Validator for InputValidator {
 
 fn main() -> Result<()> {
     let h = InputValidator {};
-    let mut rl = Editor::new();
+    let mut rl = Editor::new()?;
     rl.set_helper(Some(h));
 
     let input = rl.readline("> ")?;

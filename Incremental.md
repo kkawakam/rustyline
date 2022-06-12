@@ -46,7 +46,7 @@ Current granularity:
  * REFRESH whole input / rows
  * CLEAR_SCREEN (+REFRESH)
 
-Wanted additional granurality:
+Wanted additional granularity:
   * PUSH_STRING at end of input
   * REFRESH_DIRTY only rows / cells
 

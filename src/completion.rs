@@ -175,7 +175,7 @@ cfg_if::cfg_if! {
 }
 
 /// Kind of quote.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Quote {
     /// Double quote: `"`
     Double,
@@ -395,7 +395,7 @@ fn filename_complete(
 #[cfg(any(windows, target_os = "macos"))]
 fn normalize(s: &str) -> Cow<str> {
     // case insensitive
-    Cow::Owned(s.to_lowercase())
+    Owned(s.to_lowercase())
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -473,7 +473,7 @@ pub fn longest_common_prefix<C: Candidate>(candidates: &[C]) -> Option<&str> {
     Some(&candidate[0..longest_common_prefix])
 }
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 enum ScanMode {
     DoubleQuote,
     Escape,

@@ -43,6 +43,7 @@ regex = { version = "1.5.4", optional = true }
 nix = { version = "0.24", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
+signal-hook = { version = "0.3", optional = true, default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "synchapi", "winbase", "wincon", "winerror", "winuser"] }

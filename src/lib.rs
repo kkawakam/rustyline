@@ -8,12 +8,13 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::DefaultEditor::new();
+//! let mut rl = rustyline::DefaultEditor::new()?;
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}", line),
 //!     Err(_) => println!("No input"),
 //! }
+//! # Ok::<(), rustyline::error::ReadlineError>(())
 //! ```
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -48,13 +49,14 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, Renderer, Term, Terminal};
+use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
 #[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
+use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
 use crate::history::{DefaultHistory, History, SearchDirection};
@@ -574,6 +576,7 @@ impl<'h> Context<'h> {
 }
 
 /// Line editor
+#[must_use]
 pub struct Editor<H: Helper, I: History> {
     term: Terminal,
     history: I,
@@ -589,37 +592,34 @@ pub type DefaultEditor = Editor<(), DefaultHistory>;
 #[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H, DefaultHistory> {
     /// Create an editor with the default configuration
-    #[must_use]
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         Self::with_config(Config::default())
     }
 
     /// Create an editor with a specific configuration.
-    #[must_use]
-    pub fn with_config(config: Config) -> Self {
+    pub fn with_config(config: Config) -> Result<Self> {
         Self::with_history(config, DefaultHistory::with_config(config))
     }
 }
 
 impl<H: Helper, I: History> Editor<H, I> {
     /// Create an editor with a custom history impl.
-    #[must_use]
-    pub fn with_history(config: Config, history: I) -> Self {
+    pub fn with_history(config: Config, history: I) -> Result<Self> {
         let term = Terminal::new(
             config.color_mode(),
             config.behavior(),
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),
-        );
-        Self {
+        )?;
+        Ok(Self {
             term,
             history,
             helper: None,
             kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
             config,
             custom_bindings: Bindings::new(),
-        }
+        })
     }
 
     /// This method will read a line from STDIN and will display a `prompt`.
@@ -700,7 +700,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         let mut rdr = self.term.create_reader(&self.config, term_key_map);
         if self.term.is_output_tty() && self.config.check_cursor_position() {
             if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-                if s.out.sigwinch() {
+                if let ReadlineError::WindowResized = e {
                     s.out.update_size();
                 } else {
                     return Err(e);
@@ -743,6 +743,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 original_mode.disable_raw_mode()?;
                 tty::suspend()?;
                 let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed
+                s.out.update_size(); // window may have been resized
                 s.refresh_line()?;
                 continue;
             }
@@ -750,7 +751,6 @@ impl<H: Helper, I: History> Editor<H, I> {
             #[cfg(unix)]
             if cmd == Cmd::QuotedInsert {
                 // Quoted insert
-                use crate::tty::RawReader;
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?;
                 continue;
@@ -758,7 +758,6 @@ impl<H: Helper, I: History> Editor<H, I> {
 
             #[cfg(windows)]
             if cmd == Cmd::PasteFromClipboard {
-                use crate::tty::RawReader;
                 let clipboard = rdr.read_pasted_text()?;
                 s.edit_yank(&input_state, &clipboard[..], Anchor::Before, 1)?;
             }
@@ -862,7 +861,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// Returns an iterator over edited lines
     /// ```
-    /// let mut rl = rustyline::DefaultEditor::new();
+    /// let mut rl = rustyline::DefaultEditor::new()?;
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -874,6 +873,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     ///         }
     ///     }
     /// }
+    /// # Ok::<(), rustyline::error::ReadlineError>(())
     /// ```
     pub fn iter<'a>(&'a mut self, prompt: &'a str) -> impl Iterator<Item = Result<String>> + 'a {
         Iter {

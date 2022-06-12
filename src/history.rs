@@ -416,7 +416,7 @@ impl<'a> IntoIterator for &'a MemHistory {
 #[cfg(feature = "with-file-history")]
 pub struct FileHistory {
     mem: MemHistory,
-    /// Number of entries inputed by user and not saved yet
+    /// Number of entries inputted by user and not saved yet
     new_entries: usize,
     /// last path used by either `load` or `save`
     path_info: Option<PathInfo>,

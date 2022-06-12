@@ -86,7 +86,7 @@ impl ConditionalEventHandler for TabEventHandler {
 }
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<MyHelper, DefaultHistory>::new();
+    let mut rl = Editor::<MyHelper, DefaultHistory>::new()?;
     rl.set_helper(Some(MyHelper(HistoryHinter {})));
 
     let ceh = Box::new(CompleteHintHandler);

@@ -122,10 +122,6 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn sigwinch(&self) -> bool {
-        false
-    }
-
     fn update_size(&mut self) {}
 
     fn get_columns(&self) -> usize {
@@ -176,13 +172,13 @@ impl Term for DummyTerminal {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
-    ) -> DummyTerminal {
-        DummyTerminal {
+    ) -> Result<DummyTerminal> {
+        Ok(DummyTerminal {
             keys: Vec::new(),
             cursor: 0,
             color_mode,
             bell_style,
-        }
+        })
     }
 
     // Init checks:

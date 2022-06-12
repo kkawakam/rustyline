@@ -1,7 +1,7 @@
 # Extra features
 
 | Alt            | Scroll | Continuation prompt | Right prompt | Suspend |
-|----------------|--------|---------------------|------------------------|
+|----------------|--------|---------------------|--------------|---------|
 | isocline       |   X    |         X           |              |         |
 | linefeed       |        |                     |              |  Unix   |
 | liner          |        |                     |              |         |
@@ -11,12 +11,12 @@
 | rustyline      |        |                     |              |  Unix   |
 | termwiz        |        |                     |              |         |
 
-Scroll: for very long line (longer than screen cols*rows), scrolls from start to end.
-Continuation prompt: for multiline input, display a different prompt
+Scroll: for very long line (longer than screen cols*rows), scrolls from start to end.\
+Continuation prompt: for multiline input, display a different prompt\
 Suspend: Control-Z
 
 | Alt            | Editable History | Custom history backend | History timestamp |
-|----------------|-------------------------------------------|-------------------|
+|----------------|------------------|------------------------|-------------------|
 | isocline       |                  |                        |                   |
 | linefeed       |       X          |                        |                   |
 | liner          |                  |                        |                   |
@@ -26,8 +26,8 @@ Suspend: Control-Z
 | rustyline      |                  |                        |                   |
 | termwiz        |                  |           X            |         *         |
 
-Editable History: any history entry can be edited and saved
-Custom history backend: history persistence can be customized
+Editable History: any history entry can be edited and saved\
+Custom history backend: history persistence can be customized\
 History timestamp: history entries are timestamped
 
 Mouse support

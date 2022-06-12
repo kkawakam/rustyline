@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use rustyline::{Editor, ExternalPrinter, Result};
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<()>::new();
+    let mut rl = Editor::<()>::new()?;
     let mut printer = rl.create_external_printer()?;
     thread::spawn(move || {
         let mut rng = thread_rng();

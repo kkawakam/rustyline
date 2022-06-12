@@ -14,7 +14,7 @@ use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
-use winapi::um::handleapi::{self, CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
 use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
 use winapi::um::winnt::{CHAR, HANDLE};
@@ -153,7 +153,7 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
-        read_input(self.conin, std::u32::MAX)
+        read_input(self.conin, u32::MAX)
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
@@ -184,11 +184,8 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         total += count;
 
         if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
-            SIGWINCH.store(true, Ordering::SeqCst);
             debug!(target: "rustyline", "SIGWINCH");
-            return Err(error::ReadlineError::WindowResize); // sigwinch +
-                                                            // err => err
-                                                            // ignored
+            return Err(error::ReadlineError::WindowResized);
         } else if rec.EventType != wincon::KEY_EVENT {
             continue;
         }
@@ -531,12 +528,6 @@ impl Renderer for ConsoleRenderer {
         self.clear_old_rows(&info, layout)
     }
 
-    fn sigwinch(&self) -> bool {
-        SIGWINCH
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .unwrap_or(false)
-    }
-
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {
@@ -616,8 +607,6 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
     Ok(())
 }
 
-static SIGWINCH: AtomicBool = AtomicBool::new(false);
-
 #[cfg(not(test))]
 pub type Terminal = Console;
 
@@ -662,7 +651,7 @@ impl Term for Console {
         _tab_stop: u16,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
-    ) -> Console {
+    ) -> Result<Console> {
         let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (
                 OpenOptions::new().read(true).write(true).open("CONIN$"),
@@ -703,7 +692,7 @@ impl Term for Console {
             Err(_) => false,
         };
 
-        Console {
+        Ok(Console {
             conin_isatty,
             conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
@@ -715,7 +704,7 @@ impl Term for Console {
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
-        }
+        })
     }
 
     /// Checking for an unsupported TERM in windows is a no-op
@@ -858,8 +847,8 @@ impl Term for Console {
 impl Drop for Console {
     fn drop(&mut self) {
         if self.close_on_drop {
-            unsafe { handleapi::CloseHandle(self.conin) };
-            unsafe { handleapi::CloseHandle(self.conout) };
+            unsafe { CloseHandle(self.conin) };
+            unsafe { CloseHandle(self.conout) };
         }
     }
 }

@@ -85,7 +85,7 @@ fn main() -> Result<()> {
     println!("This is a DIY hint hack of rustyline");
     let h = DIYHinter { hints: diy_hints() };
 
-    let mut rl: Editor<DIYHinter> = Editor::new();
+    let mut rl: Editor<DIYHinter> = Editor::new()?;
     rl.set_helper(Some(h));
 
     loop {

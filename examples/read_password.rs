@@ -28,7 +28,7 @@ impl Highlighter for MaskingHighlighter {
 fn main() -> Result<()> {
     println!("This is just a hack. Reading passwords securely requires more than that.");
     let h = MaskingHighlighter { masking: false };
-    let mut rl = Editor::new();
+    let mut rl = Editor::new()?;
     rl.set_helper(Some(h));
 
     let username = rl.readline("Username:")?;

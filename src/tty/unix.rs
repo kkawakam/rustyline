@@ -4,17 +4,17 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
-use std::sync::{self, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 
 use log::{debug, warn};
 use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
 use nix::sys::select::{self, FdSet};
-use nix::sys::signal;
 use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
-use nix::unistd::{close, isatty, write};
+use nix::unistd::{close, isatty, read, write};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
@@ -24,7 +24,7 @@ use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
-use crate::{error, Cmd, Result};
+use crate::{error, Cmd, ReadlineError, Result};
 
 /// Unsupported Terminals that don't support RAW mode
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
@@ -90,7 +90,7 @@ pub type KeyMap = PosixKeyMap;
 
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
-    termios: termios::Termios,
+    termios: Termios,
     tty_in: RawFd,
     tty_out: Option<RawFd>,
     raw_mode: Arc<AtomicBool>,
@@ -116,6 +116,7 @@ impl RawMode for PosixMode {
 // So we use low-level stuff instead...
 struct TtyIn {
     fd: RawFd,
+    sigwinch_pipe: Option<RawFd>,
 }
 
 impl Read for TtyIn {
@@ -130,13 +131,35 @@ impl Read for TtyIn {
             };
             if res == -1 {
                 let error = io::Error::last_os_error();
-                if error.kind() != ErrorKind::Interrupted || SIGWINCH.load(Ordering::Relaxed) {
+                if error.kind() == ErrorKind::Interrupted && self.sigwinch()? {
+                    return Err(io::Error::new(
+                        ErrorKind::Interrupted,
+                        error::WindowResizedError,
+                    ));
+                } else if error.kind() != ErrorKind::Interrupted {
                     return Err(error);
                 }
             } else {
                 #[allow(clippy::cast_sign_loss)]
                 return Ok(res as usize);
             }
+        }
+    }
+}
+
+impl TtyIn {
+    /// Check if a SIGWINCH signal has been received
+    fn sigwinch(&self) -> nix::Result<bool> {
+        if let Some(pipe) = self.sigwinch_pipe {
+            let mut buf = [0u8; 64];
+            match read(pipe, &mut buf) {
+                Ok(0) => Ok(false),
+                Ok(_) => Ok(true),
+                Err(e) if e == Errno::EWOULDBLOCK || e == Errno::EINTR => Ok(false),
+                Err(e) => Err(e),
+            }
+        } else {
+            Ok(false)
         }
     }
 }
@@ -197,12 +220,13 @@ const RXVT_CTRL_SHIFT: char = '@';
 impl PosixRawReader {
     fn new(
         fd: RawFd,
+        sigwinch_pipe: Option<RawFd>,
         config: &Config,
         key_map: PosixKeyMap,
         pipe_reader: Option<PipeReader>,
     ) -> Self {
         Self {
-            tty_in: BufReader::with_capacity(1024, TtyIn { fd }),
+            tty_in: BufReader::with_capacity(1024, TtyIn { fd, sigwinch_pipe }),
             timeout_ms: config.keyseq_timeout(),
             parser: Parser::new(),
             key_map,
@@ -651,7 +675,7 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: i32) -> ::nix::Result<i32> {
+    fn poll(&mut self, timeout_ms: i32) -> Result<i32> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
@@ -659,33 +683,35 @@ impl PosixRawReader {
         let mut fds = [poll::PollFd::new(self.as_raw_fd(), PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
-            Ok(_) => r,
+            Ok(n) => Ok(n),
             Err(Errno::EINTR) => {
-                if SIGWINCH.load(Ordering::Relaxed) {
-                    r
+                if self.tty_in.get_ref().sigwinch()? {
+                    Err(ReadlineError::WindowResized)
                 } else {
                     Ok(0) // Ignore EINTR while polling
                 }
             }
-            Err(_) => r,
+            Err(e) => Err(e.into()),
         }
     }
 
     fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
         let tty_in = self.as_raw_fd();
+        let sigwinch_pipe = self.tty_in.get_ref().sigwinch_pipe;
+        let pipe_reader = self
+            .pipe_reader
+            .as_ref()
+            .map(|pr| pr.lock().unwrap().0.as_raw_fd());
         loop {
             let mut readfds = self.fds;
             readfds.clear();
+            if let Some(sigwinch_pipe) = sigwinch_pipe {
+                readfds.insert(sigwinch_pipe);
+            }
             readfds.insert(tty_in);
-            readfds.insert(
-                self.pipe_reader
-                    .as_ref()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .0
-                    .as_raw_fd(),
-            );
+            if let Some(pipe_reader) = pipe_reader {
+                readfds.insert(pipe_reader);
+            }
             if let Err(err) = select::select(
                 readfds.highest().map(|h| h + 1),
                 Some(&mut readfds),
@@ -693,17 +719,22 @@ impl PosixRawReader {
                 None,
                 None,
             ) {
-                if err != ::nix::errno::Errno::EINTR || SIGWINCH.load(Ordering::Relaxed) {
+                if err == Errno::EINTR && self.tty_in.get_ref().sigwinch()? {
+                    return Err(ReadlineError::WindowResized);
+                } else if err != Errno::EINTR {
                     return Err(err.into());
                 } else {
                     continue;
                 }
             };
-            if readfds.contains(tty_in) {
+            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
+                self.tty_in.get_ref().sigwinch()?;
+                return Err(ReadlineError::WindowResized);
+            } else if readfds.contains(tty_in) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
-            } else {
-                let mut guard = self.pipe_reader.as_ref().unwrap().lock().unwrap();
+            } else if let Some(ref pipe_reader) = self.pipe_reader {
+                let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];
                 guard.0.read_exact(&mut buf)?;
                 if let Ok(msg) = guard.1.try_recv() {
@@ -715,11 +746,17 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
+    #[cfg(not(feature = "signal-hook"))]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         match self.pipe_reader {
             Some(_) => self.select(single_esc_abort),
             None => self.next_key(single_esc_abort).map(Event::KeyPress),
         }
+    }
+
+    #[cfg(feature = "signal-hook")]
+    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        self.select(single_esc_abort)
     }
 
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
@@ -744,7 +781,7 @@ impl RawReader for PosixRawReader {
                     key = self.escape_sequence()?
                 }
                 // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             }
         }
         debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);
@@ -765,7 +802,7 @@ impl RawReader for PosixRawReader {
             let b = buf[0];
             self.parser.advance(&mut receiver, b);
             if !receiver.valid {
-                return Err(error::ReadlineError::from(io::ErrorKind::InvalidData));
+                return Err(error::ReadlineError::from(ErrorKind::InvalidData));
             } else if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }
@@ -1035,13 +1072,6 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
-    /// Check if a SIGWINCH signal has been received
-    fn sigwinch(&self) -> bool {
-        SIGWINCH
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .unwrap_or(false)
-    }
-
     /// Try to update the number of columns in the current terminal,
     fn update_size(&mut self) {
         let (cols, rows) = get_win_size(self.out);
@@ -1105,7 +1135,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
     Ok(Some(num))
 }
 
-fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
+fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
     let mut bytes = buf.as_bytes();
     while !bytes.is_empty() {
         match write(fd, bytes) {
@@ -1118,23 +1148,67 @@ fn write_all(fd: RawFd, buf: &str) -> ::nix::Result<()> {
     Ok(())
 }
 
-static SIGWINCH_ONCE: sync::Once = sync::Once::new();
-static SIGWINCH: AtomicBool = AtomicBool::new(false);
+#[cfg(not(feature = "signal-hook"))]
+static mut SIGWINCH_PIPE: RawFd = -1;
+#[cfg(not(feature = "signal-hook"))]
+extern "C" fn sigwinch_handler(_: libc::c_int) {
+    let _ = unsafe { write(SIGWINCH_PIPE, &[b's']) };
+}
 
-fn install_sigwinch_handler() {
-    SIGWINCH_ONCE.call_once(|| unsafe {
+#[derive(Clone, Debug)]
+struct SigWinCh {
+    pipe: RawFd,
+    #[cfg(not(feature = "signal-hook"))]
+    original: nix::sys::signal::SigAction,
+    #[cfg(feature = "signal-hook")]
+    id: signal_hook::SigId,
+}
+impl SigWinCh {
+    #[cfg(not(feature = "signal-hook"))]
+    fn install_sigwinch_handler() -> Result<SigWinCh> {
+        use nix::sys::signal;
+        let (pipe, pipe_write) = UnixStream::pair()?;
+        pipe.set_nonblocking(true)?;
+        unsafe { SIGWINCH_PIPE = pipe_write.into_raw_fd() };
         let sigwinch = signal::SigAction::new(
             signal::SigHandler::Handler(sigwinch_handler),
             signal::SaFlags::empty(),
             signal::SigSet::empty(),
         );
-        let _ = signal::sigaction(signal::SIGWINCH, &sigwinch);
-    });
-}
+        let original = unsafe { signal::sigaction(signal::SIGWINCH, &sigwinch)? };
+        Ok(SigWinCh {
+            pipe: pipe.into_raw_fd(),
+            original,
+        })
+    }
 
-extern "C" fn sigwinch_handler(_: libc::c_int) {
-    SIGWINCH.store(true, Ordering::SeqCst);
-    debug!(target: "rustyline", "SIGWINCH");
+    #[cfg(feature = "signal-hook")]
+    fn install_sigwinch_handler() -> Result<SigWinCh> {
+        let (pipe, pipe_write) = UnixStream::pair()?;
+        pipe.set_nonblocking(true)?;
+        let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
+        Ok(SigWinCh {
+            pipe: pipe.into_raw_fd(),
+            id,
+        })
+    }
+
+    #[cfg(not(feature = "signal-hook"))]
+    fn uninstall_sigwinch_handler(self) -> Result<()> {
+        use nix::sys::signal;
+        let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original)? };
+        close(self.pipe)?;
+        unsafe { close(SIGWINCH_PIPE)? };
+        unsafe { SIGWINCH_PIPE = -1 };
+        Ok(())
+    }
+
+    #[cfg(feature = "signal-hook")]
+    fn uninstall_sigwinch_handler(self) -> Result<()> {
+        signal_hook::low_level::unregister(self.id);
+        close(self.pipe)?;
+        Ok(())
+    }
 }
 
 fn map_key(key_map: &mut HashMap<KeyEvent, Cmd>, raw: &Termios, index: SCI, name: &str, cmd: Cmd) {
@@ -1164,6 +1238,7 @@ pub struct PosixTerminal {
     pipe_reader: Option<PipeReader>,
     // external print writer
     pipe_writer: Option<PipeWriter>,
+    sigwinch: Option<SigWinCh>,
 }
 
 impl PosixTerminal {
@@ -1189,7 +1264,7 @@ impl Term for PosixTerminal {
         tab_stop: u16,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
-    ) -> Self {
+    ) -> Result<Self> {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
             if behavior == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
@@ -1215,8 +1290,15 @@ impl Term for PosixTerminal {
                     false,
                 )
             };
-        let term = Self {
-            unsupported: is_unsupported_term(),
+        let unsupported = is_unsupported_term();
+        #[allow(unused_variables)]
+        let sigwinch = if !unsupported && is_in_a_tty && is_out_a_tty {
+            Some(SigWinCh::install_sigwinch_handler()?)
+        } else {
+            None
+        };
+        Ok(Self {
+            unsupported,
             tty_in,
             is_in_a_tty,
             tty_out,
@@ -1229,11 +1311,8 @@ impl Term for PosixTerminal {
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
-        };
-        if !term.unsupported && term.is_in_a_tty && term.is_out_a_tty {
-            install_sigwinch_handler();
-        }
-        term
+            sigwinch,
+        })
     }
 
     // Init checks:
@@ -1319,7 +1398,13 @@ impl Term for PosixTerminal {
 
     /// Create a RAW reader
     fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> PosixRawReader {
-        PosixRawReader::new(self.tty_in, config, key_map, self.pipe_reader.clone())
+        PosixRawReader::new(
+            self.tty_in,
+            self.sigwinch.as_ref().map(|s| s.pipe),
+            config,
+            key_map,
+            self.pipe_reader.clone(),
+        )
     }
 
     fn create_writer(&self) -> PosixRenderer {
@@ -1373,6 +1458,9 @@ impl Drop for PosixTerminal {
             close(self.tty_in);
             debug_assert_eq!(self.tty_in, self.tty_out);
         }
+        if let Some(sigwinch) = self.sigwinch.take() {
+            sigwinch.uninstall_sigwinch_handler();
+        }
     }
 }
 
@@ -1404,6 +1492,7 @@ impl super::ExternalPrinter for ExternalPrinter {
 
 #[cfg(not(test))]
 pub fn suspend() -> Result<()> {
+    use nix::sys::signal;
     use nix::unistd::Pid;
     // suspend the whole process group
     signal::kill(Pid::from_raw(0), signal::SIGTSTP)?;
@@ -1427,10 +1516,10 @@ mod test {
 
     #[test]
     fn test_unsupported_term() {
-        ::std::env::set_var("TERM", "xterm");
+        std::env::set_var("TERM", "xterm");
         assert!(!super::is_unsupported_term());
 
-        ::std::env::set_var("TERM", "dumb");
+        std::env::set_var("TERM", "dumb");
         assert!(super::is_unsupported_term());
     }
 

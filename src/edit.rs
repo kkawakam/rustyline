@@ -8,6 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
+use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::hint::Hint;
 use crate::history::SearchDirection;
@@ -83,7 +84,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     ) -> Result<Cmd> {
         loop {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
-            if rc.is_err() && self.out.sigwinch() {
+            if let Err(ReadlineError::WindowResized) = rc {
+                debug!(target: "rustyline", "SIGWINCH");
                 self.out.update_size();
                 self.prompt_size = self
                     .out

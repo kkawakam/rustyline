@@ -37,7 +37,7 @@ unicode-segmentation = "1.0"
 memchr = "2.0"
 # For custom bindings
 radix_trie = { version = "0.2", optional = true }
-regex = { version = "1.5.4", optional = true }
+regex = { version = "1.5.5", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.24", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }

@@ -77,7 +77,7 @@ impl ConditionalEventHandler for TabEventHandler {
             .filter(|c| c.is_whitespace())
             .is_some()
         {
-            Some(Cmd::SelfInsert(n, '\t'))
+            Some(Cmd::Insert(n, "\t".into()))
         } else {
             None // default complete
         }

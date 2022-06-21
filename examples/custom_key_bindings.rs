@@ -3,8 +3,8 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::{
-    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
-    Result,
+    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyCode, KeyEvent,
+    Modifiers, RepeatCount, Result,
 };
 use rustyline_derive::{Completer, Helper, Hinter, Validator};
 
@@ -69,7 +69,7 @@ impl ConditionalEventHandler for CompleteHintHandler {
 struct TabEventHandler;
 impl ConditionalEventHandler for TabEventHandler {
     fn handle(&self, evt: &Event, n: RepeatCount, _: bool, ctx: &EventContext) -> Option<Cmd> {
-        debug_assert_eq!(*evt, Event::from(KeyEvent::from('\t')));
+        debug_assert_eq!(*evt, Event::from(KeyEvent(KeyCode::Tab, Modifiers::NONE)));
         if ctx.line()[..ctx.pos()]
             .chars()
             .rev()
@@ -77,7 +77,13 @@ impl ConditionalEventHandler for TabEventHandler {
             .filter(|c| c.is_whitespace())
             .is_some()
         {
-            Some(Cmd::Insert(n, "\t".into()))
+            if cfg!(target_os = "windows") {
+                // Inserting a tab is broken in windows with rustyline
+                // use 4 spaces as a workaround for now
+                Some(Cmd::Insert(n, "    ".into()))
+            } else {
+                Some(Cmd::Insert(n, "\t".into()))
+            }
         } else {
             None // default complete
         }
@@ -92,7 +98,7 @@ fn main() -> Result<()> {
     rl.bind_sequence(KeyEvent::ctrl('E'), EventHandler::Conditional(ceh.clone()));
     rl.bind_sequence(KeyEvent::alt('f'), EventHandler::Conditional(ceh));
     rl.bind_sequence(
-        KeyEvent::from('\t'),
+        KeyEvent(KeyCode::Tab, Modifiers::NONE),
         EventHandler::Conditional(Box::new(TabEventHandler)),
     );
     rl.bind_sequence(

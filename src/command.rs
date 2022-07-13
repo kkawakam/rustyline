@@ -140,12 +140,14 @@ pub fn execute<H: Helper>(
                 ) => {
                     return Ok(Submit);
                 }
-                (Cmd::Newline, ..)
-                | (Cmd::AcceptOrInsertLine { .. }, false, _)
+                (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
                     if valid || !validation_result.has_message() {
                         s.edit_insert('\n', 1)?;
                     }
+                }
+                (Cmd::Newline, ..) => {
+                    s.edit_insert('\n', 1)?;
                 }
                 _ => unreachable!(),
             }

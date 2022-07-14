@@ -49,19 +49,6 @@ impl CommandCompleter {
     }
 }
 
-impl Completer for CommandCompleter {
-    type Candidate = Pair;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        _ctx: &Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        self.find_matches(line, pos)
-    }
-}
-
 #[derive(Helper, Hinter, Validator, Highlighter)]
 struct MyHelper {
     file_completer: FilenameCompleter,

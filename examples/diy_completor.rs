@@ -1,8 +1,7 @@
 use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
-use rustyline::hint::Hinter;
 use rustyline::{CompletionType, Config, Context, EditMode, Editor};
-use rustyline_derive::{Helper, Highlighter, Validator};
+use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
 use std::collections::HashSet;
 
 const DEFAULT_BREAK_CHARS: [u8; 3] = [b' ', b'\t', b'\n'];
@@ -15,7 +14,10 @@ struct Command {
 
 impl Command {
     fn new(cmd: &str, pre_cmd: &str) -> Self {
-        Self { cmd: cmd.into(), pre_cmd: pre_cmd.into() }
+        Self {
+            cmd: cmd.into(),
+            pre_cmd: pre_cmd.into(),
+        }
     }
 }
 struct CommandCompleter {
@@ -27,17 +29,17 @@ impl CommandCompleter {
         let (start, word) = extract_word(line, pos, None, &DEFAULT_BREAK_CHARS);
         let pre_cmd = line[..start].trim();
 
-        let matches = self.cmds
+        let matches = self
+            .cmds
             .iter()
             .filter_map(|hint| {
-                if hint.cmd.starts_with(word) 
-                    && pre_cmd == &hint.pre_cmd {
-                        let mut replacement = hint.cmd.clone();
-                        replacement += " ";
-                        Some(Pair {
-                            display: hint.cmd.to_string(),
-                            replacement: replacement.to_string(),
-                        })
+                if hint.cmd.starts_with(word) && pre_cmd == &hint.pre_cmd {
+                    let mut replacement = hint.cmd.clone();
+                    replacement += " ";
+                    Some(Pair {
+                        display: hint.cmd.to_string(),
+                        replacement: replacement.to_string(),
+                    })
                 } else {
                     None
                 }
@@ -60,9 +62,8 @@ impl Completer for CommandCompleter {
     }
 }
 
-#[derive(Helper, Validator, Highlighter)]
+#[derive(Helper, Hinter, Validator, Highlighter)]
 struct MyHelper {
-    #[rustyline(Completer)]
     file_completer: FilenameCompleter,
     cmd_completer: CommandCompleter,
 }
@@ -76,24 +77,16 @@ impl Completer for MyHelper {
         pos: usize,
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        match self.cmd_completer.complete(line, pos, ctx) {
+        match self.cmd_completer.find_matches(line, pos) {
             Ok((start, matches)) => {
                 if matches.is_empty() {
                     self.file_completer.complete(line, pos, ctx)
                 } else {
                     Ok((start, matches))
                 }
-            },
+            }
             Err(e) => Err(e),
         }
-    }
-}
-
-impl Hinter for MyHelper {
-    type Hint = String;
-
-    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<String> {
-        None
     }
 }
 
@@ -137,8 +130,7 @@ fn main() -> rustyline::Result<()> {
     loop {
         let p = format!("{}> ", count);
         let readline = rl.readline(&p)?;
-        println!("Line: {}", readline);            
+        println!("Line: {}", readline);
         count += 1;
     }
 }
-

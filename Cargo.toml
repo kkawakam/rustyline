@@ -40,7 +40,7 @@ radix_trie = { version = "0.2", optional = true }
 regex = { version = "1.5.5", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.24", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
+nix = { version = "0.25", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
 utf8parse = "0.2"
 skim = { version = "0.9", optional = true }
 signal-hook = { version = "0.3", optional = true, default-features = false }

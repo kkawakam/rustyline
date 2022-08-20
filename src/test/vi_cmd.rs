@@ -59,6 +59,16 @@ fn caret() {
 }
 
 #[test]
+fn caret_no_whitespace() {
+    assert_cursor(
+        EditMode::Vi,
+        ("Hi", ""),
+        &[E::ESC, E::from('^'), E::ENTER],
+        ("", "Hi"),
+    );
+}
+
+#[test]
 fn a() {
     assert_cursor(
         EditMode::Vi,

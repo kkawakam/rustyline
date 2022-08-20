@@ -51,7 +51,9 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::ViFirstPrint) => {
             s.edit_move_home()?;
-            s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            if s.line.starts_with(char::is_whitespace) {
+                s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            }
         }
         Cmd::Move(Movement::BackwardChar(n)) => {
             // Move back a character.

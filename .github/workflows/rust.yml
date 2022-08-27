@@ -4,21 +4,20 @@ on:
   push:
     branches: [master]
     paths:
-      - '**.rs'
-      - '**.toml'
-      - '.github/workflows/rust.yml'
+      - "**.rs"
+      - "**.toml"
+      - ".github/workflows/rust.yml"
   pull_request:
     paths:
-      - '**.rs'
-      - '**.toml'
-      - '.github/workflows/rust.yml'
-      - '*.md'
+      - "**.rs"
+      - "**.toml"
+      - ".github/workflows/rust.yml"
+      - "*.md"
 env:
   RUST_BACKTRACE: short
   RUSTFLAGS: -Cdebuginfo=1
 jobs:
   build:
-
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -26,25 +25,25 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v2
-    - uses: hecrj/setup-rust-action@v1
-      with:
-        components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@v1
-    - name: Build
-      run: cargo build --workspace --all-targets
-    - name: Run tests
-      run: cargo test --workspace --all-targets
-    - name: Run doctests
-      run: cargo test --workspace --doc
-    - name: Test features
-      if: matrix.os != 'windows-latest'
-      run: cargo test --workspace --all-targets --all-features
-    - name: Clippy
-      run: cargo clippy --workspace -- -D warnings
-    - name: Format
-      run: cargo fmt --all -- --check
-    - name: Check with no default features
-      run: cargo check --workspace --no-default-features
-      env:
-        RUSTFLAGS: "-D warnings"
+      - uses: actions/checkout@v2
+      - uses: hecrj/setup-rust-action@v1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v1
+      - name: Build
+        run: cargo build --workspace --all-targets
+      - name: Run tests
+        run: cargo test --workspace --all-targets
+      - name: Run doctests
+        run: cargo test --workspace --doc
+      - name: Test features
+        if: matrix.os != 'windows-latest'
+        run: cargo test --workspace --all-targets --all-features
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Check with no default features
+        run: cargo check --workspace --no-default-features
+        env:
+          RUSTFLAGS: "-D warnings"

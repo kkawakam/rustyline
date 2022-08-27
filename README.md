@@ -1,4 +1,5 @@
 # RustyLine
+
 [![Build Status](https://github.com/kkawakam/rustyline/workflows/Rust/badge.svg)](https://github.com/kkawakam/rustyline/actions)
 [![dependency status](https://deps.rs/repo/github/kkawakam/rustyline/status.svg)](https://deps.rs/repo/github/kkawakam/rustyline)
 [![](https://img.shields.io/crates/v/rustyline.svg)](https://crates.io/crates/rustyline)
@@ -7,17 +8,20 @@
 Readline implementation in Rust that is based on [Antirez' Linenoise](https://github.com/antirez/linenoise)
 
 **Supported Platforms**
-* Unix (tested on FreeBSD, Linux and macOS)
-* Windows
-   * cmd.exe
-   * Powershell
+
+- Unix (tested on FreeBSD, Linux and macOS)
+- Windows
+  - cmd.exe
+  - Powershell
 
 **Note**:
-* Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
-* Mintty (Cygwin/MinGW) is not supported
-* Highlighting / Colors are not supported on Windows < Windows 10 except with ConEmu and `ColorMode::Forced`.
+
+- Powershell ISE is not supported, check [issue #56](https://github.com/kkawakam/rustyline/issues/56)
+- Mintty (Cygwin/MinGW) is not supported
+- Highlighting / Colors are not supported on Windows < Windows 10 except with ConEmu and `ColorMode::Forced`.
 
 ## Example
+
 ```rust
 use rustyline::error::ReadlineError;
 use rustyline::{Editor, Result};
@@ -54,6 +58,7 @@ fn main() -> Result<()> {
 ```
 
 ## crates.io
+
 You can use this package in your project by adding the following
 to your `Cargo.toml`:
 
@@ -64,28 +69,28 @@ rustyline = "10.0.0"
 
 ## Features
 
- - Unicode (UTF-8) (linenoise supports only ASCII)
- - Word completion (linenoise supports only line completion)
- - Filename completion
- - History search ([Searching for Commands in the History](http://tiswww.case.edu/php/chet/readline/readline.html#SEC8))
- - Kill ring ([Killing Commands](http://tiswww.case.edu/php/chet/readline/readline.html#IDX3))
- - Multi line support (line wrapping)
- - Word commands
- - Hints
+- Unicode (UTF-8) (linenoise supports only ASCII)
+- Word completion (linenoise supports only line completion)
+- Filename completion
+- History search ([Searching for Commands in the History](http://tiswww.case.edu/php/chet/readline/readline.html#SEC8))
+- Kill ring ([Killing Commands](http://tiswww.case.edu/php/chet/readline/readline.html#IDX3))
+- Multi line support (line wrapping)
+- Word commands
+- Hints
 
 ## Actions
 
 For all modes:
 
 | Keystroke             | Action                                                                      |
-|-----------------------|-----------------------------------------------------------------------------|
+| --------------------- | --------------------------------------------------------------------------- |
 | Home                  | Move cursor to the beginning of line                                        |
 | End                   | Move cursor to end of line                                                  |
 | Left                  | Move cursor one character left                                              |
 | Right                 | Move cursor one character right                                             |
 | Ctrl-C                | Interrupt/Cancel edition                                                    |
-| Ctrl-D, Del           | (if line is *not* empty) Delete character under cursor                      |
-| Ctrl-D                | (if line *is* empty) End of File                                            |
+| Ctrl-D, Del           | (if line is _not_ empty) Delete character under cursor                      |
+| Ctrl-D                | (if line _is_ empty) End of File                                            |
 | Ctrl-J, Ctrl-M, Enter | Finish the line entry                                                       |
 | Ctrl-R                | Reverse Search history (Ctrl-S forward, Ctrl-G cancel)                      |
 | Ctrl-T                | Transpose previous character with current character                         |
@@ -94,12 +99,12 @@ For all modes:
 | Ctrl-W                | Delete word leading up to cursor (using white space as a word boundary)     |
 | Ctrl-Y                | Paste from Yank buffer                                                      |
 | Ctrl-Z                | Suspend (Unix only)                                                         |
-| Ctrl-_                | Undo                                                                        |
+| Ctrl-\_               | Undo                                                                        |
 
 ### Emacs mode (default mode)
 
 | Keystroke         | Action                                                                                           |
-|-------------------|--------------------------------------------------------------------------------------------------|
+| ----------------- | ------------------------------------------------------------------------------------------------ |
 | Ctrl-A, Home      | Move cursor to the beginning of line                                                             |
 | Ctrl-B, Left      | Move cursor one character left                                                                   |
 | Ctrl-E, End       | Move cursor to end of line                                                                       |
@@ -130,7 +135,7 @@ For all modes:
 ### vi command mode
 
 | Keystroke            | Action                                                                      |
-|----------------------|-----------------------------------------------------------------------------|
+| -------------------- | --------------------------------------------------------------------------- |
 | $, End               | Move cursor to end of line                                                  |
 | .                    | Redo the last text modification                                             |
 | ;                    | Redo the last character finding command                                     |
@@ -173,7 +178,7 @@ For all modes:
 ### vi insert mode
 
 | Keystroke         | Action                         |
-|-------------------|--------------------------------|
+| ----------------- | ------------------------------ |
 | Ctrl-H, Backspace | Delete character before cursor |
 | Ctrl-I, Tab       | Next completion                |
 | Esc               | Switch to command mode         |
@@ -205,26 +210,26 @@ $ infocmp
 
 ## Similar projects
 
-Library            | Lang    | OS     | Term  | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
---------           | ----    | --     | ----  | ------- | -------       | ---------- | -------       | --------- | ---- | ------     | ----------------- |
-[go-prompt][]      | Go      | Ux/win | ANSI  | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes        | Yes               |
-[Haskeline][]      | Haskell | Ux/Win | Any   | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | ?          | ?                 |
-[isocline][]       | C       | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs         | No        | Yes  | Yes        | Yes               |
-[linefeed][]       | Rust    | Ux/Win | Any   |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
-[linenoise][]      | C       | Ux     | ANSI  | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
-[Liner][]          | Rust    | Ux     | ANSI  |         | No inc search | only word  | Emacs/vi/prog | No        | Yes  | Ux         | History based     |
-[prompt_toolkit][] | Python  | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
-[reedline][]       | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | No        | Yes  | Ux/Win     | Yes               |
-[replxx][]         | C/C++   | Ux/Win | ANSI  | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
-Rustyline          | Rust    | Ux/Win | ANSI  | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
-[termwiz][]        | Rust    | Ux/Win | Any   | ?       | Yes           | any        | Emacs         | No        | No   | Ux/Win     | No                |
+| Library            | Lang    | OS     | Term | Unicode | History       | Completion | Keymap        | Kill Ring | Undo | Colors     | Hint/Auto suggest |
+| ------------------ | ------- | ------ | ---- | ------- | ------------- | ---------- | ------------- | --------- | ---- | ---------- | ----------------- |
+| [go-prompt][]      | Go      | Ux/win | ANSI | Yes     | Yes           | any        | Emacs/prog    | No        | No   | Yes        | Yes               |
+| [Haskeline][]      | Haskell | Ux/Win | Any  | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | ?          | ?                 |
+| [isocline][]       | C       | Ux/Win | ANSI | Yes     | Yes           | any        | Emacs         | No        | Yes  | Yes        | Yes               |
+| [linefeed][]       | Rust    | Ux/Win | Any  |         | Yes           | any        | Emacs/conf    | Yes       | No   | ?          | No                |
+| [linenoise][]      | C       | Ux     | ANSI | No      | Yes           | only line  | Emacs         | No        | No   | Ux         | Yes               |
+| [Liner][]          | Rust    | Ux     | ANSI |         | No inc search | only word  | Emacs/vi/prog | No        | Yes  | Ux         | History based     |
+| [prompt_toolkit][] | Python  | Ux/Win | ANSI | Yes     | Yes           | any        | Emacs/vi/conf | Yes       | Yes  | Ux/Win     | Yes               |
+| [reedline][]       | Rust    | Ux/Win | ANSI | Yes     | Yes           | any        | Emacs/vi/bind | No        | Yes  | Ux/Win     | Yes               |
+| [replxx][]         | C/C++   | Ux/Win | ANSI | Yes     | Yes           | only line  | Emacs         | Yes       | No   | Ux/Win     | Yes               |
+| Rustyline          | Rust    | Ux/Win | ANSI | Yes     | Yes           | any        | Emacs/vi/bind | Yes       | Yes  | Ux/Win 10+ | Yes               |
+| [termwiz][]        | Rust    | Ux/Win | Any  | ?       | Yes           | any        | Emacs         | No        | No   | Ux/Win     | No                |
 
 [go-prompt]: https://github.com/c-bata/go-prompt
-[Haskeline]: https://github.com/judah/haskeline
+[haskeline]: https://github.com/judah/haskeline
 [isocline]: https://github.com/daanx/isocline
 [linefeed]: https://github.com/murarth/linefeed
 [linenoise]: https://github.com/antirez/linenoise
-[Liner]: https://github.com/redox-os/liner
+[liner]: https://github.com/redox-os/liner
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [reedline]: https://github.com/nushell/reedline
 [replxx]: https://github.com/AmokHuginnsson/replxx

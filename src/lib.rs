@@ -847,7 +847,8 @@ impl<H: Helper> Editor<H> {
             .remove(&Event::normalize(key_seq.into()))
     }
 
-    /// Returns an iterator over edited lines
+    /// Returns an iterator over edited lines.
+    /// Iterator ends at [EOF](ReadlineError::Eof).
     /// ```
     /// let mut rl = rustyline::Editor::<()>::new()?;
     /// for readline in rl.iter("> ") {

@@ -255,24 +255,20 @@ impl Changeset {
         let mut count = 0;
         let mut waiting_for_begin = 0;
         let mut undone = false;
-        loop {
-            if let Some(change) = self.undos.pop() {
-                match change {
-                    Change::Begin => {
-                        waiting_for_begin -= 1;
-                    }
-                    Change::End => {
-                        waiting_for_begin += 1;
-                    }
-                    _ => {
-                        change.undo(line);
-                        undone = true;
-                    }
-                };
-                self.redos.push(change);
-            } else {
-                break;
-            }
+        while let Some(change) = self.undos.pop() {
+            match change {
+                Change::Begin => {
+                    waiting_for_begin -= 1;
+                }
+                Change::End => {
+                    waiting_for_begin += 1;
+                }
+                _ => {
+                    change.undo(line);
+                    undone = true;
+                }
+            };
+            self.redos.push(change);
             if waiting_for_begin <= 0 {
                 count += 1;
                 if count >= n {
@@ -292,24 +288,20 @@ impl Changeset {
     pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
         let mut waiting_for_end = 0;
         let mut redone = false;
-        loop {
-            if let Some(change) = self.redos.pop() {
-                match change {
-                    Change::Begin => {
-                        waiting_for_end += 1;
-                    }
-                    Change::End => {
-                        waiting_for_end -= 1;
-                    }
-                    _ => {
-                        change.redo(line);
-                        redone = true;
-                    }
-                };
-                self.undos.push(change);
-            } else {
-                break;
-            }
+        while let Some(change) = self.redos.pop() {
+            match change {
+                Change::Begin => {
+                    waiting_for_end += 1;
+                }
+                Change::End => {
+                    waiting_for_end -= 1;
+                }
+                _ => {
+                    change.redo(line);
+                    redone = true;
+                }
+            };
+            self.undos.push(change);
             if waiting_for_end <= 0 {
                 break;
             }

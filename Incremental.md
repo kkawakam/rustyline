@@ -2,8 +2,9 @@
 
 We would like to avoid redrawing all row(s) when an event occurs.
 Currently, we redraw all row(s) except when:
-  * a character is inserted at the end of input (and there is no hint and no `highlight_char`),
-  * only the cursor is moved (input is not touched and no `highlight_char`).
+
+- a character is inserted at the end of input (and there is no hint and no `highlight_char`),
+- only the cursor is moved (input is not touched and no `highlight_char`).
 
 Ideally, we would like to redraw only impacted row(s) / cell(s).
 
@@ -11,17 +12,19 @@ Ideally, we would like to redraw only impacted row(s) / cell(s).
 
 Currently, we assume that highlighting does not impact layout / rendered text size.
 So only the following observables impact layout:
-  * prompt (interactive search, [input mode indicator](https://github.com/kkawakam/rustyline/pull/369)),
-  * [input mode](https://github.com/kkawakam/rustyline/pull/369),
-  * line(s) buffer,
-  * cursor position,
-  * hint / input validation message,
-  * screen size (line wrapping),
-  * [prompt continuation](https://github.com/kkawakam/rustyline/pull/372)s,
-  * row/wrap count.
+
+- prompt (interactive search, [input mode indicator](https://github.com/kkawakam/rustyline/pull/369)),
+- [input mode](https://github.com/kkawakam/rustyline/pull/369),
+- line(s) buffer,
+- cursor position,
+- hint / input validation message,
+- screen size (line wrapping),
+- [prompt continuation](https://github.com/kkawakam/rustyline/pull/372)s,
+- row/wrap count.
 
 Some other values may impact layout but they are/should be constant:
-  * tab stop,
+
+- tab stop,
 
 ### Line wrapping and highlighting
 
@@ -35,18 +38,19 @@ So we need to preserve style.
 
 TODO How prompt_toolkit handle this problem ?
 Maybe using ANSI sequence directly was a bad idea. If `Highlighter` returns style ranges,
-applying style on input slice is easy (and also supporting styles on Windows < 10). 
+applying style on input slice is easy (and also supporting styles on Windows < 10).
 
 ### Impacts
 
 Current granularity:
- * PUSH_CHAR at end of input
- * BEEP
- * MOVE_CURSOR
- * REFRESH whole input / rows
- * CLEAR_SCREEN (+REFRESH)
+
+- PUSH_CHAR at end of input
+- BEEP
+- MOVE_CURSOR
+- REFRESH whole input / rows
+- CLEAR_SCREEN (+REFRESH)
 
 Wanted additional granularity:
-  * PUSH_STRING at end of input
-  * REFRESH_DIRTY only rows / cells
 
+- PUSH_STRING at end of input
+- REFRESH_DIRTY only rows / cells

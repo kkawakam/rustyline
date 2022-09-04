@@ -26,6 +26,16 @@ pub fn execute<H: Helper>(
     use Status::{Proceed, Submit};
 
     match cmd {
+        Cmd::EndOfFile | Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
+            if s.has_hint() || !s.is_default_prompt() {
+                // Force a refresh without hints to leave the previous
+                // line as the user typed it after a newline.
+                s.refresh_line_with_msg(None)?;
+            }
+        }
+        _ => {}
+    };
+    match cmd {
         Cmd::CompleteHint => {
             complete_hint_line(s)?;
         }
@@ -41,7 +51,9 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::ViFirstPrint) => {
             s.edit_move_home()?;
-            s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            if s.line.starts_with(char::is_whitespace) {
+                s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            }
         }
         Cmd::Move(Movement::BackwardChar(n)) => {
             // Move back a character.
@@ -58,11 +70,6 @@ pub fn execute<H: Helper>(
             s.edit_overwrite_char(c)?;
         }
         Cmd::EndOfFile => {
-            if s.has_hint() || !s.is_default_prompt() {
-                // Force a refresh without hints to leave the previous
-                // line as the user typed it after a newline.
-                s.refresh_line_with_msg(None)?;
-            }
             if s.line.is_empty() {
                 return Err(error::ReadlineError::Eof);
             } else if !input_state.is_emacs_mode() {
@@ -119,12 +126,10 @@ pub fn execute<H: Helper>(
                 kill_ring.kill(&text, Mode::Append);
             }
         }
-        Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
-            if s.has_hint() || !s.is_default_prompt() {
-                // Force a refresh without hints to leave the previous
-                // line as the user typed it after a newline.
-                s.refresh_line_with_msg(None)?;
-            }
+        Cmd::Newline => {
+            s.edit_insert('\n', 1)?;
+        }
+        Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {
             let validation_result = s.validate()?;
             let valid = validation_result.is_valid();
             let end = s.line.is_end_of_input();
@@ -140,8 +145,7 @@ pub fn execute<H: Helper>(
                 ) => {
                     return Ok(Submit);
                 }
-                (Cmd::Newline, ..)
-                | (Cmd::AcceptOrInsertLine { .. }, false, _)
+                (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
                     if valid || !validation_result.has_message() {
                         s.edit_insert('\n', 1)?;

@@ -232,7 +232,6 @@ mod test {
         assert!(subtrie.is_some());
         let subtrie = subtrie.unwrap();
         let sub_result = subtrie.get(&evt);
-        assert!(sub_result.is_ok());
         assert!(sub_result.unwrap().is_some());
         let prefix = Event::from(KeyEvent::ctrl('O'));
         let subtrie = trie.get_raw_descendant(&prefix);

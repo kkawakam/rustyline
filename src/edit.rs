@@ -86,11 +86,17 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if let Err(ReadlineError::WindowResized) = rc {
                 debug!(target: "rustyline", "SIGWINCH");
+                let old_cols = self.out.get_columns();
                 self.out.update_size();
-                self.prompt_size = self
-                    .out
-                    .calculate_position(self.prompt, Position::default());
-                self.refresh_line()?;
+                let new_cols = self.out.get_columns();
+                if new_cols != old_cols
+                    && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
+                {
+                    self.prompt_size = self
+                        .out
+                        .calculate_position(self.prompt, Position::default());
+                    self.refresh_line()?;
+                }
                 continue;
             }
             if let Ok(Cmd::Replace(..)) = rc {

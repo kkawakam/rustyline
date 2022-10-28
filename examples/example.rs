@@ -71,13 +71,13 @@ fn main() -> rustyline::Result<()> {
     }
     let mut count = 1;
     loop {
-        let p = format!("{}> ", count);
-        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
+        let p = format!("{count}> ");
+        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{p}\x1b[0m");
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                println!("Line: {}", line);
+                println!("Line: {line}");
             }
             Err(ReadlineError::Interrupted) => {
                 println!("Interrupted");
@@ -88,7 +88,7 @@ fn main() -> rustyline::Result<()> {
                 break;
             }
             Err(err) => {
-                println!("Error: {:?}", err);
+                println!("Error: {err:?}");
                 break;
             }
         }

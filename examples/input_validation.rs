@@ -26,6 +26,6 @@ fn main() -> Result<()> {
     rl.set_helper(Some(h));
 
     let input = rl.readline("> ")?;
-    println!("Input: {}", input);
+    println!("Input: {input}");
     Ok(())
 }

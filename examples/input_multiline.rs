@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     );
 
     let input = rl.readline("> ")?;
-    println!("Input: {}", input);
+    println!("Input: {input}");
 
     Ok(())
 }

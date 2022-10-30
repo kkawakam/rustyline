@@ -28,6 +28,6 @@ fn main() -> Result<()> {
 
     loop {
         let line = rl.readline("> ")?;
-        println!("Num: {}", line);
+        println!("Num: {line}");
     }
 }

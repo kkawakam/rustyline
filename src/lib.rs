@@ -376,9 +376,9 @@ fn reverse_incremental_search<H: Helper, I: History>(
     // Display the reverse-i-search prompt and process chars
     loop {
         let prompt = if success {
-            format!("(reverse-i-search)`{}': ", search_buf)
+            format!("(reverse-i-search)`{search_buf}': ")
         } else {
-            format!("(failed reverse-i-search)`{}': ", search_buf)
+            format!("(failed reverse-i-search)`{search_buf}': ")
         };
         s.refresh_prompt_and_line(&prompt)?;
 
@@ -859,7 +859,8 @@ impl<H: Helper, I: History> Editor<H, I> {
             .remove(&Event::normalize(key_seq.into()))
     }
 
-    /// Returns an iterator over edited lines
+    /// Returns an iterator over edited lines.
+    /// Iterator ends at [EOF](ReadlineError::Eof).
     /// ```
     /// let mut rl = rustyline::DefaultEditor::new()?;
     /// for readline in rl.iter("> ") {

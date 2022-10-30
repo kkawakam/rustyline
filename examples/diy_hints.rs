@@ -91,6 +91,6 @@ fn main() -> Result<()> {
 
     loop {
         let input = rl.readline("> ")?;
-        println!("input: {}", input);
+        println!("input: {input}");
     }
 }

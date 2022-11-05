@@ -77,10 +77,6 @@ pub trait History {
 
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
-    /// Return the last history entry (i.e. previous command)
-    #[must_use]
-    fn last(&self) -> Option<&String>;
-
     // jline3: default void add(String line) {
     //         add(Instant.now(), line);
     //     }
@@ -280,10 +276,6 @@ impl History for MemHistory {
 
     fn get(&self, index: usize) -> Option<&String> {
         self.entries.get(index)
-    }
-
-    fn last(&self) -> Option<&String> {
-        self.entries.back()
     }
 
     fn add(&mut self, line: &str) -> bool {
@@ -605,10 +597,6 @@ impl History for FileHistory {
         self.mem.get(index)
     }
 
-    fn last(&self) -> Option<&String> {
-        self.mem.last()
-    }
-
     fn add(&mut self, line: &str) -> bool {
         if self.mem.add(line) {
             self.new_entries = self.new_entries.saturating_add(1).min(self.len());
@@ -824,7 +812,7 @@ mod tests {
         let mut history = init();
         history.set_max_len(1);
         assert_eq!(1, history.len());
-        assert_eq!(Some(&"line3".to_owned()), history.last());
+        assert_eq!(Some(&"line3".to_owned()), history.into_iter().last());
     }
 
     #[test]

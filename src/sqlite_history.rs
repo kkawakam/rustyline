@@ -1,3 +1,4 @@
+//! History impl. based on SQLite
 use crate::history::SearchResult;
 use crate::{Config, History, SearchDirection};
 use std::path::{Path, PathBuf};
@@ -64,13 +65,6 @@ impl History for SQLiteHistory {
 
     fn get(&self, index: usize) -> Option<&String> {
         // SELECT entry FROM history WHERE rowid = :index;
-        todo!()
-    }
-
-    fn last(&self) -> Option<&String> {
-        // SELECT entry FROM history
-        // --WHERE session_id = ?
-        // ORDER BY rowid DESC LIMIT 1;
         todo!()
     }
 

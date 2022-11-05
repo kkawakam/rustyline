@@ -4,6 +4,7 @@
 use fd_lock::RwLock;
 #[cfg(feature = "with-file-history")]
 use log::{debug, warn};
+use std::borrow::Cow;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 #[cfg(feature = "with-file-history")]
@@ -33,7 +34,7 @@ pub enum SearchDirection {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SearchResult<'a> {
     /// history entry
-    pub entry: &'a str,
+    pub entry: Cow<'a, str>,
     /// history index
     pub idx: usize,
     /// match position in `entry`
@@ -85,9 +86,9 @@ pub trait History {
     // reedline: fn append(&mut self, entry: &str);
 
     /// Add a new entry in the history.
-    fn add(&mut self, line: &str) -> bool;
+    fn add(&mut self, line: &str) -> Result<bool>;
     /// Add a new entry in the history.
-    fn add_owned(&mut self, line: String) -> bool; // TODO check AsRef<str> + Into<String> vs object safe
+    fn add_owned(&mut self, line: String) -> Result<bool>; // TODO check AsRef<str> + Into<String> vs object safe
 
     /// Return the number of entries in the history.
     #[must_use]
@@ -166,12 +167,20 @@ pub trait History {
     /// Return None if no entry contains `term` between [start, len -1] for
     /// forward search
     /// or between [0, start] for reverse search.
-    #[must_use]
-    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult>;
+    fn search(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>>;
 
     /// Anchored search
-    #[must_use]
-    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult>;
+    fn starts_with(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>>;
 
     /* TODO How ? DoubleEndedIterator may be difficult to implement (for an SQLite backend)
     /// Return a iterator.
@@ -215,7 +224,7 @@ impl MemHistory {
                     if let Some(cursor) = test(entry) {
                         return Some(SearchResult {
                             idx: start - idx,
-                            entry,
+                            entry: Cow::Borrowed(entry),
                             pos: cursor,
                         });
                     }
@@ -227,7 +236,7 @@ impl MemHistory {
                     if let Some(cursor) = test(entry) {
                         return Some(SearchResult {
                             idx: idx + start,
-                            entry,
+                            entry: Cow::Borrowed(entry),
                             pos: cursor,
                         });
                     }
@@ -278,20 +287,20 @@ impl History for MemHistory {
         self.entries.get(index)
     }
 
-    fn add(&mut self, line: &str) -> bool {
+    fn add(&mut self, line: &str) -> Result<bool> {
         if self.ignore(line) {
-            return false;
+            return Ok(false);
         }
         self.insert(line.to_owned());
-        true
+        Ok(true)
     }
 
-    fn add_owned(&mut self, line: String) -> bool {
+    fn add_owned(&mut self, line: String) -> Result<bool> {
         if self.ignore(&line) {
-            return false;
+            return Ok(false);
         }
         self.insert(line);
-        true
+        Ok(true)
     }
 
     fn len(&self) -> usize {
@@ -333,28 +342,40 @@ impl History for MemHistory {
         self.entries.clear()
     }
 
-    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+    fn search(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>> {
         #[cfg(not(feature = "case_insensitive_history_search"))]
         {
             let test = |entry: &str| entry.find(term);
-            self.search_match(term, start, dir, test)
+            Ok(self.search_match(term, start, dir, test))
         }
         #[cfg(feature = "case_insensitive_history_search")]
         {
             use regex::{escape, RegexBuilder};
-            if let Ok(re) = RegexBuilder::new(&escape(term))
-                .case_insensitive(true)
-                .build()
-            {
-                let test = |entry: &str| re.find(entry).map(|m| m.start());
-                self.search_match(term, start, dir, test)
-            } else {
-                None
-            }
+            Ok(
+                if let Ok(re) = RegexBuilder::new(&escape(term))
+                    .case_insensitive(true)
+                    .build()
+                {
+                    let test = |entry: &str| re.find(entry).map(|m| m.start());
+                    self.search_match(term, start, dir, test)
+                } else {
+                    None
+                },
+            )
         }
     }
 
-    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+    fn starts_with(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>> {
         #[cfg(not(feature = "case_insensitive_history_search"))]
         {
             let test = |entry: &str| {
@@ -364,24 +385,26 @@ impl History for MemHistory {
                     None
                 }
             };
-            self.search_match(term, start, dir, test)
+            Ok(self.search_match(term, start, dir, test))
         }
         #[cfg(feature = "case_insensitive_history_search")]
         {
             use regex::{escape, RegexBuilder};
-            if let Ok(re) = RegexBuilder::new(&escape(term))
-                .case_insensitive(true)
-                .build()
-            {
-                let test = |entry: &str| {
-                    re.find(entry)
-                        .and_then(|m| if m.start() == 0 { Some(m) } else { None })
-                        .map(|m| m.end())
-                };
-                self.search_match(term, start, dir, test)
-            } else {
-                None
-            }
+            Ok(
+                if let Ok(re) = RegexBuilder::new(&escape(term))
+                    .case_insensitive(true)
+                    .build()
+                {
+                    let test = |entry: &str| {
+                        re.find(entry)
+                            .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                            .map(|m| m.end())
+                    };
+                    self.search_match(term, start, dir, test)
+                } else {
+                    None
+                },
+            )
         }
     }
 }
@@ -474,7 +497,7 @@ impl FileHistory {
             if line == Self::FILE_VERSION_V2 {
                 v2 = true;
             } else {
-                self.add_owned(line);
+                self.add_owned(line)?;
             }
         }
         let mut appendable = v2;
@@ -519,7 +542,7 @@ impl FileHistory {
                     line = s;
                 }
             }
-            appendable &= self.add_owned(line); // TODO truncate to MAX_LINE
+            appendable &= self.add_owned(line)?; // TODO truncate to MAX_LINE
         }
         self.new_entries = 0; // TODO we may lost new entries if loaded lines < max_len
         Ok(appendable)
@@ -597,21 +620,21 @@ impl History for FileHistory {
         self.mem.get(index)
     }
 
-    fn add(&mut self, line: &str) -> bool {
-        if self.mem.add(line) {
+    fn add(&mut self, line: &str) -> Result<bool> {
+        if self.mem.add(line)? {
             self.new_entries = self.new_entries.saturating_add(1).min(self.len());
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
-    fn add_owned(&mut self, line: String) -> bool {
-        if self.mem.add_owned(line) {
+    fn add_owned(&mut self, line: String) -> Result<bool> {
+        if self.mem.add_owned(line)? {
             self.new_entries = self.new_entries.saturating_add(1).min(self.len());
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -689,7 +712,7 @@ impl History for FileHistory {
         other.load_from(&lock_guard)?;
         let first_new_entry = self.mem.len().saturating_sub(self.new_entries);
         for entry in self.mem.entries.iter().skip(first_new_entry) {
-            other.add(entry);
+            other.add(entry)?;
         }
         lock_guard.seek(SeekFrom::Start(0))?;
         lock_guard.set_len(0)?; // if new size < old size
@@ -718,11 +741,21 @@ impl History for FileHistory {
         self.new_entries = 0;
     }
 
-    fn search(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+    fn search(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>> {
         self.mem.search(term, start, dir)
     }
 
-    fn starts_with(&self, term: &str, start: usize, dir: SearchDirection) -> Option<SearchResult> {
+    fn starts_with(
+        &self,
+        term: &str,
+        start: usize,
+        dir: SearchDirection,
+    ) -> Result<Option<SearchResult>> {
         self.mem.starts_with(term, start, dir)
     }
 }
@@ -779,12 +812,13 @@ mod tests {
     use crate::config::Config;
     #[cfg(feature = "with-file-history")]
     use crate::Result;
+    use std::borrow::Cow;
 
     fn init() -> DefaultHistory {
         let mut history = DefaultHistory::new();
-        assert!(history.add("line1"));
-        assert!(history.add("line2"));
-        assert!(history.add("line3"));
+        assert!(history.add("line1").unwrap());
+        assert!(history.add("line2").unwrap());
+        assert!(history.add("line3").unwrap());
         history
     }
 
@@ -800,11 +834,11 @@ mod tests {
         let mut history = DefaultHistory::with_config(config);
         #[cfg(feature = "with-file-history")]
         assert_eq!(config.max_history_size(), history.mem.max_len);
-        assert!(history.add("line1"));
-        assert!(history.add("line2"));
-        assert!(!history.add("line2"));
-        assert!(!history.add(""));
-        assert!(!history.add(" line3"));
+        assert!(history.add("line1").unwrap());
+        assert!(history.add("line2").unwrap());
+        assert!(!history.add("line2").unwrap());
+        assert!(!history.add("").unwrap());
+        assert!(!history.add(" line3").unwrap());
     }
 
     #[test]
@@ -833,7 +867,7 @@ mod tests {
     #[cfg(feature = "with-file-history")]
     fn check_save(line: &str) -> Result<()> {
         let mut history = init();
-        assert!(history.add(line));
+        assert!(history.add(line)?);
         let tf = tempfile::NamedTempFile::new()?;
 
         history.save(tf.path())?;
@@ -884,10 +918,10 @@ mod tests {
 
         let mut history2 = DefaultHistory::new();
         history2.load(tf.path())?;
-        history2.add("line4");
+        history2.add("line4")?;
         history2.append(tf.path())?;
 
-        history.add("line5");
+        history.add("line5")?;
         history.append(tf.path())?;
 
         let mut history3 = DefaultHistory::new();
@@ -906,13 +940,13 @@ mod tests {
 
         let config = Config::builder().history_ignore_dups(false).build();
         let mut history = DefaultHistory::with_config(config);
-        history.add("line1");
-        history.add("line1");
+        history.add("line1")?;
+        history.add("line1")?;
         history.append(tf.path())?;
 
         let mut history = DefaultHistory::new();
         history.load(tf.path())?;
-        history.add("l");
+        history.add("l")?;
         history.append(tf.path())?;
 
         let mut history = DefaultHistory::new();
@@ -927,66 +961,88 @@ mod tests {
     #[test]
     fn search() {
         let history = init();
-        assert_eq!(None, history.search("", 0, SearchDirection::Forward));
-        assert_eq!(None, history.search("none", 0, SearchDirection::Forward));
-        assert_eq!(None, history.search("line", 3, SearchDirection::Forward));
+        assert_eq!(
+            None,
+            history.search("", 0, SearchDirection::Forward).unwrap()
+        );
+        assert_eq!(
+            None,
+            history.search("none", 0, SearchDirection::Forward).unwrap()
+        );
+        assert_eq!(
+            None,
+            history.search("line", 3, SearchDirection::Forward).unwrap()
+        );
 
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: history.get(0).unwrap(),
+                entry: Cow::Borrowed(history.get(0).unwrap()),
                 pos: 0
             }),
-            history.search("line", 0, SearchDirection::Forward)
+            history.search("line", 0, SearchDirection::Forward).unwrap()
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: history.get(1).unwrap(),
+                entry: Cow::Borrowed(history.get(1).unwrap()),
                 pos: 0
             }),
-            history.search("line", 1, SearchDirection::Forward)
+            history.search("line", 1, SearchDirection::Forward).unwrap()
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2).unwrap(),
+                entry: Cow::Borrowed(history.get(2).unwrap()),
                 pos: 0
             }),
-            history.search("line3", 1, SearchDirection::Forward)
+            history
+                .search("line3", 1, SearchDirection::Forward)
+                .unwrap()
         );
     }
 
     #[test]
     fn reverse_search() {
         let history = init();
-        assert_eq!(None, history.search("", 2, SearchDirection::Reverse));
-        assert_eq!(None, history.search("none", 2, SearchDirection::Reverse));
-        assert_eq!(None, history.search("line", 3, SearchDirection::Reverse));
+        assert_eq!(
+            None,
+            history.search("", 2, SearchDirection::Reverse).unwrap()
+        );
+        assert_eq!(
+            None,
+            history.search("none", 2, SearchDirection::Reverse).unwrap()
+        );
+        assert_eq!(
+            None,
+            history.search("line", 3, SearchDirection::Reverse).unwrap()
+        );
 
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2).unwrap(),
+                entry: Cow::Borrowed(history.get(2).unwrap()),
                 pos: 0
             }),
-            history.search("line", 2, SearchDirection::Reverse)
+            history.search("line", 2, SearchDirection::Reverse).unwrap()
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: history.get(1).unwrap(),
+                entry: Cow::Borrowed(history.get(1).unwrap()),
                 pos: 0
             }),
-            history.search("line", 1, SearchDirection::Reverse)
+            history.search("line", 1, SearchDirection::Reverse).unwrap()
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: history.get(0).unwrap(),
+                entry: Cow::Borrowed(history.get(0).unwrap()),
                 pos: 0
             }),
-            history.search("line1", 1, SearchDirection::Reverse)
+            history
+                .search("line1", 1, SearchDirection::Reverse)
+                .unwrap()
         );
     }
 
@@ -1000,11 +1056,15 @@ mod tests {
                 entry: history.get(2).unwrap(),
                 pos: 4
             }),
-            history.starts_with("LiNe", 2, SearchDirection::Reverse)
+            history
+                .starts_with("LiNe", 2, SearchDirection::Reverse)
+                .unwrap()
         );
         assert_eq!(
             None,
-            history.starts_with("iNe", 2, SearchDirection::Reverse)
+            history
+                .starts_with("iNe", 2, SearchDirection::Reverse)
+                .unwrap()
         );
     }
 }

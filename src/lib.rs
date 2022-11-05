@@ -423,10 +423,10 @@ fn reverse_incremental_search<H: Helper, I: History>(
                 _ => break,
             }
         }
-        success = match history.search(&search_buf, history_idx, direction) {
+        success = match history.search(&search_buf, history_idx, direction)? {
             Some(sr) => {
                 history_idx = sr.idx;
-                s.line.update(sr.entry, sr.pos);
+                s.line.update(&sr.entry, sr.pos);
                 true
             }
             _ => false,
@@ -658,7 +658,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
             if self.config.auto_add_history() {
                 if let Ok(ref line) = user_input {
-                    self.add_history_entry(line.as_str());
+                    self.add_history_entry(line.as_str())?;
                 }
             }
             drop(guard); // disable_raw_mode(original_mode)?;
@@ -804,7 +804,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     /// Add a new entry in the history.
-    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
+    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> Result<bool> {
         self.history.add(line.as_ref())
     }
 

@@ -67,6 +67,7 @@ impl Hinter for HistoryHinter {
         if let Some(sr) = ctx
             .history
             .starts_with(line, start, SearchDirection::Reverse)
+            .unwrap_or(None)
         {
             if sr.entry == line {
                 return None;

@@ -76,7 +76,7 @@ fn main() -> rustyline::Result<()> {
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
+                rl.add_history_entry(line.as_str())?;
                 println!("Line: {line}");
             }
             Err(ReadlineError::Interrupted) => {

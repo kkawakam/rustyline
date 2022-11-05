@@ -103,7 +103,7 @@ fn main() -> Result<()> {
 
     loop {
         let line = rl.readline("> ")?;
-        rl.add_history_entry(line.as_str());
+        rl.add_history_entry(line.as_str())?;
         println!("Line: {line}");
     }
 }

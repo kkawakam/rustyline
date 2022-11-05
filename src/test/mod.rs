@@ -116,7 +116,7 @@ fn assert_history(
 ) {
     let mut editor = init_editor(mode, keys);
     for entry in entries {
-        editor.history.add(*entry);
+        editor.history.add(entry).unwrap();
     }
     let actual_line = editor.readline(prompt).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);

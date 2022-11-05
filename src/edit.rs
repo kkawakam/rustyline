@@ -645,10 +645,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.line.as_str()[..self.line.pos()],
             self.ctx.history_index,
             dir,
-        ) {
+        )? {
             self.ctx.history_index = sr.idx;
             self.changes.borrow_mut().begin();
-            self.line.update(sr.entry, sr.pos);
+            self.line.update(&sr.entry, sr.pos);
             self.changes.borrow_mut().end();
             self.refresh_line()
         } else {
@@ -730,8 +730,8 @@ mod test {
     fn edit_history_next() {
         let mut out = Sink::default();
         let mut history = DefaultHistory::new();
-        history.add("line0");
-        history.add("line1");
+        history.add("line0").unwrap();
+        history.add("line1").unwrap();
         let line = "current edited line";
         let helper: Option<()> = None;
         let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history);

@@ -73,8 +73,7 @@ pub trait History {
     // termwiz: fn get(&self, idx: HistoryIndex) -> Option<Cow<str>>;
 
     /// Return the history entry at position `index`, starting from 0.
-    #[must_use]
-    fn get(&self, index: usize) -> Option<&String>;
+    fn get(&self, index: usize) -> Result<Option<Cow<String>>>;
 
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
@@ -147,7 +146,7 @@ pub trait History {
     fn load(&mut self, path: &Path) -> Result<()>; // FIXME Path vs AsRef<Path>
 
     /// Clear in-memory history
-    fn clear(&mut self);
+    fn clear(&mut self) -> Result<()>;
 
     // termwiz: fn search(
     //         &self,
@@ -283,8 +282,8 @@ impl History for MemHistory {
         }
     }
 
-    fn get(&self, index: usize) -> Option<&String> {
-        self.entries.get(index)
+    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
+        Ok(self.entries.get(index).map(Cow::Borrowed))
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -338,8 +337,9 @@ impl History for MemHistory {
         unimplemented!();
     }
 
-    fn clear(&mut self) {
-        self.entries.clear()
+    fn clear(&mut self) -> Result<()> {
+        self.entries.clear();
+        Ok(())
     }
 
     fn search(
@@ -616,7 +616,7 @@ impl History for FileHistory {
         }
     }
 
-    fn get(&self, index: usize) -> Option<&String> {
+    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
         self.mem.get(index)
     }
 
@@ -736,9 +736,10 @@ impl History for FileHistory {
         }
     }
 
-    fn clear(&mut self) {
-        self.mem.clear();
+    fn clear(&mut self) -> Result<()> {
+        self.mem.clear()?;
         self.new_entries = 0;
+        Ok(())
     }
 
     fn search(
@@ -1053,7 +1054,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2).unwrap(),
+                entry: Cow::Borrowed(history.get(2).unwrap()),
                 pos: 4
             }),
             history

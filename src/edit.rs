@@ -614,9 +614,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.ctx.history_index += 1;
         }
         if self.ctx.history_index < history.len() {
-            let buf = history.get(self.ctx.history_index).unwrap();
+            let buf = history.get(self.ctx.history_index)?.unwrap();
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(&buf, buf.len());
             self.changes.borrow_mut().end();
         } else {
             // Restore current edited line
@@ -674,9 +674,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
         if first {
             self.ctx.history_index = 0;
-            let buf = history.get(self.ctx.history_index).unwrap();
+            let buf = history.get(self.ctx.history_index)?.unwrap();
             self.changes.borrow_mut().begin();
-            self.line.update(buf, buf.len());
+            self.line.update(&buf, buf.len());
             self.changes.borrow_mut().end();
         } else {
             self.ctx.history_index = history.len();

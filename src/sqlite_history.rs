@@ -50,6 +50,12 @@ impl SQLiteHistory {
         }
     }
 
+    fn reset(&mut self, path: &Path) {
+        self.path = Some(path.to_path_buf());
+        self.session_id = 0;
+        self.row_id = 0;
+    }
+
     fn conn(&self) -> Result<Connection> {
         if let Some(ref path) = self.path {
             Connection::open(path)
@@ -69,14 +75,14 @@ PRAGMA auto_vacuum = INCREMENTAL;
 CREATE TABLE session (
     id INTEGER PRIMARY KEY NOT NULL,
     timestamp REAL NOT NULL DEFAULT julianday('now')
-); -- user, host, pid
+) STRICT; -- user, host, pid
 CREATE TABLE history (
     --id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     session_id INTEGER NOT NULL,
     entry TEXT NOT NULL,
     timestamp REAL NOT NULL DEFAULT julianday('now'),
     FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
-);
+) STRICT;
 --TODO fts enabled
 CREATE VIRTUAL TABLE fts USING fts4(content=history, entry);
 CREATE TRIGGER history_bu BEFORE UPDATE ON history BEGIN
@@ -101,14 +107,18 @@ PRAGMA user_version = 1;
             conn.execute_batch(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
             )?;
-        } else {
+        } else if user_version > 0 {
             conn.execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+        }
+        if self.row_id == 0 && user_version > 0 {
+            self.row_id = conn.query_row("SELECT max(rowid) FROM history;", [], |r| r.get(0))?;
         }
         Ok(())
     }
 
     fn create_session(&mut self) -> Result<()> {
         if self.session_id == 0 {
+            self.check_schema()?;
             self.session_id = self.conn()?.query_row(
                 "INSERT INTO session (id) VALUES (NULL) RETURNING id;",
                 [],
@@ -131,6 +141,22 @@ PRAGMA user_version = 1;
         false
     }
 
+    fn add_entry(&mut self, conn: Connection, line: &str) -> Result<bool> {
+        // ignore SQLITE_CONSTRAINT_UNIQUE
+        let mut stmt = conn.prepare_cached(
+            "INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;",
+        )?;
+        if let Some(row_id) = stmt
+            .query_row((self.session_id, line), |r| r.get(0))
+            .optional()?
+        {
+            self.row_id = row_id;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn search_match(
         &self,
         term: &str,
@@ -141,7 +167,8 @@ PRAGMA user_version = 1;
         if term.is_empty() || start >= self.len() {
             return Ok(None);
         }
-        let start_with = if start_with { "'^' || " } else { "" };
+        let offsets = if start_with { "" } else { ", offsets(entry)" };
+        let prefix = if start_with { "'^' || " } else { "" };
         let op = match dir {
             SearchDirection::Reverse => '<',
             SearchDirection::Forward => '>',
@@ -149,15 +176,16 @@ PRAGMA user_version = 1;
         self.conn()?
             .query_row(
                 &format!(
-                    "SELECT docid, entry, offsets(entry) FROM fts WHERE entry MATCH {} ? || '*'  AND docid {} ?;",
-                    start_with, op
+                    "SELECT docid, entry {} FROM fts WHERE entry MATCH {} ? || '*'  AND docid {} \
+                     ?;",
+                    offsets, prefix, op
                 ),
-                [],
+                (term, start),
                 |r| {
                     Ok(SearchResult {
                         entry: Cow::Owned(r.get(1)?),
                         idx: r.get(0)?,
-                        pos: r.get(2)?, // FIXME extract from offsets
+                        pos: if start_with { 0 } else { r.get(2)? }, // FIXME extract from offsets
                     })
                 },
             )
@@ -175,10 +203,13 @@ impl History for SQLiteHistory {
         Self::new(config, None)
     }
 
-    fn get(&self, index: usize) -> Option<&String> {
+    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
         // TODO: rowid may not be sequential
-        // SELECT entry FROM history WHERE rowid = :index;
-        todo!()
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare_cached("SELECT entry FROM history WHERE rowid = ?;")?;
+        stmt.query_row([index], |r| r.get(0).map(Cow::Owned))
+            .optional()
+            .map_err(ReadlineError::from)
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -187,10 +218,7 @@ impl History for SQLiteHistory {
         }
         // Do not create a session until the first entry is added.
         self.create_session()?;
-        //self.row_id
-        // INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING
-        // rowid; ignore SQLITE_CONSTRAINT_UNIQUE
-        todo!()
+        self.add_entry(self.conn()?, line)
     }
 
     fn add_owned(&mut self, line: String) -> Result<bool> {
@@ -198,8 +226,7 @@ impl History for SQLiteHistory {
     }
 
     fn len(&self) -> usize {
-        // max(rowid) vs count()
-        todo!()
+        self.row_id + 1
     }
 
     fn is_empty(&self) -> bool {
@@ -223,7 +250,7 @@ impl History for SQLiteHistory {
     }
 
     fn save(&mut self, path: &Path) -> Result<()> {
-        // TODO check self.path == path
+        // TODO check self.path == path (if different => backup)
         if self.session_id == 0 {
             // nothing to save
             return Ok(());
@@ -238,25 +265,46 @@ PRAGMA incremental_vacuum;
     }
 
     fn append(&mut self, path: &Path) -> Result<()> {
-        // TODO check self.path == path
+        if self.path.is_some() && self.path.as_ref().map_or(true, |p| p == path) {
+            return Ok(()); // no entry in memory
+        } else if self.session_id == 0 {
+            self.reset(path);
+            self.check_schema()?;
+            return Ok(()); // no entry to append
+        }
+        let current = self.conn()?;
+        self.reset(path);
+        self.check_schema()?;
+        self.create_session()?; // TODO preserve session.timestamp
+                                // TODO Validate only current session entries
+                                //let entries = current.qu
         Ok(())
     }
 
     fn load(&mut self, path: &Path) -> Result<()> {
         if self.path.is_none() {
             // TODO check that there is no memory entries (session_id == 0) ?
-            self.path = Some(path.to_path_buf());
+            self.reset(path);
             self.check_schema()?;
         } else if self.path.as_ref().map_or(true, |p| p != path) {
-            self.path = Some(path.to_path_buf());
+            self.reset(path);
             self.check_schema()?;
         }
         // Keep all on disk
         Ok(())
     }
 
-    fn clear(&mut self) {
-        // nothing in memory
+    fn clear(&mut self) -> Result<()> {
+        if self.session_id == 0 {
+            return Ok(());
+        } else if self.path.is_none() {
+            // ON DELETE CASCADE...
+            self.conn()?.execute(
+                "DELETE FROM session WHERE session_id = ?;",
+                [self.session_id],
+            )?;
+        } // else nothing in memory, TODO Validate: no delete ?
+        Ok(())
     }
 
     fn search(

@@ -809,8 +809,8 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     /// Clear history.
-    pub fn clear_history(&mut self) {
-        self.history.clear();
+    pub fn clear_history(&mut self) -> Result<()> {
+        self.history.clear()
     }
 
     /// Return a mutable reference to the history object.

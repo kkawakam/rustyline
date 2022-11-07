@@ -15,8 +15,10 @@ pub struct SQLiteHistory {
     ignore_space: bool,
     ignore_dups: bool,
     path: Option<PathBuf>, // None => memory
-    session_id: usize,     // 0 means no new entry added
-    row_id: usize,         // max entry id
+    conn: Connection,      /* we need to keep a connection opened at least for in memory
+                            * database and also for cached statement(s) */
+    session_id: usize, // 0 means no new entry added
+    row_id: usize,     // max entry id
 }
 
 /*
@@ -31,45 +33,57 @@ The VACUUM command may change the ROWIDs of entries in any tables that do not ha
  */
 
 impl SQLiteHistory {
-    /// Open specifed
+    /// Transient in-memory database
+    pub fn with_config(config: Config) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Self::new(config, None)
+    }
+
+    /// Open specifed database
     pub fn open<P: AsRef<Path> + ?Sized>(config: Config, path: &P) -> Result<Self> {
-        let mut sh = Self::new(config, Some(path.as_ref().to_path_buf()));
+        let mut sh = Self::new(config, Some(path.as_ref().to_path_buf()))?;
         sh.check_schema()?;
         Ok(sh)
     }
 
-    fn new(config: Config, path: Option<PathBuf>) -> Self {
-        SQLiteHistory {
+    fn conn(path: Option<&PathBuf>) -> rusqlite::Result<Connection> {
+        if let Some(ref path) = path {
+            Connection::open(path)
+        } else {
+            Connection::open_in_memory()
+        }
+    }
+
+    fn new(config: Config, path: Option<PathBuf>) -> Result<Self> {
+        let conn = Self::conn(path.as_ref())?;
+        Ok(SQLiteHistory {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             // not strictly consecutive...
             ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
             path,
+            conn,
             session_id: 0,
             row_id: 0,
-        }
+        })
     }
 
-    fn reset(&mut self, path: &Path) {
+    fn reset(&mut self, path: &Path) -> Result<()> {
         self.path = Some(path.to_path_buf());
         self.session_id = 0;
         self.row_id = 0;
-    }
-
-    fn conn(&self) -> Result<Connection> {
-        if let Some(ref path) = self.path {
-            Connection::open(path)
-        } else {
-            Connection::open_in_memory()
-        }
-        .map_err(ReadlineError::from)
+        self.conn = Connection::open(path)?;
+        Ok(())
     }
 
     fn check_schema(&mut self) -> Result<()> {
-        let conn = self.conn()?;
-        let user_version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        let user_version: i32 = self
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))?;
         if user_version <= 0 {
-            conn.execute_batch(
+            self.conn.execute_batch(
                 "
 PRAGMA auto_vacuum = INCREMENTAL;
 CREATE TABLE session (
@@ -101,17 +115,20 @@ PRAGMA user_version = 1;
                  ",
             )?
         }
-        conn.pragma_update(None, "foreign_keys", 1)?;
+        self.conn.pragma_update(None, "foreign_keys", 1)?;
         if self.ignore_dups {
             // TODO Validate ignore dups only in the same session_id ?
-            conn.execute_batch(
+            self.conn.execute_batch(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
             )?;
         } else if user_version > 0 {
-            conn.execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+            self.conn
+                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
         }
         if self.row_id == 0 && user_version > 0 {
-            self.row_id = conn.query_row("SELECT max(rowid) FROM history;", [], |r| r.get(0))?;
+            self.row_id = self
+                .conn
+                .query_row("SELECT max(rowid) FROM history;", [], |r| r.get(0))?;
         }
         Ok(())
     }
@@ -119,7 +136,7 @@ PRAGMA user_version = 1;
     fn create_session(&mut self) -> Result<()> {
         if self.session_id == 0 {
             self.check_schema()?;
-            self.session_id = self.conn()?.query_row(
+            self.session_id = self.conn.query_row(
                 "INSERT INTO session (id) VALUES (NULL) RETURNING id;",
                 [],
                 |r| r.get(0),
@@ -141,9 +158,9 @@ PRAGMA user_version = 1;
         false
     }
 
-    fn add_entry(&mut self, conn: Connection, line: &str) -> Result<bool> {
+    fn add_entry(&mut self, line: &str) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
-        let mut stmt = conn.prepare_cached(
+        let mut stmt = self.conn.prepare_cached(
             "INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;",
         )?;
         if let Some(row_id) = stmt
@@ -173,7 +190,7 @@ PRAGMA user_version = 1;
             SearchDirection::Reverse => '<',
             SearchDirection::Forward => '>',
         };
-        self.conn()?
+        self.conn
             .query_row(
                 &format!(
                     "SELECT docid, entry {} FROM fts WHERE entry MATCH {} ? || '*'  AND docid {} \
@@ -195,18 +212,11 @@ PRAGMA user_version = 1;
 }
 
 impl History for SQLiteHistory {
-    /// Transient in-memory database
-    fn with_config(config: Config) -> Self
-    where
-        Self: Sized,
-    {
-        Self::new(config, None)
-    }
-
-    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
+    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
         // TODO: rowid may not be sequential
-        let conn = self.conn()?;
-        let mut stmt = conn.prepare_cached("SELECT entry FROM history WHERE rowid = ?;")?;
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT entry FROM history WHERE rowid = ?;")?;
         stmt.query_row([index], |r| r.get(0).map(Cow::Owned))
             .optional()
             .map_err(ReadlineError::from)
@@ -218,7 +228,7 @@ impl History for SQLiteHistory {
         }
         // Do not create a session until the first entry is added.
         self.create_session()?;
-        self.add_entry(self.conn()?, line)
+        self.add_entry(line)
     }
 
     fn add_owned(&mut self, line: String) -> Result<bool> {
@@ -255,7 +265,7 @@ impl History for SQLiteHistory {
             // nothing to save
             return Ok(());
         }
-        self.conn()?.execute_batch(
+        self.conn.execute_batch(
             "
 PRAGMA optimize;
 PRAGMA incremental_vacuum;
@@ -268,12 +278,12 @@ PRAGMA incremental_vacuum;
         if self.path.is_some() && self.path.as_ref().map_or(true, |p| p == path) {
             return Ok(()); // no entry in memory
         } else if self.session_id == 0 {
-            self.reset(path);
+            self.reset(path)?;
             self.check_schema()?;
             return Ok(()); // no entry to append
         }
-        let current = self.conn()?;
-        self.reset(path);
+        let current = Self::conn(self.path.as_ref())?;
+        self.reset(path)?;
         self.check_schema()?;
         self.create_session()?; // TODO preserve session.timestamp
                                 // TODO Validate only current session entries
@@ -284,10 +294,10 @@ PRAGMA incremental_vacuum;
     fn load(&mut self, path: &Path) -> Result<()> {
         if self.path.is_none() {
             // TODO check that there is no memory entries (session_id == 0) ?
-            self.reset(path);
+            self.reset(path)?;
             self.check_schema()?;
         } else if self.path.as_ref().map_or(true, |p| p != path) {
-            self.reset(path);
+            self.reset(path)?;
             self.check_schema()?;
         }
         // Keep all on disk
@@ -299,7 +309,7 @@ PRAGMA incremental_vacuum;
             return Ok(());
         } else if self.path.is_none() {
             // ON DELETE CASCADE...
-            self.conn()?.execute(
+            self.conn.execute(
                 "DELETE FROM session WHERE session_id = ?;",
                 [self.session_id],
             )?;

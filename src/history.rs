@@ -53,27 +53,10 @@ pub trait History {
     // 		std::string _timestamp;
     // 		std::string _text;
 
-    /// Default constructor
-    #[must_use]
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        Self::with_config(Config::default())
-    }
-    /// Customized constructor with:
-    /// - `Config::max_history_size()`,
-    /// - `Config::history_ignore_space()`,
-    /// - `Config::history_duplicates()`.
-    #[must_use]
-    fn with_config(config: Config) -> Self
-    where
-        Self: Sized;
-
     // termwiz: fn get(&self, idx: HistoryIndex) -> Option<Cow<str>>;
 
     /// Return the history entry at position `index`, starting from 0.
-    fn get(&self, index: usize) -> Result<Option<Cow<String>>>;
+    fn get(&self, index: usize) -> Result<Option<Cow<str>>>;
 
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
@@ -198,6 +181,26 @@ pub struct MemHistory {
 }
 
 impl MemHistory {
+    /// Default constructor
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_config(Config::default())
+    }
+
+    /// Customized constructor with:
+    /// - `Config::max_history_size()`,
+    /// - `Config::history_ignore_space()`,
+    /// - `Config::history_duplicates()`.
+    #[must_use]
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            entries: VecDeque::new(),
+            max_len: config.max_history_size(),
+            ignore_space: config.history_ignore_space(),
+            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+        }
+    }
+
     fn search_match<F>(
         &self,
         term: &str,
@@ -273,17 +276,12 @@ impl MemHistory {
 }
 
 impl History for MemHistory {
-    fn with_config(config: Config) -> Self {
-        Self {
-            entries: VecDeque::new(),
-            max_len: config.max_history_size(),
-            ignore_space: config.history_ignore_space(),
-            ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
-        }
-    }
-
-    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
-        Ok(self.entries.get(index).map(Cow::Borrowed))
+    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
+        Ok(self
+            .entries
+            .get(index)
+            .map(String::as_ref)
+            .map(Cow::Borrowed))
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -449,6 +447,25 @@ impl FileHistory {
     // and backslashes escaped in them.
     const FILE_VERSION_V2: &'static str = "#V2";
 
+    /// Default constructor
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_config(Config::default())
+    }
+
+    /// Customized constructor with:
+    /// - `Config::max_history_size()`,
+    /// - `Config::history_ignore_space()`,
+    /// - `Config::history_duplicates()`.
+    #[must_use]
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            mem: MemHistory::with_config(config),
+            new_entries: 0,
+            path_info: None,
+        }
+    }
+
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
         use std::io::{BufWriter, Write};
 
@@ -608,15 +625,7 @@ pub type DefaultHistory = FileHistory;
 
 #[cfg(feature = "with-file-history")]
 impl History for FileHistory {
-    fn with_config(config: Config) -> Self {
-        Self {
-            mem: MemHistory::with_config(config),
-            new_entries: 0,
-            path_info: None,
-        }
-    }
-
-    fn get(&self, index: usize) -> Result<Option<Cow<String>>> {
+    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
         self.mem.get(index)
     }
 
@@ -813,7 +822,6 @@ mod tests {
     use crate::config::Config;
     #[cfg(feature = "with-file-history")]
     use crate::Result;
-    use std::borrow::Cow;
 
     fn init() -> DefaultHistory {
         let mut history = DefaultHistory::new();
@@ -960,112 +968,89 @@ mod tests {
     }
 
     #[test]
-    fn search() {
+    fn search() -> Result<()> {
         let history = init();
-        assert_eq!(
-            None,
-            history.search("", 0, SearchDirection::Forward).unwrap()
-        );
-        assert_eq!(
-            None,
-            history.search("none", 0, SearchDirection::Forward).unwrap()
-        );
-        assert_eq!(
-            None,
-            history.search("line", 3, SearchDirection::Forward).unwrap()
-        );
+        assert_eq!(None, history.search("", 0, SearchDirection::Forward)?);
+        assert_eq!(None, history.search("none", 0, SearchDirection::Forward)?);
+        assert_eq!(None, history.search("line", 3, SearchDirection::Forward)?);
 
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: Cow::Borrowed(history.get(0).unwrap()),
+                entry: history.get(0)?.unwrap(),
                 pos: 0
             }),
-            history.search("line", 0, SearchDirection::Forward).unwrap()
+            history.search("line", 0, SearchDirection::Forward)?
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: Cow::Borrowed(history.get(1).unwrap()),
+                entry: history.get(1)?.unwrap(),
                 pos: 0
             }),
-            history.search("line", 1, SearchDirection::Forward).unwrap()
+            history.search("line", 1, SearchDirection::Forward)?
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: Cow::Borrowed(history.get(2).unwrap()),
+                entry: history.get(2)?.unwrap(),
                 pos: 0
             }),
-            history
-                .search("line3", 1, SearchDirection::Forward)
-                .unwrap()
+            history.search("line3", 1, SearchDirection::Forward)?
         );
+        Ok(())
     }
 
     #[test]
-    fn reverse_search() {
+    fn reverse_search() -> Result<()> {
         let history = init();
-        assert_eq!(
-            None,
-            history.search("", 2, SearchDirection::Reverse).unwrap()
-        );
-        assert_eq!(
-            None,
-            history.search("none", 2, SearchDirection::Reverse).unwrap()
-        );
-        assert_eq!(
-            None,
-            history.search("line", 3, SearchDirection::Reverse).unwrap()
-        );
+        assert_eq!(None, history.search("", 2, SearchDirection::Reverse)?);
+        assert_eq!(None, history.search("none", 2, SearchDirection::Reverse)?);
+        assert_eq!(None, history.search("line", 3, SearchDirection::Reverse)?);
 
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: Cow::Borrowed(history.get(2).unwrap()),
+                entry: history.get(2)?.unwrap(),
                 pos: 0
             }),
-            history.search("line", 2, SearchDirection::Reverse).unwrap()
+            history.search("line", 2, SearchDirection::Reverse)?
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: Cow::Borrowed(history.get(1).unwrap()),
+                entry: history.get(1)?.unwrap(),
                 pos: 0
             }),
-            history.search("line", 1, SearchDirection::Reverse).unwrap()
+            history.search("line", 1, SearchDirection::Reverse)?
         );
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: Cow::Borrowed(history.get(0).unwrap()),
+                entry: history.get(0)?.unwrap(),
                 pos: 0
             }),
-            history
-                .search("line1", 1, SearchDirection::Reverse)
-                .unwrap()
+            history.search("line1", 1, SearchDirection::Reverse)?
         );
+        Ok(())
     }
 
     #[test]
     #[cfg(feature = "case_insensitive_history_search")]
-    fn anchored_search() {
+    fn anchored_search() -> Result<()> {
         let history = init();
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: Cow::Borrowed(history.get(2).unwrap()),
+                entry: history.get(2)?.unwrap(),
                 pos: 4
             }),
-            history
-                .starts_with("LiNe", 2, SearchDirection::Reverse)
-                .unwrap()
+            history.starts_with("LiNe", 2, SearchDirection::Reverse)?
         );
         assert_eq!(
             None,
-            history
-                .starts_with("iNe", 2, SearchDirection::Reverse)
-                .unwrap()
+            history.starts_with("iNe", 2, SearchDirection::Reverse)?
         );
+        Ok(())
     }
 }

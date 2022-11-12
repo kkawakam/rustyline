@@ -1,4 +1,5 @@
 //! Customize line editor
+use crate::Result;
 use std::default::Default;
 
 /// User preferences
@@ -337,10 +338,9 @@ impl Builder {
     /// in the history list.
     ///
     /// By default, they are ignored.
-    #[must_use]
-    pub fn history_ignore_dups(mut self, yes: bool) -> Self {
-        self.set_history_ignore_dups(yes);
-        self
+    pub fn history_ignore_dups(mut self, yes: bool) -> Result<Self> {
+        self.set_history_ignore_dups(yes)?;
+        Ok(self)
     }
 
     /// Tell if lines which begin with a space character are saved or not in
@@ -483,8 +483,9 @@ pub trait Configurer {
     /// in the history list.
     ///
     /// By default, they are ignored.
-    fn set_history_ignore_dups(&mut self, yes: bool) {
+    fn set_history_ignore_dups(&mut self, yes: bool) -> Result<()> {
         self.config_mut().set_history_ignore_dups(yes);
+        Ok(())
     }
 
     /// Tell if lines which begin with a space character are saved or not in

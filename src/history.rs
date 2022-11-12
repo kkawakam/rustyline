@@ -108,7 +108,7 @@ pub trait History {
     fn set_max_len(&mut self, len: usize);
 
     /// Ignore consecutive duplicates
-    fn ignore_dups(&mut self, yes: bool);
+    fn ignore_dups(&mut self, yes: bool) -> Result<()>;
 
     /// Ignore lines which begin with a space or not
     fn ignore_space(&mut self, yes: bool);
@@ -315,8 +315,9 @@ impl History for MemHistory {
         }
     }
 
-    fn ignore_dups(&mut self, yes: bool) {
+    fn ignore_dups(&mut self, yes: bool) -> Result<()> {
         self.ignore_dups = yes;
+        Ok(())
     }
 
     fn ignore_space(&mut self, yes: bool) {
@@ -660,8 +661,8 @@ impl History for FileHistory {
         self.new_entries = self.new_entries.min(len);
     }
 
-    fn ignore_dups(&mut self, yes: bool) {
-        self.mem.ignore_dups(yes);
+    fn ignore_dups(&mut self, yes: bool) -> Result<()> {
+        self.mem.ignore_dups(yes)
     }
 
     fn ignore_space(&mut self, yes: bool) {
@@ -947,7 +948,7 @@ mod tests {
     fn truncate() -> Result<()> {
         let tf = tempfile::NamedTempFile::new()?;
 
-        let config = Config::builder().history_ignore_dups(false).build();
+        let config = Config::builder().history_ignore_dups(false)?.build();
         let mut history = DefaultHistory::with_config(config);
         history.add("line1")?;
         history.add("line1")?;

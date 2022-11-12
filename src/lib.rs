@@ -915,9 +915,9 @@ impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
         self.history.set_max_len(max_size);
     }
 
-    fn set_history_ignore_dups(&mut self, yes: bool) {
+    fn set_history_ignore_dups(&mut self, yes: bool) -> Result<()> {
         self.config_mut().set_history_ignore_dups(yes);
-        self.history.ignore_dups(yes);
+        self.history.ignore_dups(yes)
     }
 
     fn set_history_ignore_space(&mut self, yes: bool) {

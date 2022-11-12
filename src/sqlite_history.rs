@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, DatabaseName, OptionalExtension};
 
 use crate::history::SearchResult;
 use crate::{Config, History, HistoryDuplicates, ReadlineError, Result, SearchDirection};
@@ -43,21 +43,13 @@ impl SQLiteHistory {
 
     /// Open specifed database
     pub fn open<P: AsRef<Path> + ?Sized>(config: Config, path: &P) -> Result<Self> {
-        let mut sh = Self::new(config, Some(path.as_ref().to_path_buf()))?;
+        let mut sh = Self::new(config, normalize(path.as_ref()))?;
         sh.check_schema()?;
         Ok(sh)
     }
 
-    fn conn(path: Option<&PathBuf>) -> rusqlite::Result<Connection> {
-        if let Some(ref path) = path {
-            Connection::open(path)
-        } else {
-            Connection::open_in_memory()
-        }
-    }
-
     fn new(config: Config, path: Option<PathBuf>) -> Result<Self> {
-        let conn = Self::conn(path.as_ref())?;
+        let conn = conn(path.as_ref())?;
         Ok(SQLiteHistory {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
@@ -70,11 +62,26 @@ impl SQLiteHistory {
         })
     }
 
-    fn reset(&mut self, path: &Path) -> Result<()> {
-        self.path = Some(path.to_path_buf());
+    fn is_mem_or_temp(&self) -> bool {
+        match self.path {
+            None => true,
+            Some(ref p) => is_mem_or_temp(p),
+        }
+    }
+
+    fn reset(&mut self, path: &Path) -> Result<Connection> {
+        self.path = normalize(path);
         self.session_id = 0;
         self.row_id = 0;
-        self.conn = Connection::open(path)?;
+        Ok(std::mem::replace(&mut self.conn, conn(self.path.as_ref())?))
+    }
+
+    fn update_row_id(&mut self) -> Result<()> {
+        self.row_id =
+            self.conn
+                .query_row("SELECT ifnull(max(rowid), 0) FROM history;", [], |r| {
+                    r.get(0)
+                })?;
         Ok(())
     }
 
@@ -88,13 +95,13 @@ impl SQLiteHistory {
 PRAGMA auto_vacuum = INCREMENTAL;
 CREATE TABLE session (
     id INTEGER PRIMARY KEY NOT NULL,
-    timestamp REAL NOT NULL DEFAULT julianday('now')
+    timestamp REAL NOT NULL DEFAULT (julianday('now'))
 ) STRICT; -- user, host, pid
 CREATE TABLE history (
     --id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     session_id INTEGER NOT NULL,
     entry TEXT NOT NULL,
-    timestamp REAL NOT NULL DEFAULT julianday('now'),
+    timestamp REAL NOT NULL DEFAULT (julianday('now')),
     FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
 ) STRICT;
 --TODO fts enabled
@@ -116,19 +123,11 @@ PRAGMA user_version = 1;
             )?
         }
         self.conn.pragma_update(None, "foreign_keys", 1)?;
-        if self.ignore_dups {
-            // TODO Validate ignore dups only in the same session_id ?
-            self.conn.execute_batch(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
-            )?;
-        } else if user_version > 0 {
-            self.conn
-                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+        if self.ignore_dups || user_version > 0 {
+            self.ignore_dups(self.ignore_dups)?;
         }
         if self.row_id == 0 && user_version > 0 {
-            self.row_id = self
-                .conn
-                .query_row("SELECT max(rowid) FROM history;", [], |r| r.get(0))?;
+            self.update_row_id()?;
         }
         Ok(())
     }
@@ -251,8 +250,17 @@ impl History for SQLiteHistory {
         todo!()
     }
 
-    fn ignore_dups(&mut self, yes: bool) {
-        todo!()
+    fn ignore_dups(&mut self, yes: bool) -> Result<()> {
+        if self.ignore_dups {
+            // TODO Validate ignore dups only in the same session_id ?
+            self.conn.execute_batch(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
+            )?;
+        } else {
+            self.conn
+                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+        }
+        Ok(())
     }
 
     fn ignore_space(&mut self, yes: bool) {
@@ -260,39 +268,57 @@ impl History for SQLiteHistory {
     }
 
     fn save(&mut self, path: &Path) -> Result<()> {
-        // TODO check self.path == path (if different => backup)
         if self.session_id == 0 {
             // nothing to save
             return Ok(());
-        }
-        self.conn.execute_batch(
-            "
+        } else if is_same(self.path.as_ref(), path) {
+            if !self.is_mem_or_temp() {
+                self.conn.execute_batch(
+                    "
 PRAGMA optimize;
 PRAGMA incremental_vacuum;
          ",
-        )?;
+                )?;
+            }
+        } else {
+            // TODO Validate backup whole history
+            self.conn.backup(DatabaseName::Main, path, None)?;
+            // TODO Validate keep using original path
+        }
         Ok(())
     }
 
     fn append(&mut self, path: &Path) -> Result<()> {
-        if self.path.is_some() && self.path.as_ref().map_or(true, |p| p == path) {
+        if is_same(self.path.as_ref(), path) {
             return Ok(()); // no entry in memory
         } else if self.session_id == 0 {
             self.reset(path)?;
             self.check_schema()?;
             return Ok(()); // no entry to append
         }
-        let current = Self::conn(self.path.as_ref())?;
-        self.reset(path)?;
-        self.check_schema()?;
-        self.create_session()?; // TODO preserve session.timestamp
-                                // TODO Validate only current session entries
-                                //let entries = current.qu
+        let old_id = self.session_id;
+        {
+            let old = self.reset(path)?; // keep connection alive in case of in-memory database
+            self.create_session()?; // TODO preserve session.timestamp
+            old.execute("ATTACH DATABASE ? AS new;", [path.to_string_lossy()])?; // TODO empty path / temporary database
+            old.execute(
+                "INSERT OR IGNORE INTO new.history (session_id, entry) SELECT ?, entry FROM \
+                 history WHERE session_id = ?;",
+                [self.session_id, old_id],
+            )?; // TODO Validate only current session entries
+            old.execute("DETACH DATABASE new;", [])?;
+
+            let _ = old.close(); // FIXME busy
+        }
+        self.update_row_id()?;
         Ok(())
     }
 
     fn load(&mut self, path: &Path) -> Result<()> {
-        if self.path.is_none() {
+        #[allow(clippy::if_same_then_else)]
+        if is_same(self.path.as_ref(), path) {
+            return Ok(());
+        } else if self.path.is_none() {
             // TODO check that there is no memory entries (session_id == 0) ?
             self.reset(path)?;
             self.check_schema()?;
@@ -307,12 +333,12 @@ PRAGMA incremental_vacuum;
     fn clear(&mut self) -> Result<()> {
         if self.session_id == 0 {
             return Ok(());
-        } else if self.path.is_none() {
+        } else if self.is_mem_or_temp() {
             // ON DELETE CASCADE...
-            self.conn.execute(
-                "DELETE FROM session WHERE session_id = ?;",
-                [self.session_id],
-            )?;
+            self.conn
+                .execute("DELETE FROM session WHERE id = ?;", [self.session_id])?;
+            self.session_id = 0;
+            self.update_row_id()?;
         } // else nothing in memory, TODO Validate: no delete ?
         Ok(())
     }
@@ -333,5 +359,109 @@ PRAGMA incremental_vacuum;
         dir: SearchDirection,
     ) -> Result<Option<SearchResult>> {
         self.search_match(term, start, dir, true)
+    }
+}
+
+fn conn(path: Option<&PathBuf>) -> rusqlite::Result<Connection> {
+    if let Some(ref path) = path {
+        Connection::open(path)
+    } else {
+        Connection::open_in_memory()
+    }
+}
+
+const MEMORY: &str = ":memory:";
+
+fn normalize(path: &Path) -> Option<PathBuf> {
+    if path.as_os_str() == MEMORY {
+        None
+    } else {
+        Some(path.to_path_buf())
+    }
+}
+fn is_mem_or_temp(path: &Path) -> bool {
+    let os_str = path.as_os_str();
+    os_str.is_empty() || os_str == MEMORY
+}
+fn is_same(old: Option<&PathBuf>, new: &Path) -> bool {
+    if let Some(old) = old {
+        old == new // TODO canonicalize ?
+    } else {
+        new.as_os_str() == MEMORY
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SQLiteHistory;
+    use crate::config::Config;
+    use crate::history::History;
+    use crate::Result;
+    use std::path::Path;
+
+    #[test]
+    fn save() -> Result<()> {
+        let db1 = "file:db1?mode=memory&cache=shared";
+        let db2 = "file:db2?mode=memory";
+        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        h.save(Path::new(db1))?;
+        h.save(Path::new(db2))?;
+        h.add("line")?;
+        h.save(Path::new(db1))?;
+        assert_eq!(db1, h.path.unwrap().as_os_str());
+        assert_eq!(1, h.session_id);
+        assert_eq!(1, h.row_id);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // FIXME panic
+    fn append() -> Result<()> {
+        let db1 = "file:db1?mode=memory&cache=shared";
+        let db2 = "file:db2?mode=memory";
+        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        h.append(Path::new(db1))?;
+        h.append(Path::new(db2))?;
+        h.add("line")?;
+        h.append(Path::new(db1))?;
+        assert_eq!(db1, h.path.unwrap().as_os_str());
+        assert_eq!(1, h.session_id);
+        assert_eq!(1, h.row_id);
+        Ok(())
+    }
+
+    #[test]
+    fn load() -> Result<()> {
+        let db1 = "file:db1?mode=memory";
+        let db2 = "file:db2?mode=memory";
+        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        h.load(Path::new(db1))?;
+        h.add("line")?;
+        h.load(Path::new(db2))?;
+        assert_eq!(db2, h.path.unwrap().as_os_str());
+        assert_eq!(0, h.session_id);
+        assert_eq!(0, h.row_id);
+        Ok(())
+    }
+
+    #[test]
+    fn clear() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        h.clear()?;
+        h.add("line")?;
+        h.clear()?;
+        assert_eq!(0, h.session_id);
+        assert_eq!(0, h.row_id);
+        assert_eq!(
+            0,
+            h.conn
+                .query_row("SELECT count(1) FROM session;", [], |r| r.get::<_, i32>(0))?
+        );
+        assert_eq!(
+            0,
+            h.conn
+                .query_row("SELECT count(1) FROM history;", [], |r| r.get::<_, i32>(0))?
+        );
+        Ok(())
     }
 }

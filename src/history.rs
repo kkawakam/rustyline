@@ -105,7 +105,7 @@ pub trait History {
     /// smaller than the amount of items already inside the history.
     ///
     /// Like [stifle_history](http://tiswww.case.edu/php/chet/readline/history.html#IDX11).
-    fn set_max_len(&mut self, len: usize);
+    fn set_max_len(&mut self, len: usize) -> Result<()>;
 
     /// Ignore consecutive duplicates
     fn ignore_dups(&mut self, yes: bool) -> Result<()>;
@@ -308,11 +308,12 @@ impl History for MemHistory {
         self.entries.is_empty()
     }
 
-    fn set_max_len(&mut self, len: usize) {
+    fn set_max_len(&mut self, len: usize) -> Result<()> {
         self.max_len = len;
         if self.len() > len {
             self.entries.drain(..self.len() - len);
         }
+        Ok(())
     }
 
     fn ignore_dups(&mut self, yes: bool) -> Result<()> {
@@ -656,9 +657,10 @@ impl History for FileHistory {
         self.mem.is_empty()
     }
 
-    fn set_max_len(&mut self, len: usize) {
-        self.mem.set_max_len(len);
+    fn set_max_len(&mut self, len: usize) -> Result<()> {
+        self.mem.set_max_len(len)?;
         self.new_entries = self.new_entries.min(len);
+        Ok(())
     }
 
     fn ignore_dups(&mut self, yes: bool) -> Result<()> {
@@ -821,7 +823,6 @@ cfg_if::cfg_if! {
 mod tests {
     use super::{DefaultHistory, History, SearchDirection, SearchResult};
     use crate::config::Config;
-    #[cfg(feature = "with-file-history")]
     use crate::Result;
 
     fn init() -> DefaultHistory {
@@ -854,7 +855,7 @@ mod tests {
     #[test]
     fn set_max_len() {
         let mut history = init();
-        history.set_max_len(1);
+        history.set_max_len(1).unwrap();
         assert_eq!(1, history.len());
         assert_eq!(Some(&"line3".to_owned()), history.into_iter().last());
     }

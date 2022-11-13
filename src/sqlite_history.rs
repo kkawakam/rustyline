@@ -7,8 +7,6 @@ use rusqlite::{Connection, DatabaseName, OptionalExtension};
 use crate::history::SearchResult;
 use crate::{Config, History, HistoryDuplicates, ReadlineError, Result, SearchDirection};
 
-// FIXME history_index (src/lib.rs:686)
-
 /// History stored in an SQLite database.
 pub struct SQLiteHistory {
     max_len: usize,
@@ -43,14 +41,12 @@ impl SQLiteHistory {
 
     /// Open specifed database
     pub fn open<P: AsRef<Path> + ?Sized>(config: Config, path: &P) -> Result<Self> {
-        let mut sh = Self::new(config, normalize(path.as_ref()))?;
-        sh.check_schema()?;
-        Ok(sh)
+        Self::new(config, normalize(path.as_ref()))
     }
 
     fn new(config: Config, path: Option<PathBuf>) -> Result<Self> {
         let conn = conn(path.as_ref())?;
-        Ok(SQLiteHistory {
+        let mut sh = SQLiteHistory {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             // not strictly consecutive...
@@ -59,7 +55,9 @@ impl SQLiteHistory {
             conn,
             session_id: 0,
             row_id: 0,
-        })
+        };
+        sh.check_schema()?;
+        Ok(sh)
     }
 
     fn is_mem_or_temp(&self) -> bool {
@@ -104,7 +102,6 @@ CREATE TABLE history (
     timestamp REAL NOT NULL DEFAULT (julianday('now')),
     FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
 ) STRICT;
---TODO fts enabled
 CREATE VIRTUAL TABLE fts USING fts4(content=history, entry);
 CREATE TRIGGER history_bu BEFORE UPDATE ON history BEGIN
     DELETE FROM fts WHERE docid=old.rowid;
@@ -124,10 +121,23 @@ PRAGMA user_version = 1;
         }
         self.conn.pragma_update(None, "foreign_keys", 1)?;
         if self.ignore_dups || user_version > 0 {
-            self.ignore_dups(self.ignore_dups)?;
+            self.set_ignore_dups()?;
         }
         if self.row_id == 0 && user_version > 0 {
             self.update_row_id()?;
+        }
+        Ok(())
+    }
+
+    fn set_ignore_dups(&mut self) -> Result<()> {
+        if self.ignore_dups {
+            // TODO Validate: ignore dups only in the same session_id ?
+            self.conn.execute_batch(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
+            )?;
+        } else {
+            self.conn
+                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
         }
         Ok(())
     }
@@ -183,40 +193,54 @@ PRAGMA user_version = 1;
         if term.is_empty() || start >= self.len() {
             return Ok(None);
         }
-        let offsets = if start_with { "" } else { ", offsets(entry)" };
-        let prefix = if start_with { "'^' || " } else { "" };
-        let op = match dir {
-            SearchDirection::Reverse => '<',
-            SearchDirection::Forward => '>',
+        let start = start + 1; // first rowid is 1
+        let query = match (dir, start_with) {
+            (SearchDirection::Forward, true) => {
+                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ? || '*'  AND docid >= ? \
+                 ORDER BY docid ASC LIMIT 1;"
+            }
+            (SearchDirection::Forward, false) => {
+                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ? || '*'  AND docid \
+                 >= ? ORDER BY docid ASC LIMIT 1;"
+            }
+            (SearchDirection::Reverse, true) => {
+                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ? || '*'  AND docid <= ? \
+                 ORDER BY docid DESC LIMIT 1;"
+            }
+            (SearchDirection::Reverse, false) => {
+                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ? || '*'  AND docid \
+                 <= ? ORDER BY docid DESC LIMIT 1;"
+            }
         };
-        self.conn
-            .query_row(
-                &format!(
-                    "SELECT docid, entry {} FROM fts WHERE entry MATCH {} ? || '*'  AND docid {} \
-                     ?;",
-                    offsets, prefix, op
-                ),
-                (term, start),
-                |r| {
-                    Ok(SearchResult {
-                        entry: Cow::Owned(r.get(1)?),
-                        idx: r.get(0)?,
-                        pos: if start_with { 0 } else { r.get(2)? }, // FIXME extract from offsets
-                    })
+        let mut stmt = self.conn.prepare_cached(query)?;
+        stmt.query_row((term, start), |r| {
+            Ok(SearchResult {
+                entry: Cow::Owned(r.get(1)?),
+                idx: r.get::<_, usize>(0)? - 1, // rowid - 1
+                pos: if start_with {
+                    term.len()
+                } else {
+                    offset(r.get(2)?)
                 },
-            )
-            .optional()
-            .map_err(ReadlineError::from)
+            })
+        })
+        .optional()
+        .map_err(ReadlineError::from)
     }
 }
 
 impl History for SQLiteHistory {
+    /// rowid <> index
     fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
+        let rowid = index + 1; // first rowid is 1
+        if self.is_empty() {
+            return Ok(None);
+        }
         // TODO: rowid may not be sequential
         let mut stmt = self
             .conn
             .prepare_cached("SELECT entry FROM history WHERE rowid = ?;")?;
-        stmt.query_row([index], |r| r.get(0).map(Cow::Owned))
+        stmt.query_row([rowid], |r| r.get(0).map(Cow::Owned))
             .optional()
             .map_err(ReadlineError::from)
     }
@@ -234,31 +258,36 @@ impl History for SQLiteHistory {
         self.add(line.as_str())
     }
 
+    /// This is not really the length
     fn len(&self) -> usize {
-        self.row_id + 1
+        self.row_id
     }
 
     fn is_empty(&self) -> bool {
         self.row_id == 0
     }
 
-    fn set_max_len(&mut self, len: usize) {
-        // SELECT count(1) FROM history;
-        // DELETE FROM history WHERE rowid IN (SELECT rowid FROM history ORDER BY rowid
-        // ASC LIMIT ?);
+    fn set_max_len(&mut self, len: usize) -> Result<()> {
+        // TODO call this method on save ? before append ?
+        // FIXME rowid may not be sequential
+        let count: usize = self
+            .conn
+            .query_row("SELECT count(1) FROM history;", [], |r| r.get(0))?;
+        if count > len {
+            self.conn.execute(
+                "DELETE FROM history WHERE rowid IN (SELECT rowid FROM history ORDER BY rowid ASC \
+                 LIMIT ?);",
+                [count - len],
+            )?;
+        }
         self.max_len = len;
-        todo!()
+        Ok(())
     }
 
     fn ignore_dups(&mut self, yes: bool) -> Result<()> {
-        if self.ignore_dups {
-            // TODO Validate ignore dups only in the same session_id ?
-            self.conn.execute_batch(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON history(entry, session_id);",
-            )?;
-        } else {
-            self.conn
-                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+        if self.ignore_dups != yes {
+            self.ignore_dups = yes;
+            self.set_ignore_dups()?;
         }
         Ok(())
     }
@@ -281,9 +310,9 @@ PRAGMA incremental_vacuum;
                 )?;
             }
         } else {
-            // TODO Validate backup whole history
+            // TODO Validate: backup whole history
             self.conn.backup(DatabaseName::Main, path, None)?;
-            // TODO Validate keep using original path
+            // TODO Validate: keep using original path
         }
         Ok(())
     }
@@ -305,7 +334,7 @@ PRAGMA incremental_vacuum;
                 "INSERT OR IGNORE INTO new.history (session_id, entry) SELECT ?, entry FROM \
                  history WHERE session_id = ?;",
                 [self.session_id, old_id],
-            )?; // TODO Validate only current session entries
+            )?; // TODO Validate: only current session entries
             old.execute("DETACH DATABASE new;", [])?;
 
             let _ = old.close(); // FIXME busy
@@ -390,18 +419,85 @@ fn is_same(old: Option<&PathBuf>, new: &Path) -> bool {
         new.as_os_str() == MEMORY
     }
 }
+fn offset(s: String) -> usize {
+    s.split(' ')
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
 
 #[cfg(test)]
 mod tests {
     use super::SQLiteHistory;
     use crate::config::Config;
-    use crate::history::History;
+    use crate::history::{History, SearchDirection, SearchResult};
     use crate::Result;
+    use std::borrow::Cow;
     use std::path::Path;
+
+    fn init() -> Result<SQLiteHistory> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        h.add("line1")?;
+        h.add("line2")?;
+        h.add("line3")?;
+        Ok(h)
+    }
+
+    #[test]
+    fn get() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        assert_eq!(None, h.get(0)?);
+        h.add("line")?;
+        assert_eq!(Some(Cow::Borrowed("line")), h.get(0)?);
+        Ok(())
+    }
+
+    #[test]
+    fn len() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        assert_eq!(0, h.len());
+        h.add("line")?;
+        assert_eq!(1, h.len());
+        Ok(())
+    }
+
+    #[test]
+    fn is_empty() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        assert!(h.is_empty());
+        h.add("line")?;
+        assert!(!h.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn set_max_len() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        h.add("l1")?;
+        h.add("l2")?;
+        h.add("l3")?;
+        h.set_max_len(2)?;
+        let (min, max) =
+            h.conn
+                .query_row("SELECT min(rowid), max(rowid) FROM history;", [], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+                })?;
+        assert_eq!(2, min);
+        assert_eq!(3, max);
+        Ok(())
+    }
+
+    #[test]
+    fn ignore_dups() -> Result<()> {
+        let mut h = SQLiteHistory::with_config(Config::default())?;
+        h.ignore_dups(true)?;
+        h.ignore_dups(false)?;
+        h.ignore_dups(true)
+    }
 
     #[test]
     fn save() -> Result<()> {
-        let db1 = "file:db1?mode=memory&cache=shared";
+        let db1 = "file:db1?mode=memory";
         let db2 = "file:db2?mode=memory";
         let mut h = SQLiteHistory::open(Config::default(), db1)?;
         h.save(Path::new(db1))?;
@@ -417,14 +513,14 @@ mod tests {
     #[test]
     #[ignore] // FIXME panic
     fn append() -> Result<()> {
-        let db1 = "file:db1?mode=memory&cache=shared";
-        let db2 = "file:db2?mode=memory";
+        let db1 = "file:db1?mode=memory";
+        let db2 = "file:db2?mode=memory&cache=shared";
         let mut h = SQLiteHistory::open(Config::default(), db1)?;
         h.append(Path::new(db1))?;
-        h.append(Path::new(db2))?;
+        //h.append(Path::new(db2))?;
         h.add("line")?;
-        h.append(Path::new(db1))?;
-        assert_eq!(db1, h.path.unwrap().as_os_str());
+        h.append(Path::new(db2))?;
+        assert_eq!(db2, h.path.unwrap().as_os_str());
         assert_eq!(1, h.session_id);
         assert_eq!(1, h.row_id);
         Ok(())
@@ -462,6 +558,89 @@ mod tests {
             h.conn
                 .query_row("SELECT count(1) FROM history;", [], |r| r.get::<_, i32>(0))?
         );
+        Ok(())
+    }
+
+    #[test]
+    fn search() -> Result<()> {
+        let h = init()?;
+        assert_eq!(None, h.search("", 0, SearchDirection::Forward)?);
+        assert_eq!(None, h.search("none", 0, SearchDirection::Forward)?);
+        assert_eq!(None, h.search("line", 3, SearchDirection::Forward)?);
+
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: h.get(0)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line", 0, SearchDirection::Forward)?
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: h.get(1)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line", 1, SearchDirection::Forward)?
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: h.get(2)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line3", 1, SearchDirection::Forward)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reverse_search() -> Result<()> {
+        let h = init()?;
+        assert_eq!(None, h.search("", 2, SearchDirection::Reverse)?);
+        assert_eq!(None, h.search("none", 2, SearchDirection::Reverse)?);
+        assert_eq!(None, h.search("line", 3, SearchDirection::Reverse)?);
+
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: h.get(2)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line", 2, SearchDirection::Reverse)?
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 1,
+                entry: h.get(1)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line", 1, SearchDirection::Reverse)?
+        );
+        assert_eq!(
+            Some(SearchResult {
+                idx: 0,
+                entry: h.get(0)?.unwrap(),
+                pos: 0
+            }),
+            h.search("line1", 1, SearchDirection::Reverse)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn starts_with() -> Result<()> {
+        let h = init()?;
+        assert_eq!(
+            Some(SearchResult {
+                idx: 2,
+                entry: h.get(2)?.unwrap(),
+                pos: 4
+            }),
+            h.starts_with("LiNe", 2, SearchDirection::Reverse)?
+        );
+        assert_eq!(None, h.starts_with("iNe", 2, SearchDirection::Reverse)?);
         Ok(())
     }
 }

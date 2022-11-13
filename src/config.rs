@@ -328,10 +328,9 @@ impl Builder {
     }
 
     /// Set the maximum length for the history.
-    #[must_use]
-    pub fn max_history_size(mut self, max_size: usize) -> Self {
-        self.set_max_history_size(max_size);
-        self
+    pub fn max_history_size(mut self, max_size: usize) -> Result<Self> {
+        self.set_max_history_size(max_size)?;
+        Ok(self)
     }
 
     /// Tell if lines which match the previous history entry are saved or not
@@ -475,8 +474,9 @@ pub trait Configurer {
     fn config_mut(&mut self) -> &mut Config;
 
     /// Set the maximum length for the history.
-    fn set_max_history_size(&mut self, max_size: usize) {
+    fn set_max_history_size(&mut self, max_size: usize) -> Result<()> {
         self.config_mut().set_max_history_size(max_size);
+        Ok(())
     }
 
     /// Tell if lines which match the previous history entry are saved or not

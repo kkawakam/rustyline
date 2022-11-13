@@ -910,9 +910,9 @@ impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
         &mut self.config
     }
 
-    fn set_max_history_size(&mut self, max_size: usize) {
+    fn set_max_history_size(&mut self, max_size: usize) -> Result<()> {
         self.config_mut().set_max_history_size(max_size);
-        self.history.set_max_len(max_size);
+        self.history.set_max_len(max_size)
     }
 
     fn set_history_ignore_dups(&mut self, yes: bool) -> Result<()> {

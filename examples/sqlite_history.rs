@@ -10,7 +10,7 @@ fn main() -> Result<()> {
         // file
     };
     #[cfg(not(feature = "with-sqlite-history"))]
-    let history = rustyline::history::MemHistory::with_config(config)?;
+    let history = rustyline::history::MemHistory::with_config(config);
     let mut rl: Editor<(), _> = Editor::with_history(config, history)?;
     loop {
         let line = rl.readline("> ")?;

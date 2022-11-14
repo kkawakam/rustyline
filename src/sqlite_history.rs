@@ -170,7 +170,7 @@ PRAGMA user_version = 1;
     fn add_entry(&mut self, line: &str) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
         let mut stmt = self.conn.prepare_cached(
-            "INSERT OR IGNORE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;",
+            "INSERT OR REPLACE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;",
         )?;
         if let Some(row_id) = stmt
             .query_row((self.session_id, line), |r| r.get(0))

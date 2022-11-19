@@ -336,8 +336,6 @@ PRAGMA incremental_vacuum;
                 [self.session_id, old_id],
             )?; // TODO Validate: only current session entries
             old.execute("DETACH DATABASE new;", [])?;
-
-            let _ = old.close(); // FIXME busy
         }
         self.update_row_id()?;
         Ok(())
@@ -511,10 +509,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // FIXME panic
+    #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn append() -> Result<()> {
         let db1 = "file:db1?mode=memory";
-        let db2 = "file:db2?mode=memory&cache=shared";
+        // https://sqlite.org/forum/forumpost/c8b364331a8cac86
+        // let db2 = "file:db2?mode=memory&cache=shared";
+        let tf = tempfile::NamedTempFile::new()?;
+        let db2 = tf.path();
         let mut h = SQLiteHistory::open(Config::default(), db1)?;
         h.append(Path::new(db1))?;
         //h.append(Path::new(db2))?;
@@ -523,6 +524,7 @@ mod tests {
         assert_eq!(db2, h.path.unwrap().as_os_str());
         assert_eq!(1, h.session_id);
         assert_eq!(1, h.row_id);
+        tf.close()?;
         Ok(())
     }
 

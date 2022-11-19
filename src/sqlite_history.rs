@@ -1,5 +1,6 @@
 //! History impl. based on SQLite
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, DatabaseName, OptionalExtension};
@@ -15,8 +16,8 @@ pub struct SQLiteHistory {
     path: Option<PathBuf>, // None => memory
     conn: Connection,      /* we need to keep a connection opened at least for in memory
                             * database and also for cached statement(s) */
-    session_id: usize, // 0 means no new entry added
-    row_id: usize,     // max entry id
+    session_id: usize,   // 0 means no new entry added
+    row_id: Cell<usize>, // max entry id
 }
 
 /*
@@ -54,7 +55,7 @@ impl SQLiteHistory {
             path,
             conn,
             session_id: 0,
-            row_id: 0,
+            row_id: Cell::new(0),
         };
         sh.check_schema()?;
         Ok(sh)
@@ -70,16 +71,16 @@ impl SQLiteHistory {
     fn reset(&mut self, path: &Path) -> Result<Connection> {
         self.path = normalize(path);
         self.session_id = 0;
-        self.row_id = 0;
+        self.row_id.set(0);
         Ok(std::mem::replace(&mut self.conn, conn(self.path.as_ref())?))
     }
 
     fn update_row_id(&mut self) -> Result<()> {
-        self.row_id =
-            self.conn
-                .query_row("SELECT ifnull(max(rowid), 0) FROM history;", [], |r| {
-                    r.get(0)
-                })?;
+        self.row_id.set(self.conn.query_row(
+            "SELECT ifnull(max(rowid), 0) FROM history;",
+            [],
+            |r| r.get(0),
+        )?);
         Ok(())
     }
 
@@ -123,7 +124,7 @@ PRAGMA user_version = 1;
         if self.ignore_dups || user_version > 0 {
             self.set_ignore_dups()?;
         }
-        if self.row_id == 0 && user_version > 0 {
+        if self.row_id.get() == 0 && user_version > 0 {
             self.update_row_id()?;
         }
         Ok(())
@@ -176,7 +177,7 @@ PRAGMA user_version = 1;
             .query_row((self.session_id, line), |r| r.get(0))
             .optional()?
         {
-            self.row_id = row_id;
+            self.row_id.set(row_id);
             Ok(true)
         } else {
             Ok(false)
@@ -214,9 +215,13 @@ PRAGMA user_version = 1;
         };
         let mut stmt = self.conn.prepare_cached(query)?;
         stmt.query_row((term, start), |r| {
+            let rowid = r.get::<_, usize>(0)?;
+            if rowid > self.row_id.get() {
+                self.row_id.set(rowid);
+            }
             Ok(SearchResult {
                 entry: Cow::Owned(r.get(1)?),
-                idx: r.get::<_, usize>(0)? - 1, // rowid - 1
+                idx: rowid - 1, // rowid - 1
                 pos: if start_with {
                     term.len()
                 } else {
@@ -231,18 +236,34 @@ PRAGMA user_version = 1;
 
 impl History for SQLiteHistory {
     /// rowid <> index
-    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
+    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>> {
         let rowid = index + 1; // first rowid is 1
         if self.is_empty() {
             return Ok(None);
         }
-        // TODO: rowid may not be sequential
-        let mut stmt = self
-            .conn
-            .prepare_cached("SELECT entry FROM history WHERE rowid = ?;")?;
-        stmt.query_row([rowid], |r| r.get(0).map(Cow::Owned))
-            .optional()
-            .map_err(ReadlineError::from)
+        // rowid may not be sequential
+        let query = match dir {
+            SearchDirection::Forward => {
+                "SELECT rowid, entry FROM history WHERE rowid >= ? ORDER BY rowid ASC LIMIT 1;"
+            }
+            SearchDirection::Reverse => {
+                "SELECT rowid, entry FROM history WHERE rowid <= ? ORDER BY rowid DESC LIMIT 1;"
+            }
+        };
+        let mut stmt = self.conn.prepare_cached(query)?;
+        stmt.query_row([rowid], |r| {
+            let rowid = r.get::<_, usize>(0)?;
+            if rowid > self.row_id.get() {
+                self.row_id.set(rowid);
+            }
+            Ok(SearchResult {
+                entry: Cow::Owned(r.get(1)?),
+                idx: rowid - 1,
+                pos: 0,
+            })
+        })
+        .optional()
+        .map_err(ReadlineError::from)
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -260,11 +281,11 @@ impl History for SQLiteHistory {
 
     /// This is not really the length
     fn len(&self) -> usize {
-        self.row_id
+        self.row_id.get()
     }
 
     fn is_empty(&self) -> bool {
-        self.row_id == 0
+        self.row_id.get() == 0
     }
 
     fn set_max_len(&mut self, len: usize) -> Result<()> {
@@ -444,9 +465,17 @@ mod tests {
     #[test]
     fn get() -> Result<()> {
         let mut h = SQLiteHistory::with_config(Config::default())?;
-        assert_eq!(None, h.get(0)?);
+        assert_eq!(None, h.get(0, SearchDirection::Forward)?);
         h.add("line")?;
-        assert_eq!(Some(Cow::Borrowed("line")), h.get(0)?);
+        assert_eq!(
+            Some(Cow::Borrowed("line")),
+            h.get(0, SearchDirection::Forward)?.map(|r| r.entry)
+        );
+        h.add("line")?; // add duplicates => first entry removed
+        assert_eq!(
+            Some(Cow::Borrowed("line")),
+            h.get(0, SearchDirection::Forward)?.map(|r| r.entry)
+        );
         Ok(())
     }
 
@@ -504,7 +533,7 @@ mod tests {
         h.save(Path::new(db1))?;
         assert_eq!(db1, h.path.unwrap().as_os_str());
         assert_eq!(1, h.session_id);
-        assert_eq!(1, h.row_id);
+        assert_eq!(1, h.row_id.get());
         Ok(())
     }
 
@@ -523,7 +552,7 @@ mod tests {
         h.append(Path::new(db2))?;
         assert_eq!(db2, h.path.unwrap().as_os_str());
         assert_eq!(1, h.session_id);
-        assert_eq!(1, h.row_id);
+        assert_eq!(1, h.row_id.get());
         tf.close()?;
         Ok(())
     }
@@ -538,7 +567,7 @@ mod tests {
         h.load(Path::new(db2))?;
         assert_eq!(db2, h.path.unwrap().as_os_str());
         assert_eq!(0, h.session_id);
-        assert_eq!(0, h.row_id);
+        assert_eq!(0, h.row_id.get());
         Ok(())
     }
 
@@ -549,7 +578,7 @@ mod tests {
         h.add("line")?;
         h.clear()?;
         assert_eq!(0, h.session_id);
-        assert_eq!(0, h.row_id);
+        assert_eq!(0, h.row_id.get());
         assert_eq!(
             0,
             h.conn
@@ -573,7 +602,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: h.get(0)?.unwrap(),
+                entry: h.get(0, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line", 0, SearchDirection::Forward)?
@@ -581,7 +610,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: h.get(1)?.unwrap(),
+                entry: h.get(1, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line", 1, SearchDirection::Forward)?
@@ -589,7 +618,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: h.get(2)?.unwrap(),
+                entry: h.get(2, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line3", 1, SearchDirection::Forward)?
@@ -607,7 +636,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: h.get(2)?.unwrap(),
+                entry: h.get(2, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line", 2, SearchDirection::Reverse)?
@@ -615,7 +644,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: h.get(1)?.unwrap(),
+                entry: h.get(1, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line", 1, SearchDirection::Reverse)?
@@ -623,7 +652,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: h.get(0)?.unwrap(),
+                entry: h.get(0, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             h.search("line1", 1, SearchDirection::Reverse)?
@@ -637,7 +666,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: h.get(2)?.unwrap(),
+                entry: h.get(2, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 4
             }),
             h.starts_with("LiNe", 2, SearchDirection::Reverse)?

@@ -4,10 +4,11 @@ fn main() -> Result<()> {
     let config = Config::builder().auto_add_history(true).build();
     #[cfg(feature = "with-sqlite-history")]
     let history = if false {
-        rustyline::sqlite_history::SQLiteHistory::with_config(config)? // memory
+        // memory
+        rustyline::sqlite_history::SQLiteHistory::with_config(config)?
     } else {
-        rustyline::sqlite_history::SQLiteHistory::open(config, "history.sqlite3")?
         // file
+        rustyline::sqlite_history::SQLiteHistory::open(config, "history.sqlite3")?
     };
     #[cfg(not(feature = "with-sqlite-history"))]
     let history = rustyline::history::MemHistory::with_config(config);

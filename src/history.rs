@@ -56,7 +56,10 @@ pub trait History {
     // termwiz: fn get(&self, idx: HistoryIndex) -> Option<Cow<str>>;
 
     /// Return the history entry at position `index`, starting from 0.
-    fn get(&self, index: usize) -> Result<Option<Cow<str>>>;
+    ///
+    /// `SearchDirection` is usefull only for implementations without direct
+    /// indexing.
+    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>>;
 
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
@@ -276,12 +279,17 @@ impl MemHistory {
 }
 
 impl History for MemHistory {
-    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
+    fn get(&self, index: usize, _: SearchDirection) -> Result<Option<SearchResult>> {
         Ok(self
             .entries
             .get(index)
             .map(String::as_ref)
-            .map(Cow::Borrowed))
+            .map(Cow::Borrowed)
+            .map(|entry| SearchResult {
+                entry,
+                idx: index,
+                pos: 0,
+            }))
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -627,8 +635,8 @@ pub type DefaultHistory = FileHistory;
 
 #[cfg(feature = "with-file-history")]
 impl History for FileHistory {
-    fn get(&self, index: usize) -> Result<Option<Cow<str>>> {
-        self.mem.get(index)
+    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>> {
+        self.mem.get(index, dir)
     }
 
     fn add(&mut self, line: &str) -> Result<bool> {
@@ -979,7 +987,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: history.get(0)?.unwrap(),
+                entry: history.get(0, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line", 0, SearchDirection::Forward)?
@@ -987,7 +995,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: history.get(1)?.unwrap(),
+                entry: history.get(1, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line", 1, SearchDirection::Forward)?
@@ -995,7 +1003,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2)?.unwrap(),
+                entry: history.get(2, SearchDirection::Forward)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line3", 1, SearchDirection::Forward)?
@@ -1013,7 +1021,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2)?.unwrap(),
+                entry: history.get(2, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line", 2, SearchDirection::Reverse)?
@@ -1021,7 +1029,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 1,
-                entry: history.get(1)?.unwrap(),
+                entry: history.get(1, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line", 1, SearchDirection::Reverse)?
@@ -1029,7 +1037,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 0,
-                entry: history.get(0)?.unwrap(),
+                entry: history.get(0, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 0
             }),
             history.search("line1", 1, SearchDirection::Reverse)?
@@ -1044,7 +1052,7 @@ mod tests {
         assert_eq!(
             Some(SearchResult {
                 idx: 2,
-                entry: history.get(2)?.unwrap(),
+                entry: history.get(2, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 4
             }),
             history.starts_with("LiNe", 2, SearchDirection::Reverse)?

@@ -608,16 +608,22 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else if self.ctx.history_index == 0 && prev {
             return Ok(());
         }
-        if prev {
-            self.ctx.history_index -= 1;
+        let (idx, dir) = if prev {
+            (self.ctx.history_index - 1, SearchDirection::Reverse)
         } else {
             self.ctx.history_index += 1;
-        }
-        if self.ctx.history_index < history.len() {
-            let buf = history.get(self.ctx.history_index)?.unwrap();
-            self.changes.borrow_mut().begin();
-            self.line.update(&buf, buf.len());
-            self.changes.borrow_mut().end();
+            (self.ctx.history_index, SearchDirection::Forward)
+        };
+        if idx < history.len() {
+            if let Some(r) = history.get(idx, dir)? {
+                let buf = r.entry;
+                self.ctx.history_index = r.idx;
+                self.changes.borrow_mut().begin();
+                self.line.update(&buf, buf.len());
+                self.changes.borrow_mut().end();
+            } else {
+                return Ok(());
+            }
         } else {
             // Restore current edited line
             self.restore();
@@ -673,11 +679,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             return Ok(());
         }
         if first {
-            self.ctx.history_index = 0;
-            let buf = history.get(self.ctx.history_index)?.unwrap();
-            self.changes.borrow_mut().begin();
-            self.line.update(&buf, buf.len());
-            self.changes.borrow_mut().end();
+            if let Some(r) = history.get(0, SearchDirection::Forward)? {
+                let buf = r.entry;
+                self.ctx.history_index = r.idx;
+                self.changes.borrow_mut().begin();
+                self.line.update(&buf, buf.len());
+                self.changes.borrow_mut().end();
+            } else {
+                return Ok(());
+            }
         } else {
             self.ctx.history_index = history.len();
             // Restore current edited line

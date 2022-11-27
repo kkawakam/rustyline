@@ -91,6 +91,7 @@ impl SQLiteHistory {
         if user_version <= 0 {
             self.conn.execute_batch(
                 "
+BEGIN EXCLUSIVE;
 PRAGMA auto_vacuum = INCREMENTAL;
 CREATE TABLE session (
     id INTEGER PRIMARY KEY NOT NULL,
@@ -117,6 +118,7 @@ CREATE TRIGGER history_ai AFTER INSERT ON history BEGIN
     INSERT INTO fts (docid, entry) VALUES(new.rowid, new.entry);
 END;
 PRAGMA user_version = 1;
+COMMIT;
                  ",
             )?
         }
@@ -171,7 +173,7 @@ PRAGMA user_version = 1;
     fn add_entry(&mut self, line: &str) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
         let mut stmt = self.conn.prepare_cached(
-            "INSERT OR REPLACE INTO history (session_id, entry) VALUES (?, ?) RETURNING rowid;",
+            "INSERT OR REPLACE INTO history (session_id, entry) VALUES (?1, ?2) RETURNING rowid;",
         )?;
         if let Some(row_id) = stmt
             .query_row((self.session_id, line), |r| r.get(0))
@@ -197,20 +199,20 @@ PRAGMA user_version = 1;
         let start = start + 1; // first rowid is 1
         let query = match (dir, start_with) {
             (SearchDirection::Forward, true) => {
-                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ? || '*'  AND docid >= ? \
+                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ?1 || '*'  AND docid >= ?2 \
                  ORDER BY docid ASC LIMIT 1;"
             }
             (SearchDirection::Forward, false) => {
-                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ? || '*'  AND docid \
-                 >= ? ORDER BY docid ASC LIMIT 1;"
+                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ?1 || '*'  AND docid \
+                 >= ?2 ORDER BY docid ASC LIMIT 1;"
             }
             (SearchDirection::Reverse, true) => {
-                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ? || '*'  AND docid <= ? \
+                "SELECT docid, entry FROM fts WHERE entry MATCH '^' || ?1 || '*'  AND docid <= ?2 \
                  ORDER BY docid DESC LIMIT 1;"
             }
             (SearchDirection::Reverse, false) => {
-                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ? || '*'  AND docid \
-                 <= ? ORDER BY docid DESC LIMIT 1;"
+                "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH ?1 || '*'  AND docid \
+                 <= ?2 ORDER BY docid DESC LIMIT 1;"
             }
         };
         let mut stmt = self.conn.prepare_cached(query)?;
@@ -244,10 +246,10 @@ impl History for SQLiteHistory {
         // rowid may not be sequential
         let query = match dir {
             SearchDirection::Forward => {
-                "SELECT rowid, entry FROM history WHERE rowid >= ? ORDER BY rowid ASC LIMIT 1;"
+                "SELECT rowid, entry FROM history WHERE rowid >= ?1 ORDER BY rowid ASC LIMIT 1;"
             }
             SearchDirection::Reverse => {
-                "SELECT rowid, entry FROM history WHERE rowid <= ? ORDER BY rowid DESC LIMIT 1;"
+                "SELECT rowid, entry FROM history WHERE rowid <= ?1 ORDER BY rowid DESC LIMIT 1;"
             }
         };
         let mut stmt = self.conn.prepare_cached(query)?;
@@ -297,7 +299,7 @@ impl History for SQLiteHistory {
         if count > len {
             self.conn.execute(
                 "DELETE FROM history WHERE rowid IN (SELECT rowid FROM history ORDER BY rowid ASC \
-                 LIMIT ?);",
+                 LIMIT ?1);",
                 [count - len],
             )?;
         }
@@ -350,10 +352,10 @@ PRAGMA incremental_vacuum;
         {
             let old = self.reset(path)?; // keep connection alive in case of in-memory database
             self.create_session()?; // TODO preserve session.timestamp
-            old.execute("ATTACH DATABASE ? AS new;", [path.to_string_lossy()])?; // TODO empty path / temporary database
+            old.execute("ATTACH DATABASE ?1 AS new;", [path.to_string_lossy()])?; // TODO empty path / temporary database
             old.execute(
-                "INSERT OR IGNORE INTO new.history (session_id, entry) SELECT ?, entry FROM \
-                 history WHERE session_id = ?;",
+                "INSERT OR IGNORE INTO new.history (session_id, entry) SELECT ?1, entry FROM \
+                 history WHERE session_id = ?2;",
                 [self.session_id, old_id],
             )?; // TODO Validate: only current session entries
             old.execute("DETACH DATABASE new;", [])?;
@@ -384,7 +386,7 @@ PRAGMA incremental_vacuum;
         } else if self.is_mem_or_temp() {
             // ON DELETE CASCADE...
             self.conn
-                .execute("DELETE FROM session WHERE id = ?;", [self.session_id])?;
+                .execute("DELETE FROM session WHERE id = ?1;", [self.session_id])?;
             self.session_id = 0;
             self.update_row_id()?;
         } // else nothing in memory, TODO Validate: no delete ?

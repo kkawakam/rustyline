@@ -127,14 +127,12 @@ fn validate_brackets(input: &str) -> ValidationResult {
                 (Some('('), ')') | (Some('['), ']') | (Some('{'), '}') => {}
                 (Some(wanted), _) => {
                     return ValidationResult::Invalid(Some(format!(
-                        "Mismatched brackets: {:?} is not properly closed",
-                        wanted
+                        "Mismatched brackets: {wanted:?} is not properly closed"
                     )))
                 }
                 (None, c) => {
                     return ValidationResult::Invalid(Some(format!(
-                        "Mismatched brackets: {:?} is unpaired",
-                        c
+                        "Mismatched brackets: {c:?} is unpaired"
                     )))
                 }
             },

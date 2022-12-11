@@ -68,6 +68,10 @@ with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 
+[[example]]
+name = "sqlite_history"
+required-features = ["with-sqlite-history"]
+
 [package.metadata.docs.rs]
 features = ["custom-bindings", "with-dirs", "with-file-history", "with-fuzzy"]
 all-features = false

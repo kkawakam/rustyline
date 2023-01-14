@@ -292,10 +292,11 @@ pub enum ColorMode {
 }
 
 /// Should the editor use stdio
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Behavior {
     /// Use stdin / stdout
+    #[default]
     Stdio,
     /// Use terminal-style interaction whenever possible, even if 'stdin' and/or
     /// 'stdout' are not terminals.
@@ -303,12 +304,6 @@ pub enum Behavior {
     // TODO
     // Use file-style interaction, reading input from the given file.
     // useFile
-}
-
-impl Default for Behavior {
-    fn default() -> Self {
-        Behavior::Stdio
-    }
 }
 
 /// Configuration builder

@@ -26,16 +26,11 @@ pub enum WordAction {
 }
 
 /// Delete (kill) direction
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Direction {
+    #[default]
     Forward,
     Backward,
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Direction::Forward
-    }
 }
 
 /// Listener to be notified when some text is deleted.

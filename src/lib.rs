@@ -217,7 +217,7 @@ fn complete_line<H: Helper>(
                         text: c.display().to_owned(),
                     })
                     .for_each(|c| {
-                        let _ = tx_item.send(Arc::new(c));
+                        let _ = tx_item.send(std::sync::Arc::new(c));
                     });
                 drop(tx_item); // so that skim could know when to stop waiting for more items.
 
@@ -243,7 +243,12 @@ fn complete_line<H: Helper>(
                         .downcast_ref::<Candidate>() // downcast to concrete type
                         .expect("something wrong with downcast");
                     if let Some(candidate) = candidates.get(item.index) {
-                        completer.update(&mut s.line, start, candidate.replacement());
+                        completer.update(
+                            &mut s.line,
+                            start,
+                            candidate.replacement(),
+                            &mut s.changes,
+                        );
                     }
                 }
                 s.refresh_line()?;

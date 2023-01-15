@@ -18,14 +18,14 @@ impl Highlighter for MyHelper {
         default: bool,
     ) -> Cow<'b, str> {
         if default {
-            Owned(format!("\x1b[1;32m{}\x1b[m", prompt))
+            Owned(format!("\x1b[1;32m{prompt}\x1b[m"))
         } else {
             Borrowed(prompt)
         }
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        Owned(format!("\x1b[1m{}\x1b[m", hint))
+        Owned(format!("\x1b[1m{hint}\x1b[m"))
     }
 }
 
@@ -103,6 +103,6 @@ fn main() -> Result<()> {
     loop {
         let line = rl.readline("> ")?;
         rl.add_history_entry(line.as_str());
-        println!("Line: {}", line);
+        println!("Line: {line}");
     }
 }

@@ -374,9 +374,9 @@ fn reverse_incremental_search<H: Helper>(
     // Display the reverse-i-search prompt and process chars
     loop {
         let prompt = if success {
-            format!("(reverse-i-search)`{}': ", search_buf)
+            format!("(reverse-i-search)`{search_buf}': ")
         } else {
-            format!("(failed reverse-i-search)`{}': ", search_buf)
+            format!("(failed reverse-i-search)`{search_buf}': ")
         };
         s.refresh_prompt_and_line(&prompt)?;
 

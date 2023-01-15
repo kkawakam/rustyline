@@ -89,16 +89,16 @@ pub trait Completer {
         Ok((0, Vec::with_capacity(0)))
     }
     /// Updates the edited `line` with the `elected` candidate.
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
         let end = line.pos();
-        line.replace(start..end, elected);
+        line.replace(start..end, elected, cl);
     }
 }
 
 impl Completer for () {
     type Candidate = String;
 
-    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str) {
+    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str, _cl: &mut Changeset) {
         unreachable!();
     }
 }
@@ -115,8 +115,8 @@ impl<'c, C: ?Sized + Completer> Completer for &'c C {
         (**self).complete(line, pos, ctx)
     }
 
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
-        (**self).update(line, start, elected);
+    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+        (**self).update(line, start, elected, cl);
     }
 }
 macro_rules! box_completer {
@@ -128,14 +128,15 @@ macro_rules! box_completer {
                 fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
                     (**self).complete(line, pos, ctx)
                 }
-                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str) {
-                    (**self).update(line, start, elected)
+                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+                    (**self).update(line, start, elected, cl)
                 }
             }
         )*
     }
 }
 
+use crate::undo::Changeset;
 use std::rc::Rc;
 use std::sync::Arc;
 box_completer! { Box Rc Arc }

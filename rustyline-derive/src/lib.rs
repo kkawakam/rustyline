@@ -59,8 +59,8 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
                     ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, ctx)
                 }
 
-                fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str) {
-                    ::rustyline::completion::Completer::update(&self.#field_name_or_index, line, start, elected)
+                fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
+                    ::rustyline::completion::Completer::update(&self.#field_name_or_index, line, start, elected, cl)
                 }
             }
         }

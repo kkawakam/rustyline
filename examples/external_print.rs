@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use rand::{thread_rng, Rng};
 
-use rustyline::{Editor, ExternalPrinter, Result};
+use rustyline::{DefaultEditor, ExternalPrinter, Result};
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<()>::new()?;
+    let mut rl = DefaultEditor::new()?;
     let mut printer = rl.create_external_printer()?;
     thread::spawn(move || {
         let mut rng = thread_rng();
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
 
     loop {
         let line = rl.readline("> ")?;
-        rl.add_history_entry(line.as_str());
+        rl.add_history_entry(line.as_str())?;
         println!("Line: {line}");
     }
 }

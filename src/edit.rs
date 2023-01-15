@@ -643,16 +643,22 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         } else if self.ctx.history_index == 0 && prev {
             return Ok(());
         }
-        if prev {
-            self.ctx.history_index -= 1;
+        let (idx, dir) = if prev {
+            (self.ctx.history_index - 1, SearchDirection::Reverse)
         } else {
             self.ctx.history_index += 1;
-        }
-        if self.ctx.history_index < history.len() {
-            let buf = history.get(self.ctx.history_index).unwrap();
-            self.changes.begin();
-            self.line.update(buf, buf.len(), &mut self.changes);
-            self.changes.end();
+            (self.ctx.history_index, SearchDirection::Forward)
+        };
+        if idx < history.len() {
+            if let Some(r) = history.get(idx, dir)? {
+                let buf = r.entry;
+                self.ctx.history_index = r.idx;
+                self.changes.begin();
+                self.line.update(&buf, buf.len(), &mut self.changes);
+                self.changes.end();
+            } else {
+                return Ok(());
+            }
         } else {
             // Restore current edited line
             self.restore();
@@ -680,10 +686,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.line.as_str()[..self.line.pos()],
             self.ctx.history_index,
             dir,
-        ) {
+        )? {
             self.ctx.history_index = sr.idx;
             self.changes.begin();
-            self.line.update(sr.entry, sr.pos, &mut self.changes);
+            self.line.update(&sr.entry, sr.pos, &mut self.changes);
             self.changes.end();
             self.refresh_line()
         } else {
@@ -708,11 +714,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             return Ok(());
         }
         if first {
-            self.ctx.history_index = 0;
-            let buf = history.get(self.ctx.history_index).unwrap();
-            self.changes.begin();
-            self.line.update(buf, buf.len(), &mut self.changes);
-            self.changes.end();
+            if let Some(r) = history.get(0, SearchDirection::Forward)? {
+                let buf = r.entry;
+                self.ctx.history_index = r.idx;
+                self.changes.begin();
+                self.line.update(&buf, buf.len(), &mut self.changes);
+                self.changes.end();
+            } else {
+                return Ok(());
+            }
         } else {
             self.ctx.history_index = history.len();
             // Restore current edited line
@@ -737,7 +747,7 @@ pub fn init_state<'out, H: Helper>(
     line: &str,
     pos: usize,
     helper: Option<&'out H>,
-    history: &'out crate::history::History,
+    history: &'out crate::history::DefaultHistory,
 ) -> State<'out, 'static, H> {
     State {
         out,
@@ -758,15 +768,15 @@ pub fn init_state<'out, H: Helper>(
 #[cfg(test)]
 mod test {
     use super::init_state;
-    use crate::history::History;
+    use crate::history::{DefaultHistory, History};
     use crate::tty::Sink;
 
     #[test]
     fn edit_history_next() {
         let mut out = Sink::default();
-        let mut history = History::new();
-        history.add("line0");
-        history.add("line1");
+        let mut history = DefaultHistory::new();
+        history.add("line0").unwrap();
+        history.add("line1").unwrap();
         let line = "current edited line";
         let helper: Option<()> = None;
         let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history);

@@ -1,6 +1,6 @@
 use rustyline::{
-    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyCode, KeyEvent,
-    Modifiers, RepeatCount, Result,
+    Cmd, ConditionalEventHandler, DefaultEditor, Event, EventContext, EventHandler, KeyCode,
+    KeyEvent, Modifiers, RepeatCount, Result,
 };
 
 struct FilteringEventHandler;
@@ -19,7 +19,7 @@ impl ConditionalEventHandler for FilteringEventHandler {
 }
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<()>::new()?;
+    let mut rl = DefaultEditor::new()?;
 
     rl.bind_sequence(
         Event::Any,

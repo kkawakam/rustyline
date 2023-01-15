@@ -29,6 +29,9 @@ pub enum ReadlineError {
     /// Something went wrong calling a Windows API
     #[cfg(windows)]
     SystemError(clipboard_win::SystemError),
+    /// Error related to SQLite history backend
+    #[cfg(feature = "with-sqlite-history")]
+    SQLiteError(rusqlite::Error),
 }
 
 impl fmt::Display for ReadlineError {
@@ -44,6 +47,8 @@ impl fmt::Display for ReadlineError {
             ReadlineError::Decode(ref err) => err.fmt(f),
             #[cfg(windows)]
             ReadlineError::SystemError(ref err) => err.fmt(f),
+            #[cfg(feature = "with-sqlite-history")]
+            ReadlineError::SQLiteError(ref err) => err.fmt(f),
         }
     }
 }
@@ -61,6 +66,8 @@ impl Error for ReadlineError {
             ReadlineError::Decode(ref err) => Some(err),
             #[cfg(windows)]
             ReadlineError::SystemError(_) => None,
+            #[cfg(feature = "with-sqlite-history")]
+            ReadlineError::SQLiteError(ref err) => Some(err),
         }
     }
 }
@@ -129,5 +136,12 @@ impl From<fmt::Error> for ReadlineError {
 impl From<clipboard_win::SystemError> for ReadlineError {
     fn from(err: clipboard_win::SystemError) -> Self {
         ReadlineError::SystemError(err)
+    }
+}
+
+#[cfg(feature = "with-sqlite-history")]
+impl From<rusqlite::Error> for ReadlineError {
+    fn from(err: rusqlite::Error) -> Self {
+        ReadlineError::SQLiteError(err)
     }
 }

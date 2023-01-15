@@ -2,6 +2,7 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
+use rustyline::history::DefaultHistory;
 use rustyline::{
     Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
     Result,
@@ -85,7 +86,7 @@ impl ConditionalEventHandler for TabEventHandler {
 }
 
 fn main() -> Result<()> {
-    let mut rl = Editor::<MyHelper>::new()?;
+    let mut rl = Editor::<MyHelper, DefaultHistory>::new()?;
     rl.set_helper(Some(MyHelper(HistoryHinter {})));
 
     let ceh = Box::new(CompleteHintHandler);
@@ -102,7 +103,7 @@ fn main() -> Result<()> {
 
     loop {
         let line = rl.readline("> ")?;
-        rl.add_history_entry(line.as_str());
+        rl.add_history_entry(line.as_str())?;
         println!("Line: {line}");
     }
 }

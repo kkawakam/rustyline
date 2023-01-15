@@ -26,10 +26,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2.2.0
       - name: Build
         run: cargo build --workspace --all-targets
       - name: Run tests

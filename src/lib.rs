@@ -44,7 +44,6 @@ use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::result;
-use std::sync::{Arc, Mutex};
 
 use log::debug;
 use unicode_width::UnicodeWidthStr;
@@ -65,6 +64,7 @@ use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::tty::ExternalPrinter;
+pub use crate::undo::Changeset;
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
@@ -90,7 +90,7 @@ fn complete_line<H: Helper>(
         s.out.beep()?;
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
-        let mark = s.changes.borrow_mut().begin();
+        let mark = s.changes.begin();
         // Save the current edited line before overwriting it
         let backup = s.line.as_str().to_owned();
         let backup_pos = s.line.pos();
@@ -106,10 +106,10 @@ fn complete_line<H: Helper>(
                 } else {
                     Borrowed(candidate)
                 };*/
-                completer.update(&mut s.line, start, candidate);
+                completer.update(&mut s.line, start, candidate, &mut s.changes);
             } else {
                 // Restore current edited line
-                s.line.update(&backup, backup_pos);
+                s.line.update(&backup, backup_pos, &mut s.changes);
             }
             s.refresh_line()?;
 
@@ -132,14 +132,14 @@ fn complete_line<H: Helper>(
                 Cmd::Abort => {
                     // Re-show original buffer
                     if i < candidates.len() {
-                        s.line.update(&backup, backup_pos);
+                        s.line.update(&backup, backup_pos, &mut s.changes);
                         s.refresh_line()?;
                     }
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.truncate(mark);
                     return Ok(None);
                 }
                 _ => {
-                    s.changes.borrow_mut().end();
+                    s.changes.end();
                     break;
                 }
             }
@@ -149,7 +149,7 @@ fn complete_line<H: Helper>(
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start {
-                completer.update(&mut s.line, start, lcp);
+                completer.update(&mut s.line, start, lcp, &mut s.changes);
                 s.refresh_line()?;
             }
         }
@@ -219,7 +219,7 @@ fn complete_line<H: Helper>(
                         text: c.display().to_owned(),
                     })
                     .for_each(|c| {
-                        let _ = tx_item.send(Arc::new(c));
+                        let _ = tx_item.send(std::sync::Arc::new(c));
                     });
                 drop(tx_item); // so that skim could know when to stop waiting for more items.
 
@@ -245,7 +245,12 @@ fn complete_line<H: Helper>(
                         .downcast_ref::<Candidate>() // downcast to concrete type
                         .expect("something wrong with downcast");
                     if let Some(candidate) = candidates.get(item.index) {
-                        completer.update(&mut s.line, start, candidate.replacement());
+                        completer.update(
+                            &mut s.line,
+                            start,
+                            candidate.replacement(),
+                            &mut s.changes,
+                        );
                     }
                 }
                 s.refresh_line()?;
@@ -263,7 +268,7 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     };
     s.line.move_end();
     if let Some(text) = hint.completion() {
-        if s.line.yank(text, 1).is_none() {
+        if s.line.yank(text, 1, &mut s.changes).is_none() {
             s.out.beep()?;
         }
     } else {
@@ -362,7 +367,7 @@ fn reverse_incremental_search<H: Helper, I: History>(
     if history.is_empty() {
         return Ok(None);
     }
-    let mark = s.changes.borrow_mut().begin();
+    let mark = s.changes.begin();
     // Save the current edited line (and cursor position) before overwriting it
     let backup = s.line.as_str().to_owned();
     let backup_pos = s.line.pos();
@@ -411,9 +416,9 @@ fn reverse_incremental_search<H: Helper, I: History>(
                 }
                 Cmd::Abort => {
                     // Restore current edited line (before search)
-                    s.line.update(&backup, backup_pos);
+                    s.line.update(&backup, backup_pos, &mut s.changes);
                     s.refresh_line()?;
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.truncate(mark);
                     return Ok(None);
                 }
                 Cmd::Move(_) => {
@@ -426,13 +431,13 @@ fn reverse_incremental_search<H: Helper, I: History>(
         success = match history.search(&search_buf, history_idx, direction)? {
             Some(sr) => {
                 history_idx = sr.idx;
-                s.line.update(&sr.entry, sr.pos);
+                s.line.update(&sr.entry, sr.pos, &mut s.changes);
                 true
             }
             _ => false,
         };
     }
-    s.changes.borrow_mut().end();
+    s.changes.end();
     Ok(Some(cmd))
 }
 
@@ -581,7 +586,7 @@ pub struct Editor<H: Helper, I: History> {
     term: Terminal,
     history: I,
     helper: Option<H>,
-    kill_ring: Arc<Mutex<KillRing>>,
+    kill_ring: KillRing,
     config: Config,
     custom_bindings: Bindings,
 }
@@ -616,7 +621,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             term,
             history,
             helper: None,
-            kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
+            kill_ring: KillRing::new(60),
             config,
             custom_bindings: Bindings::new(),
         })
@@ -683,18 +688,18 @@ impl<H: Helper, I: History> Editor<H, I> {
     ) -> Result<String> {
         let mut stdout = self.term.create_writer();
 
-        self.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
+        self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
         let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 
-        s.line.set_delete_listener(self.kill_ring.clone());
-        s.line.set_change_listener(s.changes.clone());
-
         if let Some((left, right)) = initial {
-            s.line
-                .update((left.to_owned() + right).as_ref(), left.len());
+            s.line.update(
+                (left.to_owned() + right).as_ref(),
+                left.len(),
+                &mut s.changes,
+            );
         }
 
         let mut rdr = self.term.create_reader(&self.config, term_key_map);
@@ -713,7 +718,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
 
             if cmd.should_reset_kill_ring() {
-                self.reset_kill_ring();
+                self.kill_ring.reset();
             }
 
             // First trigger commands that need extra input
@@ -772,7 +777,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             }
 
             // Execute things can be done solely on a state object
-            match command::execute(cmd, &mut s, &input_state, &self.kill_ring, &self.config)? {
+            match command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config)? {
                 command::Status::Proceed => continue,
                 command::Status::Submit => break,
             }
@@ -881,11 +886,6 @@ impl<H: Helper, I: History> Editor<H, I> {
             editor: self,
             prompt,
         }
-    }
-
-    fn reset_kill_ring(&self) {
-        let mut kill_ring = self.kill_ring.lock().unwrap();
-        kill_ring.reset();
     }
 
     /// If output stream is a tty, this function returns its width and height as

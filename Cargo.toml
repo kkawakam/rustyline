@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "10.0.0"
+version = "10.1.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2018"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -41,9 +41,9 @@ radix_trie = { version = "0.2", optional = true }
 regex = { version = "1.5.5", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
+nix = { version = "0.26", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
 utf8parse = "0.2"
-skim = { version = "0.9", optional = true }
+skim = { version = "0.10", optional = true }
 signal-hook = { version = "0.3", optional = true, default-features = false }
 
 [target.'cfg(windows)'.dependencies]
@@ -53,7 +53,7 @@ clipboard-win = "4.2.1"
 
 [dev-dependencies]
 doc-comment = "0.3"
-env_logger = { version = "0.9", default-features = false }
+env_logger = { version = "0.10", default-features = false }
 tempfile = "3.1.0"
 rand = "0.8"
 assert_matches = "1.2"

@@ -1,9 +1,7 @@
 //! Command processor
 
 use log::debug;
-use std::cell::RefCell;
 use std::fmt;
-use std::rc::Rc;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
@@ -15,10 +13,13 @@ use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
-use crate::line_buffer::{LineBuffer, WordAction, MAX_LINE};
+use crate::line_buffer::{
+    ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
+};
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
+use crate::KillRing;
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -30,7 +31,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub layout: Layout,
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
-    pub changes: Rc<RefCell<Changeset>>, // changes to line, for undo/redo
+    pub changes: Changeset, // changes to line, for undo/redo
     pub helper: Option<&'out H>,
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
@@ -59,7 +60,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             layout: Layout::default(),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
-            changes: Rc::new(RefCell::new(Changeset::new())),
+            changes: Changeset::new(),
             helper,
             ctx,
             hint: None,
@@ -100,7 +101,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 continue;
             }
             if let Ok(Cmd::Replace(..)) = rc {
-                self.changes.borrow_mut().begin();
+                self.changes.begin();
             }
             return rc;
         }
@@ -108,13 +109,14 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn backup(&mut self) {
         self.saved_line_for_history
-            .update(self.line.as_str(), self.line.pos());
+            .update(self.line.as_str(), self.line.pos(), &mut NoListener);
     }
 
     pub fn restore(&mut self) {
         self.line.update(
             self.saved_line_for_history.as_str(),
             self.saved_line_for_history.pos(),
+            &mut self.changes,
         );
     }
 
@@ -225,9 +227,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
-            self.changes.borrow_mut().begin();
+            self.changes.begin();
             let result = validator.validate(&mut ValidationContext::new(self))?;
-            let corrected = self.changes.borrow_mut().end();
+            let corrected = self.changes.end();
             match result {
                 ValidationResult::Incomplete => {}
                 ValidationResult::Valid(ref msg) => {
@@ -280,15 +282,15 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 
     fn doing_insert(&mut self) {
-        self.changes.borrow_mut().begin();
+        self.changes.begin();
     }
 
     fn done_inserting(&mut self) {
-        self.changes.borrow_mut().end();
+        self.changes.end();
     }
 
     fn last_insert(&self) -> Option<String> {
-        self.changes.borrow().last_insert()
+        self.changes.last_insert()
     }
 
     fn is_cursor_at_end(&self) -> bool {
@@ -346,7 +348,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     /// Insert the character `ch` at cursor current position.
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
-        if let Some(push) = self.line.insert(ch, n) {
+        if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
             if push {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
@@ -378,16 +380,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     /// Replace a single (or n) character(s) under the cursor (Vi mode)
     pub fn edit_replace_char(&mut self, ch: char, n: RepeatCount) -> Result<()> {
-        self.changes.borrow_mut().begin();
-        let succeed = if let Some(chars) = self.line.delete(n) {
+        self.changes.begin();
+        let succeed = if let Some(chars) = self.line.delete(n, &mut self.changes) {
             let count = chars.graphemes(true).count();
-            self.line.insert(ch, count);
+            self.line.insert(ch, count, &mut self.changes);
             self.line.move_backward(1);
             true
         } else {
             false
         };
-        self.changes.borrow_mut().end();
+        self.changes.end();
         if succeed {
             self.refresh_line()
         } else {
@@ -401,7 +403,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             {
                 let text = ch.encode_utf8(&mut self.byte_buffer);
                 let start = self.line.pos();
-                self.line.replace(start..end, text);
+                self.line.replace(start..end, text, &mut self.changes);
             }
             self.refresh_line()
         } else {
@@ -420,7 +422,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if let Anchor::After = anchor {
             self.line.move_forward(1);
         }
-        if self.line.yank(text, n).is_some() {
+        if self.line.yank(text, n, &mut self.changes).is_some() {
             if !input_state.is_emacs_mode() {
                 self.line.move_backward(1);
             }
@@ -432,13 +434,17 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     // Delete previously yanked text and yank/paste `text` at current position.
     pub fn edit_yank_pop(&mut self, yank_size: usize, text: &str) -> Result<()> {
-        self.changes.borrow_mut().begin();
-        let result = if self.line.yank_pop(yank_size, text).is_some() {
+        self.changes.begin();
+        let result = if self
+            .line
+            .yank_pop(yank_size, text, &mut self.changes)
+            .is_some()
+        {
             self.refresh_line()
         } else {
             Ok(())
         };
-        self.changes.borrow_mut().end();
+        self.changes.end();
         result
     }
 
@@ -496,8 +502,37 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    pub fn edit_kill(&mut self, mvt: &Movement) -> Result<()> {
-        if self.line.kill(mvt) {
+    pub fn edit_kill(&mut self, mvt: &Movement, kill_ring: &mut KillRing) -> Result<()> {
+        struct Proxy<'p>(&'p mut Changeset, &'p mut KillRing);
+        let mut proxy = Proxy(&mut self.changes, kill_ring);
+        impl DeleteListener for Proxy<'_> {
+            fn start_killing(&mut self) {
+                self.1.start_killing();
+            }
+
+            fn delete(&mut self, idx: usize, string: &str, dir: Direction) {
+                self.0.delete(idx, string);
+                self.1.delete(idx, string, dir);
+            }
+
+            fn stop_killing(&mut self) {
+                self.1.stop_killing()
+            }
+        }
+        impl ChangeListener for Proxy<'_> {
+            fn insert_char(&mut self, idx: usize, c: char) {
+                self.0.insert_char(idx, c)
+            }
+
+            fn insert_str(&mut self, idx: usize, string: &str) {
+                self.0.insert_str(idx, string)
+            }
+
+            fn replace(&mut self, idx: usize, old: &str, new: &str) {
+                self.0.replace(idx, old, new)
+            }
+        }
+        if self.line.kill(mvt, &mut proxy) {
             self.refresh_line()
         } else {
             Ok(())
@@ -509,15 +544,15 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             return Ok(());
         }
         let cursor = self.line.pos();
-        self.line.insert_str(cursor, text);
+        self.line.insert_str(cursor, text, &mut self.changes);
         self.refresh_line()
     }
 
     /// Exchange the char before cursor with the character at cursor.
     pub fn edit_transpose_chars(&mut self) -> Result<()> {
-        self.changes.borrow_mut().begin();
-        let succeed = self.line.transpose_chars();
-        self.changes.borrow_mut().end();
+        self.changes.begin();
+        let succeed = self.line.transpose_chars(&mut self.changes);
+        self.changes.end();
         if succeed {
             self.refresh_line()
         } else {
@@ -570,9 +605,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     pub fn edit_word(&mut self, a: WordAction) -> Result<()> {
-        self.changes.borrow_mut().begin();
-        let succeed = self.line.edit_word(a);
-        self.changes.borrow_mut().end();
+        self.changes.begin();
+        let succeed = self.line.edit_word(a, &mut self.changes);
+        self.changes.end();
         if succeed {
             self.refresh_line()
         } else {
@@ -581,9 +616,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     pub fn edit_transpose_words(&mut self, n: RepeatCount) -> Result<()> {
-        self.changes.borrow_mut().begin();
-        let succeed = self.line.transpose_words(n);
-        self.changes.borrow_mut().end();
+        self.changes.begin();
+        let succeed = self.line.transpose_words(n, &mut self.changes);
+        self.changes.end();
         if succeed {
             self.refresh_line()
         } else {
@@ -618,9 +653,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             if let Some(r) = history.get(idx, dir)? {
                 let buf = r.entry;
                 self.ctx.history_index = r.idx;
-                self.changes.borrow_mut().begin();
-                self.line.update(&buf, buf.len());
-                self.changes.borrow_mut().end();
+                self.changes.begin();
+                self.line.update(&buf, buf.len(), &mut self.changes);
+                self.changes.end();
             } else {
                 return Ok(());
             }
@@ -653,9 +688,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             dir,
         )? {
             self.ctx.history_index = sr.idx;
-            self.changes.borrow_mut().begin();
-            self.line.update(&sr.entry, sr.pos);
-            self.changes.borrow_mut().end();
+            self.changes.begin();
+            self.line.update(&sr.entry, sr.pos, &mut self.changes);
+            self.changes.end();
             self.refresh_line()
         } else {
             self.out.beep()
@@ -682,9 +717,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             if let Some(r) = history.get(0, SearchDirection::Forward)? {
                 let buf = r.entry;
                 self.ctx.history_index = r.idx;
-                self.changes.borrow_mut().begin();
-                self.line.update(&buf, buf.len());
-                self.changes.borrow_mut().end();
+                self.changes.begin();
+                self.line.update(&buf, buf.len(), &mut self.changes);
+                self.changes.end();
             } else {
                 return Ok(());
             }
@@ -698,7 +733,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     /// Change the indentation of the lines covered by movement
     pub fn edit_indent(&mut self, mvt: &Movement, amount: usize, dedent: bool) -> Result<()> {
-        if self.line.indent(mvt, amount, dedent) {
+        if self.line.indent(mvt, amount, dedent, &mut self.changes) {
             self.refresh_line()
         } else {
             Ok(())
@@ -718,11 +753,11 @@ pub fn init_state<'out, H: Helper>(
         out,
         prompt: "",
         prompt_size: Position::default(),
-        line: LineBuffer::init(line, pos, None),
+        line: LineBuffer::init(line, pos),
         layout: Layout::default(),
         saved_line_for_history: LineBuffer::with_capacity(100),
         byte_buffer: [0; 4],
-        changes: Rc::new(RefCell::new(Changeset::new())),
+        changes: Changeset::new(),
         helper,
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),

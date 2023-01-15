@@ -24,7 +24,7 @@ pub enum WordAction {
 
 /// Delete (kill) direction
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Direction {
+pub enum Direction {
     /// After cursor
     #[default]
     Forward,

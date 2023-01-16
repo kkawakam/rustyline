@@ -69,6 +69,18 @@ with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 
 [[example]]
+name = "custom_key_bindings"
+required-features = ["custom-bindings"]
+[[example]]
+name = "example"
+required-features = ["custom-bindings"]
+[[example]]
+name = "input_multiline"
+required-features = ["custom-bindings"]
+[[example]]
+name = "numeric_input"
+required-features = ["custom-bindings"]
+[[example]]
 name = "sqlite_history"
 required-features = ["with-sqlite-history"]
 

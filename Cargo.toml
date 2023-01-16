@@ -39,6 +39,8 @@ memchr = "2.0"
 # For custom bindings
 radix_trie = { version = "0.2", optional = true }
 regex = { version = "1.5.5", optional = true }
+# For derive
+rustyline-derive = { version = "0.7.0", optional = true, path = "rustyline-derive" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.26", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }
@@ -62,6 +64,7 @@ rustyline-derive = { version = "0.7.0", path = "rustyline-derive" }
 [features]
 default = ["custom-bindings", "with-dirs", "with-file-history"]
 custom-bindings = ["radix_trie"]
+derive = ["rustyline-derive"]
 with-dirs = ["dirs-next"]
 with-file-history = ["fd-lock"]
 with-sqlite-history = ["rusqlite"]

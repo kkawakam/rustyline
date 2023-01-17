@@ -47,6 +47,7 @@ use std::result;
 
 use log::debug;
 #[cfg(feature = "derive")]
+#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 use unicode_width::UnicodeWidthStr;
 

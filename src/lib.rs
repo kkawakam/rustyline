@@ -228,7 +228,6 @@ fn complete_line<H: Helper>(
                 // by default skim multi select is off so only expect one selection
 
                 let options = SkimOptionsBuilder::default()
-                    .height(Some("20%"))
                     .prompt(Some("? "))
                     .reverse(true)
                     .build()

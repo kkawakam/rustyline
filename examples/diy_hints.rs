@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use rustyline::hint::{Hint, Hinter};
 use rustyline::history::DefaultHistory;
 use rustyline::Context;
-use rustyline::{Editor, Result};
 use rustyline::{Completer, Helper, Highlighter, Validator};
+use rustyline::{Editor, Result};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct DIYHinter {

@@ -4,7 +4,7 @@ use rustyline::hint::{Hint, Hinter};
 use rustyline::history::DefaultHistory;
 use rustyline::Context;
 use rustyline::{Editor, Result};
-use rustyline_derive::{Completer, Helper, Highlighter, Validator};
+use rustyline::{Completer, Helper, Highlighter, Validator};
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct DIYHinter {

@@ -59,7 +59,6 @@ env_logger = { version = "0.10", default-features = false }
 tempfile = "3.1.0"
 rand = "0.8"
 assert_matches = "1.2"
-rustyline-derive = { version = "0.7.0", path = "rustyline-derive" }
 
 [features]
 default = ["custom-bindings", "with-dirs", "with-file-history"]
@@ -73,16 +72,25 @@ case_insensitive_history_search = ["regex"]
 
 [[example]]
 name = "custom_key_bindings"
-required-features = ["custom-bindings"]
+required-features = ["custom-bindings", "derive"]
+[[example]]
+name = "diy_hints"
+required-features = ["derive"]
 [[example]]
 name = "example"
-required-features = ["custom-bindings"]
+required-features = ["custom-bindings", "derive"]
 [[example]]
 name = "input_multiline"
-required-features = ["custom-bindings"]
+required-features = ["custom-bindings", "derive"]
+[[example]]
+name = "input_validation"
+required-features = ["derive"]
 [[example]]
 name = "numeric_input"
 required-features = ["custom-bindings"]
+[[example]]
+name = "read_password"
+required-features = ["derive"]
 [[example]]
 name = "sqlite_history"
 required-features = ["with-sqlite-history"]

@@ -7,7 +7,7 @@ use rustyline::{
     Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
     Result,
 };
-use rustyline_derive::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Completer, Helper, Hinter, Validator)]
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);

@@ -1,6 +1,6 @@
 use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, Editor, EventHandler, KeyCode, KeyEvent, Modifiers, Result};
-use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
+use rustyline::{Completer, Helper, Highlighter, Hinter, Validator};
 
 #[derive(Completer, Helper, Highlighter, Hinter, Validator)]
 struct InputValidator {

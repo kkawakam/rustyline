@@ -88,7 +88,7 @@ name = "sqlite_history"
 required-features = ["with-sqlite-history"]
 
 [package.metadata.docs.rs]
-features = ["custom-bindings", "with-dirs", "with-file-history", "with-fuzzy"]
+features = ["custom-bindings", "derive", "with-dirs", "with-file-history", "with-fuzzy"]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"

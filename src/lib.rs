@@ -46,6 +46,9 @@ use std::path::Path;
 use std::result;
 
 use log::debug;
+#[cfg(feature = "derive")]
+#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
+pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};

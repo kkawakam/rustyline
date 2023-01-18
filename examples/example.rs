@@ -6,7 +6,7 @@ use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
-use rustyline_derive::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct MyHelper {

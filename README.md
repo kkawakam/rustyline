@@ -236,7 +236,7 @@ $ infocmp
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [reedline]: https://github.com/nushell/reedline
 [replxx]: https://github.com/AmokHuginnsson/replxx
-[termwiz]: https://github.com/wez/wezterm/tree/master/termwiz
+[termwiz]: https://github.com/wez/wezterm/tree/main/termwiz
 
 ## Multi line support
 

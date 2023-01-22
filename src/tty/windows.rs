@@ -113,7 +113,6 @@ impl ConsoleRawReader {
     }
 
     fn select(&mut self) -> Result<Event> {
-        use std::convert::TryInto;
         use winapi::um::synchapi::WaitForMultipleObjects;
         use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
 

@@ -1,7 +1,6 @@
 //! Syntax highlighting
 
 use crate::config::CompletionType;
-use memchr::memchr;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
@@ -90,9 +89,6 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
         (**self).highlight_char(line, pos)
     }
 }
-
-const OPENS: &[u8; 3] = b"{[(";
-const CLOSES: &[u8; 3] = b"}])";
 
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
@@ -224,11 +220,11 @@ const fn matching_bracket(bracket: u8) -> u8 {
         b => b,
     }
 }
-fn is_open_bracket(bracket: u8) -> bool {
-    memchr(bracket, OPENS).is_some()
+const fn is_open_bracket(bracket: u8) -> bool {
+    matches!(bracket, b'{' | b'[' | b'(')
 }
-fn is_close_bracket(bracket: u8) -> bool {
-    memchr(bracket, CLOSES).is_some()
+const fn is_close_bracket(bracket: u8) -> bool {
+    matches!(bracket, b'}' | b']' | b')')
 }
 
 #[cfg(test)]

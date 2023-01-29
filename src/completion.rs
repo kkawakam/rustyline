@@ -5,7 +5,6 @@ use std::path::{self, Path};
 
 use crate::line_buffer::LineBuffer;
 use crate::{Context, Result};
-use memchr::memchr;
 
 /// A completion candidate.
 pub trait Candidate {
@@ -143,8 +142,8 @@ box_completer! { Box Rc Arc }
 
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
-    break_chars: &'static [u8],
-    double_quotes_special_chars: &'static [u8],
+    break_chars: fn(char) -> bool,
+    double_quotes_special_chars: fn(char) -> bool,
 }
 
 const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
@@ -152,26 +151,26 @@ const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 cfg_if::cfg_if! {
     if #[cfg(unix)] {
         // rl_basic_word_break_characters, rl_completer_word_break_characters
-        const DEFAULT_BREAK_CHARS: [u8; 18] = [
-            b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&',
-            b'{', b'(', b'\0',
-        ];
+        const fn default_break_chars(c : char) -> bool {
+            matches!(c, ' ' | '\t' | '\n' | '"' | '\\' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' |
+            '{' | '(' | '\0')
+        }
         const ESCAPE_CHAR: Option<char> = Some('\\');
         // In double quotes, not all break_chars need to be escaped
         // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
+        const fn double_quotes_special_chars(c: char) -> bool { matches!(c, '"' | '$' | '\\' | '`') }
     } else if #[cfg(windows)] {
         // Remove \ to make file completion works on windows
-        const DEFAULT_BREAK_CHARS: [u8; 17] = [
-            b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{',
-            b'(', b'\0',
-        ];
+        const fn default_break_chars(c: char) -> bool {
+            matches!(c, ' ' | '\t' | '\n' | '"' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' | '{' |
+            '(' | '\0')
+        }
         const ESCAPE_CHAR: Option<char> = None;
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
+        const fn double_quotes_special_chars(c: char) -> bool { c == '"' } // TODO Validate: only '"' ?
     } else if #[cfg(target_arch = "wasm32")] {
-        const DEFAULT_BREAK_CHARS: [u8; 0] = [];
+        const fn default_break_chars(c: char) -> bool { false }
         const ESCAPE_CHAR: Option<char> = None;
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = [];
+        const fn double_quotes_special_chars(c: char) -> bool { false }
     }
 }
 
@@ -191,8 +190,8 @@ impl FilenameCompleter {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            break_chars: &DEFAULT_BREAK_CHARS,
-            double_quotes_special_chars: &DOUBLE_QUOTES_SPECIAL_CHARS,
+            break_chars: default_break_chars,
+            double_quotes_special_chars,
         }
     }
 
@@ -208,7 +207,7 @@ impl FilenameCompleter {
                         start,
                         unescape(&line[start..pos], DOUBLE_QUOTES_ESCAPE_CHAR),
                         DOUBLE_QUOTES_ESCAPE_CHAR,
-                        &self.double_quotes_special_chars,
+                        self.double_quotes_special_chars,
                         quote,
                     )
                 } else {
@@ -216,14 +215,14 @@ impl FilenameCompleter {
                         start,
                         Borrowed(&line[start..pos]),
                         None,
-                        &self.break_chars,
+                        self.break_chars,
                         quote,
                     )
                 }
             } else {
                 let (start, path) = extract_word(line, pos, ESCAPE_CHAR, self.break_chars);
                 let path = unescape(path, ESCAPE_CHAR);
-                (start, path, ESCAPE_CHAR, &self.break_chars, Quote::None)
+                (start, path, ESCAPE_CHAR, self.break_chars, Quote::None)
             };
         let mut matches = filename_complete(&path, esc_char, break_chars, quote);
         #[allow(clippy::unnecessary_sort_by)]
@@ -284,16 +283,13 @@ pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
 pub fn escape(
     mut input: String,
     esc_char: Option<char>,
-    break_chars: &[u8],
+    is_break_char: fn(char) -> bool,
     quote: Quote,
 ) -> String {
     if quote == Quote::Single {
         return input; // no escape in single quotes
     }
-    let n = input
-        .bytes()
-        .filter(|b| memchr(*b, break_chars).is_some())
-        .count();
+    let n = input.chars().filter(|c| is_break_char(*c)).count();
     if n == 0 {
         return input; // no need to escape
     }
@@ -309,7 +305,7 @@ pub fn escape(
     let mut result = String::with_capacity(input.len() + n);
 
     for c in input.chars() {
-        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
+        if is_break_char(c) {
             result.push(esc_char);
         }
         result.push(c);
@@ -320,7 +316,7 @@ pub fn escape(
 fn filename_complete(
     path: &str,
     esc_char: Option<char>,
-    break_chars: &[u8],
+    is_break_char: fn(char) -> bool,
     quote: Quote,
 ) -> Vec<Pair> {
     #[cfg(feature = "with-dirs")]
@@ -383,7 +379,7 @@ fn filename_complete(
                         }
                         entries.push(Pair {
                             display: String::from(s),
-                            replacement: escape(path, esc_char, break_chars, quote),
+                            replacement: escape(path, esc_char, is_break_char, quote),
                         });
                     } // else ignore PermissionDenied
                 }
@@ -409,12 +405,12 @@ fn normalize(s: &str) -> Cow<str> {
 /// Return (0, `line[..pos]`) if no break char has been found.
 /// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
 #[must_use]
-pub fn extract_word<'l>(
-    line: &'l str,
+pub fn extract_word(
+    line: &str,
     pos: usize,
     esc_char: Option<char>,
-    break_chars: &[u8],
-) -> (usize, &'l str) {
+    is_break_char: fn(char) -> bool,
+) -> (usize, &str) {
     let line = &line[..pos];
     if line.is_empty() {
         return (0, line);
@@ -429,7 +425,7 @@ pub fn extract_word<'l>(
             }
             break;
         }
-        if c.is_ascii() && memchr(c as u8, break_chars).is_some() {
+        if is_break_char(c) {
             start = Some(i + c.len_utf8());
             if esc_char.is_none() {
                 break;
@@ -536,7 +532,7 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
 mod tests {
     #[test]
     pub fn extract_word() {
-        let break_chars: &[u8] = &super::DEFAULT_BREAK_CHARS;
+        let break_chars = super::default_break_chars;
         let line = "ls '/usr/local/b";
         assert_eq!(
             (4, "/usr/local/b"),
@@ -567,7 +563,7 @@ mod tests {
 
     #[test]
     pub fn escape() {
-        let break_chars: &[u8] = &super::DEFAULT_BREAK_CHARS;
+        let break_chars = super::default_break_chars;
         let input = String::from("/usr/local/b");
         assert_eq!(
             input.clone(),

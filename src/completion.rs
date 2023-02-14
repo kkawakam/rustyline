@@ -46,6 +46,7 @@ impl Candidate for &'_ str {
 }
 
 /// Completion candidate pair
+#[derive(Clone)]
 pub struct Pair {
     /// Text to display when listing alternatives.
     pub display: String,

@@ -200,6 +200,14 @@ impl FilenameCompleter {
     /// returns the start position and the completion candidates for the
     /// partial path to be completed.
     pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
+        let (start, mut matches) = self.complete_path_unsorted(line, pos)?;
+        #[allow(clippy::unnecessary_sort_by)]
+        matches.sort_by(|a, b| a.display().cmp(b.display()));
+        Ok((start, matches))
+    }
+
+    /// Similar to [`Self::complete_path`], but the returned paths are unsorted.
+    pub fn complete_path_unsorted(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, path, esc_char, break_chars, quote) =
             if let Some((idx, quote)) = find_unclosed_quote(&line[..pos]) {
                 let start = idx + 1;
@@ -225,9 +233,7 @@ impl FilenameCompleter {
                 let path = unescape(path, ESCAPE_CHAR);
                 (start, path, ESCAPE_CHAR, self.break_chars, Quote::None)
             };
-        let mut matches = filename_complete(&path, esc_char, break_chars, quote);
-        #[allow(clippy::unnecessary_sort_by)]
-        matches.sort_by(|a, b| a.display().cmp(b.display()));
+        let matches = filename_complete(&path, esc_char, break_chars, quote);
         Ok((start, matches))
     }
 }

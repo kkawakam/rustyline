@@ -1,6 +1,6 @@
 [package]
 name = "rustyline"
-version = "10.1.0"
+version = "11.0.0"
 authors = ["Katsu Kawakami <kkawa1570@gmail.com>"]
 edition = "2021"
 description = "Rustyline, a readline implementation based on Antirez's Linenoise"
@@ -40,7 +40,7 @@ memchr = "2.0"
 radix_trie = { version = "0.2", optional = true }
 regex = { version = "1.5.5", optional = true }
 # For derive
-rustyline-derive = { version = "0.7.0", optional = true, path = "rustyline-derive" }
+rustyline-derive = { version = "0.8.0", optional = true, path = "rustyline-derive" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.26", default-features = false, features = ["fs", "ioctl", "poll", "signal", "term"] }

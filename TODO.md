@@ -51,7 +51,7 @@ History
       each line input session.
 - [x] append_history
 - [ ] history_truncate_file
-- [ ] custom persistent storage
+- [X] custom persistent storage
 
 Input
 

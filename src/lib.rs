@@ -71,7 +71,7 @@ pub use crate::undo::Changeset;
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
-pub type Result<T> = result::Result<T, error::ReadlineError>;
+pub type Result<T> = result::Result<T, ReadlineError>;
 
 /// Completes the line/word
 fn complete_line<H: Helper>(
@@ -489,7 +489,7 @@ fn readline_direct(
 
     loop {
         if reader.read_line(&mut input)? == 0 {
-            return Err(error::ReadlineError::Eof);
+            return Err(ReadlineError::Eof);
         }
         // Remove trailing newline
         let trailing_n = input.ends_with('\n');
@@ -954,7 +954,7 @@ impl<'a, H: Helper, I: History> Iterator for Iter<'a, H, I> {
         let readline = self.editor.readline(self.prompt);
         match readline {
             Ok(l) => Some(Ok(l)),
-            Err(error::ReadlineError::Eof) => None,
+            Err(ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
     }

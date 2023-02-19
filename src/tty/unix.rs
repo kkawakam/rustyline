@@ -801,12 +801,12 @@ impl RawReader for PosixRawReader {
         loop {
             let n = self.tty_in.read(&mut buf)?;
             if n == 0 {
-                return Err(error::ReadlineError::Eof);
+                return Err(ReadlineError::Eof);
             }
             let b = buf[0];
             self.parser.advance(&mut receiver, b);
             if !receiver.valid {
-                return Err(error::ReadlineError::from(ErrorKind::InvalidData));
+                return Err(ReadlineError::from(ErrorKind::InvalidData));
             } else if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }

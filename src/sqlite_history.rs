@@ -40,7 +40,7 @@ impl SQLiteHistory {
         Self::new(config, None)
     }
 
-    /// Open specifed database
+    /// Open specified database
     pub fn open<P: AsRef<Path> + ?Sized>(config: Config, path: &P) -> Result<Self> {
         Self::new(config, normalize(path.as_ref()))
     }

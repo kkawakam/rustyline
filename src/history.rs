@@ -57,7 +57,7 @@ pub trait History {
 
     /// Return the history entry at position `index`, starting from 0.
     ///
-    /// `SearchDirection` is usefull only for implementations without direct
+    /// `SearchDirection` is useful only for implementations without direct
     /// indexing.
     fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>>;
 

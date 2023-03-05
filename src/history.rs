@@ -175,7 +175,6 @@ pub trait History {
 }
 
 /// Transient in-memory history implementation.
-#[derive(Default)]
 pub struct MemHistory {
     entries: VecDeque<String>,
     max_len: usize,
@@ -275,6 +274,12 @@ impl MemHistory {
             self.entries.pop_front();
         }
         self.entries.push_back(line);
+    }
+}
+
+impl Default for MemHistory {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

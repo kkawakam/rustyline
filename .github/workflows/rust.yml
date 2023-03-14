@@ -16,6 +16,10 @@ on:
 env:
   RUST_BACKTRACE: short
   RUSTFLAGS: -Cdebuginfo=1
+
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:

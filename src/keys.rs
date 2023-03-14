@@ -170,6 +170,7 @@ pub enum KeyCode {
 
 bitflags::bitflags! {
     /// The set of modifier keys that were triggered along with a key press.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct Modifiers: u8 {
         /// Control modifier
         const CTRL  = 1<<3;
@@ -181,13 +182,13 @@ bitflags::bitflags! {
         /// No modifier
         const NONE = 0;
         /// Ctrl + Shift
-        const CTRL_SHIFT = Self::CTRL.bits | Self::SHIFT.bits;
+        const CTRL_SHIFT = Self::CTRL.bits() | Self::SHIFT.bits();
         /// Alt + Shift
-        const ALT_SHIFT = Self::ALT.bits | Self::SHIFT.bits;
+        const ALT_SHIFT = Self::ALT.bits() | Self::SHIFT.bits();
         /// Ctrl + Alt
-        const CTRL_ALT = Self::CTRL.bits | Self::ALT.bits;
+        const CTRL_ALT = Self::CTRL.bits() | Self::ALT.bits();
         /// Ctrl + Alt + Shift
-        const CTRL_ALT_SHIFT = Self::CTRL.bits | Self::ALT.bits | Self::SHIFT.bits;
+        const CTRL_ALT_SHIFT = Self::CTRL.bits() | Self::ALT.bits() | Self::SHIFT.bits();
     }
 }
 

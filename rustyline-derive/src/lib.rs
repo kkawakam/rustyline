@@ -7,7 +7,7 @@ fn get_field_by_attr<'a>(data: &'a Data, ident: &str) -> Option<(usize, &'a Fiel
     if let Data::Struct(struct_data) = &data {
         let mut fields = struct_data.fields.iter().enumerate().filter(|(_, field)| {
             field.attrs.iter().any(|attr| {
-                attr.path.is_ident("rustyline")
+                attr.path().is_ident("rustyline")
                     && attr
                         .parse_args::<Path>()
                         .map_or(false, |arg| arg.is_ident(ident))

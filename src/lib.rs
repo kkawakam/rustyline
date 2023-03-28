@@ -901,6 +901,16 @@ impl<H: Helper, I: History> Editor<H, I> {
         }
     }
 
+    /// Clear the screen.
+    pub fn clear_screen(&mut self) -> Result<()> {
+        if self.term.is_output_tty() {
+            let mut out = self.term.create_writer();
+            out.clear_screen()
+        } else {
+            Ok(())
+        }
+    }
+
     /// Create an external printer
     pub fn create_external_printer(&mut self) -> Result<<Terminal as Term>::ExternalPrinter> {
         self.term.create_external_printer()

@@ -26,7 +26,6 @@ use crate::KillRing;
 pub struct State<'out, H: Helper, P> {
     pub out: &'out mut <Terminal as Term>::Writer,
     prompt: P,  // Prompt to display (rl_prompt)
-    prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
     pub layout: Layout,
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
@@ -51,11 +50,9 @@ impl<'out, H: Helper, P: ToString> State<'out, H, P> {
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> Self {
-        let prompt_size = out.calculate_position(prompt.to_string().as_str(), Position::default());
         State {
             out,
             prompt,
-            prompt_size,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             layout: Layout::default(),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
@@ -93,9 +90,6 @@ impl<'out, H: Helper, P: ToString> State<'out, H, P> {
                 if new_cols != old_cols
                     && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
                 {
-                    self.prompt_size = self
-                        .out
-                        .calculate_position(self.prompt.to_string().as_str(), Position::default());
                     self.refresh_line()?;
                 }
                 continue;
@@ -121,19 +115,20 @@ impl<'out, H: Helper, P: ToString> State<'out, H, P> {
     }
 
     pub fn move_cursor(&mut self) -> Result<()> {
+        let prompt_size = self.out.calculate_position(self.prompt.to_string().as_str(), Position::default());
         // calculate the desired position of the cursor
         let cursor = self
             .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+            .calculate_position(&self.line[..self.line.pos()], prompt_size);
         if self.layout.cursor == cursor {
             return Ok(());
         }
         if self.highlight_char() {
-            let prompt_size = self.prompt_size;
+            let prompt_size = prompt_size;
             self.refresh(self.prompt.to_string().as_str(), prompt_size, true, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, cursor)?;
-            self.layout.prompt_size = self.prompt_size;
+            self.layout.prompt_size = prompt_size;
             self.layout.cursor = cursor;
             debug_assert!(self.layout.prompt_size <= self.layout.cursor);
             debug_assert!(self.layout.cursor <= self.layout.end);
@@ -261,14 +256,14 @@ impl<'out, P, H: Helper> Invoke for State<'out, H, P> {
 
 impl<'out, P: ToString, H: Helper> Refresher for State<'out, H, P> {
     fn refresh_line(&mut self) -> Result<()> {
-        let prompt_size = self.prompt_size;
+        let prompt_size = self.out.calculate_position(self.prompt.to_string().as_str(), Position::default());
         self.hint();
         self.highlight_char();
         self.refresh(self.prompt.to_string().as_str(), prompt_size, true, Info::Hint)
     }
 
     fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
-        let prompt_size = self.prompt_size;
+        let prompt_size = self.out.calculate_position(self.prompt.to_string().as_str(), Position::default());
         self.hint = None;
         self.highlight_char();
         self.refresh(self.prompt.to_string().as_str(), prompt_size, true, Info::Msg(msg))
@@ -329,7 +324,6 @@ impl<'out, P: ToString, H: Helper> fmt::Debug for State<'out, H, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt.to_string().as_str())
-            .field("prompt_size", &self.prompt_size)
             .field("buf", &self.line)
             .field("cols", &self.out.get_columns())
             .field("layout", &self.layout)
@@ -350,7 +344,7 @@ impl<'out, P: ToString, H: Helper> State<'out, H, P> {
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
             if push {
-                let prompt_size = self.prompt_size;
+                let prompt_size = self.out.calculate_position(self.prompt.to_string().as_str(), Position::default());
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
                 let width = ch.width().unwrap_or(0);
@@ -752,7 +746,6 @@ pub fn init_state<'out, H: Helper>(
     State {
         out,
         prompt: "",
-        prompt_size: Position::default(),
         line: LineBuffer::init(line, pos),
         layout: Layout::default(),
         saved_line_for_history: LineBuffer::with_capacity(100),

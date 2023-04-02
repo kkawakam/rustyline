@@ -14,9 +14,9 @@ pub enum Status {
     Submit,
 }
 
-pub fn execute<H: Helper>(
+pub fn execute<H: Helper, P: ToString>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H, P>,
     input_state: &InputState,
     kill_ring: &mut KillRing,
     config: &Config,

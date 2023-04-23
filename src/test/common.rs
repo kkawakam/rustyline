@@ -177,16 +177,16 @@ fn interrupt_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         let mut editor = init_editor(*mode, &[E::ctrl('C')]);
         let err = editor.readline(">>");
-        assert_matches!(err, Err(ReadlineError::Interrupted));
+        assert_matches!(err, Err(ReadlineError::Interrupted(_)));
 
         let mut editor = init_editor(*mode, &[E::ctrl('C')]);
         let err = editor.readline_with_initial(">>", ("Hi", ""));
-        assert_matches!(err, Err(ReadlineError::Interrupted));
+        assert_matches!(err, Err(ReadlineError::Interrupted(_)));
         if *mode == EditMode::Vi {
             // vi command mode
             let mut editor = init_editor(*mode, &[E::ESC, E::ctrl('C')]);
             let err = editor.readline_with_initial(">>", ("Hi", ""));
-            assert_matches!(err, Err(ReadlineError::Interrupted));
+            assert_matches!(err, Err(ReadlineError::Interrupted(_)));
         }
     }
 }

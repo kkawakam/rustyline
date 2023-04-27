@@ -301,7 +301,7 @@ impl PosixRawReader {
         let seq2 = self.next_char()?;
         if seq2.is_ascii_digit() {
             match seq2 {
-                '0' | '9' => {
+                '0' => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
@@ -427,6 +427,11 @@ impl PosixRawReader {
                                 E(K::UnknownEscSeq, M::NONE)
                             }
                         })
+                    } else if seq6 == 'u' {
+                        Ok(E::normalize(E(
+                            K::Char(parse_csiu_codepoint(&[seq2, seq3])),
+                            parse_csiu_modifier(seq5),
+                        )))
                     } else {
                         debug!(target: "rustyline",
                                "unsupported esc sequence: \\E[{}{};{}{}", seq2, seq3, seq5, seq6);
@@ -449,6 +454,25 @@ impl PosixRawReader {
                             E(K::UnknownEscSeq, M::NONE)
                         }
                     })
+                } else if seq5 == ';' {
+                    let seq6 = self.next_char()?;
+                    if seq6.is_ascii_digit() {
+                        let seq7 = self.next_char()?;
+                        if seq7 == 'u' {
+                            Ok(E::normalize(E(
+                                K::Char(parse_csiu_codepoint(&[seq2, seq3, seq4])),
+                                parse_csiu_modifier(seq6),
+                            )))
+                        } else {
+                            debug!(target: "rustyline",
+                                   "unsupported esc sequence: \\E[{}{}{}{}{}{}", seq2, seq3, seq4, seq5, seq6, seq7);
+                            Ok(E(K::UnknownEscSeq, M::NONE))
+                        }
+                    } else {
+                        debug!(target: "rustyline",
+                               "unsupported esc sequence: \\E[{}{}{}{}{}", seq2, seq3, seq4, seq5, seq6);
+                        Ok(E(K::UnknownEscSeq, M::NONE))
+                    }
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}{}{}{}", seq2, seq3, seq4, seq5);
@@ -1207,6 +1231,18 @@ fn map_key(key_map: &mut HashMap<KeyEvent, Cmd>, raw: &Termios, index: SCI, name
     let key = KeyEvent::new(cc, M::NONE);
     debug!(target: "rustyline", "{}: {:?}", name, key);
     key_map.insert(key, cmd);
+}
+
+fn parse_csiu_codepoint(chars: &[char]) -> char {
+    // all chars are in range '0'..'9'
+    let parsed = chars
+        .iter()
+        .fold(0, |accum, &x| accum * 10 + (x as u32 - '0' as u32));
+    char::from_u32(parsed).unwrap()
+}
+
+fn parse_csiu_modifier(c: char) -> M {
+    M::from_bits_truncate(((c as u32 - '1' as u32) << 1) as u8)
 }
 
 #[cfg(not(test))]

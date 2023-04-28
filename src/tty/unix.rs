@@ -31,6 +31,8 @@ const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
+const PUSH_KITTY_FLAGS: &str = "\x1b[>1u";
+const POP_KITTY_FLAGS: &str = "\x1b[<u";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
@@ -110,6 +112,7 @@ impl RawMode for PosixMode {
         // disable bracketed paste
         if let Some(out) = self.tty_out {
             write_all(out, BRACKETED_PASTE_OFF)?;
+            write_all(out, POP_KITTY_FLAGS)?;
         }
         self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
@@ -1394,6 +1397,8 @@ impl Term for PosixTerminal {
         map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
 
         termios::tcsetattr(self.tty_in, SetArg::TCSADRAIN, &raw)?;
+
+        write_all(self.tty_out, PUSH_KITTY_FLAGS)?;
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste

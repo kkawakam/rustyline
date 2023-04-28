@@ -1528,9 +1528,16 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use crate::config::BellStyle;
+    use super::{Position, PosixKeyMap, PosixRawReader, PosixRenderer, PosixTerminal, Renderer};
+    use crate::config::{BellStyle, Config};
+    use crate::keys::{KeyCode as K, Modifiers as M};
     use crate::line_buffer::{LineBuffer, NoListener};
+    use crate::KeyEvent;
+    use crate::RawReader;
+    use nix::unistd::pipe;
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
 
     #[test]
     #[ignore]
@@ -1588,5 +1595,25 @@ mod test {
             "\r\u{1b}[K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
+    }
+
+    #[test]
+    fn test_csiu() {
+        let (reader_fd, writer_fd) = pipe().unwrap();
+        let mut reader = PosixRawReader::new(
+            reader_fd,
+            None,
+            &Config::builder().build(),
+            PosixKeyMap::default(),
+            None,
+        );
+        let mut writer = unsafe { File::from_raw_fd(writer_fd) };
+        writer.write_all("\x1b[13;5u".as_bytes()).unwrap();
+        let event = reader.next_key(false).unwrap();
+        assert_eq!(event, KeyEvent(K::Enter, M::CTRL));
+
+        writer.write_all("\x1b[127;2u".as_bytes()).unwrap();
+        let event = reader.next_key(false).unwrap();
+        assert_eq!(event, KeyEvent(K::Backspace, M::SHIFT));
     }
 }

@@ -12,7 +12,6 @@ use std::sync::Arc;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -468,12 +467,13 @@ impl Renderer for ConsoleRenderer {
     /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
+        let mut esc_sec = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
                 pos.col = 0;
                 pos.row += 1;
             } else {
-                let cw = c.width();
+                let cw = width(c, &mut esc_sec);
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;
@@ -883,7 +883,19 @@ impl Drop for Handle {
 
 #[cfg(test)]
 mod test {
-    use super::Console;
+    use super::*;
+
+    #[test]
+    fn prompt_with_ansi_escape_codes() {
+        let out = ConsoleRenderer::new(
+            unsafe { processenv::GetStdHandle(winbase::STD_OUTPUT_HANDLE) },
+            true,
+            BellStyle::default(),
+        );
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
+        assert_eq!(3, pos.col);
+        assert_eq!(0, pos.row);
+    }
 
     #[test]
     fn test_send() {

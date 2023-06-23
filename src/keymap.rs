@@ -711,7 +711,9 @@ impl<'b> InputState<'b> {
             E(K::Char('$') | K::End, M::NONE) => Cmd::Move(Movement::EndOfLine),
             E(K::Char('.'), M::NONE) => {
                 // vi-redo (repeat last command)
-                if no_num_args {
+                if !self.last_cmd.is_repeatable() {
+                    Cmd::Noop
+                } else if no_num_args {
                     self.last_cmd.redo(None, wrt)
                 } else {
                     self.last_cmd.redo(Some(n), wrt)

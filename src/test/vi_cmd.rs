@@ -13,10 +13,15 @@ fn dollar() {
     );
 }
 
-/*#[test]
+#[test]
 fn dot() {
-    // TODO
-}*/
+    assert_cursor(
+        EditMode::Vi,
+        ("", ""),
+        &[E::ESC, E::from('.'), E::ENTER],
+        ("", ""),
+    );
+}
 
 #[test]
 fn semi_colon() {

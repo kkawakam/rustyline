@@ -23,7 +23,7 @@ Suspend: Control-Z
 | prompt-toolkit |                  | X                      |                   |
 | reedline       |                  | X                      |                   |
 | replxx         | X                |                        | X                 |
-| rustyline      |                  |                        |                   |
+| rustyline      |                  | X                      |                   |
 | termwiz        |                  | X                      | \*                |
 
 Editable History: any history entry can be edited and saved\

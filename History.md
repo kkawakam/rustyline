@@ -30,9 +30,3 @@ PathInfo
   path: Path,
   modified: SystemTime,
 ```
-
----
-
-With `termwiz`, you can define your own `History` backend.
-`termwiz` does not specify anything how the history is persisted.
-Only how to access / search history entry.

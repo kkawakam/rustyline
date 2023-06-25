@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
@@ -20,7 +18,7 @@ pub fn execute<H: Helper>(
     cmd: Cmd,
     s: &mut State<'_, '_, H>,
     input_state: &InputState,
-    kill_ring: &Arc<Mutex<KillRing>>,
+    kill_ring: &mut KillRing,
     config: &Config,
 ) -> Result<Status> {
     use Status::{Proceed, Submit};
@@ -61,7 +59,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
         Cmd::Replace(mvt, text) => {
-            s.edit_kill(&mvt)?;
+            s.edit_kill(&mvt, kill_ring)?;
             if let Some(text) = text {
                 s.edit_insert_text(&text)?;
             }
@@ -115,14 +113,12 @@ pub fn execute<H: Helper>(
         }
         Cmd::Yank(n, anchor) => {
             // retrieve (yank) last item killed
-            let mut kill_ring = kill_ring.lock().unwrap();
             if let Some(text) = kill_ring.yank() {
                 s.edit_yank(input_state, text, anchor, n)?;
             }
         }
         Cmd::ViYankTo(ref mvt) => {
             if let Some(text) = s.line.copy(mvt) {
-                let mut kill_ring = kill_ring.lock().unwrap();
                 kill_ring.kill(&text, Mode::Append);
             }
         }
@@ -171,7 +167,7 @@ pub fn execute<H: Helper>(
             s.edit_word(WordAction::Capitalize)?;
         }
         Cmd::Kill(ref mvt) => {
-            s.edit_kill(mvt)?;
+            s.edit_kill(mvt, kill_ring)?;
         }
         Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
             // move forwards one word
@@ -205,14 +201,13 @@ pub fn execute<H: Helper>(
         }
         Cmd::YankPop => {
             // yank-pop
-            let mut kill_ring = kill_ring.lock().unwrap();
             if let Some((yank_size, text)) = kill_ring.yank_pop() {
                 s.edit_yank_pop(yank_size, text)?;
             }
         }
         Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
         Cmd::Undo(n) => {
-            if s.changes.borrow_mut().undo(&mut s.line, n) {
+            if s.changes.undo(&mut s.line, n) {
                 s.refresh_line()?;
             }
         }

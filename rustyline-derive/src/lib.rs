@@ -7,7 +7,7 @@ fn get_field_by_attr<'a>(data: &'a Data, ident: &str) -> Option<(usize, &'a Fiel
     if let Data::Struct(struct_data) = &data {
         let mut fields = struct_data.fields.iter().enumerate().filter(|(_, field)| {
             field.attrs.iter().any(|attr| {
-                attr.path.is_ident("rustyline")
+                attr.path().is_ident("rustyline")
                     && attr
                         .parse_args::<Path>()
                         .map_or(false, |arg| arg.is_ident(ident))
@@ -59,8 +59,8 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
                     ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, ctx)
                 }
 
-                fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str) {
-                    ::rustyline::completion::Completer::update(&self.#field_name_or_index, line, start, elected)
+                fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
+                    ::rustyline::completion::Completer::update(&self.#field_name_or_index, line, start, elected, cl)
                 }
             }
         }

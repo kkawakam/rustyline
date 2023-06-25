@@ -51,7 +51,7 @@ History
       each line input session.
 - [x] append_history
 - [ ] history_truncate_file
-- [ ] custom persistent storage
+- [X] custom persistent storage
 
 Input
 
@@ -59,10 +59,11 @@ Input
 - [x] quoted insert (#65)
 - [ ] Overwrite mode (em-toggle-overwrite, vi-replace-mode, rl_insert_mode)
 - [ ] Encoding
-- [x] [Ctrl-][Alt-][Shift-]<Key> (#121)
+- [x] \[Ctrl-]\[Alt-]\[Shift-]<Key> (#121)
 
 Layout
 
+- [ ] Scroll
 - [ ] Redraw perf (https://crates.io/crates/cassowary)
 
 Misc

@@ -24,11 +24,12 @@ Readline implementation in Rust that is based on [Antirez' Linenoise](https://gi
 
 ```rust
 use rustyline::error::ReadlineError;
-use rustyline::{Editor, Result};
+use rustyline::{DefaultEditor, Result};
 
 fn main() -> Result<()> {
     // `()` can be used when no completer is required
-    let mut rl = Editor::<()>::new()?;
+    let mut rl = DefaultEditor::new()?;
+    #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
@@ -53,7 +54,9 @@ fn main() -> Result<()> {
             }
         }
     }
-    rl.save_history("history.txt")
+    #[cfg(feature = "with-file-history")]
+    rl.save_history("history.txt");
+    Ok(())
 }
 ```
 
@@ -64,7 +67,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "10.0.0"
+rustyline = "12.0.0"
 ```
 
 ## Features
@@ -233,7 +236,7 @@ $ infocmp
 [prompt_toolkit]: https://github.com/jonathanslenders/python-prompt-toolkit
 [reedline]: https://github.com/nushell/reedline
 [replxx]: https://github.com/AmokHuginnsson/replxx
-[termwiz]: https://github.com/wez/wezterm/tree/master/termwiz
+[termwiz]: https://github.com/wez/wezterm/tree/main/termwiz
 
 ## Multi line support
 

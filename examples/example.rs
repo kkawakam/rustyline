@@ -6,7 +6,7 @@ use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
-use rustyline_derive::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct MyHelper {
@@ -71,13 +71,13 @@ fn main() -> rustyline::Result<()> {
     }
     let mut count = 1;
     loop {
-        let p = format!("{}> ", count);
-        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{}\x1b[0m", p);
+        let p = format!("{count}> ");
+        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{p}\x1b[0m");
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                println!("Line: {}", line);
+                rl.add_history_entry(line.as_str())?;
+                println!("Line: {line}");
             }
             Err(ReadlineError::Interrupted) => {
                 println!("Interrupted");
@@ -88,7 +88,7 @@ fn main() -> rustyline::Result<()> {
                 break;
             }
             Err(err) => {
-                println!("Error: {:?}", err);
+                println!("Error: {err:?}");
                 break;
             }
         }

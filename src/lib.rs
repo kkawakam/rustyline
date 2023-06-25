@@ -8,7 +8,7 @@
 //! Usage
 //!
 //! ```
-//! let mut rl = rustyline::Editor::<()>::new()?;
+//! let mut rl = rustyline::DefaultEditor::new()?;
 //! let readline = rl.readline(">> ");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}", line),
@@ -34,6 +34,8 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
+#[cfg(feature = "with-sqlite-history")]
+pub mod sqlite_history;
 mod tty;
 mod undo;
 pub mod validate;
@@ -42,9 +44,11 @@ use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::result;
-use std::sync::{Arc, Mutex};
 
 use log::debug;
+#[cfg(feature = "derive")]
+#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
+pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 
 use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
@@ -56,16 +60,17 @@ use crate::edit::State;
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::{History, SearchDirection};
+use crate::history::{DefaultHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
 use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::tty::ExternalPrinter;
+pub use crate::undo::Changeset;
 use crate::validate::Validator;
 
 /// The error type for I/O and Linux Syscalls (Errno)
-pub type Result<T> = result::Result<T, error::ReadlineError>;
+pub type Result<T> = result::Result<T, ReadlineError>;
 
 /// Completes the line/word
 fn complete_line<H: Helper>(
@@ -87,7 +92,7 @@ fn complete_line<H: Helper>(
         s.out.beep()?;
         Ok(None)
     } else if CompletionType::Circular == config.completion_type() {
-        let mark = s.changes.borrow_mut().begin();
+        let mark = s.changes.begin();
         // Save the current edited line before overwriting it
         let backup = s.line.as_str().to_owned();
         let backup_pos = s.line.pos();
@@ -103,10 +108,10 @@ fn complete_line<H: Helper>(
                 } else {
                     Borrowed(candidate)
                 };*/
-                completer.update(&mut s.line, start, candidate);
+                completer.update(&mut s.line, start, candidate, &mut s.changes);
             } else {
                 // Restore current edited line
-                s.line.update(&backup, backup_pos);
+                s.line.update(&backup, backup_pos, &mut s.changes);
             }
             s.refresh_line()?;
 
@@ -129,14 +134,14 @@ fn complete_line<H: Helper>(
                 Cmd::Abort => {
                     // Re-show original buffer
                     if i < candidates.len() {
-                        s.line.update(&backup, backup_pos);
+                        s.line.update(&backup, backup_pos, &mut s.changes);
                         s.refresh_line()?;
                     }
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.truncate(mark);
                     return Ok(None);
                 }
                 _ => {
-                    s.changes.borrow_mut().end();
+                    s.changes.end();
                     break;
                 }
             }
@@ -146,7 +151,7 @@ fn complete_line<H: Helper>(
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start {
-                completer.update(&mut s.line, start, lcp);
+                completer.update(&mut s.line, start, lcp, &mut s.changes);
                 s.refresh_line()?;
             }
         }
@@ -216,7 +221,7 @@ fn complete_line<H: Helper>(
                         text: c.display().to_owned(),
                     })
                     .for_each(|c| {
-                        let _ = tx_item.send(Arc::new(c));
+                        let _ = tx_item.send(std::sync::Arc::new(c));
                     });
                 drop(tx_item); // so that skim could know when to stop waiting for more items.
 
@@ -225,7 +230,6 @@ fn complete_line<H: Helper>(
                 // by default skim multi select is off so only expect one selection
 
                 let options = SkimOptionsBuilder::default()
-                    .height(Some("20%"))
                     .prompt(Some("? "))
                     .reverse(true)
                     .build()
@@ -242,7 +246,12 @@ fn complete_line<H: Helper>(
                         .downcast_ref::<Candidate>() // downcast to concrete type
                         .expect("something wrong with downcast");
                     if let Some(candidate) = candidates.get(item.index) {
-                        completer.update(&mut s.line, start, candidate.replacement());
+                        completer.update(
+                            &mut s.line,
+                            start,
+                            candidate.replacement(),
+                            &mut s.changes,
+                        );
                     }
                 }
                 s.refresh_line()?;
@@ -260,7 +269,7 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     };
     s.line.move_end();
     if let Some(text) = hint.completion() {
-        if s.line.yank(text, 1).is_none() {
+        if s.line.yank(text, 1, &mut s.changes).is_none() {
             s.out.beep()?;
         }
     } else {
@@ -350,16 +359,16 @@ fn page_completions<C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<H: Helper>(
+fn reverse_incremental_search<H: Helper, I: History>(
     rdr: &mut <Terminal as Term>::Reader,
     s: &mut State<'_, '_, H>,
     input_state: &mut InputState,
-    history: &History,
+    history: &I,
 ) -> Result<Option<Cmd>> {
     if history.is_empty() {
         return Ok(None);
     }
-    let mark = s.changes.borrow_mut().begin();
+    let mark = s.changes.begin();
     // Save the current edited line (and cursor position) before overwriting it
     let backup = s.line.as_str().to_owned();
     let backup_pos = s.line.pos();
@@ -373,9 +382,9 @@ fn reverse_incremental_search<H: Helper>(
     // Display the reverse-i-search prompt and process chars
     loop {
         let prompt = if success {
-            format!("(reverse-i-search)`{}': ", search_buf)
+            format!("(reverse-i-search)`{search_buf}': ")
         } else {
-            format!("(failed reverse-i-search)`{}': ", search_buf)
+            format!("(failed reverse-i-search)`{search_buf}': ")
         };
         s.refresh_prompt_and_line(&prompt)?;
 
@@ -408,9 +417,9 @@ fn reverse_incremental_search<H: Helper>(
                 }
                 Cmd::Abort => {
                     // Restore current edited line (before search)
-                    s.line.update(&backup, backup_pos);
+                    s.line.update(&backup, backup_pos, &mut s.changes);
                     s.refresh_line()?;
-                    s.changes.borrow_mut().truncate(mark);
+                    s.changes.truncate(mark);
                     return Ok(None);
                 }
                 Cmd::Move(_) => {
@@ -420,16 +429,16 @@ fn reverse_incremental_search<H: Helper>(
                 _ => break,
             }
         }
-        success = match history.search(&search_buf, history_idx, direction) {
+        success = match history.search(&search_buf, history_idx, direction)? {
             Some(sr) => {
                 history_idx = sr.idx;
-                s.line.update(sr.entry, sr.pos);
+                s.line.update(&sr.entry, sr.pos, &mut s.changes);
                 true
             }
             _ => false,
         };
     }
-    s.changes.borrow_mut().end();
+    s.changes.end();
     Ok(Some(cmd))
 }
 
@@ -479,7 +488,7 @@ fn readline_direct(
 
     loop {
         if reader.read_line(&mut input)? == 0 {
-            return Err(error::ReadlineError::Eof);
+            return Err(ReadlineError::Eof);
         }
         // Remove trailing newline
         let trailing_n = input.ends_with('\n');
@@ -545,14 +554,14 @@ impl<'h, H: ?Sized + Helper> Helper for &'h H {}
 
 /// Completion/suggestion context
 pub struct Context<'h> {
-    history: &'h History,
+    history: &'h dyn History,
     history_index: usize,
 }
 
 impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
     #[must_use]
-    pub fn new(history: &'h History) -> Self {
+    pub fn new(history: &'h dyn History) -> Self {
         Context {
             history,
             history_index: history.len(),
@@ -561,7 +570,7 @@ impl<'h> Context<'h> {
 
     /// Return an immutable reference to the history object.
     #[must_use]
-    pub fn history(&self) -> &History {
+    pub fn history(&self) -> &dyn History {
         self.history
     }
 
@@ -574,17 +583,20 @@ impl<'h> Context<'h> {
 
 /// Line editor
 #[must_use]
-pub struct Editor<H: Helper> {
+pub struct Editor<H: Helper, I: History> {
     term: Terminal,
-    history: History,
+    history: I,
     helper: Option<H>,
-    kill_ring: Arc<Mutex<KillRing>>,
+    kill_ring: KillRing,
     config: Config,
     custom_bindings: Bindings,
 }
 
+/// Default editor with no helper and `DefaultHistory`
+pub type DefaultEditor = Editor<(), DefaultHistory>;
+
 #[allow(clippy::new_without_default)]
-impl<H: Helper> Editor<H> {
+impl<H: Helper> Editor<H, DefaultHistory> {
     /// Create an editor with the default configuration
     pub fn new() -> Result<Self> {
         Self::with_config(Config::default())
@@ -592,6 +604,13 @@ impl<H: Helper> Editor<H> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Result<Self> {
+        Self::with_history(config, DefaultHistory::with_config(config))
+    }
+}
+
+impl<H: Helper, I: History> Editor<H, I> {
+    /// Create an editor with a custom history impl.
+    pub fn with_history(config: Config, history: I) -> Result<Self> {
         let term = Terminal::new(
             config.color_mode(),
             config.behavior(),
@@ -601,9 +620,9 @@ impl<H: Helper> Editor<H> {
         )?;
         Ok(Self {
             term,
-            history: History::with_config(config),
+            history,
             helper: None,
-            kill_ring: Arc::new(Mutex::new(KillRing::new(60))),
+            kill_ring: KillRing::new(60),
             config,
             custom_bindings: Bindings::new(),
         })
@@ -645,7 +664,7 @@ impl<H: Helper> Editor<H> {
             let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
             if self.config.auto_add_history() {
                 if let Ok(ref line) = user_input {
-                    self.add_history_entry(line.as_str());
+                    self.add_history_entry(line.as_str())?;
                 }
             }
             drop(guard); // disable_raw_mode(original_mode)?;
@@ -670,18 +689,18 @@ impl<H: Helper> Editor<H> {
     ) -> Result<String> {
         let mut stdout = self.term.create_writer();
 
-        self.reset_kill_ring(); // TODO recreate a new kill ring vs Arc<Mutex<KillRing>>
+        self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
         let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 
-        s.line.set_delete_listener(self.kill_ring.clone());
-        s.line.set_change_listener(s.changes.clone());
-
         if let Some((left, right)) = initial {
-            s.line
-                .update((left.to_owned() + right).as_ref(), left.len());
+            s.line.update(
+                (left.to_owned() + right).as_ref(),
+                left.len(),
+                &mut s.changes,
+            );
         }
 
         let mut rdr = self.term.create_reader(&self.config, term_key_map);
@@ -700,7 +719,7 @@ impl<H: Helper> Editor<H> {
             let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
 
             if cmd.should_reset_kill_ring() {
-                self.reset_kill_ring();
+                self.kill_ring.reset();
             }
 
             // First trigger commands that need extra input
@@ -759,7 +778,7 @@ impl<H: Helper> Editor<H> {
             }
 
             // Execute things can be done solely on a state object
-            match command::execute(cmd, &mut s, &input_state, &self.kill_ring, &self.config)? {
+            match command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config)? {
                 command::Status::Proceed => continue,
                 command::Status::Submit => break,
             }
@@ -777,36 +796,36 @@ impl<H: Helper> Editor<H> {
 
     /// Load the history from the specified file.
     pub fn load_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.load(path)
+        self.history.load(path.as_ref())
     }
 
     /// Save the history in the specified file.
     pub fn save_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.save(path)
+        self.history.save(path.as_ref())
     }
 
     /// Append new entries in the specified file.
     pub fn append_history<P: AsRef<Path> + ?Sized>(&mut self, path: &P) -> Result<()> {
-        self.history.append(path)
+        self.history.append(path.as_ref())
     }
 
     /// Add a new entry in the history.
-    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> bool {
-        self.history.add(line)
+    pub fn add_history_entry<S: AsRef<str> + Into<String>>(&mut self, line: S) -> Result<bool> {
+        self.history.add(line.as_ref())
     }
 
     /// Clear history.
-    pub fn clear_history(&mut self) {
-        self.history.clear();
+    pub fn clear_history(&mut self) -> Result<()> {
+        self.history.clear()
     }
 
     /// Return a mutable reference to the history object.
-    pub fn history_mut(&mut self) -> &mut History {
+    pub fn history_mut(&mut self) -> &mut I {
         &mut self.history
     }
 
     /// Return an immutable reference to the history object.
-    pub fn history(&self) -> &History {
+    pub fn history(&self) -> &I {
         &self.history
     }
 
@@ -846,9 +865,10 @@ impl<H: Helper> Editor<H> {
             .remove(&Event::normalize(key_seq.into()))
     }
 
-    /// Returns an iterator over edited lines
+    /// Returns an iterator over edited lines.
+    /// Iterator ends at [EOF](ReadlineError::Eof).
     /// ```
-    /// let mut rl = rustyline::Editor::<()>::new()?;
+    /// let mut rl = rustyline::DefaultEditor::new()?;
     /// for readline in rl.iter("> ") {
     ///     match readline {
     ///         Ok(line) => {
@@ -869,11 +889,6 @@ impl<H: Helper> Editor<H> {
         }
     }
 
-    fn reset_kill_ring(&self) {
-        let mut kill_ring = self.kill_ring.lock().unwrap();
-        kill_ring.reset();
-    }
-
     /// If output stream is a tty, this function returns its width and height as
     /// a number of characters.
     pub fn dimensions(&mut self) -> Option<(u16, u16)> {
@@ -885,30 +900,40 @@ impl<H: Helper> Editor<H> {
         }
     }
 
+    /// Clear the screen.
+    pub fn clear_screen(&mut self) -> Result<()> {
+        if self.term.is_output_tty() {
+            let mut out = self.term.create_writer();
+            out.clear_screen()
+        } else {
+            Ok(())
+        }
+    }
+
     /// Create an external printer
     pub fn create_external_printer(&mut self) -> Result<<Terminal as Term>::ExternalPrinter> {
         self.term.create_external_printer()
     }
 }
 
-impl<H: Helper> config::Configurer for Editor<H> {
+impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
     fn config_mut(&mut self) -> &mut Config {
         &mut self.config
     }
 
-    fn set_max_history_size(&mut self, max_size: usize) {
+    fn set_max_history_size(&mut self, max_size: usize) -> Result<()> {
         self.config_mut().set_max_history_size(max_size);
-        self.history.set_max_len(max_size);
+        self.history.set_max_len(max_size)
     }
 
-    fn set_history_ignore_dups(&mut self, yes: bool) {
+    fn set_history_ignore_dups(&mut self, yes: bool) -> Result<()> {
         self.config_mut().set_history_ignore_dups(yes);
-        self.history.ignore_dups = yes;
+        self.history.ignore_dups(yes)
     }
 
     fn set_history_ignore_space(&mut self, yes: bool) {
         self.config_mut().set_history_ignore_space(yes);
-        self.history.ignore_space = yes;
+        self.history.ignore_space(yes);
     }
 
     fn set_color_mode(&mut self, color_mode: ColorMode) {
@@ -917,7 +942,7 @@ impl<H: Helper> config::Configurer for Editor<H> {
     }
 }
 
-impl<H: Helper> fmt::Debug for Editor<H> {
+impl<H: Helper, I: History> fmt::Debug for Editor<H, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Editor")
             .field("term", &self.term)
@@ -926,19 +951,19 @@ impl<H: Helper> fmt::Debug for Editor<H> {
     }
 }
 
-struct Iter<'a, H: Helper> {
-    editor: &'a mut Editor<H>,
+struct Iter<'a, H: Helper, I: History> {
+    editor: &'a mut Editor<H, I>,
     prompt: &'a str,
 }
 
-impl<'a, H: Helper> Iterator for Iter<'a, H> {
+impl<'a, H: Helper, I: History> Iterator for Iter<'a, H, I> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
         let readline = self.editor.readline(self.prompt);
         match readline {
             Ok(l) => Some(Ok(l)),
-            Err(error::ReadlineError::Eof) => None,
+            Err(ReadlineError::Eof) => None,
             e @ Err(_) => Some(e),
         }
     }

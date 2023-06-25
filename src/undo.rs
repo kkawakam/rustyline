@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 
 use crate::keymap::RepeatCount;
-use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer};
+use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer, NoListener};
 use log::debug;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -34,10 +34,10 @@ impl Change {
                 unreachable!();
             }
             Change::Insert { idx, ref text } => {
-                line.delete_range(idx..idx + text.len());
+                line.delete_range(idx..idx + text.len(), &mut NoListener);
             }
             Change::Delete { idx, ref text } => {
-                line.insert_str(idx, text);
+                line.insert_str(idx, text, &mut NoListener);
                 line.set_pos(idx + text.len());
             }
             Change::Replace {
@@ -45,7 +45,7 @@ impl Change {
                 ref old,
                 ref new,
             } => {
-                line.replace(idx..idx + new.len(), old);
+                line.replace(idx..idx + new.len(), old, &mut NoListener);
             }
         }
     }
@@ -57,17 +57,17 @@ impl Change {
                 unreachable!();
             }
             Change::Insert { idx, ref text } => {
-                line.insert_str(idx, text);
+                line.insert_str(idx, text, &mut NoListener);
             }
             Change::Delete { idx, ref text } => {
-                line.delete_range(idx..idx + text.len());
+                line.delete_range(idx..idx + text.len(), &mut NoListener);
             }
             Change::Replace {
                 idx,
                 ref old,
                 ref new,
             } => {
-                line.replace(idx..idx + old.len(), new);
+                line.replace(idx..idx + old.len(), new, &mut NoListener);
             }
         }
     }
@@ -98,6 +98,7 @@ impl Change {
     }
 }
 
+/// Undo manager
 pub struct Changeset {
     undo_group_level: u32,
     undos: Vec<Change>, // undoable changes
@@ -105,7 +106,7 @@ pub struct Changeset {
 }
 
 impl Changeset {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             undo_group_level: 0,
             undos: Vec::new(),
@@ -113,7 +114,7 @@ impl Changeset {
         }
     }
 
-    pub fn begin(&mut self) -> usize {
+    pub(crate) fn begin(&mut self) -> usize {
         debug!(target: "rustyline", "Changeset::begin");
         self.redos.clear();
         let mark = self.undos.len();
@@ -124,7 +125,7 @@ impl Changeset {
 
     /// Returns `true` when changes happen between the last call to `begin` and
     /// this `end`.
-    pub fn end(&mut self) -> bool {
+    pub(crate) fn end(&mut self) -> bool {
         debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();
         let mut touched = false;
@@ -147,7 +148,7 @@ impl Changeset {
         Change::Insert { idx, text }
     }
 
-    pub fn insert(&mut self, idx: usize, c: char) {
+    pub(crate) fn insert(&mut self, idx: usize, c: char) {
         debug!(target: "rustyline", "Changeset::insert({}, {:?})", idx, c);
         self.redos.clear();
         if !c.is_alphanumeric() || !self.undos.last().map_or(false, |lc| lc.insert_seq(idx)) {
@@ -164,7 +165,11 @@ impl Changeset {
         self.undos.push(last_change);
     }
 
-    pub fn insert_str<S: AsRef<str> + Into<String> + Debug>(&mut self, idx: usize, string: S) {
+    pub(crate) fn insert_str<S: AsRef<str> + Into<String> + Debug>(
+        &mut self,
+        idx: usize,
+        string: S,
+    ) {
         debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
         self.redos.clear();
         if string.as_ref().is_empty() {
@@ -176,7 +181,7 @@ impl Changeset {
         });
     }
 
-    pub fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
+    pub(crate) fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
         debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
         self.redos.clear();
         if string.as_ref().is_empty() {
@@ -221,7 +226,12 @@ impl Changeset {
         }) && graphemes.next().is_none()
     }
 
-    pub fn replace<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, old_: S, new_: S) {
+    pub(crate) fn replace<S: AsRef<str> + Into<String> + Debug>(
+        &mut self,
+        indx: usize,
+        old_: S,
+        new_: S,
+    ) {
         debug!(target: "rustyline", "Changeset::replace({}, {:?}, {:?})", indx, old_, new_);
         self.redos.clear();
 
@@ -250,7 +260,7 @@ impl Changeset {
         self.undos.push(last_change);
     }
 
-    pub fn undo(&mut self, line: &mut LineBuffer, n: RepeatCount) -> bool {
+    pub(crate) fn undo(&mut self, line: &mut LineBuffer, n: RepeatCount) -> bool {
         debug!(target: "rustyline", "Changeset::undo");
         let mut count = 0;
         let mut waiting_for_begin = 0;
@@ -279,13 +289,13 @@ impl Changeset {
         undone
     }
 
-    pub fn truncate(&mut self, len: usize) {
+    pub(crate) fn truncate(&mut self, len: usize) {
         debug!(target: "rustyline", "Changeset::truncate({})", len);
         self.undos.truncate(len);
     }
 
     #[cfg(test)]
-    pub fn redo(&mut self, line: &mut LineBuffer) -> bool {
+    pub(crate) fn redo(&mut self, line: &mut LineBuffer) -> bool {
         let mut waiting_for_end = 0;
         let mut redone = false;
         while let Some(change) = self.redos.pop() {
@@ -309,7 +319,7 @@ impl Changeset {
         redone
     }
 
-    pub fn last_insert(&self) -> Option<String> {
+    pub(crate) fn last_insert(&self) -> Option<String> {
         for change in self.undos.iter().rev() {
             match change {
                 Change::Insert { ref text, .. } => return Some(text.clone()),
@@ -327,13 +337,9 @@ impl Changeset {
 }
 
 impl DeleteListener for Changeset {
-    fn start_killing(&mut self) {}
-
     fn delete(&mut self, idx: usize, string: &str, _: Direction) {
         self.delete(idx, string);
     }
-
-    fn stop_killing(&mut self) {}
 }
 impl ChangeListener for Changeset {
     fn insert_char(&mut self, idx: usize, c: char) {
@@ -352,7 +358,7 @@ impl ChangeListener for Changeset {
 #[cfg(test)]
 mod tests {
     use super::Changeset;
-    use crate::line_buffer::LineBuffer;
+    use crate::line_buffer::{LineBuffer, NoListener};
 
     #[test]
     fn test_insert_chars() {
@@ -376,9 +382,9 @@ mod tests {
 
     #[test]
     fn test_undo_insert() {
-        let mut buf = LineBuffer::init("", 0, None);
-        buf.insert_str(0, "Hello");
-        buf.insert_str(5, ", world!");
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hello", &mut NoListener);
+        buf.insert_str(5, ", world!", &mut NoListener);
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello, world!");
 
@@ -397,8 +403,8 @@ mod tests {
 
     #[test]
     fn test_undo_delete() {
-        let mut buf = LineBuffer::init("", 0, None);
-        buf.insert_str(0, "Hello");
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hello", &mut NoListener);
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello");
 
@@ -413,8 +419,8 @@ mod tests {
 
     #[test]
     fn test_delete_chars() {
-        let mut buf = LineBuffer::init("", 0, None);
-        buf.insert_str(0, "Hlo");
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hlo", &mut NoListener);
 
         let mut cs = Changeset::new();
         cs.delete(1, "e");
@@ -427,8 +433,8 @@ mod tests {
 
     #[test]
     fn test_backspace_chars() {
-        let mut buf = LineBuffer::init("", 0, None);
-        buf.insert_str(0, "Hlo");
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hlo", &mut NoListener);
 
         let mut cs = Changeset::new();
         cs.delete(2, "l");
@@ -441,12 +447,12 @@ mod tests {
 
     #[test]
     fn test_undo_replace() {
-        let mut buf = LineBuffer::init("", 0, None);
-        buf.insert_str(0, "Hello, world!");
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hello, world!", &mut NoListener);
         let mut cs = Changeset::new();
         assert_eq!(buf.as_str(), "Hello, world!");
 
-        buf.replace(1..5, "i");
+        buf.replace(1..5, "i", &mut NoListener);
         assert_eq!(buf.as_str(), "Hi, world!");
         cs.replace(1, "ello", "i");
 

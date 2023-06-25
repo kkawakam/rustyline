@@ -1,4 +1,5 @@
 //! Customize line editor
+use crate::Result;
 use std::default::Default;
 
 /// User preferences
@@ -292,10 +293,11 @@ pub enum ColorMode {
 }
 
 /// Should the editor use stdio
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Behavior {
     /// Use stdin / stdout
+    #[default]
     Stdio,
     /// Use terminal-style interaction whenever possible, even if 'stdin' and/or
     /// 'stdout' are not terminals.
@@ -303,12 +305,6 @@ pub enum Behavior {
     // TODO
     // Use file-style interaction, reading input from the given file.
     // useFile
-}
-
-impl Default for Behavior {
-    fn default() -> Self {
-        Behavior::Stdio
-    }
 }
 
 /// Configuration builder
@@ -327,20 +323,18 @@ impl Builder {
     }
 
     /// Set the maximum length for the history.
-    #[must_use]
-    pub fn max_history_size(mut self, max_size: usize) -> Self {
-        self.set_max_history_size(max_size);
-        self
+    pub fn max_history_size(mut self, max_size: usize) -> Result<Self> {
+        self.set_max_history_size(max_size)?;
+        Ok(self)
     }
 
     /// Tell if lines which match the previous history entry are saved or not
     /// in the history list.
     ///
     /// By default, they are ignored.
-    #[must_use]
-    pub fn history_ignore_dups(mut self, yes: bool) -> Self {
-        self.set_history_ignore_dups(yes);
-        self
+    pub fn history_ignore_dups(mut self, yes: bool) -> Result<Self> {
+        self.set_history_ignore_dups(yes)?;
+        Ok(self)
     }
 
     /// Tell if lines which begin with a space character are saved or not in
@@ -475,16 +469,18 @@ pub trait Configurer {
     fn config_mut(&mut self) -> &mut Config;
 
     /// Set the maximum length for the history.
-    fn set_max_history_size(&mut self, max_size: usize) {
+    fn set_max_history_size(&mut self, max_size: usize) -> Result<()> {
         self.config_mut().set_max_history_size(max_size);
+        Ok(())
     }
 
     /// Tell if lines which match the previous history entry are saved or not
     /// in the history list.
     ///
     /// By default, they are ignored.
-    fn set_history_ignore_dups(&mut self, yes: bool) {
+    fn set_history_ignore_dups(&mut self, yes: bool) -> Result<()> {
         self.config_mut().set_history_ignore_dups(yes);
+        Ok(())
     }
 
     /// Tell if lines which begin with a space character are saved or not in

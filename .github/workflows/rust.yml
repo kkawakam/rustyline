@@ -16,6 +16,10 @@ on:
 env:
   RUST_BACKTRACE: short
   RUSTFLAGS: -Cdebuginfo=1
+
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -25,11 +29,8 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v1
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2.2.0
       - name: Build
         run: cargo build --workspace --all-targets
       - name: Run tests
@@ -40,7 +41,7 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: cargo test --workspace --all-targets --all-features
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --no-deps -- -D warnings
       - name: Format
         run: cargo fmt --all -- --check
       - name: Check with no default features

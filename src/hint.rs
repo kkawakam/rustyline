@@ -67,6 +67,7 @@ impl Hinter for HistoryHinter {
         if let Some(sr) = ctx
             .history
             .starts_with(line, start, SearchDirection::Reverse)
+            .unwrap_or(None)
         {
             if sr.entry == line {
                 return None;
@@ -80,12 +81,12 @@ impl Hinter for HistoryHinter {
 #[cfg(test)]
 mod test {
     use super::{Hinter, HistoryHinter};
-    use crate::history::History;
+    use crate::history::DefaultHistory;
     use crate::Context;
 
     #[test]
     pub fn empty_history() {
-        let history = History::new();
+        let history = DefaultHistory::new();
         let ctx = Context::new(&history);
         let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);

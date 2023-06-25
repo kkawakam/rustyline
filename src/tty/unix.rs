@@ -1549,7 +1549,11 @@ mod test {
 
         assert_eq!(
             Some(true),
-            line.insert('a', (out.cols - prompt_size.col + 1).into(), &mut NoListener)
+            line.insert(
+                'a',
+                (out.cols - prompt_size.col + 1).into(),
+                &mut NoListener
+            )
         );
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);

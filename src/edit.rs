@@ -91,9 +91,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let new_cols = self.out.get_columns();
                 if new_cols != old_cols
                     && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
-                {self.prompt_size =
+                {
+                    self.prompt_size =
                         self.out
-                        .calculate_position(self.prompt, Position::default(), None);
+                            .calculate_position(self.prompt, Position::default(), None);
                     self.refresh_line()?;
                 }
                 continue;

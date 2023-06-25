@@ -803,12 +803,12 @@ impl RawReader for PosixRawReader {
         loop {
             let n = self.tty_in.read(&mut buf)?;
             if n == 0 {
-                return Err(error::ReadlineError::Eof);
+                return Err(ReadlineError::Eof);
             }
             let b = buf[0];
             self.parser.advance(&mut receiver, b);
             if !receiver.valid {
-                return Err(error::ReadlineError::from(ErrorKind::InvalidData));
+                return Err(ReadlineError::from(ErrorKind::InvalidData));
             } else if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }
@@ -895,7 +895,7 @@ impl PosixRenderer {
         let cursor_row_movement = old_rows.saturating_sub(current_row);
         // move the cursor down as required
         if cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}B", cursor_row_movement).unwrap();
+            write!(self.buffer, "\x1b[{cursor_row_movement}B").unwrap();
         }
         // clear old rows
         for _ in 0..old_rows {
@@ -919,7 +919,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[B");
             } else {
-                write!(self.buffer, "\x1b[{}B", row_shift)?;
+                write!(self.buffer, "\x1b[{row_shift}B")?;
             }
         } else if row_ordering == cmp::Ordering::Less {
             // move up
@@ -927,7 +927,7 @@ impl Renderer for PosixRenderer {
             if row_shift == 1 {
                 self.buffer.push_str("\x1b[A");
             } else {
-                write!(self.buffer, "\x1b[{}A", row_shift)?;
+                write!(self.buffer, "\x1b[{row_shift}A")?;
             }
         }
         let col_ordering = new.col.cmp(&old.col);
@@ -937,7 +937,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[C");
             } else {
-                write!(self.buffer, "\x1b[{}C", col_shift)?;
+                write!(self.buffer, "\x1b[{col_shift}C")?;
             }
         } else if col_ordering == cmp::Ordering::Less {
             // move left
@@ -945,7 +945,7 @@ impl Renderer for PosixRenderer {
             if col_shift == 1 {
                 self.buffer.push_str("\x1b[D");
             } else {
-                write!(self.buffer, "\x1b[{}D", col_shift)?;
+                write!(self.buffer, "\x1b[{col_shift}D")?;
             }
         }
         write_all(self.out, self.buffer.as_str())?;
@@ -1004,7 +1004,7 @@ impl Renderer for PosixRenderer {
         let new_cursor_row_movement = end_pos.row - cursor.row;
         // move the cursor up as required
         if new_cursor_row_movement > 0 {
-            write!(self.buffer, "\x1b[{}A", new_cursor_row_movement)?;
+            write!(self.buffer, "\x1b[{new_cursor_row_movement}A")?;
         }
         // position the cursor within the line
         if cursor.col > 0 {
@@ -1501,7 +1501,7 @@ pub fn suspend() -> Result<()> {
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
-    use crate::line_buffer::LineBuffer;
+    use crate::line_buffer::{LineBuffer, NoListener};
 
     #[test]
     #[ignore]
@@ -1540,12 +1540,15 @@ mod test {
         let default_prompt = true;
         let prompt_size = out.calculate_position(prompt, Position::default());
 
-        let mut line = LineBuffer::init("", 0, None);
+        let mut line = LineBuffer::init("", 0);
         let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
-        assert_eq!(Some(true), line.insert('a', out.cols - prompt_size.col + 1));
+        assert_eq!(
+            Some(true),
+            line.insert('a', out.cols - prompt_size.col + 1, &mut NoListener)
+        );
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);

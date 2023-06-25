@@ -13,10 +13,15 @@ fn dollar() {
     );
 }
 
-/*#[test]
+#[test]
 fn dot() {
-    // TODO
-}*/
+    assert_cursor(
+        EditMode::Vi,
+        ("", ""),
+        &[E::ESC, E::from('.'), E::ENTER],
+        ("", ""),
+    );
+}
 
 #[test]
 fn semi_colon() {
@@ -55,6 +60,16 @@ fn caret() {
         (" Hi", ""),
         &[E::ESC, E::from('^'), E::ENTER],
         (" ", "Hi"),
+    );
+}
+
+#[test]
+fn caret_no_whitespace() {
+    assert_cursor(
+        EditMode::Vi,
+        ("Hi", ""),
+        &[E::ESC, E::from('^'), E::ENTER],
+        ("", "Hi"),
     );
 }
 

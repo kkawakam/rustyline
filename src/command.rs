@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
@@ -20,11 +18,21 @@ pub fn execute<H: Helper>(
     cmd: Cmd,
     s: &mut State<'_, '_, H>,
     input_state: &InputState,
-    kill_ring: &Arc<Mutex<KillRing>>,
+    kill_ring: &mut KillRing,
     config: &Config,
 ) -> Result<Status> {
     use Status::{Proceed, Submit};
 
+    match cmd {
+        Cmd::EndOfFile | Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
+            if s.has_hint() || !s.is_default_prompt() {
+                // Force a refresh without hints to leave the previous
+                // line as the user typed it after a newline.
+                s.refresh_line_with_msg(None)?;
+            }
+        }
+        _ => {}
+    };
     match cmd {
         Cmd::CompleteHint => {
             complete_hint_line(s)?;
@@ -41,7 +49,9 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::ViFirstPrint) => {
             s.edit_move_home()?;
-            s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            if s.line.starts_with(char::is_whitespace) {
+                s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            }
         }
         Cmd::Move(Movement::BackwardChar(n)) => {
             // Move back a character.
@@ -49,7 +59,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
         Cmd::Replace(mvt, text) => {
-            s.edit_kill(&mvt)?;
+            s.edit_kill(&mvt, kill_ring)?;
             if let Some(text) = text {
                 s.edit_insert_text(&text)?;
             }
@@ -58,11 +68,6 @@ pub fn execute<H: Helper>(
             s.edit_overwrite_char(c)?;
         }
         Cmd::EndOfFile => {
-            if s.has_hint() || !s.is_default_prompt() {
-                // Force a refresh without hints to leave the previous
-                // line as the user typed it after a newline.
-                s.refresh_line_with_msg(None)?;
-            }
             if s.line.is_empty() {
                 return Err(error::ReadlineError::Eof);
             } else if !input_state.is_emacs_mode() {
@@ -108,23 +113,19 @@ pub fn execute<H: Helper>(
         }
         Cmd::Yank(n, anchor) => {
             // retrieve (yank) last item killed
-            let mut kill_ring = kill_ring.lock().unwrap();
             if let Some(text) = kill_ring.yank() {
                 s.edit_yank(input_state, text, anchor, n)?;
             }
         }
         Cmd::ViYankTo(ref mvt) => {
             if let Some(text) = s.line.copy(mvt) {
-                let mut kill_ring = kill_ring.lock().unwrap();
                 kill_ring.kill(&text, Mode::Append);
             }
         }
-        Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
-            if s.has_hint() || !s.is_default_prompt() {
-                // Force a refresh without hints to leave the previous
-                // line as the user typed it after a newline.
-                s.refresh_line_with_msg(None)?;
-            }
+        Cmd::Newline => {
+            s.edit_insert('\n', 1)?;
+        }
+        Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {
             let validation_result = s.validate()?;
             let valid = validation_result.is_valid();
             let end = s.line.is_end_of_input();
@@ -140,8 +141,7 @@ pub fn execute<H: Helper>(
                 ) => {
                     return Ok(Submit);
                 }
-                (Cmd::Newline, ..)
-                | (Cmd::AcceptOrInsertLine { .. }, false, _)
+                (Cmd::AcceptOrInsertLine { .. }, false, _)
                 | (Cmd::AcceptOrInsertLine { .. }, true, false) => {
                     if valid || !validation_result.has_message() {
                         s.edit_insert('\n', 1)?;
@@ -167,7 +167,7 @@ pub fn execute<H: Helper>(
             s.edit_word(WordAction::Capitalize)?;
         }
         Cmd::Kill(ref mvt) => {
-            s.edit_kill(mvt)?;
+            s.edit_kill(mvt, kill_ring)?;
         }
         Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
             // move forwards one word
@@ -201,14 +201,13 @@ pub fn execute<H: Helper>(
         }
         Cmd::YankPop => {
             // yank-pop
-            let mut kill_ring = kill_ring.lock().unwrap();
             if let Some((yank_size, text)) = kill_ring.yank_pop() {
                 s.edit_yank_pop(yank_size, text)?;
             }
         }
         Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
         Cmd::Undo(n) => {
-            if s.changes.borrow_mut().undo(&mut s.line, n) {
+            if s.changes.undo(&mut s.line, n) {
                 s.refresh_line()?;
             }
         }

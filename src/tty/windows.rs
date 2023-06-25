@@ -114,7 +114,6 @@ impl ConsoleRawReader {
     }
 
     fn select(&mut self) -> Result<Event> {
-        use std::convert::TryInto;
         use winapi::um::synchapi::WaitForMultipleObjects;
         use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
 
@@ -170,7 +169,6 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn poll(&mut self, mut timeout: Duration) -> Result<bool> {
-        use std::convert::TryFrom;
         use winapi::shared::winerror::WAIT_TIMEOUT;
         use winapi::um::synchapi::WaitForSingleObject;
         use winapi::um::winbase::WAIT_OBJECT_0;

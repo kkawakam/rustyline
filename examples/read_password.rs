@@ -3,7 +3,7 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::config::Configurer;
 use rustyline::highlight::Highlighter;
 use rustyline::{ColorMode, Editor, Result};
-use rustyline_derive::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Completer, Helper, Hinter, Validator)]
 struct MaskingHighlighter {
@@ -32,12 +32,12 @@ fn main() -> Result<()> {
     rl.set_helper(Some(h));
 
     let username = rl.readline("Username:")?;
-    println!("Username: {}", username);
+    println!("Username: {username}");
 
     rl.helper_mut().expect("No helper").masking = true;
     rl.set_color_mode(ColorMode::Forced); // force masking
     rl.set_auto_add_history(false); // make sure password is not added to history
     let passwd = rl.readline("Password:")?;
-    println!("Secret: {}", passwd);
+    println!("Secret: {passwd}");
     Ok(())
 }

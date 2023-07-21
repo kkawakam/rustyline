@@ -455,11 +455,7 @@ impl<'b> InputState<'b> {
     }
 
     /// Terminal peculiar binding
-    fn term_binding<R: RawReader>(
-        rdr: &R,
-        wrt: &dyn Refresher,
-        key: &KeyEvent,
-    ) -> Option<Cmd> {
+    fn term_binding<R: RawReader>(rdr: &R, wrt: &dyn Refresher, key: &KeyEvent) -> Option<Cmd> {
         let cmd = rdr.find_binding(key);
         if cmd == Some(Cmd::EndOfFile) && !wrt.line().is_empty() {
             None // ReadlineError::Eof only if line is empty

@@ -1183,7 +1183,7 @@ impl<'b> InputState<'b> {
 impl<'b> InputState<'b> {
     fn custom_binding(
         &self,
-        _: &mut dyn Refresher,
+        _: &dyn Refresher,
         _: &Event,
         _: RepeatCount,
         _: bool,
@@ -1194,7 +1194,7 @@ impl<'b> InputState<'b> {
     fn custom_seq_binding<R: RawReader>(
         &self,
         _: &mut R,
-        _: &mut dyn Refresher,
+        _: &dyn Refresher,
         _: &mut Event,
         _: RepeatCount,
         _: bool,

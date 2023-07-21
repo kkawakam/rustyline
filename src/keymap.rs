@@ -456,8 +456,8 @@ impl<'b> InputState<'b> {
 
     /// Terminal peculiar binding
     fn term_binding<R: RawReader>(
-        rdr: &mut R,
-        wrt: &mut dyn Refresher,
+        rdr: &R,
+        wrt: &dyn Refresher,
         key: &KeyEvent,
     ) -> Option<Cmd> {
         let cmd = rdr.find_binding(key);
@@ -1008,7 +1008,7 @@ impl<'b> InputState<'b> {
     fn common<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         mut evt: Event,
         key: KeyEvent,
         n: RepeatCount,
@@ -1130,7 +1130,7 @@ impl<'b> InputState<'b> {
     /// Application customized binding
     fn custom_binding(
         &self,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
         positive: bool,
@@ -1153,7 +1153,7 @@ impl<'b> InputState<'b> {
     fn custom_seq_binding<R: RawReader>(
         &self,
         rdr: &mut R,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         evt: &mut Event,
         n: RepeatCount,
         positive: bool,

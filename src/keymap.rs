@@ -1181,13 +1181,7 @@ impl<'b> InputState<'b> {
 
 #[cfg(not(feature = "custom-bindings"))]
 impl<'b> InputState<'b> {
-    fn custom_binding(
-        &self,
-        _: &dyn Refresher,
-        _: &Event,
-        _: RepeatCount,
-        _: bool,
-    ) -> Option<Cmd> {
+    fn custom_binding(&self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
         None
     }
 

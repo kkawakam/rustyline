@@ -778,7 +778,7 @@ impl RawReader for PosixRawReader {
                 self.timeout_ms
             };
             match self.poll(timeout_ms) {
-                Ok(n) if n == 0 => {
+                Ok(0) => {
                     // single escape
                 }
                 Ok(_) => {

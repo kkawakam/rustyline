@@ -45,6 +45,16 @@ impl Candidate for &'_ str {
     }
 }
 
+impl Candidate for Rc<str> {
+    fn display(&self) -> &str {
+        self
+    }
+
+    fn replacement(&self) -> &str {
+        self
+    }
+}
+
 /// Completion candidate pair
 #[derive(Clone)]
 pub struct Pair {

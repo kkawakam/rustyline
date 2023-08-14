@@ -979,11 +979,21 @@ impl Renderer for PosixRenderer {
         }
         // display hint
         if let Some(hint) = hint {
+            // position the cursor within the line
+            if cursor.col > 0 {
+                write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
+            } else {
+                self.buffer.push('\r');
+            }
+            // enter insert mode:
+            write!(self.buffer, "\x1b[4h").unwrap();
             if let Some(highlighter) = highlighter {
                 self.buffer.push_str(&highlighter.highlight_hint(hint));
             } else {
                 self.buffer.push_str(hint);
             }
+            // leave insert mode:
+            write!(self.buffer, "\x1b[4l").unwrap();
         }
         // we have to generate our own newline on line wrap
         if end_pos.col == 0

@@ -106,8 +106,7 @@ pub type Mode = PosixMode;
 impl RawMode for PosixMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        let mut termios = self.termios;
-        tcsetattr(self.tty_in, termios::TCSADRAIN, &mut termios)?;
+        tcsetattr(self.tty_in, termios::TCSADRAIN, &self.termios)?;
         // disable bracketed paste
         if let Some(out) = self.tty_out {
             write_all(out, BRACKETED_PASTE_OFF)?;

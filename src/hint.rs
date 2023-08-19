@@ -50,7 +50,15 @@ impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
 
 /// Add suggestion based on previous history entries matching current user
 /// input.
+#[derive(Default)]
 pub struct HistoryHinter {}
+
+impl HistoryHinter {
+    /// Create a new `HistoryHinter`
+    pub fn new() -> HistoryHinter {
+        HistoryHinter::default()
+    }
+}
 
 impl Hinter for HistoryHinter {
     type Hint = String;

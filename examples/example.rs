@@ -58,7 +58,7 @@ fn main() -> rustyline::Result<()> {
     let h = MyHelper {
         completer: FilenameCompleter::new(),
         highlighter: MatchingBracketHighlighter::new(),
-        hinter: HistoryHinter {},
+        hinter: HistoryHinter::new(),
         colored_prompt: "".to_owned(),
         validator: MatchingBracketValidator::new(),
     };

@@ -455,11 +455,7 @@ impl<'b> InputState<'b> {
     }
 
     /// Terminal peculiar binding
-    fn term_binding<R: RawReader>(
-        rdr: &mut R,
-        wrt: &mut dyn Refresher,
-        key: &KeyEvent,
-    ) -> Option<Cmd> {
+    fn term_binding<R: RawReader>(rdr: &R, wrt: &dyn Refresher, key: &KeyEvent) -> Option<Cmd> {
         let cmd = rdr.find_binding(key);
         if cmd == Some(Cmd::EndOfFile) && !wrt.line().is_empty() {
             None // ReadlineError::Eof only if line is empty
@@ -1008,7 +1004,7 @@ impl<'b> InputState<'b> {
     fn common<R: RawReader>(
         &mut self,
         rdr: &mut R,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         mut evt: Event,
         key: KeyEvent,
         n: RepeatCount,
@@ -1130,7 +1126,7 @@ impl<'b> InputState<'b> {
     /// Application customized binding
     fn custom_binding(
         &self,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
         positive: bool,
@@ -1153,7 +1149,7 @@ impl<'b> InputState<'b> {
     fn custom_seq_binding<R: RawReader>(
         &self,
         rdr: &mut R,
-        wrt: &mut dyn Refresher,
+        wrt: &dyn Refresher,
         evt: &mut Event,
         n: RepeatCount,
         positive: bool,
@@ -1185,20 +1181,14 @@ impl<'b> InputState<'b> {
 
 #[cfg(not(feature = "custom-bindings"))]
 impl<'b> InputState<'b> {
-    fn custom_binding(
-        &self,
-        _: &mut dyn Refresher,
-        _: &Event,
-        _: RepeatCount,
-        _: bool,
-    ) -> Option<Cmd> {
+    fn custom_binding(&self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
         None
     }
 
     fn custom_seq_binding<R: RawReader>(
         &self,
         _: &mut R,
-        _: &mut dyn Refresher,
+        _: &dyn Refresher,
         _: &mut Event,
         _: RepeatCount,
         _: bool,

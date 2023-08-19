@@ -14,7 +14,7 @@ use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
 use nix::sys::select::{self, FdSet};
 use nix::unistd::{close, isatty, read, write};
-use termios::{tcgetattr, tcsetattr, Termios};
+use termios::{tcsetattr, Termios};
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
@@ -106,8 +106,7 @@ pub type Mode = PosixMode;
 impl RawMode for PosixMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        let mut termios = self.termios;
-        tcgetattr(self.tty_in, &mut termios)?;
+        tcsetattr(self.tty_in, termios::TCSADRAIN, &self.termios)?;
         // disable bracketed paste
         if let Some(out) = self.tty_out {
             write_all(out, BRACKETED_PASTE_OFF)?;

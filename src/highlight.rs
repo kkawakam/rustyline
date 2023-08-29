@@ -56,6 +56,14 @@ pub trait Highlighter {
         let _ = (line, pos);
         false
     }
+    /// Tells the editor if the line needs a final refresh after the line has been
+    /// accepted.
+    ///
+    /// This can be used to undo any cursor-specific highlights
+    fn final_highlight(&self, line: &str) -> bool {
+        let _ = line;
+        false
+    }
 }
 
 impl Highlighter for () {}
@@ -88,6 +96,10 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
         (**self).highlight_char(line, pos)
     }
+
+    fn final_highlight(&self, line: &str) -> bool {
+        (**self).final_highlight(line)
+    }
 }
 
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
@@ -96,6 +108,7 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
 #[derive(Default)]
 pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
+    is_final: Cell<bool>, // whether the highlighter should render the line without bracket-matching
 }
 
 impl MatchingBracketHighlighter {
@@ -104,6 +117,7 @@ impl MatchingBracketHighlighter {
     pub fn new() -> Self {
         Self {
             bracket: Cell::new(None),
+            is_final: Cell::new(false),
         }
     }
 }
@@ -113,20 +127,30 @@ impl Highlighter for MatchingBracketHighlighter {
         if line.len() <= 1 {
             return Borrowed(line);
         }
-        // highlight matching brace/bracket/parenthesis if it exists
-        if let Some((bracket, pos)) = self.bracket.get() {
-            if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
-                let mut copy = line.to_owned();
-                copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
-                return Owned(copy);
+        // highlight matching brace/bracket/parenthesis if it exists, and this isn't the final render
+        if !self.is_final.get() {
+            if let Some((bracket, pos)) = self.bracket.get() {
+                if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
+                    let mut copy = line.to_owned();
+                    copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
+                    return Owned(copy);
+                }
             }
         }
         Borrowed(line)
     }
 
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
+        if line.len() != pos {
+            self.is_final.set(false);
+        }
         // will highlight matching brace/bracket/parenthesis if it exists
         self.bracket.set(check_bracket(line, pos));
+        self.bracket.get().is_some()
+    }
+
+    fn final_highlight(&self, _line: &str) -> bool {
+        self.is_final.set(true);
         self.bracket.get().is_some()
     }
 }

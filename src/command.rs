@@ -25,7 +25,7 @@ pub fn execute<H: Helper>(
 
     match cmd {
         Cmd::EndOfFile | Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
-            if s.has_hint() || !s.is_default_prompt() {
+            if s.needs_final_refresh()  {
                 // Force a refresh without hints to leave the previous
                 // line as the user typed it after a newline.
                 s.refresh_line_with_msg(None)?;

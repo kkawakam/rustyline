@@ -225,6 +225,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.layout.default_prompt
     }
 
+    pub fn needs_final_refresh(&self) -> bool {
+        let highlighter_needs_refresh = self.highlighter()
+            .map_or(false, |h| h.final_highlight(self.line.as_str()));
+        self.has_hint() || !self.is_default_prompt() || highlighter_needs_refresh
+    }
+
     pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
             self.changes.begin();

@@ -141,7 +141,7 @@ impl Highlighter for MatchingBracketHighlighter {
     }
 
     fn highlight_char(&self, line: &str, pos: usize) -> bool {
-        if line.len() != pos {
+        if pos == 0 || line.len() != pos {
             self.is_final.set(false);
         }
         // will highlight matching brace/bracket/parenthesis if it exists

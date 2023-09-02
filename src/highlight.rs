@@ -49,6 +49,7 @@ pub trait Highlighter {
     }
     /// Tells if `line` needs to be highlighted when a specific char is typed or
     /// when cursor is moved under a specific char.
+    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient vs final highlight).
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.

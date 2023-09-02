@@ -787,7 +787,9 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         // Move to end, in case cursor was in the middle of the line, so that
         // next thing application prints goes after the input
+        s.forced_refresh = true;
         s.edit_move_buffer_end()?;
+        s.forced_refresh = false;
 
         if cfg!(windows) {
             let _ = original_mode; // silent warning

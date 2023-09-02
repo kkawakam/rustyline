@@ -49,11 +49,12 @@ pub trait Highlighter {
     }
     /// Tells if `line` needs to be highlighted when a specific char is typed or
     /// when cursor is moved under a specific char.
+    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient vs final highlight).
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, line: &str, pos: usize) -> bool {
-        let _ = (line, pos);
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+        let _ = (line, pos, forced);
         false
     }
 }
@@ -85,8 +86,8 @@ impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
         (**self).highlight_candidate(candidate, completion)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize) -> bool {
-        (**self).highlight_char(line, pos)
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+        (**self).highlight_char(line, pos, forced)
     }
 }
 
@@ -124,7 +125,11 @@ impl Highlighter for MatchingBracketHighlighter {
         Borrowed(line)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize) -> bool {
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+        if forced {
+            self.bracket.set(None);
+            return false;
+        }
         // will highlight matching brace/bracket/parenthesis if it exists
         self.bracket.set(check_bracket(line, pos));
         self.bracket.get().is_some()

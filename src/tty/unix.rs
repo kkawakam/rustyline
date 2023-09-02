@@ -3,7 +3,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, ErrorKind, Read, Write};
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
@@ -181,12 +181,12 @@ pub struct PosixRawReader {
     key_map: PosixKeyMap,
     // external print reader
     pipe_reader: Option<PipeReader>,
-    fds: FdSet,
 }
 
-impl AsRawFd for PosixRawReader {
-    fn as_raw_fd(&self) -> RawFd {
-        self.tty_in.get_ref().fd
+impl AsFd for PosixRawReader {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        let fd = self.tty_in.get_ref().fd;
+        unsafe { BorrowedFd::borrow_raw(fd) }
     }
 }
 
@@ -235,7 +235,6 @@ impl PosixRawReader {
             parser: Parser::new(),
             key_map,
             pipe_reader,
-            fds: FdSet::new(),
         }
     }
 
@@ -684,7 +683,7 @@ impl PosixRawReader {
         if n > 0 {
             return Ok(n as i32);
         }
-        let mut fds = [poll::PollFd::new(self.as_raw_fd(), PollFlags::POLLIN)];
+        let mut fds = [poll::PollFd::new(self, PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
             Ok(n) => Ok(n),
@@ -700,29 +699,27 @@ impl PosixRawReader {
     }
 
     fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
-        let tty_in = self.as_raw_fd();
-        let sigwinch_pipe = self.tty_in.get_ref().sigwinch_pipe;
+        let tty_in = self.as_fd();
+        let sigwinch_pipe = self
+            .tty_in
+            .get_ref()
+            .sigwinch_pipe
+            .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
         let pipe_reader = self
             .pipe_reader
             .as_ref()
-            .map(|pr| pr.lock().unwrap().0.as_raw_fd());
+            .map(|pr| pr.lock().unwrap().0.as_raw_fd())
+            .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
         loop {
-            let mut readfds = self.fds;
-            readfds.clear();
-            if let Some(sigwinch_pipe) = sigwinch_pipe {
+            let mut readfds = FdSet::new();
+            if let Some(ref sigwinch_pipe) = sigwinch_pipe {
                 readfds.insert(sigwinch_pipe);
             }
-            readfds.insert(tty_in);
-            if let Some(pipe_reader) = pipe_reader {
+            readfds.insert(&tty_in);
+            if let Some(ref pipe_reader) = pipe_reader {
                 readfds.insert(pipe_reader);
             }
-            if let Err(err) = select::select(
-                readfds.highest().map(|h| h + 1),
-                Some(&mut readfds),
-                None,
-                None,
-                None,
-            ) {
+            if let Err(err) = select::select(None, Some(&mut readfds), None, None, None) {
                 if err == Errno::EINTR && self.tty_in.get_ref().sigwinch()? {
                     return Err(ReadlineError::WindowResized);
                 } else if err != Errno::EINTR {
@@ -731,10 +728,10 @@ impl PosixRawReader {
                     continue;
                 }
             };
-            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
+            if sigwinch_pipe.map_or(false, |fd| readfds.contains(&fd)) {
                 self.tty_in.get_ref().sigwinch()?;
                 return Err(ReadlineError::WindowResized);
-            } else if readfds.contains(tty_in) {
+            } else if readfds.contains(&tty_in) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else if let Some(ref pipe_reader) = self.pipe_reader {

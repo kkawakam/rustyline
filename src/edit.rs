@@ -82,7 +82,8 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub helper: Option<&'out H>,
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
-    highlight_char: bool,            // `true` if a char has been highlighted
+    pub highlight_char: bool,        // `true` if a char has been highlighted
+    pub forced_refresh: bool,        // `true` if line is redraw without hint or highlight_char
     refresh_rate_limit: RefreshRateLimit,
 }
 
@@ -114,6 +115,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
+            forced_refresh: false,
             refresh_rate_limit: RefreshRateLimit::new(config.refresh_rate_limit()),
         }
     }
@@ -263,7 +265,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     fn highlight_char(&mut self) -> bool {
         if let Some(highlighter) = self.highlighter() {
-            let highlight_char = highlighter.highlight_char(&self.line, self.line.pos());
+            let highlight_char =
+                highlighter.highlight_char(&self.line, self.line.pos(), self.forced_refresh);
             if highlight_char {
                 self.highlight_char = true;
                 true
@@ -824,6 +827,7 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
+        forced_refresh: false,
         refresh_rate_limit: RefreshRateLimit::new(Duration::from_millis(0)),
     }
 }

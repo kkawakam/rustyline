@@ -20,7 +20,7 @@ impl Highlighter for MaskingHighlighter {
         }
     }
 
-    fn highlight_char(&self, _line: &str, _pos: usize) -> bool {
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
         self.masking
     }
 }

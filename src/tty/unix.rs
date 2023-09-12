@@ -31,6 +31,8 @@ const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
+const PUSH_KITTY_FLAGS: &str = "\x1b[>1u";
+const POP_KITTY_FLAGS: &str = "\x1b[<u";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
@@ -110,6 +112,7 @@ impl RawMode for PosixMode {
         // disable bracketed paste
         if let Some(out) = self.tty_out {
             write_all(out, BRACKETED_PASTE_OFF)?;
+            write_all(out, POP_KITTY_FLAGS)?;
         }
         self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
@@ -300,7 +303,7 @@ impl PosixRawReader {
         let seq2 = self.next_char()?;
         if seq2.is_ascii_digit() {
             match seq2 {
-                '0' | '9' => {
+                '0' => {
                     debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
@@ -426,6 +429,11 @@ impl PosixRawReader {
                                 E(K::UnknownEscSeq, M::NONE)
                             }
                         })
+                    } else if seq6 == 'u' {
+                        Ok(E::normalize(E(
+                            K::Char(parse_csiu_codepoint(&[seq2, seq3])),
+                            parse_csiu_modifier(seq5),
+                        )))
                     } else {
                         debug!(target: "rustyline",
                                "unsupported esc sequence: \\E[{}{};{}{}", seq2, seq3, seq5, seq6);
@@ -448,6 +456,25 @@ impl PosixRawReader {
                             E(K::UnknownEscSeq, M::NONE)
                         }
                     })
+                } else if seq5 == ';' {
+                    let seq6 = self.next_char()?;
+                    if seq6.is_ascii_digit() {
+                        let seq7 = self.next_char()?;
+                        if seq7 == 'u' {
+                            Ok(E::normalize(E(
+                                K::Char(parse_csiu_codepoint(&[seq2, seq3, seq4])),
+                                parse_csiu_modifier(seq6),
+                            )))
+                        } else {
+                            debug!(target: "rustyline",
+                                   "unsupported esc sequence: \\E[{}{}{}{}{}{}", seq2, seq3, seq4, seq5, seq6, seq7);
+                            Ok(E(K::UnknownEscSeq, M::NONE))
+                        }
+                    } else {
+                        debug!(target: "rustyline",
+                               "unsupported esc sequence: \\E[{}{}{}{}{}", seq2, seq3, seq4, seq5, seq6);
+                        Ok(E(K::UnknownEscSeq, M::NONE))
+                    }
                 } else {
                     debug!(target: "rustyline",
                            "unsupported esc sequence: \\E[{}{}{}{}", seq2, seq3, seq4, seq5);
@@ -1212,6 +1239,18 @@ fn map_key(
     key_map.insert(key, cmd);
 }
 
+fn parse_csiu_codepoint(chars: &[char]) -> char {
+    // all chars are in range '0'..'9'
+    let parsed = chars
+        .iter()
+        .fold(0, |accum, &x| accum * 10 + (x as u32 - '0' as u32));
+    char::from_u32(parsed).unwrap()
+}
+
+fn parse_csiu_modifier(c: char) -> M {
+    M::from_bits_truncate(((c as u32 - '1' as u32) << 1) as u8)
+}
+
 #[cfg(not(test))]
 pub type Terminal = PosixTerminal;
 
@@ -1357,6 +1396,8 @@ impl Term for PosixTerminal {
 
         tcsetattr(self.tty_in, termios::TCSADRAIN, &raw)?;
 
+        write_all(self.tty_out, PUSH_KITTY_FLAGS)?;
+
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
         let out = if !self.enable_bracketed_paste {
@@ -1490,9 +1531,16 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
-    use crate::config::BellStyle;
+    use super::{Position, PosixKeyMap, PosixRawReader, PosixRenderer, PosixTerminal, Renderer};
+    use crate::config::{BellStyle, Config};
+    use crate::keys::{KeyCode as K, Modifiers as M};
     use crate::line_buffer::{LineBuffer, NoListener};
+    use crate::KeyEvent;
+    use crate::RawReader;
+    use nix::unistd::pipe;
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
 
     #[test]
     #[ignore]
@@ -1550,5 +1598,25 @@ mod test {
             "\r\u{1b}[K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
+    }
+
+    #[test]
+    fn test_csiu() {
+        let (reader_fd, writer_fd) = pipe().unwrap();
+        let mut reader = PosixRawReader::new(
+            reader_fd,
+            None,
+            &Config::builder().build(),
+            PosixKeyMap::default(),
+            None,
+        );
+        let mut writer = unsafe { File::from_raw_fd(writer_fd) };
+        writer.write_all("\x1b[13;5u".as_bytes()).unwrap();
+        let event = reader.next_key(false).unwrap();
+        assert_eq!(event, KeyEvent(K::Enter, M::CTRL));
+
+        writer.write_all("\x1b[127;2u".as_bytes()).unwrap();
+        let event = reader.next_key(false).unwrap();
+        assert_eq!(event, KeyEvent(K::Backspace, M::SHIFT));
     }
 }

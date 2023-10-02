@@ -6,6 +6,7 @@ use std::io;
 use std::mem;
 use std::os::windows::io::IntoRawHandle;
 use std::ptr;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
@@ -104,11 +105,11 @@ impl RawMode for ConsoleMode {
 pub struct ConsoleRawReader {
     conin: HANDLE,
     // external print reader
-    pipe_reader: Option<Arc<AsyncPipe>>,
+    pipe_reader: Option<Rc<AsyncPipe>>,
 }
 
 impl ConsoleRawReader {
-    fn create(conin: HANDLE, pipe_reader: Option<Arc<AsyncPipe>>) -> ConsoleRawReader {
+    fn create(conin: HANDLE, pipe_reader: Option<Rc<AsyncPipe>>) -> ConsoleRawReader {
         ConsoleRawReader { conin, pipe_reader }
     }
 
@@ -581,7 +582,7 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
             )
         })?;
         if written == 0 {
-            return Err(Error::new(ErrorKind::WriteZero, "WriteConsoleW"))?;
+            Err(Error::new(ErrorKind::WriteZero, "WriteConsoleW"))?;
         }
         data = &data[(written as usize)..];
     }
@@ -603,7 +604,7 @@ pub struct Console {
     bell_style: BellStyle,
     raw_mode: Arc<AtomicBool>,
     // external print reader
-    pipe_reader: Option<Arc<AsyncPipe>>,
+    pipe_reader: Option<Rc<AsyncPipe>>,
     // external print writer
     pipe_writer: Option<SyncSender<String>>,
 }
@@ -810,7 +811,7 @@ impl Term for Console {
         }
         let (sender, receiver) = sync_channel(1);
 
-        let reader = Arc::new(AsyncPipe {
+        let reader = Rc::new(AsyncPipe {
             event: Handle(event),
             receiver,
         });

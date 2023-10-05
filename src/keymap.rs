@@ -68,8 +68,8 @@ pub enum Cmd {
     NextHistory,
     /// No action
     Noop,
-    /// Refresh
-    Refresh,
+    /// repaint
+    Repaint,
     /// vi-replace
     Overwrite(char),
     /// previous-history

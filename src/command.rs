@@ -127,7 +127,7 @@ pub fn execute<H: Helper>(
         Cmd::Newline => {
             s.edit_insert('\n', 1)?;
         }
-        Cmd::Refresh => {
+        Cmd::Repaint => {
             s.refresh_line()?;
         }
         Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {

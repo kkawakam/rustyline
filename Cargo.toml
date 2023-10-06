@@ -46,7 +46,7 @@ nix = { version = "0.27", default-features = false, features = ["fs", "ioctl", "
 utf8parse = "0.2"
 skim = { version = "0.10", optional = true, default-features = false }
 signal-hook = { version = "0.3", optional = true, default-features = false }
-termios = "0.3.3"
+termios = { version = "0.3.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "winbase", "wincon", "winuser"] }

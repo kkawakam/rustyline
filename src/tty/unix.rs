@@ -13,8 +13,11 @@ use log::{debug, warn};
 use nix::errno::Errno;
 use nix::poll::{self, PollFlags};
 use nix::sys::select::{self, FdSet};
+#[cfg(not(feature = "termios"))]
+use nix::sys::termios::Termios;
 use nix::unistd::{close, isatty, read, write};
-use termios::{tcsetattr, Termios};
+#[cfg(feature = "termios")]
+use termios::Termios;
 use unicode_segmentation::UnicodeSegmentation;
 use utf8parse::{Parser, Receiver};
 
@@ -106,7 +109,7 @@ pub type Mode = PosixMode;
 impl RawMode for PosixMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        tcsetattr(self.tty_in, termios::TCSADRAIN, &self.termios)?;
+        termios_::disable_raw_mode(self.tty_in, &self.termios)?;
         // disable bracketed paste
         if let Some(out) = self.tty_out {
             write_all(out, BRACKETED_PASTE_OFF)?;
@@ -1199,19 +1202,6 @@ impl SigWinCh {
     }
 }
 
-fn map_key(
-    key_map: &mut HashMap<KeyEvent, Cmd>,
-    raw: &Termios,
-    index: usize,
-    name: &str,
-    cmd: Cmd,
-) {
-    let cc = char::from(raw.c_cc[index]);
-    let key = KeyEvent::new(cc, M::NONE);
-    debug!(target: "rustyline", "{}: {:?}", name, key);
-    key_map.insert(key, cmd);
-}
-
 #[cfg(not(test))]
 pub type Terminal = PosixTerminal;
 
@@ -1332,30 +1322,7 @@ impl Term for PosixTerminal {
         if !self.is_in_a_tty {
             return Err(ENOTTY.into());
         }
-        let original_mode = Termios::from_fd(self.tty_in)?;
-        let mut raw = original_mode;
-        // disable BREAK interrupt, CR to NL conversion on input,
-        // input parity check, strip high bit (bit 8), output flow control
-        raw.c_iflag &=
-            !(termios::BRKINT | termios::ICRNL | termios::INPCK | termios::ISTRIP | termios::IXON);
-        // we don't want raw output, it turns newlines into straight line feeds
-        // disable all output processing
-        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
-
-        // character-size mark (8 bits)
-        raw.c_cflag |= termios::CS8;
-        // disable echoing, canonical mode, extended input processing and signals
-        raw.c_lflag &= !(termios::ECHO | termios::ICANON | termios::IEXTEN | termios::ISIG);
-        raw.c_cc[termios::VMIN] = 1; // One character-at-a-time input
-        raw.c_cc[termios::VTIME] = 0; // with blocking read
-
-        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
-        map_key(&mut key_map, &raw, termios::VEOF, "VEOF", Cmd::EndOfFile);
-        map_key(&mut key_map, &raw, termios::VINTR, "VINTR", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, termios::VQUIT, "VQUIT", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, termios::VSUSP, "VSUSP", Cmd::Suspend);
-
-        tcsetattr(self.tty_in, termios::TCSADRAIN, &raw)?;
+        let (original_mode, key_map) = termios_::enable_raw_mode(self.tty_in)?;
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
@@ -1486,6 +1453,117 @@ pub fn suspend() -> Result<()> {
     // suspend the whole process group
     signal::kill(Pid::from_raw(0), signal::SIGTSTP)?;
     Ok(())
+}
+
+#[cfg(not(feature = "termios"))]
+mod termios_ {
+    use super::PosixKeyMap;
+    use crate::keys::{KeyEvent, Modifiers as M};
+    use crate::{Cmd, Result};
+    use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
+    use std::collections::HashMap;
+    use std::os::unix::io::{BorrowedFd, RawFd};
+    pub fn disable_raw_mode(tty_in: RawFd, termios: &Termios) -> Result<()> {
+        let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
+        Ok(termios::tcsetattr(fd, SetArg::TCSADRAIN, termios)?)
+    }
+    pub fn enable_raw_mode(tty_in: RawFd) -> Result<(Termios, PosixKeyMap)> {
+        use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
+
+        let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
+        let original_mode = termios::tcgetattr(fd)?;
+        let mut raw = original_mode.clone();
+        // disable BREAK interrupt, CR to NL conversion on input,
+        // input parity check, strip high bit (bit 8), output flow control
+        raw.input_flags &= !(InputFlags::BRKINT
+            | InputFlags::ICRNL
+            | InputFlags::INPCK
+            | InputFlags::ISTRIP
+            | InputFlags::IXON);
+        // we don't want raw output, it turns newlines into straight line feeds
+        // disable all output processing
+        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
+
+        // character-size mark (8 bits)
+        raw.control_flags |= ControlFlags::CS8;
+        // disable echoing, canonical mode, extended input processing and signals
+        raw.local_flags &=
+            !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
+        raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
+        raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
+
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
+        map_key(&mut key_map, &raw, SCI::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, &raw, SCI::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
+
+        termios::tcsetattr(fd, SetArg::TCSADRAIN, &raw)?;
+        Ok((original_mode, key_map))
+    }
+    fn map_key(
+        key_map: &mut HashMap<KeyEvent, Cmd>,
+        raw: &Termios,
+        index: SCI,
+        name: &str,
+        cmd: Cmd,
+    ) {
+        let cc = char::from(raw.control_chars[index as usize]);
+        let key = KeyEvent::new(cc, M::NONE);
+        log::debug!(target: "rustyline", "{}: {:?}", name, key);
+        key_map.insert(key, cmd);
+    }
+}
+#[cfg(feature = "termios")]
+mod termios_ {
+    use super::PosixKeyMap;
+    use crate::keys::{KeyEvent, Modifiers as M};
+    use crate::{Cmd, Result};
+    use std::collections::HashMap;
+    use std::os::unix::io::RawFd;
+    use termios::{self, Termios};
+    pub fn disable_raw_mode(tty_in: RawFd, termios: &Termios) -> Result<()> {
+        Ok(termios::tcsetattr(tty_in, termios::TCSADRAIN, termios)?)
+    }
+    pub fn enable_raw_mode(tty_in: RawFd) -> Result<(Termios, PosixKeyMap)> {
+        let original_mode = Termios::from_fd(tty_in)?;
+        let mut raw = original_mode;
+        // disable BREAK interrupt, CR to NL conversion on input,
+        // input parity check, strip high bit (bit 8), output flow control
+        raw.c_iflag &=
+            !(termios::BRKINT | termios::ICRNL | termios::INPCK | termios::ISTRIP | termios::IXON);
+        // we don't want raw output, it turns newlines into straight line feeds
+        // disable all output processing
+        // raw.c_oflag = raw.c_oflag & !(OutputFlags::OPOST);
+
+        // character-size mark (8 bits)
+        raw.c_cflag |= termios::CS8;
+        // disable echoing, canonical mode, extended input processing and signals
+        raw.c_lflag &= !(termios::ECHO | termios::ICANON | termios::IEXTEN | termios::ISIG);
+        raw.c_cc[termios::VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[termios::VTIME] = 0; // with blocking read
+
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
+        map_key(&mut key_map, &raw, termios::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, &raw, termios::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, termios::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, &raw, termios::VSUSP, "VSUSP", Cmd::Suspend);
+
+        termios::tcsetattr(tty_in, termios::TCSADRAIN, &raw)?;
+        Ok((original_mode, key_map))
+    }
+    fn map_key(
+        key_map: &mut HashMap<KeyEvent, Cmd>,
+        raw: &Termios,
+        index: usize,
+        name: &str,
+        cmd: Cmd,
+    ) {
+        let cc = char::from(raw.c_cc[index]);
+        let key = KeyEvent::new(cc, M::NONE);
+        log::debug!(target: "rustyline", "{}: {:?}", name, key);
+        key_map.insert(key, cmd);
+    }
 }
 
 #[cfg(test)]

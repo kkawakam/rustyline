@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
 use winapi::shared::winerror;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -26,7 +25,7 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
@@ -55,13 +54,13 @@ fn check(rc: BOOL) -> io::Result<()> {
     }
 }
 
-fn get_win_size(handle: HANDLE) -> (usize, usize) {
+fn get_win_size(handle: HANDLE) -> (u16, u16) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { wincon::GetConsoleScreenBufferInfo(handle, &mut info) } {
         FALSE => (80, 24),
         _ => (
-            info.dwSize.X as usize,
-            (1 + info.srWindow.Bottom - info.srWindow.Top) as usize,
+            info.dwSize.X as u16,
+            (1 + info.srWindow.Bottom - info.srWindow.Top) as u16,
         ), // (info.srWindow.Right - info.srWindow.Left + 1)
     }
 }
@@ -283,7 +282,8 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 
 pub struct ConsoleRenderer {
     conout: HANDLE,
-    cols: usize, // Number of columns in terminal
+    cols: u16, // Number of columns in terminal
+    rows: u16, // Number of rows in terminal
     buffer: String,
     utf16: Vec<u16>,
     colors_enabled: bool,
@@ -293,10 +293,11 @@ pub struct ConsoleRenderer {
 impl ConsoleRenderer {
     fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
-        let (cols, _) = get_win_size(conout);
+        let (cols, rows) = get_win_size(conout);
         ConsoleRenderer {
             conout,
             cols,
+            rows,
             buffer: String::with_capacity(1024),
             utf16: Vec::with_capacity(1024),
             colors_enabled,
@@ -336,7 +337,7 @@ impl ConsoleRenderer {
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
+    fn wrap_at_eol(&mut self, s: &str, mut col: u16) -> u16 {
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
@@ -360,8 +361,8 @@ impl ConsoleRenderer {
 
     // position at the start of the prompt, clear to end of previous input
     fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
-        let current_row = layout.cursor.row;
-        let old_rows = layout.end.row;
+        let current_row = layout.cursor.row.saturating_sub(layout.first_row);
+        let old_rows = layout.last_row.saturating_sub(layout.first_row);
         let mut coord = info.dwCursorPosition;
         coord.X = 0;
         coord.Y -= current_row as i16;
@@ -421,12 +422,14 @@ impl Renderer for ConsoleRenderer {
 
         self.buffer.clear();
         let mut col = 0;
+        let prompt = new_layout.visible_prompt(prompt);
+        let (line, pos) = new_layout.visible_line(line, line.pos());
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
             col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
             // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+            col = self.wrap_at_eol(&highlighter.highlight(line, pos), col);
         } else {
             // append the prompt
             self.buffer.push_str(prompt);
@@ -435,6 +438,7 @@ impl Renderer for ConsoleRenderer {
         }
         // append hint
         if let Some(hint) = hint {
+            let hint = new_layout.visible_hint(hint);
             if let Some(highlighter) = highlighter {
                 self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
             } else {
@@ -467,24 +471,38 @@ impl Renderer for ConsoleRenderer {
     }
 
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        mut breaks: Option<&mut Vec<usize>>,
+    ) -> Position {
         let mut pos = orig;
-        for c in s.graphemes(true) {
+        for (offset, c) in s.grapheme_indices(true) {
             if c == "\n" {
                 pos.col = 0;
                 pos.row += 1;
+                if let Some(ref mut breaks) = breaks {
+                    breaks.push(offset + 1);
+                }
             } else {
-                let cw = c.width();
+                let cw = layout::width(c);
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;
                     pos.col = cw;
+                    if let Some(ref mut breaks) = breaks {
+                        breaks.push(offset);
+                    }
                 }
             }
         }
         if pos.col == self.cols {
             pos.col = 0;
             pos.row += 1;
+            if let Some(ref mut breaks) = breaks {
+                breaks.push(s.len());
+            }
         }
         pos
     }
@@ -513,19 +531,19 @@ impl Renderer for ConsoleRenderer {
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {
-        let (cols, _) = get_win_size(self.conout);
+        let (cols, rows) = get_win_size(self.conout);
         self.cols = cols;
+        self.rows = rows;
     }
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> u16 {
         self.cols
     }
 
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
-    fn get_rows(&self) -> usize {
-        let (_, rows) = get_win_size(self.conout);
-        rows
+    fn get_rows(&self) -> u16 {
+        self.rows
     }
 
     fn colors_enabled(&self) -> bool {
@@ -630,7 +648,7 @@ impl Term for Console {
     fn new(
         color_mode: ColorMode,
         behavior: Behavior,
-        _tab_stop: usize,
+        _tab_stop: u16,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
     ) -> Result<Console> {

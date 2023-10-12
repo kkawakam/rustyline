@@ -3,7 +3,6 @@
 use log::debug;
 use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::error::ReadlineError;
@@ -12,7 +11,7 @@ use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
 };
@@ -52,7 +51,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> State<'out, 'prompt, H> {
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), None);
         State {
             out,
             prompt,
@@ -95,9 +94,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 if new_cols != old_cols
                     && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
                 {
-                    self.prompt_size = self
-                        .out
-                        .calculate_position(self.prompt, Position::default());
+                    self.prompt_size =
+                        self.out
+                            .calculate_position(self.prompt, Position::default(), None);
                     self.refresh_line()?;
                 }
                 continue;
@@ -124,13 +123,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
-        let cursor = self
-            .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+        let cursor =
+            self.out
+                .calculate_position(&self.line[..self.line.pos()], self.prompt_size, None);
         if self.layout.cursor == cursor {
             return Ok(());
         }
-        if self.highlight_char() {
+        if self.highlight_char() || self.layout.scroll(cursor) {
             let prompt_size = self.prompt_size;
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {
@@ -146,6 +145,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn move_cursor_to_end(&mut self) -> Result<()> {
         if self.layout.cursor == self.layout.end {
             return Ok(());
+        } else if self.layout.scroll(self.layout.end) {
+            let prompt_size = self.prompt_size;
+            return self.refresh(self.prompt, prompt_size, true, Info::NoHint);
         }
         self.out.move_cursor(self.layout.cursor, self.layout.end)?;
         self.layout.cursor = self.layout.end;
@@ -278,7 +280,9 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.out.calculate_position(prompt, Position::default());
+        let prompt_size = self
+            .out
+            .calculate_position(prompt, Position::default(), None);
         self.hint();
         self.highlight_char();
         self.refresh(prompt, prompt_size, false, Info::Hint)
@@ -318,8 +322,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
 
     fn external_print(&mut self, msg: String) -> Result<()> {
         self.out.clear_rows(&self.layout)?;
-        self.layout.end.row = 0;
-        self.layout.cursor.row = 0;
+        self.layout.reset_rows();
         self.out.write_and_flush(msg.as_str())?;
         if !msg.ends_with('\n') {
             self.out.write_and_flush("\n")?;
@@ -344,8 +347,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
-        self.layout.cursor = Position::default();
-        self.layout.end = Position::default();
+        self.layout.reset();
         Ok(())
     }
 
@@ -356,7 +358,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
-                let width = ch.width().unwrap_or(0);
+                let width = layout::cwidth(ch);
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()

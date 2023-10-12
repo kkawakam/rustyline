@@ -49,7 +49,6 @@ use log::debug;
 #[cfg(feature = "derive")]
 #[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
-use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
 
@@ -293,15 +292,16 @@ fn page_completions<C: Candidate, H: Helper>(
         cols,
         candidates
             .iter()
-            .map(|s| s.display().width())
+            .map(|s| layout::width(s.display()))
             .max()
             .unwrap()
             + min_col_pad,
     );
     let num_cols = cols / max_width;
+    let nbc: u16 = layout::try_from(candidates.len());
 
     let mut pause_row = s.out.get_rows() - 1;
-    let num_rows = (candidates.len() + num_cols - 1) / num_cols;
+    let num_rows = (nbc + num_cols - 1) / num_cols;
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
@@ -335,15 +335,15 @@ fn page_completions<C: Candidate, H: Helper>(
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
-            if i < candidates.len() {
-                let candidate = &candidates[i].display();
-                let width = candidate.width();
+            if i < nbc {
+                let candidate = &candidates[i as usize].display();
+                let width = layout::width(candidate);
                 if let Some(highlighter) = s.highlighter() {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
                 }
-                if ((col + 1) * num_rows) + row < candidates.len() {
+                if ((col + 1) * num_rows) + row < nbc {
                     for _ in width..max_width {
                         ab.push(' ');
                     }
@@ -353,8 +353,7 @@ fn page_completions<C: Candidate, H: Helper>(
         s.out.write_and_flush(ab.as_str())?;
     }
     s.out.write_and_flush("\n")?;
-    s.layout.end.row = 0; // dirty way to make clear_old_rows do nothing
-    s.layout.cursor.row = 0;
+    s.layout.reset_rows(); // dirty way to make clear_old_rows do nothing
     s.refresh_line()?;
     Ok(None)
 }
@@ -894,7 +893,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// If output stream is a tty, this function returns its width and height as
     /// a number of characters.
-    pub fn dimensions(&mut self) -> Option<(usize, usize)> {
+    pub fn dimensions(&mut self) -> Option<(u16, u16)> {
         if self.term.is_output_tty() {
             let out = self.term.create_writer();
             Some((out.get_columns(), out.get_rows()))

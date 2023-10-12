@@ -8,7 +8,7 @@ use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position};
+use crate::layout::{self, Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -100,9 +100,9 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, _: Option<&mut Vec<usize>>) -> Position {
         let mut pos = orig;
-        pos.col += s.len();
+        pos.col += layout::try_from(s.len());
         pos
     }
 
@@ -124,11 +124,11 @@ impl Renderer for Sink {
 
     fn update_size(&mut self) {}
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> u16 {
         80
     }
 
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> u16 {
         24
     }
 
@@ -154,7 +154,7 @@ pub type Terminal = DummyTerminal;
 #[derive(Clone, Debug)]
 pub struct DummyTerminal {
     pub keys: Vec<KeyEvent>,
-    pub cursor: usize, // cursor position before last command
+    pub cursor: u16, // cursor position before last command
     pub color_mode: ColorMode,
     pub bell_style: BellStyle,
 }
@@ -169,7 +169,7 @@ impl Term for DummyTerminal {
     fn new(
         color_mode: ColorMode,
         _behavior: Behavior,
-        _tab_stop: usize,
+        _tab_stop: u16,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
     ) -> Result<DummyTerminal> {

@@ -427,6 +427,11 @@ impl Renderer for ConsoleRenderer {
             col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
             // append the input line
             col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+        } else if self.colors_enabled {
+            // append the prompt
+            col = self.wrap_at_eol(prompt, col);
+            // append the input line
+            col = self.wrap_at_eol(line, col);
         } else {
             // append the prompt
             self.buffer.push_str(prompt);
@@ -437,6 +442,8 @@ impl Renderer for ConsoleRenderer {
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
                 self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
+            } else if self.colors_enabled {
+                self.wrap_at_eol(hint, col);
             } else {
                 self.buffer.push_str(hint);
             }

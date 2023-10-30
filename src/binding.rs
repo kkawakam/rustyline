@@ -216,8 +216,6 @@ pub trait ConditionalEventHandler: Send + Sync {
 
 #[cfg(test)]
 mod test {
-    use core::mem::size_of;
-
     use super::{Event, EventHandler};
     use crate::{Cmd, KeyCode, KeyEvent, Modifiers};
     use radix_trie::Trie;
@@ -251,7 +249,9 @@ mod test {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn size_of_event() {
+        use core::mem::size_of;
         assert_eq!(size_of::<Event>(), 32);
     }
 }

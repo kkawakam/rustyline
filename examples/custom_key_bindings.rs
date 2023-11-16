@@ -100,6 +100,10 @@ fn main() -> Result<()> {
         Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
         EventHandler::Simple(Cmd::Suspend), // TODO external editor
     );
+    rl.bind_sequence(
+        Event::KeySeq(vec!['\\'.into(), '8'.into()]),
+        EventHandler::Simple(Cmd::Insert(1, "∞".to_string())),
+    );
 
     loop {
         let line = rl.readline("> ")?;

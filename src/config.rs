@@ -1,6 +1,7 @@
 //! Customize line editor
 use crate::Result;
 use std::default::Default;
+use std::time::Duration;
 
 /// User preferences
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +36,8 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// To avoid freezing the UI
+    refresh_rate_limit: Duration,
 }
 
 impl Config {
@@ -193,6 +196,11 @@ impl Config {
     pub fn enable_bracketed_paste(&self) -> bool {
         self.enable_bracketed_paste
     }
+
+    /// Used to batch input events before repainting edited line.
+    pub fn refresh_rate_limit(&self) -> Duration {
+        self.refresh_rate_limit
+    }
 }
 
 impl Default for Config {
@@ -213,6 +221,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            refresh_rate_limit: Duration::from_millis(500),
         }
     }
 }
@@ -450,6 +459,15 @@ impl Builder {
         self
     }
 
+    /// Used to batch input events before repainting edited line.
+    ///
+    /// By default, 500 ms
+    #[must_use]
+    pub fn refresh_rate_limit(mut self, refresh_rate_limit: Duration) -> Self {
+        self.set_refresh_rate_limit(refresh_rate_limit);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     #[must_use]
     pub fn build(self) -> Config {
@@ -566,5 +584,12 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Used to batch input events before repainting edited line.
+    ///
+    /// By default, 500 ms
+    fn set_refresh_rate_limit(&mut self, refresh_rate_limit: Duration) {
+        self.config_mut().refresh_rate_limit = refresh_rate_limit;
     }
 }

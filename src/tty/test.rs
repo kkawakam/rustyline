@@ -1,6 +1,7 @@
 //! Tests specific definitions
 use std::iter::IntoIterator;
 use std::slice::Iter;
+use std::time::Duration;
 use std::vec::IntoIter;
 
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
@@ -45,6 +46,10 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
         None
     }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
@@ -75,6 +80,10 @@ impl RawReader for IntoIter<KeyEvent> {
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
         None
+    }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
     }
 }
 

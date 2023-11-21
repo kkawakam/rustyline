@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
@@ -123,10 +124,7 @@ impl ConsoleRawReader {
         loop {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 {
-                let mut count = 0;
-                check(unsafe {
-                    consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count)
-                })?;
+                let count = self.get_number_of_events()?;
                 match read_input(self.conin, count)? {
                     KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
@@ -142,6 +140,12 @@ impl ConsoleRawReader {
                 Err(io::Error::last_os_error())?
             }
         }
+    }
+
+    fn get_number_of_events(&self) -> Result<u32> {
+        let mut count = 0;
+        check(unsafe { consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
+        Ok(count)
     }
 }
 
@@ -163,6 +167,70 @@ impl RawReader for ConsoleRawReader {
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
         None
+    }
+
+    fn poll(&mut self, mut timeout: Duration) -> Result<bool> {
+        use winapi::shared::winerror::WAIT_TIMEOUT;
+        use winapi::um::synchapi::WaitForSingleObject;
+        use winapi::um::winbase::WAIT_OBJECT_0;
+
+        let start = Instant::now();
+        loop {
+            let mut noe = self.get_number_of_events()?;
+            if noe == 0 {
+                let rc = unsafe {
+                    WaitForSingleObject(
+                        self.conin,
+                        u32::try_from(timeout.as_millis()).expect("invalid timeout"),
+                    )
+                };
+                match rc {
+                    WAIT_OBJECT_0 => {
+                        noe = self.get_number_of_events()?;
+                    }
+                    WAIT_TIMEOUT => {
+                        return Ok(false);
+                    }
+                    _ => Err(io::Error::last_os_error())?,
+                }
+            }
+
+            let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
+            let mut count = 0;
+            while noe > 0 {
+                check(unsafe { wincon::PeekConsoleInputW(self.conin, &mut rec, 1, &mut count) })?;
+                if count > 0 {
+                    noe -= count;
+                    if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
+                        return Ok(true);
+                    } else if rec.EventType != wincon::KEY_EVENT {
+                        // read the event to unsignal the handle
+                        check(unsafe {
+                            consoleapi::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
+                        })?;
+                    } else {
+                        let key_event = unsafe { rec.Event.KeyEvent() };
+                        if key_event.bKeyDown == 0
+                            && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD
+                        {
+                            // read the event to unsignal the handle
+                            check(unsafe {
+                                consoleapi::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
+                            })?;
+                        } else {
+                            return Ok(true);
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            if let Some(t) = timeout.checked_sub(start.elapsed()) {
+                timeout = t;
+            } else {
+                return Ok(false);
+            }
+        }
     }
 }
 

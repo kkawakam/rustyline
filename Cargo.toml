@@ -49,9 +49,9 @@ signal-hook = { version = "0.3", optional = true, default-features = false }
 termios = { version = "0.3.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "winbase", "wincon", "winuser"] }
+winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "winbase", "wincon", "winerror", "winuser"] }
 scopeguard = "1.1"
-clipboard-win = "4.5"
+clipboard-win = "5.0"
 
 [dev-dependencies]
 doc-comment = "0.3"

@@ -28,7 +28,7 @@ pub enum ReadlineError {
     Decode(char::DecodeUtf16Error),
     /// Something went wrong calling a Windows API
     #[cfg(windows)]
-    SystemError(clipboard_win::SystemError),
+    SystemError(clipboard_win::ErrorCode),
     /// Error related to SQLite history backend
     #[cfg(feature = "with-sqlite-history")]
     SQLiteError(rusqlite::Error),
@@ -133,8 +133,8 @@ impl From<fmt::Error> for ReadlineError {
 }
 
 #[cfg(windows)]
-impl From<clipboard_win::SystemError> for ReadlineError {
-    fn from(err: clipboard_win::SystemError) -> Self {
+impl From<clipboard_win::ErrorCode> for ReadlineError {
+    fn from(err: clipboard_win::ErrorCode) -> Self {
         ReadlineError::SystemError(err)
     }
 }

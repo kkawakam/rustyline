@@ -220,6 +220,7 @@ pub trait Term {
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
     type ExternalPrinter: ExternalPrinter;
+    type CursorGuard;
 
     fn new(
         color_mode: ColorMode,
@@ -246,6 +247,8 @@ pub trait Term {
     fn writeln(&self) -> Result<()>;
     /// Create an external printer
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
+    /// Change cursor visibility
+    fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<Self::CursorGuard>>;
 }
 
 // If on Windows platform import Windows TTY module

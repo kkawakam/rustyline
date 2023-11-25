@@ -330,8 +330,8 @@ impl ConsoleRenderer {
         })?)
     }
 
-    fn set_cursor_visible(&mut self, visible: BOOL) -> Result<()> {
-        set_cursor_visible(self.conout, visible)
+    fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<ConsoleCursorGuard>> {
+        set_cursor_visibility(self.conout, visible)
     }
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
@@ -374,16 +374,28 @@ impl ConsoleRenderer {
     }
 }
 
-fn set_cursor_visible(handle: HANDLE, visible: BOOL) -> Result<()> {
+pub struct ConsoleCursorGuard(HANDLE);
+
+impl Drop for ConsoleCursorGuard {
+    fn drop(&mut self) {
+        let _ = set_cursor_visibility(self.0, true);
+    }
+}
+
+fn set_cursor_visibility(handle: HANDLE, visible: bool) -> Result<Option<ConsoleCursorGuard>> {
     let mut info = unsafe { mem::zeroed() };
     check(unsafe { wincon::GetConsoleCursorInfo(handle, &mut info) })?;
-    if info.bVisible == visible {
-        return Ok(());
+    let b = if visible { TRUE } else { FALSE };
+    if info.bVisible == b {
+        return Ok(None);
     }
-    info.bVisible = visible;
-    Ok(check(unsafe {
-        wincon::SetConsoleCursorInfo(handle, &info)
-    })?)
+    info.bVisible = b;
+    check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })?;
+    Ok(if visible {
+        None
+    } else {
+        Some(ConsoleCursorGuard(handle))
+    })
 }
 
 impl Renderer for ConsoleRenderer {
@@ -449,11 +461,8 @@ impl Renderer for ConsoleRenderer {
             }
         }
         let info = self.get_console_screen_buffer_info()?;
-        self.set_cursor_visible(FALSE)?; // just to avoid flickering
-        let handle = self.conout;
-        scopeguard::defer! {
-            let _ = set_cursor_visible(handle, TRUE);
-        }
+        // just to avoid flickering
+        let mut guard = self.set_cursor_visibility(false)?;
         // position at the start of the prompt, clear to end of previous input
         self.clear_old_rows(&info, old_layout)?;
         // display prompt, input line and hint
@@ -465,7 +474,7 @@ impl Renderer for ConsoleRenderer {
         coord.X = cursor.col as i16;
         coord.Y -= (end_pos.row - cursor.row) as i16;
         self.set_console_cursor_position(coord, info.dwSize)?;
-
+        guard.take();
         Ok(())
     }
 
@@ -628,6 +637,7 @@ impl Console {
 }
 
 impl Term for Console {
+    type CursorGuard = ConsoleCursorGuard;
     type ExternalPrinter = ExternalPrinter;
     type KeyMap = ConsoleKeyMap;
     type Mode = ConsoleMode;
@@ -830,6 +840,14 @@ impl Term for Console {
             raw_mode: self.raw_mode.clone(),
             conout: self.conout,
         })
+    }
+
+    fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<ConsoleCursorGuard>> {
+        if self.conout_isatty {
+            set_cursor_visibility(self.conout, visible)
+        } else {
+            Ok(None)
+        }
     }
 }
 

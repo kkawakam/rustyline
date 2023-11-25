@@ -1139,6 +1139,23 @@ fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
     Ok(())
 }
 
+pub struct PosixCursorGuard(RawFd);
+
+impl Drop for PosixCursorGuard {
+    fn drop(&mut self) {
+        let _ = set_cursor_visibility(self.0, true);
+    }
+}
+
+fn set_cursor_visibility(fd: RawFd, visible: bool) -> Result<Option<PosixCursorGuard>> {
+    write_all(fd, if visible { "\x1b[?25h" } else { "\x1b[?25l" })?;
+    Ok(if visible {
+        None
+    } else {
+        Some(PosixCursorGuard(fd))
+    })
+}
+
 #[cfg(not(feature = "signal-hook"))]
 static mut SIGWINCH_PIPE: RawFd = -1;
 #[cfg(not(feature = "signal-hook"))]
@@ -1236,6 +1253,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type CursorGuard = PosixCursorGuard;
     type ExternalPrinter = ExternalPrinter;
     type KeyMap = PosixKeyMap;
     type Mode = PosixMode;
@@ -1404,6 +1422,14 @@ impl Term for PosixTerminal {
             raw_mode: self.raw_mode.clone(),
             tty_out: self.tty_out,
         })
+    }
+
+    fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<PosixCursorGuard>> {
+        if self.is_out_a_tty {
+            set_cursor_visibility(self.tty_out, visible)
+        } else {
+            Ok(None)
+        }
     }
 }
 

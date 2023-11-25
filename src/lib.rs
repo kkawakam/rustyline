@@ -917,6 +917,14 @@ impl<H: Helper, I: History> Editor<H, I> {
     pub fn create_external_printer(&mut self) -> Result<<Terminal as Term>::ExternalPrinter> {
         self.term.create_external_printer()
     }
+
+    /// Change cursor visibility
+    pub fn set_cursor_visibility(
+        &mut self,
+        visible: bool,
+    ) -> Result<Option<<Terminal as Term>::CursorGuard>> {
+        self.term.set_cursor_visibility(visible)
+    }
 }
 
 impl<H: Helper, I: History> config::Configurer for Editor<H, I> {

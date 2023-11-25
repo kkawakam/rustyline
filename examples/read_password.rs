@@ -14,13 +14,13 @@ impl Highlighter for MaskingHighlighter {
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
-            Owned("*".repeat(line.width()))
+            Owned(" ".repeat(line.width()))
         } else {
             Borrowed(line)
         }
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+    fn highlight_char(&self, _line: &str, _pos: usize, _forced: bool) -> bool {
         self.masking
     }
 }
@@ -37,7 +37,9 @@ fn main() -> Result<()> {
     rl.helper_mut().expect("No helper").masking = true;
     rl.set_color_mode(ColorMode::Forced); // force masking
     rl.set_auto_add_history(false); // make sure password is not added to history
+    let mut guard = rl.set_cursor_visibility(false)?;
     let passwd = rl.readline("Password:")?;
+    guard.take();
     println!("Secret: {passwd}");
     Ok(())
 }

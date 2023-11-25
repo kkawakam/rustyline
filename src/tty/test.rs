@@ -160,6 +160,7 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type CursorGuard = ();
     type ExternalPrinter = DummyExternalPrinter;
     type KeyMap = KeyMap;
     type Mode = Mode;
@@ -217,6 +218,10 @@ impl Term for DummyTerminal {
 
     fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
         Ok(DummyExternalPrinter {})
+    }
+
+    fn set_cursor_visibility(&mut self, _: bool) -> Result<Option<()>> {
+        Ok(None)
     }
 
     fn writeln(&self) -> Result<()> {

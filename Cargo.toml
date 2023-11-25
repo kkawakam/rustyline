@@ -50,7 +50,6 @@ termios = { version = "0.3.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "winbase", "wincon", "winerror", "winuser"] }
-scopeguard = "1.1"
 clipboard-win = "5.0"
 
 [dev-dependencies]

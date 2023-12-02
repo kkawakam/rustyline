@@ -73,8 +73,7 @@ impl ConditionalEventHandler for TabEventHandler {
         debug_assert_eq!(*evt, Event::from(KeyEvent::from('\t')));
         if ctx.line()[..ctx.pos()]
             .chars()
-            .rev()
-            .next()
+            .next_back()
             .filter(|c| c.is_whitespace())
             .is_some()
         {

@@ -238,7 +238,7 @@ fn complete_line<H: Helper>(
 
                 let selected_items = Skim::run_with(&options, Some(rx_item))
                     .map(|out| out.selected_items)
-                    .unwrap_or_else(Vec::new);
+                    .unwrap_or_default();
 
                 // match the first (and only) returned option with the candidate and update the
                 // line otherwise only refresh line to clear the skim UI changes

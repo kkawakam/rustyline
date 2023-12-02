@@ -151,7 +151,7 @@ fn complete_line<H: Helper>(
     } else if CompletionType::List == config.completion_type() {
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it
-            if lcp.len() > s.line.pos() - start {
+            if lcp.len() > s.line.pos() - start || candidates.len() == 1 {
                 completer.update(&mut s.line, start, lcp, &mut s.changes);
                 s.refresh_line()?;
             }

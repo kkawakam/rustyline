@@ -255,14 +255,14 @@ pub trait Term {
 // and re-export into mod.rs scope
 #[cfg(all(windows, not(target_arch = "wasm32")))]
 mod windows;
-#[cfg(all(windows, not(target_arch = "wasm32")))]
+#[cfg(all(windows, not(target_arch = "wasm32"), not(test)))]
 pub use self::windows::*;
 
 // If on Unix platform import Unix TTY module
 // and re-export into mod.rs scope
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod unix;
-#[cfg(all(unix, not(target_arch = "wasm32")))]
+#[cfg(all(unix, not(target_arch = "wasm32"), not(test)))]
 pub use self::unix::*;
 
 #[cfg(any(test, target_arch = "wasm32"))]

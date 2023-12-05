@@ -1,7 +1,7 @@
 use std::vec::IntoIter;
 
 use crate::completion::Completer;
-use crate::config::{Config, EditMode};
+use crate::config::{CompletionType, Config, EditMode};
 use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
@@ -35,7 +35,16 @@ impl Completer for SimpleCompleter {
         _pos: usize,
         _ctx: &Context<'_>,
     ) -> Result<(usize, Vec<String>)> {
-        Ok((0, vec![line.to_owned() + "t"]))
+        Ok((
+            0,
+            if line == "rus" {
+                vec![line.to_owned() + "t"]
+            } else if line == "\\hbar" {
+                vec!["ℏ".to_owned()]
+            } else {
+                vec![]
+            },
+        ))
     }
 }
 impl Hinter for SimpleCompleter {
@@ -61,7 +70,7 @@ fn complete_line() {
     let mut input_state = InputState::new(&config, &bindings);
     let keys = vec![E::ENTER];
     let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
-    let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &Config::default()).unwrap();
+    let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &config).unwrap();
     assert_eq!(
         Some(Cmd::AcceptOrInsertLine {
             accept_in_the_middle: true
@@ -70,6 +79,25 @@ fn complete_line() {
     );
     assert_eq!("rust", s.line.as_str());
     assert_eq!(4, s.line.pos());
+}
+
+#[test]
+fn complete_symbol() {
+    let mut out = Sink::default();
+    let history = crate::history::DefaultHistory::new();
+    let helper = Some(SimpleCompleter);
+    let mut s = init_state(&mut out, "\\hbar", 5, helper.as_ref(), &history);
+    let config = Config::builder()
+        .completion_type(CompletionType::List)
+        .build();
+    let bindings = Bindings::new();
+    let mut input_state = InputState::new(&config, &bindings);
+    let keys = vec![E::ENTER];
+    let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
+    let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &config).unwrap();
+    assert_eq!(None, cmd);
+    assert_eq!("ℏ", s.line.as_str());
+    assert_eq!(3, s.line.pos());
 }
 
 // `keys`: keys to press

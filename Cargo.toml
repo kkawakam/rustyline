@@ -49,7 +49,7 @@ signal-hook = { version = "0.3", optional = true, default-features = false }
 termios = { version = "0.3.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["consoleapi", "handleapi", "synchapi", "minwindef", "processenv", "std", "winbase", "wincon", "winerror", "winuser"] }
+windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_Security", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 clipboard-win = "5.0"
 
 [dev-dependencies]

@@ -14,13 +14,10 @@ use std::sync::Arc;
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE, WORD};
-use winapi::shared::winerror;
-use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-use winapi::um::synchapi::{CreateEventW, ResetEvent, SetEvent};
-use winapi::um::wincon::{self, CONSOLE_SCREEN_BUFFER_INFO, COORD};
-use winapi::um::winnt::{CHAR, HANDLE};
-use winapi::um::{consoleapi, processenv, winbase, winuser};
+use windows_sys::Win32::Foundation::{self as foundation, BOOL, FALSE, HANDLE, TRUE};
+use windows_sys::Win32::System::Console as console;
+use windows_sys::Win32::System::Threading as threading;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse;
 
 use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
@@ -30,15 +27,15 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
-fn get_std_handle(fd: DWORD) -> Result<HANDLE> {
-    let handle = unsafe { processenv::GetStdHandle(fd) };
+fn get_std_handle(fd: console::STD_HANDLE) -> Result<HANDLE> {
+    let handle = unsafe { console::GetStdHandle(fd) };
     check_handle(handle)
 }
 
 fn check_handle(handle: HANDLE) -> Result<HANDLE> {
-    if handle == INVALID_HANDLE_VALUE {
+    if handle == foundation::INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
-    } else if handle.is_null() {
+    } else if handle == 0 {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "no stdio handle available for this process",
@@ -57,7 +54,7 @@ fn check(rc: BOOL) -> io::Result<()> {
 
 fn get_win_size(handle: HANDLE) -> (usize, usize) {
     let mut info = unsafe { mem::zeroed() };
-    match unsafe { wincon::GetConsoleScreenBufferInfo(handle, &mut info) } {
+    match unsafe { console::GetConsoleScreenBufferInfo(handle, &mut info) } {
         FALSE => (80, 24),
         _ => (
             info.dwSize.X as usize,
@@ -66,9 +63,9 @@ fn get_win_size(handle: HANDLE) -> (usize, usize) {
     }
 }
 
-fn get_console_mode(handle: HANDLE) -> Result<DWORD> {
+fn get_console_mode(handle: HANDLE) -> Result<console::CONSOLE_MODE> {
     let mut original_mode = 0;
-    check(unsafe { consoleapi::GetConsoleMode(handle, &mut original_mode) })?;
+    check(unsafe { console::GetConsoleMode(handle, &mut original_mode) })?;
     Ok(original_mode)
 }
 
@@ -82,9 +79,9 @@ pub type Mode = ConsoleMode;
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 #[derive(Clone, Debug)]
 pub struct ConsoleMode {
-    original_conin_mode: DWORD,
+    original_conin_mode: console::CONSOLE_MODE,
     conin: HANDLE,
-    original_conout_mode: Option<DWORD>,
+    original_conout_mode: Option<console::CONSOLE_MODE>,
     conout: HANDLE,
     raw_mode: Arc<AtomicBool>,
 }
@@ -92,9 +89,9 @@ pub struct ConsoleMode {
 impl RawMode for ConsoleMode {
     /// Disable RAW mode for the terminal.
     fn disable_raw_mode(&self) -> Result<()> {
-        check(unsafe { consoleapi::SetConsoleMode(self.conin, self.original_conin_mode) })?;
+        check(unsafe { console::SetConsoleMode(self.conin, self.original_conin_mode) })?;
         if let Some(original_stdstream_mode) = self.original_conout_mode {
-            check(unsafe { consoleapi::SetConsoleMode(self.conout, original_stdstream_mode) })?;
+            check(unsafe { console::SetConsoleMode(self.conout, original_stdstream_mode) })?;
         }
         self.raw_mode.store(false, Ordering::SeqCst);
         Ok(())
@@ -114,8 +111,8 @@ impl ConsoleRawReader {
     }
 
     fn select(&mut self) -> Result<Event> {
-        use winapi::um::synchapi::WaitForMultipleObjects;
-        use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
+        use foundation::WAIT_OBJECT_0;
+        use threading::{WaitForMultipleObjects, INFINITE};
 
         let pipe_reader = self.pipe_reader.as_ref().unwrap();
         let handles = [self.conin, pipe_reader.event.0];
@@ -124,16 +121,14 @@ impl ConsoleRawReader {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 {
                 let mut count = 0;
-                check(unsafe {
-                    consoleapi::GetNumberOfConsoleInputEvents(self.conin, &mut count)
-                })?;
+                check(unsafe { console::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
                 match read_input(self.conin, count)? {
                     KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
                 };
             } else if rc == WAIT_OBJECT_0 + 1 {
                 debug!(target: "rustyline", "ExternalPrinter::receive");
-                check(unsafe { ResetEvent(pipe_reader.event.0) })?;
+                check(unsafe { threading::ResetEvent(pipe_reader.event.0) })?;
                 match pipe_reader.receiver.recv() {
                     Ok(msg) => return Ok(Event::ExternalPrint(msg)),
                     Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
@@ -167,12 +162,12 @@ impl RawReader for ConsoleRawReader {
 }
 
 fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
-    use std::char::decode_utf16;
-    use winapi::um::wincon::{
+    use console::{
         LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED,
     };
+    use std::char::decode_utf16;
 
-    let mut rec: wincon::INPUT_RECORD = unsafe { mem::zeroed() };
+    let mut rec: console::INPUT_RECORD = unsafe { mem::zeroed() };
     let mut count = 0;
     let mut total = 0;
     let mut surrogate = 0;
@@ -181,18 +176,18 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             return Ok(KeyEvent(K::UnknownEscSeq, M::NONE));
         }
         // TODO GetNumberOfConsoleInputEvents
-        check(unsafe { consoleapi::ReadConsoleInputW(handle, &mut rec, 1, &mut count) })?;
+        check(unsafe { console::ReadConsoleInputW(handle, &mut rec, 1, &mut count) })?;
         total += count;
 
-        if rec.EventType == wincon::WINDOW_BUFFER_SIZE_EVENT {
+        if u32::from(rec.EventType) == console::WINDOW_BUFFER_SIZE_EVENT {
             debug!(target: "rustyline", "SIGWINCH");
             return Err(error::ReadlineError::WindowResized);
-        } else if rec.EventType != wincon::KEY_EVENT {
+        } else if u32::from(rec.EventType) != console::KEY_EVENT {
             continue;
         }
-        let key_event = unsafe { rec.Event.KeyEvent() };
+        let key_event = unsafe { rec.Event.KeyEvent };
         // writeln!(io::stderr(), "key_event: {:?}", key_event).unwrap();
-        if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != winuser::VK_MENU as WORD {
+        if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != KeyboardAndMouse::VK_MENU {
             continue;
         }
         // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
@@ -211,34 +206,34 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             mods |= M::SHIFT;
         }
 
-        let utf16 = unsafe { *key_event.uChar.UnicodeChar() };
-        let key_code = match i32::from(key_event.wVirtualKeyCode) {
-            winuser::VK_LEFT => K::Left,
-            winuser::VK_RIGHT => K::Right,
-            winuser::VK_UP => K::Up,
-            winuser::VK_DOWN => K::Down,
-            winuser::VK_DELETE => K::Delete,
-            winuser::VK_HOME => K::Home,
-            winuser::VK_END => K::End,
-            winuser::VK_PRIOR => K::PageUp,
-            winuser::VK_NEXT => K::PageDown,
-            winuser::VK_INSERT => K::Insert,
-            winuser::VK_F1 => K::F(1),
-            winuser::VK_F2 => K::F(2),
-            winuser::VK_F3 => K::F(3),
-            winuser::VK_F4 => K::F(4),
-            winuser::VK_F5 => K::F(5),
-            winuser::VK_F6 => K::F(6),
-            winuser::VK_F7 => K::F(7),
-            winuser::VK_F8 => K::F(8),
-            winuser::VK_F9 => K::F(9),
-            winuser::VK_F10 => K::F(10),
-            winuser::VK_F11 => K::F(11),
-            winuser::VK_F12 => K::F(12),
-            winuser::VK_BACK => K::Backspace, // vs Ctrl-h
-            winuser::VK_RETURN => K::Enter,   // vs Ctrl-m
-            winuser::VK_ESCAPE => K::Esc,
-            winuser::VK_TAB => {
+        let utf16 = unsafe { key_event.uChar.UnicodeChar };
+        let key_code = match key_event.wVirtualKeyCode {
+            KeyboardAndMouse::VK_LEFT => K::Left,
+            KeyboardAndMouse::VK_RIGHT => K::Right,
+            KeyboardAndMouse::VK_UP => K::Up,
+            KeyboardAndMouse::VK_DOWN => K::Down,
+            KeyboardAndMouse::VK_DELETE => K::Delete,
+            KeyboardAndMouse::VK_HOME => K::Home,
+            KeyboardAndMouse::VK_END => K::End,
+            KeyboardAndMouse::VK_PRIOR => K::PageUp,
+            KeyboardAndMouse::VK_NEXT => K::PageDown,
+            KeyboardAndMouse::VK_INSERT => K::Insert,
+            KeyboardAndMouse::VK_F1 => K::F(1),
+            KeyboardAndMouse::VK_F2 => K::F(2),
+            KeyboardAndMouse::VK_F3 => K::F(3),
+            KeyboardAndMouse::VK_F4 => K::F(4),
+            KeyboardAndMouse::VK_F5 => K::F(5),
+            KeyboardAndMouse::VK_F6 => K::F(6),
+            KeyboardAndMouse::VK_F7 => K::F(7),
+            KeyboardAndMouse::VK_F8 => K::F(8),
+            KeyboardAndMouse::VK_F9 => K::F(9),
+            KeyboardAndMouse::VK_F10 => K::F(10),
+            KeyboardAndMouse::VK_F11 => K::F(11),
+            KeyboardAndMouse::VK_F12 => K::F(12),
+            KeyboardAndMouse::VK_BACK => K::Backspace, // vs Ctrl-h
+            KeyboardAndMouse::VK_RETURN => K::Enter,   // vs Ctrl-m
+            KeyboardAndMouse::VK_ESCAPE => K::Esc,
+            KeyboardAndMouse::VK_TAB => {
                 if mods.contains(M::SHIFT) {
                     mods.remove(M::SHIFT);
                     K::BackTab
@@ -304,29 +299,33 @@ impl ConsoleRenderer {
         }
     }
 
-    fn get_console_screen_buffer_info(&self) -> Result<CONSOLE_SCREEN_BUFFER_INFO> {
+    fn get_console_screen_buffer_info(&self) -> Result<console::CONSOLE_SCREEN_BUFFER_INFO> {
         let mut info = unsafe { mem::zeroed() };
-        check(unsafe { wincon::GetConsoleScreenBufferInfo(self.conout, &mut info) })?;
+        check(unsafe { console::GetConsoleScreenBufferInfo(self.conout, &mut info) })?;
         Ok(info)
     }
 
-    fn set_console_cursor_position(&mut self, mut pos: COORD, size: COORD) -> Result<COORD> {
+    fn set_console_cursor_position(
+        &mut self,
+        mut pos: console::COORD,
+        size: console::COORD,
+    ) -> Result<console::COORD> {
         use std::cmp::{max, min};
         // https://docs.microsoft.com/en-us/windows/console/setconsolecursorposition
         // > The coordinates must be within the boundaries of the console screen buffer.
         // pos.X = max(0, min(size.X - 1, pos.X));
         pos.Y = max(0, min(size.Y - 1, pos.Y));
-        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, pos) })?;
+        check(unsafe { console::SetConsoleCursorPosition(self.conout, pos) })?;
         Ok(pos)
     }
 
-    fn clear(&mut self, length: DWORD, pos: COORD, attr: WORD) -> Result<()> {
+    fn clear(&mut self, length: u32, pos: console::COORD, attr: u16) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
-            wincon::FillConsoleOutputCharacterA(self.conout, ' ' as CHAR, length, pos, &mut _count)
+            console::FillConsoleOutputCharacterA(self.conout, b' ', length, pos, &mut _count)
         })?;
         Ok(check(unsafe {
-            wincon::FillConsoleOutputAttribute(self.conout, attr, length, pos, &mut _count)
+            console::FillConsoleOutputAttribute(self.conout, attr, length, pos, &mut _count)
         })?)
     }
 
@@ -359,7 +358,11 @@ impl ConsoleRenderer {
     }
 
     // position at the start of the prompt, clear to end of previous input
-    fn clear_old_rows(&mut self, info: &CONSOLE_SCREEN_BUFFER_INFO, layout: &Layout) -> Result<()> {
+    fn clear_old_rows(
+        &mut self,
+        info: &console::CONSOLE_SCREEN_BUFFER_INFO,
+        layout: &Layout,
+    ) -> Result<()> {
         let current_row = layout.cursor.row;
         let old_rows = layout.end.row;
         let mut coord = info.dwCursorPosition;
@@ -367,7 +370,7 @@ impl ConsoleRenderer {
         coord.Y -= current_row as i16;
         let coord = self.set_console_cursor_position(coord, info.dwSize)?;
         self.clear(
-            (info.dwSize.X * (old_rows as i16 + 1)) as DWORD,
+            (info.dwSize.X * (old_rows as i16 + 1)) as u32,
             coord,
             info.wAttributes,
         )
@@ -384,13 +387,13 @@ impl Drop for ConsoleCursorGuard {
 
 fn set_cursor_visibility(handle: HANDLE, visible: bool) -> Result<Option<ConsoleCursorGuard>> {
     let mut info = unsafe { mem::zeroed() };
-    check(unsafe { wincon::GetConsoleCursorInfo(handle, &mut info) })?;
+    check(unsafe { console::GetConsoleCursorInfo(handle, &mut info) })?;
     let b = if visible { TRUE } else { FALSE };
     if info.bVisible == b {
         return Ok(None);
     }
     info.bVisible = b;
-    check(unsafe { wincon::SetConsoleCursorInfo(handle, &info) })?;
+    check(unsafe { console::SetConsoleCursorInfo(handle, &info) })?;
     Ok(if visible {
         None
     } else {
@@ -515,9 +518,9 @@ impl Renderer for ConsoleRenderer {
     /// Clear the screen. Used to handle ctrl+l
     fn clear_screen(&mut self) -> Result<()> {
         let info = self.get_console_screen_buffer_info()?;
-        let coord = COORD { X: 0, Y: 0 };
-        check(unsafe { wincon::SetConsoleCursorPosition(self.conout, coord) })?;
-        let n = info.dwSize.X as DWORD * info.dwSize.Y as DWORD;
+        let coord = console::COORD { X: 0, Y: 0 };
+        check(unsafe { console::SetConsoleCursorPosition(self.conout, coord) })?;
+        let n = info.dwSize.X as u32 * info.dwSize.Y as u32;
         self.clear(n, coord, info.wAttributes)
     }
 
@@ -559,7 +562,7 @@ impl Renderer for ConsoleRenderer {
         cursor.Y += 1;
         let res = self.set_console_cursor_position(cursor, info.dwSize);
         if let Err(error::ReadlineError::Io(ref e)) = res {
-            if e.raw_os_error() == Some(winerror::ERROR_INVALID_PARAMETER as i32) {
+            if e.raw_os_error() == Some(foundation::ERROR_INVALID_PARAMETER as i32) {
                 warn!(target: "rustyline", "invalid cursor position: ({:?}, {:?}) in ({:?}, {:?})", cursor.X, cursor.Y, info.dwSize.X, info.dwSize.Y);
                 write_all(self.conout, &[10; 1])?;
                 return Ok(());
@@ -589,7 +592,7 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
         };
         let mut written = 0;
         check(unsafe {
-            consoleapi::WriteConsoleW(
+            console::WriteConsoleW(
                 handle,
                 slice.as_ptr().cast::<std::ffi::c_void>(),
                 slice.len() as u32,
@@ -657,21 +660,21 @@ impl Term for Console {
                 OpenOptions::new().read(true).write(true).open("CONOUT$"),
             ) {
                 (
-                    Ok(conin.into_raw_handle()),
-                    Ok(conout.into_raw_handle()),
+                    Ok(conin.into_raw_handle() as HANDLE),
+                    Ok(conout.into_raw_handle() as HANDLE),
                     true,
                 )
             } else {
                 (
-                    get_std_handle(winbase::STD_INPUT_HANDLE),
-                    get_std_handle(winbase::STD_OUTPUT_HANDLE),
+                    get_std_handle(console::STD_INPUT_HANDLE),
+                    get_std_handle(console::STD_OUTPUT_HANDLE),
                     false,
                 )
             }
         } else {
             (
-                get_std_handle(winbase::STD_INPUT_HANDLE),
-                get_std_handle(winbase::STD_OUTPUT_HANDLE),
+                get_std_handle(console::STD_INPUT_HANDLE),
+                get_std_handle(console::STD_OUTPUT_HANDLE),
                 false,
             )
         };
@@ -693,9 +696,9 @@ impl Term for Console {
 
         Ok(Console {
             conin_isatty,
-            conin: conin.unwrap_or(ptr::null_mut()),
+            conin: conin.unwrap_or(0),
             conout_isatty,
-            conout: conout.unwrap_or(ptr::null_mut()),
+            conout: conout.unwrap_or(0),
             close_on_drop,
             color_mode,
             ansi_colors_supported: false,
@@ -734,44 +737,44 @@ impl Term for Console {
         let original_conin_mode = get_console_mode(self.conin)?;
         // Disable these modes
         let mut raw = original_conin_mode
-            & !(wincon::ENABLE_LINE_INPUT
-                | wincon::ENABLE_ECHO_INPUT
-                | wincon::ENABLE_PROCESSED_INPUT);
+            & !(console::ENABLE_LINE_INPUT
+                | console::ENABLE_ECHO_INPUT
+                | console::ENABLE_PROCESSED_INPUT);
         // Enable these modes
-        raw |= wincon::ENABLE_EXTENDED_FLAGS;
-        raw |= wincon::ENABLE_INSERT_MODE;
-        raw |= wincon::ENABLE_QUICK_EDIT_MODE;
-        raw |= wincon::ENABLE_WINDOW_INPUT;
-        check(unsafe { consoleapi::SetConsoleMode(self.conin, raw) })?;
+        raw |= console::ENABLE_EXTENDED_FLAGS;
+        raw |= console::ENABLE_INSERT_MODE;
+        raw |= console::ENABLE_QUICK_EDIT_MODE;
+        raw |= console::ENABLE_WINDOW_INPUT;
+        check(unsafe { console::SetConsoleMode(self.conin, raw) })?;
 
         let original_conout_mode = if self.conout_isatty {
             let original_conout_mode = get_console_mode(self.conout)?;
 
             let mut mode = original_conout_mode;
-            if mode & wincon::ENABLE_WRAP_AT_EOL_OUTPUT == 0 {
-                mode |= wincon::ENABLE_WRAP_AT_EOL_OUTPUT;
+            if mode & console::ENABLE_WRAP_AT_EOL_OUTPUT == 0 {
+                mode |= console::ENABLE_WRAP_AT_EOL_OUTPUT;
                 debug!(target: "rustyline", "activate ENABLE_WRAP_AT_EOL_OUTPUT");
                 unsafe {
-                    assert_ne!(consoleapi::SetConsoleMode(self.conout, mode), 0);
+                    assert_ne!(console::SetConsoleMode(self.conout, mode), 0);
                 }
             }
             // To enable ANSI colors (Windows 10 only):
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
-            self.ansi_colors_supported = mode & wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0;
+            self.ansi_colors_supported = mode & console::ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0;
             if self.ansi_colors_supported {
                 if self.color_mode == ColorMode::Disabled {
-                    mode &= !wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                    mode &= !console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                     debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
                     unsafe {
-                        assert_ne!(consoleapi::SetConsoleMode(self.conout, mode), 0);
+                        assert_ne!(console::SetConsoleMode(self.conout, mode), 0);
                     }
                 } else {
                     debug!(target: "rustyline", "ANSI colors already enabled");
                 }
             } else if self.color_mode != ColorMode::Disabled {
-                mode |= wincon::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                mode |= console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
-                    unsafe { consoleapi::SetConsoleMode(self.conout, mode) != 0 };
+                    unsafe { console::SetConsoleMode(self.conout, mode) != 0 };
                 debug!(target: "rustyline", "ansi_colors_supported: {}", self.ansi_colors_supported);
             }
             Some(original_conout_mode)
@@ -822,8 +825,8 @@ impl Term for Console {
         if !self.is_input_tty() || !self.is_output_tty() {
             Err(io::Error::from(io::ErrorKind::Other))?; // FIXME
         }
-        let event = unsafe { CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
-        if event.is_null() {
+        let event = unsafe { threading::CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
+        if event == 0 {
             Err(io::Error::last_os_error())?;
         }
         let (sender, receiver) = sync_channel(1);
@@ -854,8 +857,8 @@ impl Term for Console {
 impl Drop for Console {
     fn drop(&mut self) {
         if self.close_on_drop {
-            unsafe { CloseHandle(self.conin) };
-            unsafe { CloseHandle(self.conout) };
+            unsafe { foundation::CloseHandle(self.conin) };
+            unsafe { foundation::CloseHandle(self.conout) };
         }
     }
 }
@@ -890,7 +893,7 @@ impl super::ExternalPrinter for ExternalPrinter {
             self.sender
                 .send(msg)
                 .map_err(|_| io::Error::from(io::ErrorKind::Other))?; // FIXME
-            Ok(check(unsafe { SetEvent(self.event) })?)
+            Ok(check(unsafe { threading::SetEvent(self.event) })?)
         }
     }
 }
@@ -903,7 +906,7 @@ unsafe impl Sync for Handle {}
 
 impl Drop for Handle {
     fn drop(&mut self) {
-        unsafe { CloseHandle(self.0) };
+        unsafe { foundation::CloseHandle(self.0) };
     }
 }
 

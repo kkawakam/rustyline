@@ -68,6 +68,7 @@ with-file-history = ["fd-lock"]
 with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+openmpi = []
 
 [[example]]
 name = "custom_key_bindings"

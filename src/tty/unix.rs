@@ -73,6 +73,13 @@ fn get_win_size(fd: RawFd) -> (usize, usize) {
 /// Check TERM environment variable to see if current term is in our
 /// unsupported list
 fn is_unsupported_term() -> bool {
+    #[cfg(feature = "openmpi")]
+    {
+        if std::env::var("OMPI_COMM_WORLD_SIZE").is_ok() {
+            return true;
+        }
+    }
+
     match std::env::var("TERM") {
         Ok(term) => {
             for iter in &UNSUPPORTED_TERM {

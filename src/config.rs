@@ -35,6 +35,8 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// Write new line after accepting prompt input
+    enable_newline: bool,
 }
 
 impl Config {
@@ -193,6 +195,14 @@ impl Config {
     pub fn enable_bracketed_paste(&self) -> bool {
         self.enable_bracketed_paste
     }
+
+    /// Write new line after accepting prompt input
+    ///
+    /// By default, it's enabled.
+    #[must_use]
+    pub fn enable_newline(&self) -> bool {
+        self.enable_newline
+    }
 }
 
 impl Default for Config {
@@ -213,6 +223,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            enable_newline: true,
         }
     }
 }
@@ -450,6 +461,15 @@ impl Builder {
         self
     }
 
+    /// Enable or disable newline after accepting prompt input
+    ///
+    /// By default, it's enabled.
+    #[must_use]
+    pub fn newline(mut self, enabled: bool) -> Self {
+        self.enable_newline(enabled);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     #[must_use]
     pub fn build(self) -> Config {
@@ -566,5 +586,12 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Enable or disable newline after accepting prompt input
+    ///
+    /// By default, it's enabled.
+    fn enable_newline(&mut self, enabled: bool) {
+        self.config_mut().enable_newline = enabled;
     }
 }

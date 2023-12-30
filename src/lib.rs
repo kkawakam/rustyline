@@ -669,7 +669,9 @@ impl<H: Helper, I: History> Editor<H, I> {
                 }
             }
             drop(guard); // disable_raw_mode(original_mode)?;
-            self.term.writeln()?;
+            if self.config.enable_newline() {
+                self.term.writeln()?;
+            }
             user_input
         } else {
             debug!(target: "rustyline", "stdin is not a tty");

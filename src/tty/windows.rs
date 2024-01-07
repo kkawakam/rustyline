@@ -653,6 +653,7 @@ impl Term for Console {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
+        _enable_signals: bool,
     ) -> Result<Console> {
         let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (

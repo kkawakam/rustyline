@@ -35,6 +35,8 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// Whether to disable or not the signals in termios
+    enable_signals: bool,
 }
 
 impl Config {
@@ -193,6 +195,18 @@ impl Config {
     pub fn enable_bracketed_paste(&self) -> bool {
         self.enable_bracketed_paste
     }
+
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    #[must_use]
+    pub fn enable_signals(&self) -> bool {
+        self.enable_signals
+    }
+
+    pub(crate) fn set_enable_signals(&mut self, enable_signals: bool) {
+        self.enable_signals = enable_signals;
+    }
 }
 
 impl Default for Config {
@@ -213,6 +227,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            enable_signals: false,
         }
     }
 }
@@ -450,6 +465,15 @@ impl Builder {
         self
     }
 
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    #[must_use]
+    pub fn enable_signals(mut self, enable_signals: bool) -> Self {
+        self.p.set_enable_signals(enable_signals);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     #[must_use]
     pub fn build(self) -> Config {
@@ -566,5 +590,12 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    fn set_enable_signals(&mut self, enable_signals: bool) {
+        self.config_mut().set_enable_signals(enable_signals);
     }
 }

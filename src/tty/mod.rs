@@ -228,6 +228,7 @@ pub trait Term {
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
+        enable_signals: bool,
     ) -> Result<Self>
     where
         Self: Sized;

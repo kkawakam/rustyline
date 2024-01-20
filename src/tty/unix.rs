@@ -233,7 +233,7 @@ impl PosixRawReader {
         pipe_reader: Option<PipeReader>,
     ) -> Self {
         Self {
-            tty_in: BufReader::with_capacity(1024, TtyIn { fd, sigwinch_pipe }),
+            tty_in: BufReader::with_capacity(1, TtyIn { fd, sigwinch_pipe }),
             timeout_ms: config.keyseq_timeout(),
             parser: Parser::new(),
             key_map,

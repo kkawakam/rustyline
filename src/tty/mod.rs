@@ -23,6 +23,7 @@ pub enum Event {
 
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
+    type Buffer;
     /// Blocking wait for either a key press or an external print
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
@@ -34,6 +35,8 @@ pub trait RawReader {
     fn read_pasted_text(&mut self) -> Result<String>;
     /// Check if `key` is bound to a peculiar command
     fn find_binding(&self, key: &KeyEvent) -> Option<Cmd>;
+    /// Backup type ahead
+    fn unbuffer(self) -> Option<Buffer>;
 }
 
 /// Display prompt, line and cursor in terminal output
@@ -215,8 +218,9 @@ pub trait ExternalPrinter {
 
 /// Terminal contract
 pub trait Term {
+    type Buffer;
     type KeyMap;
-    type Reader: RawReader; // rl_instream
+    type Reader: RawReader<Buffer = Self::Buffer>; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
     type ExternalPrinter: ExternalPrinter;
@@ -241,7 +245,12 @@ pub trait Term {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Self::Reader;
+    fn create_reader(
+        &self,
+        buffer: Option<Self::Buffer>,
+        config: &Config,
+        key_map: Self::KeyMap,
+    ) -> Self::Reader;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
     fn writeln(&self) -> Result<()>;

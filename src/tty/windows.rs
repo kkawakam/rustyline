@@ -69,6 +69,10 @@ fn get_console_mode(handle: HANDLE) -> Result<console::CONSOLE_MODE> {
     Ok(original_mode)
 }
 
+type ConsoleBuffer = ();
+#[cfg(not(test))]
+pub type Buffer = ConsoleBuffer;
+
 type ConsoleKeyMap = ();
 #[cfg(not(test))]
 pub type KeyMap = ConsoleKeyMap;
@@ -141,6 +145,8 @@ impl ConsoleRawReader {
 }
 
 impl RawReader for ConsoleRawReader {
+    type Buffer = ConsoleBuffer;
+
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         match self.pipe_reader {
             Some(_) => self.select(),
@@ -157,6 +163,10 @@ impl RawReader for ConsoleRawReader {
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
+    }
+
+    fn unbuffer(self) -> Option<ConsoleBuffer> {
         None
     }
 }
@@ -640,6 +650,7 @@ impl Console {
 }
 
 impl Term for Console {
+    type Buffer = ConsoleBuffer;
     type CursorGuard = ConsoleCursorGuard;
     type ExternalPrinter = ExternalPrinter;
     type KeyMap = ConsoleKeyMap;
@@ -801,7 +812,12 @@ impl Term for Console {
         ))
     }
 
-    fn create_reader(&self, _: &Config, _: ConsoleKeyMap) -> ConsoleRawReader {
+    fn create_reader(
+        &self,
+        _: Option<ConsoleBuffer>,
+        _: &Config,
+        _: ConsoleKeyMap,
+    ) -> ConsoleRawReader {
         ConsoleRawReader::create(self.conin, self.pipe_reader.clone())
     }
 

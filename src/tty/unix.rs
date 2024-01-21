@@ -1,8 +1,12 @@
 //! Unix specific definitions
+#[cfg(feature = "buffer-redux")]
+use buffer_redux::BufReader;
 use std::cmp;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufReader, ErrorKind, Read, Write};
+#[cfg(not(feature = "buffer-redux"))]
+use std::io::BufReader;
+use std::io::{self, ErrorKind, Read, Write};
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -90,6 +94,13 @@ fn is_unsupported_term() -> bool {
 fn is_a_tty(fd: RawFd) -> bool {
     isatty(fd).unwrap_or(false)
 }
+
+#[cfg(any(not(feature = "buffer-redux"), test))]
+pub type PosixBuffer = ();
+#[cfg(all(feature = "buffer-redux", not(test)))]
+pub type PosixBuffer = buffer_redux::Buffer;
+#[cfg(not(test))]
+pub type Buffer = PosixBuffer;
 
 pub type PosixKeyMap = HashMap<KeyEvent, Cmd>;
 #[cfg(not(test))]
@@ -228,12 +239,22 @@ impl PosixRawReader {
     fn new(
         fd: RawFd,
         sigwinch_pipe: Option<RawFd>,
+        buffer: Option<PosixBuffer>,
         config: &Config,
         key_map: PosixKeyMap,
         pipe_reader: Option<PipeReader>,
     ) -> Self {
+        let inner = TtyIn { fd, sigwinch_pipe };
+        #[cfg(any(not(feature = "buffer-redux"), test))]
+        let (tty_in, _) = (BufReader::with_capacity(1024, inner), buffer);
+        #[cfg(all(feature = "buffer-redux", not(test)))]
+        let tty_in = if let Some(buffer) = buffer {
+            BufReader::with_buffer(buffer, inner)
+        } else {
+            BufReader::with_capacity(1024, inner)
+        };
         Self {
-            tty_in: BufReader::with_capacity(1024, TtyIn { fd, sigwinch_pipe }),
+            tty_in,
             timeout_ms: config.keyseq_timeout(),
             parser: Parser::new(),
             key_map,
@@ -750,6 +771,8 @@ impl PosixRawReader {
 }
 
 impl RawReader for PosixRawReader {
+    type Buffer = PosixBuffer;
+
     #[cfg(not(feature = "signal-hook"))]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         match self.pipe_reader {
@@ -839,6 +862,17 @@ impl RawReader for PosixRawReader {
             debug!(target: "rustyline", "terminal key binding: {:?} => {:?}", key, cmd);
         }
         cmd
+    }
+
+    #[cfg(any(not(feature = "buffer-redux"), test))]
+    fn unbuffer(self) -> Option<PosixBuffer> {
+        None
+    }
+
+    #[cfg(all(feature = "buffer-redux", not(test)))]
+    fn unbuffer(self) -> Option<PosixBuffer> {
+        let (_, buffer) = self.tty_in.into_inner_with_buffer();
+        Some(buffer)
     }
 }
 
@@ -1253,6 +1287,7 @@ impl PosixTerminal {
 }
 
 impl Term for PosixTerminal {
+    type Buffer = PosixBuffer;
     type CursorGuard = PosixCursorGuard;
     type ExternalPrinter = ExternalPrinter;
     type KeyMap = PosixKeyMap;
@@ -1371,10 +1406,16 @@ impl Term for PosixTerminal {
     }
 
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: PosixKeyMap) -> PosixRawReader {
+    fn create_reader(
+        &self,
+        buffer: Option<PosixBuffer>,
+        config: &Config,
+        key_map: PosixKeyMap,
+    ) -> PosixRawReader {
         PosixRawReader::new(
             self.tty_in,
             self.sigwinch.as_ref().map(|s| s.pipe),
+            buffer,
             config,
             key_map,
             self.pipe_reader.clone(),

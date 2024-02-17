@@ -51,7 +51,7 @@ use log::debug;
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 use unicode_width::UnicodeWidthStr;
 
-use crate::tty::{RawMode, RawReader, Renderer, Term, Terminal};
+use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
 
 #[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
@@ -586,6 +586,7 @@ impl<'h> Context<'h> {
 #[must_use]
 pub struct Editor<H: Helper, I: History> {
     term: Terminal,
+    buffer: Option<Buffer>,
     history: I,
     helper: Option<H>,
     kill_ring: KillRing,
@@ -621,6 +622,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         )?;
         Ok(Self {
             term,
+            buffer: None,
             history,
             helper: None,
             kill_ring: KillRing::new(60),
@@ -704,7 +706,9 @@ impl<H: Helper, I: History> Editor<H, I> {
             );
         }
 
-        let mut rdr = self.term.create_reader(&self.config, term_key_map);
+        let mut rdr = self
+            .term
+            .create_reader(self.buffer.take(), &self.config, term_key_map);
         if self.term.is_output_tty() && self.config.check_cursor_position() {
             if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
                 if let ReadlineError::WindowResized = e {
@@ -794,6 +798,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         if cfg!(windows) {
             let _ = original_mode; // silent warning
         }
+        self.buffer = rdr.unbuffer();
         Ok(s.line.into_string())
     }
 

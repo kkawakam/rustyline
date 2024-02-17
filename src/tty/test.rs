@@ -12,6 +12,7 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
+pub type Buffer = ();
 pub type KeyMap = ();
 pub type Mode = ();
 
@@ -22,6 +23,8 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyEvent> {
+    type Buffer = Buffer;
+
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         self.next_key(single_esc_abort).map(Event::KeyPress)
     }
@@ -45,9 +48,15 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
         None
     }
+
+    fn unbuffer(self) -> Option<Buffer> {
+        None
+    }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
+    type Buffer = Buffer;
+
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         self.next_key(single_esc_abort).map(Event::KeyPress)
     }
@@ -74,6 +83,10 @@ impl RawReader for IntoIter<KeyEvent> {
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
+    }
+
+    fn unbuffer(self) -> Option<Buffer> {
         None
     }
 }
@@ -160,6 +173,7 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type Buffer = Buffer;
     type CursorGuard = ();
     type ExternalPrinter = DummyExternalPrinter;
     type KeyMap = KeyMap;
@@ -208,7 +222,7 @@ impl Term for DummyTerminal {
         Ok(((), ()))
     }
 
-    fn create_reader(&self, _: &Config, _: KeyMap) -> Self::Reader {
+    fn create_reader(&self, _: Option<Buffer>, _: &Config, _: KeyMap) -> Self::Reader {
         self.keys.clone().into_iter()
     }
 

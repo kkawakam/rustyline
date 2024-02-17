@@ -250,6 +250,7 @@ mod test {
 
     #[test]
     #[ignore]
+    #[cfg(target_arch = "x86_64")]
     fn size_of_event() {
         use core::mem::size_of;
         assert_eq!(size_of::<Event>(), 32);

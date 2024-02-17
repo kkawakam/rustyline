@@ -1274,6 +1274,7 @@ pub struct PosixTerminal {
     // external print writer
     pipe_writer: Option<PipeWriter>,
     sigwinch: Option<SigWinCh>,
+    enable_signals: bool,
 }
 
 impl PosixTerminal {
@@ -1301,6 +1302,7 @@ impl Term for PosixTerminal {
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
+        enable_signals: bool,
     ) -> Result<Self> {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
             if behavior == Behavior::PreferTerm {
@@ -1349,6 +1351,7 @@ impl Term for PosixTerminal {
             pipe_reader: None,
             pipe_writer: None,
             sigwinch,
+            enable_signals,
         })
     }
 
@@ -1375,7 +1378,7 @@ impl Term for PosixTerminal {
         if !self.is_in_a_tty {
             return Err(ENOTTY.into());
         }
-        let (original_mode, key_map) = termios_::enable_raw_mode(self.tty_in)?;
+        let (original_mode, key_map) = termios_::enable_raw_mode(self.tty_in, self.enable_signals)?;
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
@@ -1534,7 +1537,7 @@ mod termios_ {
         let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
         Ok(termios::tcsetattr(fd, SetArg::TCSADRAIN, termios)?)
     }
-    pub fn enable_raw_mode(tty_in: RawFd) -> Result<(Termios, PosixKeyMap)> {
+    pub fn enable_raw_mode(tty_in: RawFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
 
         let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
@@ -1556,6 +1559,11 @@ mod termios_ {
         // disable echoing, canonical mode, extended input processing and signals
         raw.local_flags &=
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
+
+        if enable_signals {
+            raw.local_flags |= LocalFlags::ISIG;
+        }
+
         raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
 
@@ -1592,7 +1600,7 @@ mod termios_ {
     pub fn disable_raw_mode(tty_in: RawFd, termios: &Termios) -> Result<()> {
         Ok(termios::tcsetattr(tty_in, termios::TCSADRAIN, termios)?)
     }
-    pub fn enable_raw_mode(tty_in: RawFd) -> Result<(Termios, PosixKeyMap)> {
+    pub fn enable_raw_mode(tty_in: RawFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
         let original_mode = Termios::from_fd(tty_in)?;
         let mut raw = original_mode;
         // disable BREAK interrupt, CR to NL conversion on input,
@@ -1607,6 +1615,11 @@ mod termios_ {
         raw.c_cflag |= termios::CS8;
         // disable echoing, canonical mode, extended input processing and signals
         raw.c_lflag &= !(termios::ECHO | termios::ICANON | termios::IEXTEN | termios::ISIG);
+
+        if enable_signals {
+            raw.c_lflag |= termios::ISIG;
+        }
+
         raw.c_cc[termios::VMIN] = 1; // One character-at-a-time input
         raw.c_cc[termios::VTIME] = 0; // with blocking read
 

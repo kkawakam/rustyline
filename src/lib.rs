@@ -619,6 +619,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             config.tab_stop(),
             config.bell_style(),
             config.enable_bracketed_paste(),
+            config.enable_signals(),
         )?;
         Ok(Self {
             term,

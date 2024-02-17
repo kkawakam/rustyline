@@ -187,6 +187,7 @@ impl Term for DummyTerminal {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
+        _enable_signals: bool,
     ) -> Result<DummyTerminal> {
         Ok(DummyTerminal {
             keys: Vec::new(),

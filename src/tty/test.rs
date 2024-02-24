@@ -1,5 +1,4 @@
 //! Tests specific definitions
-use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::vec::IntoIter;
 

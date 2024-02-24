@@ -15,7 +15,7 @@ pub struct Config {
     completion_prompt_limit: usize,
     /// Duration (milliseconds) Rustyline will wait for a character when
     /// reading an ambiguous key sequence.
-    keyseq_timeout: i32,
+    keyseq_timeout: Option<u16>,
     /// Emacs or Vi mode
     edit_mode: EditMode,
     /// If true, each nonblank line returned by `readline` will be
@@ -108,7 +108,7 @@ impl Config {
     ///
     /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
     #[must_use]
-    pub fn keyseq_timeout(&self) -> i32 {
+    pub fn keyseq_timeout(&self) -> Option<u16> {
         self.keyseq_timeout
     }
 
@@ -217,7 +217,7 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
-            keyseq_timeout: -1,
+            keyseq_timeout: None,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
             bell_style: BellStyle::default(),
@@ -383,7 +383,7 @@ impl Builder {
     /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another
     /// byte.
     #[must_use]
-    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Self {
+    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: Option<u16>) -> Self {
         self.set_keyseq_timeout(keyseq_timeout_ms);
         self
     }
@@ -526,7 +526,7 @@ pub trait Configurer {
     }
 
     /// Timeout for ambiguous key sequences in milliseconds.
-    fn set_keyseq_timeout(&mut self, keyseq_timeout_ms: i32) {
+    fn set_keyseq_timeout(&mut self, keyseq_timeout_ms: Option<u16>) {
         self.config_mut().keyseq_timeout = keyseq_timeout_ms;
     }
 
@@ -534,8 +534,8 @@ pub trait Configurer {
     fn set_edit_mode(&mut self, edit_mode: EditMode) {
         self.config_mut().edit_mode = edit_mode;
         match edit_mode {
-            EditMode::Emacs => self.set_keyseq_timeout(-1), // no timeout
-            EditMode::Vi => self.set_keyseq_timeout(500),
+            EditMode::Emacs => self.set_keyseq_timeout(None), // no timeout
+            EditMode::Vi => self.set_keyseq_timeout(Some(500)),
         }
     }
 

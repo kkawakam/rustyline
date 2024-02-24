@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use log::{debug, warn};
 use nix::errno::Errno;
-use nix::poll::{self, PollFlags};
+use nix::poll::{self, PollFlags, PollTimeout};
 use nix::sys::select::{self, FdSet};
 #[cfg(not(feature = "termios"))]
 use nix::sys::termios::Termios;
@@ -190,7 +190,7 @@ type PipeWriter = (Arc<Mutex<File>>, SyncSender<String>);
 /// Console input reader
 pub struct PosixRawReader {
     tty_in: BufReader<TtyIn>,
-    timeout_ms: i32,
+    timeout_ms: PollTimeout,
     parser: Parser,
     key_map: PosixKeyMap,
     // external print reader
@@ -255,7 +255,7 @@ impl PosixRawReader {
         };
         Self {
             tty_in,
-            timeout_ms: config.keyseq_timeout(),
+            timeout_ms: config.keyseq_timeout().into(),
             parser: Parser::new(),
             key_map,
             pipe_reader,
@@ -298,8 +298,8 @@ impl PosixRawReader {
             if !allow_recurse {
                 return Ok(E::ESC);
             }
-            let timeout = if self.timeout_ms < 0 {
-                100
+            let timeout = if self.timeout_ms.is_none() {
+                100u8.into()
             } else {
                 self.timeout_ms
             };
@@ -702,12 +702,12 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: i32) -> Result<i32> {
+    fn poll(&mut self, timeout_ms: PollTimeout) -> Result<i32> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
         }
-        let mut fds = [poll::PollFd::new(self, PollFlags::POLLIN)];
+        let mut fds = [poll::PollFd::new(self.as_fd(), PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout_ms);
         match r {
             Ok(n) => Ok(n),
@@ -736,11 +736,11 @@ impl PosixRawReader {
             .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
         loop {
             let mut readfds = FdSet::new();
-            if let Some(ref sigwinch_pipe) = sigwinch_pipe {
+            if let Some(sigwinch_pipe) = sigwinch_pipe {
                 readfds.insert(sigwinch_pipe);
             }
-            readfds.insert(&tty_in);
-            if let Some(ref pipe_reader) = pipe_reader {
+            readfds.insert(tty_in);
+            if let Some(pipe_reader) = pipe_reader {
                 readfds.insert(pipe_reader);
             }
             if let Err(err) = select::select(None, Some(&mut readfds), None, None, None) {
@@ -752,10 +752,10 @@ impl PosixRawReader {
                     continue;
                 }
             };
-            if sigwinch_pipe.map_or(false, |fd| readfds.contains(&fd)) {
+            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
                 self.tty_in.get_ref().sigwinch()?;
                 return Err(ReadlineError::WindowResized);
-            } else if readfds.contains(&tty_in) {
+            } else if readfds.contains(tty_in) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else if let Some(ref pipe_reader) = self.pipe_reader {
@@ -794,8 +794,8 @@ impl RawReader for PosixRawReader {
             if !self.tty_in.buffer().is_empty() {
                 debug!(target: "rustyline", "read buffer {:?}", self.tty_in.buffer());
             }
-            let timeout_ms = if single_esc_abort && self.timeout_ms == -1 {
-                0
+            let timeout_ms = if single_esc_abort && self.timeout_ms.is_none() {
+                PollTimeout::ZERO
             } else {
                 self.timeout_ms
             };
@@ -1119,14 +1119,14 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
-        if rdr.poll(0)? != 0 {
+        if rdr.poll(PollTimeout::ZERO)? != 0 {
             debug!(target: "rustyline", "cannot request cursor location");
             return Ok(());
         }
         /* Report cursor location */
         self.write_and_flush("\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
-        if rdr.poll(100)? == 0
+        if rdr.poll(PollTimeout::from(100u8))? == 0
             || rdr.next_char()? != '\x1b'
             || rdr.next_char()? != '['
             || read_digits_until(rdr, ';')?.is_none()
@@ -1163,7 +1163,7 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
 fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
     let mut bytes = buf.as_bytes();
     while !bytes.is_empty() {
-        match write(fd, bytes) {
+        match write(unsafe { BorrowedFd::borrow_raw(fd) }, bytes) {
             Ok(0) => return Err(Errno::EIO),
             Ok(n) => bytes = &bytes[n..],
             Err(Errno::EINTR) => {}
@@ -1194,7 +1194,7 @@ fn set_cursor_visibility(fd: RawFd, visible: bool) -> Result<Option<PosixCursorG
 static mut SIGWINCH_PIPE: RawFd = -1;
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    let _ = unsafe { write(SIGWINCH_PIPE, &[b's']) };
+    let _ = unsafe { write(BorrowedFd::borrow_raw(SIGWINCH_PIPE), &[b's']) };
 }
 
 #[derive(Clone, Debug)]
@@ -1451,14 +1451,10 @@ impl Term for PosixTerminal {
             return Err(nix::Error::ENOTTY.into());
         }
         use nix::unistd::pipe;
-        use std::os::unix::io::FromRawFd;
         let (sender, receiver) = mpsc::sync_channel(1); // TODO validate: bound
         let (r, w) = pipe()?;
-        let reader = Arc::new(Mutex::new((unsafe { File::from_raw_fd(r) }, receiver)));
-        let writer = (
-            Arc::new(Mutex::new(unsafe { File::from_raw_fd(w) })),
-            sender,
-        );
+        let reader = Arc::new(Mutex::new((r.into(), receiver)));
+        let writer = (Arc::new(Mutex::new(w.into())), sender);
         self.pipe_reader.replace(reader);
         self.pipe_writer.replace(writer.clone());
         Ok(ExternalPrinter {

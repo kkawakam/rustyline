@@ -587,7 +587,7 @@ impl FileHistory {
         )) = self.path_info
         {
             if previous_path.as_path() != path {
-                *previous_path = path.to_owned();
+                path.clone_into(previous_path);
             }
             *previous_modified = modified;
             *previous_size = size;

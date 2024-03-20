@@ -531,13 +531,6 @@ impl<'b> InputState<'b> {
             return Ok(cmd);
         }
         let cmd = match key {
-            E(K::Char(c), M::NONE) => {
-                if positive {
-                    Cmd::SelfInsert(n, c)
-                } else {
-                    Cmd::Unknown
-                }
-            }
             E(K::Char('A'), M::CTRL) => Cmd::Move(Movement::BeginningOfLine),
             E(K::Char('B'), M::CTRL) => Cmd::Move(if positive {
                 Movement::BackwardChar(n)
@@ -648,7 +641,20 @@ impl<'b> InputState<'b> {
             // TODO ESC-R (r): Undo all changes made to this line.
             E(K::Char('U' | 'u'), M::ALT) => Cmd::UpcaseWord,
             E(K::Char('Y' | 'y'), M::ALT) => Cmd::YankPop,
-            _ => self.common(rdr, wrt, evt, key, n, positive)?,
+            event => {
+                let cmd = self.common(rdr, wrt, evt, key, n, positive)?;
+                if cmd != Cmd::Unknown {
+                    cmd
+                } else if let E(K::Char(c), M::NONE) = event {
+                    if positive {
+                        Cmd::SelfInsert(n, c)
+                    } else {
+                        Cmd::Unknown
+                    }
+                } else {
+                    Cmd::Unknown
+                }
+            }
         };
         debug!(target: "rustyline", "Emacs command: {:?}", cmd);
         Ok(cmd)
@@ -879,13 +885,6 @@ impl<'b> InputState<'b> {
             return Ok(cmd);
         }
         let cmd = match key {
-            E(K::Char(c), M::NONE) => {
-                if self.input_mode == InputMode::Replace {
-                    Cmd::Overwrite(c)
-                } else {
-                    Cmd::SelfInsert(1, c)
-                }
-            }
             E(K::Char('H'), M::CTRL) | E::BACKSPACE => Cmd::Kill(Movement::BackwardChar(1)),
             E(K::BackTab, M::NONE) => Cmd::CompleteBackward,
             E(K::Char('I'), M::CTRL) | E(K::Tab, M::NONE) => Cmd::Complete,
@@ -904,7 +903,20 @@ impl<'b> InputState<'b> {
                 wrt.done_inserting();
                 Cmd::Move(Movement::BackwardChar(1))
             }
-            _ => self.common(rdr, wrt, evt, key, 1, true)?,
+            event => {
+                let cmd = self.common(rdr, wrt, evt, key, 1, true)?;
+                if cmd != Cmd::Unknown {
+                    cmd
+                } else if let E(K::Char(c), M::NONE) = event {
+                    if self.input_mode == InputMode::Replace {
+                        Cmd::Overwrite(c)
+                    } else {
+                        Cmd::SelfInsert(1, c)
+                    }
+                } else {
+                    Cmd::Unknown
+                }
+            }
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
@@ -1163,8 +1175,8 @@ impl<'b> InputState<'b> {
             } else {
                 break;
             }
-            let handler = subtrie.get(evt).unwrap();
-            if let Some(handler) = handler {
+            let handler = subtrie.get(evt);
+            if let Ok(Some(handler)) = handler {
                 let cmd = match handler {
                     EventHandler::Simple(cmd) => Some(cmd.clone()),
                     EventHandler::Conditional(handler) => {
@@ -1175,9 +1187,26 @@ impl<'b> InputState<'b> {
                 if cmd.is_some() {
                     return Ok(cmd);
                 }
+            } else {
+                return Ok(Some(Cmd::Insert(1, letter_sequence(evt))));
             }
         }
         Ok(None)
+    }
+}
+
+fn letter_sequence(evt: &Event) -> String {
+    if let Event::KeySeq(key_seq) = evt {
+        key_seq
+            .iter()
+            .filter_map(|k| match k.0 {
+                K::Char(c) => Some(c),
+                K::Enter => Some('\n'),
+                _ => None,
+            })
+            .collect()
+    } else {
+        "".to_string()
     }
 }
 

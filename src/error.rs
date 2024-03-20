@@ -17,7 +17,7 @@ pub enum ReadlineError {
     /// EOF (VEOF / Ctrl-D)
     Eof,
     /// Interrupt signal (VINTR / VQUIT / Ctrl-C)
-    Interrupted,
+    Interrupted(String),
     /// Unix Error from syscall
     #[cfg(unix)]
     Errno(nix::Error),
@@ -36,10 +36,10 @@ pub enum ReadlineError {
 
 impl fmt::Display for ReadlineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             ReadlineError::Io(ref err) => err.fmt(f),
             ReadlineError::Eof => write!(f, "EOF"),
-            ReadlineError::Interrupted => write!(f, "Interrupted"),
+            ReadlineError::Interrupted(s) => write!(f, "Interrupted({s})"),
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => err.fmt(f),
             ReadlineError::WindowResized => write!(f, "WindowResized"),
@@ -58,7 +58,7 @@ impl Error for ReadlineError {
         match *self {
             ReadlineError::Io(ref err) => Some(err),
             ReadlineError::Eof => None,
-            ReadlineError::Interrupted => None,
+            ReadlineError::Interrupted(_) => None,
             #[cfg(unix)]
             ReadlineError::Errno(ref err) => Some(err),
             ReadlineError::WindowResized => None,

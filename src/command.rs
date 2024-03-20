@@ -14,9 +14,9 @@ pub enum Status {
     Submit,
 }
 
-pub fn execute<H: Helper>(
+pub fn execute<H: Helper, P: ToString>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H, P>,
     input_state: &InputState,
     kill_ring: &mut KillRing,
     config: &Config,
@@ -226,8 +226,9 @@ pub fn execute<H: Helper>(
             // Move to end, in case cursor was in the middle of the
             // line, so that next thing application prints goes after
             // the input
+            let buf = s.line.as_str().to_owned();
             s.move_cursor_to_end()?;
-            return Err(error::ReadlineError::Interrupted);
+            return Err(error::ReadlineError::Interrupted(buf));
         }
         _ => {
             // Ignore the character typed.

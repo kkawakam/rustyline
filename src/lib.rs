@@ -74,9 +74,9 @@ use crate::validate::Validator;
 pub type Result<T> = result::Result<T, ReadlineError>;
 
 /// Completes the line/word
-fn complete_line<H: Helper>(
+fn complete_line<H: Helper, P: ToString>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H, P>,
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -263,7 +263,7 @@ fn complete_line<H: Helper>(
 }
 
 /// Completes the current hint
-fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
+fn complete_hint_line<H: Helper, P: ToString>(s: &mut State<'_, H, P>) -> Result<()> {
     let hint = match s.hint.as_ref() {
         Some(hint) => hint,
         None => return Ok(()),
@@ -279,9 +279,9 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     s.refresh_line()
 }
 
-fn page_completions<C: Candidate, H: Helper>(
+fn page_completions<C: Candidate, H: Helper, P: ToString>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H, P>,
     input_state: &mut InputState,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
@@ -360,9 +360,9 @@ fn page_completions<C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<H: Helper, I: History>(
+fn reverse_incremental_search<H: Helper, I: History, P: ToString>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H, P>,
     input_state: &mut InputState,
     history: &I,
 ) -> Result<Option<Cmd>> {
@@ -638,7 +638,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// terminal.
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
-    pub fn readline(&mut self, prompt: &str) -> Result<String> {
+    pub fn readline<P: ToString>(&mut self, prompt: P) -> Result<String> {
         self.readline_with(prompt, None)
     }
 
@@ -653,12 +653,12 @@ impl<H: Helper, I: History> Editor<H, I> {
         self.readline_with(prompt, Some(initial))
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
+    fn readline_with<P: ToString>(&mut self, prompt: P, initial: Option<(&str, &str)>) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
-            stdout.write_all(prompt.as_bytes())?;
+            stdout.write_all(prompt.to_string().as_bytes())?;
             stdout.flush()?;
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
@@ -684,9 +684,9 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Handles reading and editing the readline buffer.
     /// It will also handle special inputs in an appropriate fashion
     /// (e.g., C-c will exit readline)
-    fn readline_edit(
+    fn readline_edit<P: ToString>(
         &mut self,
-        prompt: &str,
+        prompt: P,
         initial: Option<(&str, &str)>,
         original_mode: &tty::Mode,
         term_key_map: tty::KeyMap,

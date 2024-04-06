@@ -183,9 +183,9 @@ impl TtyIn {
 }
 
 // (native receiver with a selectable file descriptor, actual message receiver)
-type PipeReader = Arc<Mutex<(File, mpsc::Receiver<String>)>>;
+type PipeReader = Arc<Mutex<(File, mpsc::Receiver<ExternalPrinterMsg>)>>;
 // (native sender, actual message sender)
-type PipeWriter = (Arc<Mutex<File>>, SyncSender<String>);
+type PipeWriter = (Arc<Mutex<File>>, SyncSender<ExternalPrinterMsg>);
 
 /// Console input reader
 pub struct PosixRawReader {
@@ -763,7 +763,10 @@ impl PosixRawReader {
                 let mut buf = [0; 1];
                 guard.0.read_exact(&mut buf)?;
                 if let Ok(msg) = guard.1.try_recv() {
-                    return Ok(Event::ExternalPrint(msg));
+                    return match msg {
+                        ExternalPrinterMsg::Print(str) => Ok(Event::ExternalPrint(str)),
+                        ExternalPrinterMsg::SetPrompt(prompt) => Ok(Event::SetPrompt(prompt)),
+                    };
                 }
             }
         }
@@ -1451,7 +1454,7 @@ impl Term for PosixTerminal {
             return Err(nix::Error::ENOTTY.into());
         }
         use nix::unistd::pipe;
-        let (sender, receiver) = mpsc::sync_channel(1); // TODO validate: bound
+        let (sender, receiver) = mpsc::sync_channel::<ExternalPrinterMsg>(1); // TODO validate: bound
         let (r, w) = pipe()?;
         let reader = Arc::new(Mutex::new((r.into(), receiver)));
         let writer = (Arc::new(Mutex::new(w.into())), sender);
@@ -1501,7 +1504,7 @@ impl super::ExternalPrinter for ExternalPrinter {
         } else if let Ok(mut writer) = self.writer.0.lock() {
             self.writer
                 .1
-                .send(msg)
+                .send(ExternalPrinterMsg::Print(msg))
                 .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
             writer.write_all(&[b'm'])?;
             writer.flush()?;
@@ -1510,6 +1513,26 @@ impl super::ExternalPrinter for ExternalPrinter {
         }
         Ok(())
     }
+
+    fn set_prompt(&mut self, prompt: String) -> Result<()> {
+        if let Ok(mut writer) = self.writer.0.lock() {
+            self.writer
+                .1
+                .send(ExternalPrinterMsg::SetPrompt(prompt))
+                .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
+            writer.write_all(&[b'm'])?;
+            writer.flush()?;
+        } else {
+            return Err(io::Error::from(ErrorKind::Other).into()); // FIXME
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+enum ExternalPrinterMsg {
+    Print(String),
+    SetPrompt(String),
 }
 
 #[cfg(not(test))]

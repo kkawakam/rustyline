@@ -159,6 +159,10 @@ impl ExternalPrinter for DummyExternalPrinter {
     fn print(&mut self, _msg: String) -> Result<()> {
         Ok(())
     }
+
+    fn set_prompt(&mut self, _prompt: String) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub type Terminal = DummyTerminal;

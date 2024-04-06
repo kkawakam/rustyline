@@ -913,6 +913,10 @@ impl super::ExternalPrinter for ExternalPrinter {
             Ok(check(unsafe { threading::SetEvent(self.event) })?)
         }
     }
+
+    fn set_prompt(&mut self, prompt: String) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug)]

@@ -19,6 +19,7 @@ pub trait RawMode: Sized {
 pub enum Event {
     KeyPress(KeyEvent),
     ExternalPrint(String),
+    SetPrompt(String),
 }
 
 /// Translate bytes read from stdin to keys.
@@ -214,6 +215,8 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
 pub trait ExternalPrinter {
     /// Print message to stdout
     fn print(&mut self, msg: String) -> Result<()>;
+    /// Change the prompt
+    fn set_prompt(&mut self, prompt: String) -> Result<()>;
 }
 
 /// Terminal contract

@@ -86,6 +86,8 @@ pub enum Cmd {
     SelfInsert(RepeatCount, char),
     /// Suspend signal (Ctrl-Z on unix platform)
     Suspend,
+    /// change the prompt
+    SetPrompt(String),
     /// transpose-chars
     TransposeChars,
     /// transpose-words
@@ -438,6 +440,9 @@ impl<'b> InputState<'b> {
                     }
                     tty::Event::ExternalPrint(msg) => {
                         wrt.external_print(msg)?;
+                    }
+                    tty::Event::SetPrompt(prompt) => {
+                        return Ok(Cmd::SetPrompt(prompt));
                     }
                 }
             }

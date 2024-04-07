@@ -380,6 +380,9 @@ pub trait Refresher {
     fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()>;
     /// Same as `refresh_line` but with a dynamic prompt.
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
+    /// Lightweight `refresh_line()` used when the default prompt has been
+    /// changed.
+    fn refresh_prompt(&mut self) -> Result<()>;
     /// Vi only, switch to insert mode.
     fn doing_insert(&mut self);
     /// Vi only, switch to command mode.

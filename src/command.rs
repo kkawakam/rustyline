@@ -231,7 +231,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::SetPrompt(prompt) => {
             s.set_prompt(prompt);
-            s.refresh_line()?;
+            s.refresh_prompt()?;
         }
         _ => {
             // Ignore the character typed.

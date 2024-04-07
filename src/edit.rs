@@ -296,6 +296,10 @@ impl<'out, H: Helper> Refresher for State<'out, H> {
         self.refresh(Some(prompt), false, Info::Hint)
     }
 
+    fn refresh_prompt(&mut self) -> Result<()> {
+        self.refresh(None, true, Info::Hint)
+    }
+
     fn doing_insert(&mut self) {
         self.changes.begin();
     }

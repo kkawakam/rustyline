@@ -29,8 +29,8 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2.2.0
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --workspace --all-targets
       - name: Run tests

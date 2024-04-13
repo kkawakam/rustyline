@@ -1119,6 +1119,7 @@ impl LineBuffer {
             .map_or_else(|| self.buf.len(), |pos| end + pos);
         let mut index = start;
         if dedent {
+            #[allow(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 let max = line.len() - line.trim_start().len();
                 let deleting = min(max, amount);
@@ -1134,6 +1135,7 @@ impl LineBuffer {
                 index += line.len() + 1 - deleting;
             }
         } else {
+            #[allow(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 for off in (0..amount).step_by(INDENT.len()) {
                     self.insert_str(index, &INDENT[..min(amount - off, INDENT.len())], cl);

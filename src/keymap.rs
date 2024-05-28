@@ -389,10 +389,12 @@ pub trait Refresher {
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
     /// Returns the hint text that is shown after the current cursor position.
+    #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
     fn hint_text(&self) -> Option<&str>;
     /// currently edited line
     fn line(&self) -> &str;
     /// Current cursor position (byte position)
+    #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
     fn pos(&self) -> usize;
     /// Display `msg` above currently edited line.
     fn external_print(&mut self, msg: String) -> Result<()>;

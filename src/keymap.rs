@@ -86,6 +86,8 @@ pub enum Cmd {
     SelfInsert(RepeatCount, char),
     /// Suspend signal (Ctrl-Z on unix platform)
     Suspend,
+    /// change the prompt
+    SetPrompt(String),
     /// transpose-chars
     TransposeChars,
     /// transpose-words
@@ -378,6 +380,9 @@ pub trait Refresher {
     fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()>;
     /// Same as `refresh_line` but with a dynamic prompt.
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
+    /// Lightweight `refresh_line()` used when the default prompt has been
+    /// changed.
+    fn refresh_prompt(&mut self) -> Result<()>;
     /// Vi only, switch to insert mode.
     fn doing_insert(&mut self);
     /// Vi only, switch to command mode.
@@ -440,6 +445,9 @@ impl<'b> InputState<'b> {
                     }
                     tty::Event::ExternalPrint(msg) => {
                         wrt.external_print(msg)?;
+                    }
+                    tty::Event::SetPrompt(prompt) => {
+                        return Ok(Cmd::SetPrompt(prompt));
                     }
                 }
             }

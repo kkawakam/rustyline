@@ -76,7 +76,7 @@ pub type Result<T> = result::Result<T, ReadlineError>;
 /// Completes the line/word
 fn complete_line<H: Helper>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H>,
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -263,7 +263,7 @@ fn complete_line<H: Helper>(
 }
 
 /// Completes the current hint
-fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
+fn complete_hint_line<H: Helper>(s: &mut State<'_, H>) -> Result<()> {
     let hint = match s.hint.as_ref() {
         Some(hint) => hint,
         None => return Ok(()),
@@ -281,7 +281,7 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
 
 fn page_completions<C: Candidate, H: Helper>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H>,
     input_state: &mut InputState,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
@@ -362,7 +362,7 @@ fn page_completions<C: Candidate, H: Helper>(
 /// Incremental search
 fn reverse_incremental_search<H: Helper, I: History>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H>,
     input_state: &mut InputState,
     history: &I,
 ) -> Result<Option<Cmd>> {

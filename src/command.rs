@@ -16,7 +16,7 @@ pub enum Status {
 
 pub fn execute<H: Helper>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, H>,
     input_state: &InputState,
     kill_ring: &mut KillRing,
     config: &Config,
@@ -228,6 +228,10 @@ pub fn execute<H: Helper>(
             // the input
             s.move_cursor_to_end()?;
             return Err(error::ReadlineError::Interrupted);
+        }
+        Cmd::SetPrompt(prompt) => {
+            s.set_prompt(prompt);
+            s.refresh_prompt()?;
         }
         _ => {
             // Ignore the character typed.

@@ -23,9 +23,9 @@ use crate::KillRing;
 
 /// Represent the state during line editing.
 /// Implement rendering.
-pub struct State<'out, 'prompt, H: Helper> {
+pub struct State<'out, H: Helper> {
     pub out: &'out mut <Terminal as Term>::Writer,
-    prompt: &'prompt str,  // Prompt to display (rl_prompt)
+    prompt: String,        // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
     pub layout: Layout,
@@ -45,14 +45,15 @@ enum Info<'m> {
     Msg(Option<&'m str>),
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'out, 'prompt, H: Helper> State<'out, H> {
     pub fn new(
         out: &'out mut <Terminal as Term>::Writer,
-        prompt: &'prompt str,
+        prompt: impl Into<String>,
         helper: Option<&'out H>,
         ctx: Context<'out>,
-    ) -> State<'out, 'prompt, H> {
-        let prompt_size = out.calculate_position(prompt, Position::default());
+    ) -> State<'out, H> {
+        let prompt: String = prompt.into();
+        let prompt_size = out.calculate_position(&prompt, Position::default());
         State {
             out,
             prompt,
@@ -97,7 +98,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 {
                     self.prompt_size = self
                         .out
-                        .calculate_position(self.prompt, Position::default());
+                        .calculate_position(&self.prompt, Position::default());
                     self.refresh_line()?;
                 }
                 continue;
@@ -131,8 +132,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             return Ok(());
         }
         if self.highlight_char() {
-            let prompt_size = self.prompt_size;
-            self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
+            self.refresh(None, true, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, cursor)?;
             self.layout.prompt_size = self.prompt_size;
@@ -158,8 +158,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     fn refresh(
         &mut self,
-        prompt: &str,
-        prompt_size: Position,
+        prompt: Option<&str>,
         default_prompt: bool,
         info: Info<'_>,
     ) -> Result<()> {
@@ -172,6 +171,17 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.helper.map(|h| h as &dyn Highlighter)
         } else {
             None
+        };
+
+        // if a prompt was specified, calculate the size of it, otherwise use
+        // the default promp & size.
+        let (prompt, prompt_size): (&str, Position) = if let Some(prompt) = prompt {
+            (
+                prompt,
+                self.out.calculate_position(prompt, Position::default()),
+            )
+        } else {
+            (&self.prompt, self.prompt_size)
         };
 
         let new_layout = self
@@ -228,6 +238,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.layout.default_prompt
     }
 
+    pub fn set_prompt(&mut self, prompt: String) {
+        self.prompt_size = self.out.calculate_position(&prompt, Position::default());
+        self.prompt = prompt;
+    }
+
     pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
             self.changes.begin();
@@ -256,32 +271,33 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl<'out, H: Helper> Invoke for State<'out, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
+impl<'out, H: Helper> Refresher for State<'out, H> {
     fn refresh_line(&mut self) -> Result<()> {
-        let prompt_size = self.prompt_size;
         self.hint();
         self.highlight_char();
-        self.refresh(self.prompt, prompt_size, true, Info::Hint)
+        self.refresh(None, true, Info::Hint)
     }
 
     fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
-        let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
-        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
+        self.refresh(None, true, Info::Msg(msg))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.out.calculate_position(prompt, Position::default());
         self.hint();
         self.highlight_char();
-        self.refresh(prompt, prompt_size, false, Info::Hint)
+        self.refresh(Some(prompt), false, Info::Hint)
+    }
+
+    fn refresh_prompt(&mut self) -> Result<()> {
+        self.refresh(None, true, Info::Hint)
     }
 
     fn doing_insert(&mut self) {
@@ -328,7 +344,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
+impl<'out, H: Helper> fmt::Debug for State<'out, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -341,7 +357,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'out, H: Helper> State<'out, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -353,7 +369,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
             if push {
-                let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
                 let width = ch.width().unwrap_or(0);
@@ -371,7 +386,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     self.out.write_and_flush(bits)
                 } else {
-                    self.refresh(self.prompt, prompt_size, true, Info::Hint)
+                    self.refresh(None, true, Info::Hint)
                 }
             } else {
                 self.refresh_line()
@@ -751,10 +766,10 @@ pub fn init_state<'out, H: Helper>(
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::DefaultHistory,
-) -> State<'out, 'static, H> {
+) -> State<'out, H> {
     State {
         out,
-        prompt: "",
+        prompt: "".to_string(),
         prompt_size: Position::default(),
         line: LineBuffer::init(line, pos),
         layout: Layout::default(),

@@ -411,7 +411,7 @@ PRAGMA incremental_vacuum;
         self.search_match(term, start, dir, true)
     }
 
-    fn recent_index(&self) -> Option<usize> {
+    fn recent_index(&mut self) -> Option<usize> {
         None // TODO
     }
 

@@ -557,15 +557,17 @@ impl<'h, H: ?Sized + Helper> Helper for &'h H {}
 pub struct Context<'h> {
     history: &'h dyn History,
     history_index: usize,
+    recent_index: Option<usize>,
 }
 
 impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
     #[must_use]
-    pub fn new(history: &'h dyn History) -> Self {
+    pub fn new(history: &'h dyn History, recent_index: Option<usize>) -> Self {
         Context {
             history,
-            history_index: history.recent_index().unwrap_or(history.len()),
+            history_index: history.len(),
+            recent_index,
         }
     }
 
@@ -579,6 +581,14 @@ impl<'h> Context<'h> {
     #[must_use]
     pub fn history_index(&self) -> usize {
         self.history_index
+    }
+
+    pub(crate) fn recall(&mut self, next_and_empty: bool) {
+        if let Some(idx) = self.recent_index.take() {
+            if next_and_empty {
+                self.history_index = idx;
+            }
+        }
     }
 }
 
@@ -694,7 +704,8 @@ impl<H: Helper, I: History> Editor<H, I> {
         let mut stdout = self.term.create_writer();
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
-        let ctx = Context::new(&self.history);
+        let recent_index = self.history.recent_index();
+        let ctx = Context::new(&self.history, recent_index);
         let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);

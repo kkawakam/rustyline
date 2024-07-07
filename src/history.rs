@@ -172,7 +172,7 @@ pub trait History {
      */
 
     /// recently used index
-    fn recent_index(&self) -> Option<usize>;
+    fn recent_index(&mut self) -> Option<usize>;
     /// Update recently used index
     fn set_recent_index(&mut self, entry: Option<(usize, &str)>);
 }
@@ -427,8 +427,8 @@ impl History for MemHistory {
         }
     }
 
-    fn recent_index(&self) -> Option<usize> {
-        self.recent
+    fn recent_index(&mut self) -> Option<usize> {
+        self.recent.take()
     }
 
     fn set_recent_index(&mut self, entry: Option<(usize, &str)>) {
@@ -813,7 +813,7 @@ impl History for FileHistory {
         self.mem.starts_with(term, start, dir)
     }
 
-    fn recent_index(&self) -> Option<usize> {
+    fn recent_index(&mut self) -> Option<usize> {
         self.mem.recent_index()
     }
 

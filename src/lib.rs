@@ -565,7 +565,7 @@ impl<'h> Context<'h> {
     pub fn new(history: &'h dyn History) -> Self {
         Context {
             history,
-            history_index: history.len(),
+            history_index: history.recent_index().unwrap_or(history.len()),
         }
     }
 
@@ -800,7 +800,10 @@ impl<H: Helper, I: History> Editor<H, I> {
             let _ = original_mode; // silent warning
         }
         self.buffer = rdr.unbuffer();
-        Ok(s.line.into_string())
+        let line = s.line.into_string();
+        self.history
+            .set_recent_index(Some((s.ctx.history_index, &line)));
+        Ok(line)
     }
 
     /// Load the history from the specified file.

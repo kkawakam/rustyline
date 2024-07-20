@@ -1194,7 +1194,7 @@ fn set_cursor_visibility(fd: RawFd, visible: bool) -> Result<Option<PosixCursorG
 static mut SIGWINCH_PIPE: RawFd = -1;
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sigwinch_handler(_: libc::c_int) {
-    let _ = unsafe { write(BorrowedFd::borrow_raw(SIGWINCH_PIPE), &[b's']) };
+    let _ = unsafe { write(BorrowedFd::borrow_raw(SIGWINCH_PIPE), b"s") };
 }
 
 #[derive(Clone, Debug)]
@@ -1503,7 +1503,7 @@ impl super::ExternalPrinter for ExternalPrinter {
                 .1
                 .send(msg)
                 .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
-            writer.write_all(&[b'm'])?;
+            writer.write_all(b"m")?;
             writer.flush()?;
         } else {
             return Err(io::Error::from(ErrorKind::Other).into()); // FIXME

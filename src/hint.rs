@@ -95,7 +95,7 @@ mod test {
     #[test]
     pub fn empty_history() {
         let history = DefaultHistory::new();
-        let ctx = Context::new(&history);
+        let ctx = Context::new(&history, None);
         let hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);
         assert_eq!(None, hint);

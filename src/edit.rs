@@ -130,7 +130,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if self.layout.cursor == cursor {
             return Ok(());
         }
-        if self.highlight_char() {
+        if self.highlight_char() || self.has_hint() {
+            self.hint = None;
             let prompt_size = self.prompt_size;
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {

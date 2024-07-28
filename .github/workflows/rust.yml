@@ -48,3 +48,7 @@ jobs:
         run: cargo check --workspace --no-default-features
         env:
           RUSTFLAGS: "-D warnings"
+      - name Test direct-minimal-versions
+        run: |
+          cargo update -Z direct-minimal-versions
+          cargo test --workspace --all-targets

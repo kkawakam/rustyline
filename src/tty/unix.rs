@@ -1120,6 +1120,7 @@ impl Renderer for PosixRenderer {
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
         if rdr.poll(PollTimeout::ZERO)? != 0 {
+            // TODO fill input buffer instead
             debug!(target: "rustyline", "cannot request cursor location");
             return Ok(());
         }
@@ -1131,6 +1132,7 @@ impl Renderer for PosixRenderer {
             || rdr.next_char()? != '['
             || read_digits_until(rdr, ';')?.is_none()
         {
+            // TODO fill input buffer instead
             warn!(target: "rustyline", "cannot read initial cursor location");
             return Ok(());
         }

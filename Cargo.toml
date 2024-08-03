@@ -50,7 +50,7 @@ termios = { version = "0.3.3", optional = true }
 buffer-redux = { version = "1.0", optional = true, default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_Security", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_Security", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 clipboard-win = "5.0"
 
 [dev-dependencies]

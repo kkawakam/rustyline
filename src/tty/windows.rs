@@ -35,7 +35,7 @@ fn get_std_handle(fd: console::STD_HANDLE) -> Result<HANDLE> {
 fn check_handle(handle: HANDLE) -> Result<HANDLE> {
     if handle == foundation::INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())?;
-    } else if handle == 0 {
+    } else if handle.is_null() {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "no stdio handle available for this process",
@@ -332,7 +332,7 @@ impl ConsoleRenderer {
     fn clear(&mut self, length: u32, pos: console::COORD, attr: u16) -> Result<()> {
         let mut _count = 0;
         check(unsafe {
-            console::FillConsoleOutputCharacterA(self.conout, b' ', length, pos, &mut _count)
+            console::FillConsoleOutputCharacterA(self.conout, b' ' as i8, length, pos, &mut _count)
         })?;
         Ok(check(unsafe {
             console::FillConsoleOutputAttribute(self.conout, attr, length, pos, &mut _count)
@@ -604,7 +604,7 @@ fn write_all(handle: HANDLE, mut data: &[u16]) -> Result<()> {
         check(unsafe {
             console::WriteConsoleW(
                 handle,
-                slice.as_ptr().cast::<std::ffi::c_void>(),
+                slice.as_ptr(),
                 slice.len() as u32,
                 &mut written,
                 ptr::null_mut(),
@@ -708,9 +708,9 @@ impl Term for Console {
 
         Ok(Console {
             conin_isatty,
-            conin: conin.unwrap_or(0),
+            conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
-            conout: conout.unwrap_or(0),
+            conout: conout.unwrap_or(ptr::null_mut()),
             close_on_drop,
             color_mode,
             ansi_colors_supported: false,
@@ -843,7 +843,7 @@ impl Term for Console {
             Err(io::Error::from(io::ErrorKind::Other))?; // FIXME
         }
         let event = unsafe { threading::CreateEventW(ptr::null_mut(), TRUE, FALSE, ptr::null()) };
-        if event == 0 {
+        if event.is_null() {
             Err(io::Error::last_os_error())?;
         }
         let (sender, receiver) = sync_channel(1);

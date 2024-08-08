@@ -17,13 +17,13 @@ pub enum ValidationResult {
 
 impl ValidationResult {
     pub(crate) fn is_valid(&self) -> bool {
-        matches!(self, ValidationResult::Valid(_))
+        matches!(self, Self::Valid(_))
     }
 
     pub(crate) fn has_message(&self) -> bool {
         matches!(
             self,
-            ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_))
+            Self::Valid(Some(_)) | Self::Invalid(Some(_))
         )
     }
 }

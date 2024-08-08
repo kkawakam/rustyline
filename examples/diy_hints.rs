@@ -33,16 +33,16 @@ impl Hint for CommandHint {
 }
 
 impl CommandHint {
-    fn new(text: &str, complete_up_to: &str) -> CommandHint {
+    fn new(text: &str, complete_up_to: &str) -> Self {
         assert!(text.starts_with(complete_up_to));
-        CommandHint {
+        Self {
             display: text.into(),
             complete_up_to: complete_up_to.len(),
         }
     }
 
-    fn suffix(&self, strip_chars: usize) -> CommandHint {
-        CommandHint {
+    fn suffix(&self, strip_chars: usize) -> Self {
+        Self {
             display: self.display[strip_chars..].to_owned(),
             complete_up_to: self.complete_up_to.saturating_sub(strip_chars),
         }

@@ -263,10 +263,10 @@ pub enum CharSearch {
 impl CharSearch {
     const fn opposite(self) -> Self {
         match self {
-            CharSearch::Forward(c) => CharSearch::Backward(c),
-            CharSearch::ForwardBefore(c) => CharSearch::BackwardAfter(c),
-            CharSearch::Backward(c) => CharSearch::Forward(c),
-            CharSearch::BackwardAfter(c) => CharSearch::ForwardBefore(c),
+            Self::Forward(c) => Self::Backward(c),
+            Self::ForwardBefore(c) => Self::BackwardAfter(c),
+            Self::Backward(c) => Self::Forward(c),
+            Self::BackwardAfter(c) => Self::ForwardBefore(c),
         }
     }
 }
@@ -309,26 +309,26 @@ impl Movement {
     // Replay this movement with a possible different `RepeatCount`.
     const fn redo(&self, new: Option<RepeatCount>) -> Self {
         match *self {
-            Movement::WholeLine => Movement::WholeLine,
-            Movement::BeginningOfLine => Movement::BeginningOfLine,
-            Movement::ViFirstPrint => Movement::ViFirstPrint,
-            Movement::EndOfLine => Movement::EndOfLine,
-            Movement::BackwardWord(previous, word) => {
-                Movement::BackwardWord(repeat_count(previous, new), word)
+            Self::WholeLine => Self::WholeLine,
+            Self::BeginningOfLine => Self::BeginningOfLine,
+            Self::ViFirstPrint => Self::ViFirstPrint,
+            Self::EndOfLine => Self::EndOfLine,
+            Self::BackwardWord(previous, word) => {
+                Self::BackwardWord(repeat_count(previous, new), word)
             }
-            Movement::ForwardWord(previous, at, word) => {
-                Movement::ForwardWord(repeat_count(previous, new), at, word)
+            Self::ForwardWord(previous, at, word) => {
+                Self::ForwardWord(repeat_count(previous, new), at, word)
             }
-            Movement::ViCharSearch(previous, char_search) => {
-                Movement::ViCharSearch(repeat_count(previous, new), char_search)
+            Self::ViCharSearch(previous, char_search) => {
+                Self::ViCharSearch(repeat_count(previous, new), char_search)
             }
-            Movement::BackwardChar(previous) => Movement::BackwardChar(repeat_count(previous, new)),
-            Movement::ForwardChar(previous) => Movement::ForwardChar(repeat_count(previous, new)),
-            Movement::LineUp(previous) => Movement::LineUp(repeat_count(previous, new)),
-            Movement::LineDown(previous) => Movement::LineDown(repeat_count(previous, new)),
-            Movement::WholeBuffer => Movement::WholeBuffer,
-            Movement::BeginningOfBuffer => Movement::BeginningOfBuffer,
-            Movement::EndOfBuffer => Movement::EndOfBuffer,
+            Self::BackwardChar(previous) => Self::BackwardChar(repeat_count(previous, new)),
+            Self::ForwardChar(previous) => Self::ForwardChar(repeat_count(previous, new)),
+            Self::LineUp(previous) => Self::LineUp(repeat_count(previous, new)),
+            Self::LineDown(previous) => Self::LineDown(repeat_count(previous, new)),
+            Self::WholeBuffer => Self::WholeBuffer,
+            Self::BeginningOfBuffer => Self::BeginningOfBuffer,
+            Self::EndOfBuffer => Self::EndOfBuffer,
         }
     }
 }
@@ -1209,14 +1209,14 @@ enum Event {
    KeySeq([KeyEvent; 1]),
 }
 impl From<KeyEvent> for Event {
-    fn from(k: KeyEvent) -> Event {
-        Event::KeySeq([k])
+    fn from(k: KeyEvent) -> Self {
+        Self::KeySeq([k])
     }
 }
 pub struct Bindings {}
 impl Bindings {
-    pub fn new() -> Bindings {
-        Bindings {}
+    pub fn new() -> Self {
+        Self {}
     }
 }
     }

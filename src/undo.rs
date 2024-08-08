@@ -30,9 +30,7 @@ enum Change {
 impl Change {
     fn undo(&self, line: &mut LineBuffer) {
         match *self {
-            Self::Begin | Self::End => {
-                unreachable!();
-            }
+            Self::Begin | Self::End => unreachable!(),
             Self::Insert { idx, ref text } => {
                 line.delete_range(idx..idx + text.len(), &mut NoListener);
             }
@@ -53,9 +51,7 @@ impl Change {
     #[cfg(test)]
     fn redo(&self, line: &mut LineBuffer) {
         match *self {
-            Self::Begin | Change::End => {
-                unreachable!();
-            }
+            Self::Begin | Change::End => unreachable!(),
             Self::Insert { idx, ref text } => {
                 line.insert_str(idx, text, &mut NoListener);
             }

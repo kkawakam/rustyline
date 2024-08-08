@@ -133,14 +133,14 @@ impl Cmd {
     pub const fn should_reset_kill_ring(&self) -> bool {
         #[allow(clippy::match_same_arms)]
         match *self {
-            Cmd::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
-            Cmd::ClearScreen
-            | Cmd::Kill(_)
-            | Cmd::Replace(..)
-            | Cmd::Noop
-            | Cmd::Suspend
-            | Cmd::Yank(..)
-            | Cmd::YankPop => false,
+            Self::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
+            Self::ClearScreen
+            | Self::Kill(_)
+            | Self::Replace(..)
+            | Self::Noop
+            | Self::Suspend
+            | Self::Yank(..)
+            | Self::YankPop => false,
             _ => true,
         }
     }
@@ -148,21 +148,21 @@ impl Cmd {
     const fn is_repeatable_change(&self) -> bool {
         matches!(
             *self,
-            Cmd::Dedent(..)
-                | Cmd::Indent(..)
-                | Cmd::Insert(..)
-                | Cmd::Kill(_)
-                | Cmd::ReplaceChar(..)
-                | Cmd::Replace(..)
-                | Cmd::SelfInsert(..)
-                | Cmd::ViYankTo(_)
-                | Cmd::Yank(..) // Cmd::TransposeChars | TODO Validate
+            Self::Dedent(..)
+                | Self::Indent(..)
+                | Self::Insert(..)
+                | Self::Kill(_)
+                | Self::ReplaceChar(..)
+                | Self::Replace(..)
+                | Self::SelfInsert(..)
+                | Self::ViYankTo(_)
+                | Self::Yank(..) // Cmd::TransposeChars | TODO Validate
         )
     }
 
     const fn is_repeatable(&self) -> bool {
         match *self {
-            Cmd::Move(_) => true,
+            Self::Move(_) => true,
             _ => self.is_repeatable_change(),
         }
     }
@@ -170,40 +170,40 @@ impl Cmd {
     // Replay this command with a possible different `RepeatCount`.
     fn redo(&self, new: Option<RepeatCount>, wrt: &dyn Refresher) -> Self {
         match *self {
-            Cmd::Dedent(ref mvt) => Cmd::Dedent(mvt.redo(new)),
-            Cmd::Indent(ref mvt) => Cmd::Indent(mvt.redo(new)),
-            Cmd::Insert(previous, ref text) => {
-                Cmd::Insert(repeat_count(previous, new), text.clone())
+            Self::Dedent(ref mvt) => Self::Dedent(mvt.redo(new)),
+            Self::Indent(ref mvt) => Self::Indent(mvt.redo(new)),
+            Self::Insert(previous, ref text) => {
+                Self::Insert(repeat_count(previous, new), text.clone())
             }
-            Cmd::Kill(ref mvt) => Cmd::Kill(mvt.redo(new)),
-            Cmd::Move(ref mvt) => Cmd::Move(mvt.redo(new)),
-            Cmd::ReplaceChar(previous, c) => Cmd::ReplaceChar(repeat_count(previous, new), c),
-            Cmd::Replace(ref mvt, ref text) => {
+            Self::Kill(ref mvt) => Self::Kill(mvt.redo(new)),
+            Self::Move(ref mvt) => Self::Move(mvt.redo(new)),
+            Self::ReplaceChar(previous, c) => Self::ReplaceChar(repeat_count(previous, new), c),
+            Self::Replace(ref mvt, ref text) => {
                 if text.is_none() {
                     let last_insert = wrt.last_insert();
                     if let Movement::ForwardChar(0) = mvt {
-                        Cmd::Replace(
+                        Self::Replace(
                             Movement::ForwardChar(last_insert.as_ref().map_or(0, String::len)),
                             last_insert,
                         )
                     } else {
-                        Cmd::Replace(mvt.redo(new), last_insert)
+                        Self::Replace(mvt.redo(new), last_insert)
                     }
                 } else {
-                    Cmd::Replace(mvt.redo(new), text.clone())
+                    Self::Replace(mvt.redo(new), text.clone())
                 }
             }
-            Cmd::SelfInsert(previous, c) => {
+            Self::SelfInsert(previous, c) => {
                 // consecutive char inserts are repeatable not only the last one...
                 if let Some(text) = wrt.last_insert() {
-                    Cmd::Insert(repeat_count(previous, new), text)
+                    Self::Insert(repeat_count(previous, new), text)
                 } else {
-                    Cmd::SelfInsert(repeat_count(previous, new), c)
+                    Self::SelfInsert(repeat_count(previous, new), c)
                 }
             }
             // Cmd::TransposeChars => Cmd::TransposeChars,
-            Cmd::ViYankTo(ref mvt) => Cmd::ViYankTo(mvt.redo(new)),
-            Cmd::Yank(previous, anchor) => Cmd::Yank(repeat_count(previous, new), anchor),
+            Self::ViYankTo(ref mvt) => Self::ViYankTo(mvt.redo(new)),
+            Self::Yank(previous, anchor) => Self::Yank(repeat_count(previous, new), anchor),
             _ => unreachable!(),
         }
     }

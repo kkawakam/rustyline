@@ -375,7 +375,7 @@ fn filename_complete(
         dir_path.to_path_buf()
     };
 
-    let mut entries: Vec<Pair> = Vec::new();
+    let mut entries: Vec<Pair> = vec![];
 
     // if dir doesn't exist, then don't offer any completions
     if !dir.exists() {

@@ -189,7 +189,7 @@ impl Term for DummyTerminal {
         _enable_signals: bool,
     ) -> Result<DummyTerminal> {
         Ok(DummyTerminal {
-            keys: Vec::new(),
+            keys: vec![],
             cursor: 0,
             color_mode,
             bell_style,

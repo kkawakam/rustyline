@@ -665,7 +665,7 @@ impl Term for Console {
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
         _enable_signals: bool,
-    ) -> Result<Console> {
+    ) -> Result<Self> {
         let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (
                 OpenOptions::new().read(true).write(true).open("CONIN$"),
@@ -706,7 +706,7 @@ impl Term for Console {
             Err(_) => false,
         };
 
-        Ok(Console {
+        Ok(Self {
             conin_isatty,
             conin: conin.unwrap_or(ptr::null_mut()),
             conout_isatty,
@@ -904,7 +904,7 @@ impl super::ExternalPrinter for ExternalPrinter {
     fn print(&mut self, msg: String) -> Result<()> {
         // write directly to stdout/stderr while not in raw mode
         if !self.raw_mode.load(Ordering::SeqCst) {
-            let mut utf16 = Vec::new();
+            let mut utf16 = vec![];
             write_to_console(self.conout, msg.as_str(), &mut utf16)
         } else {
             self.sender

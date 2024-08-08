@@ -248,12 +248,12 @@ pub enum BellStyle {
 impl Default for BellStyle {
     #[cfg(any(windows, target_arch = "wasm32"))]
     fn default() -> Self {
-        BellStyle::None
+        Self::None
     }
 
     #[cfg(unix)]
     fn default() -> Self {
-        BellStyle::Audible
+        Self::Audible
     }
 }
 

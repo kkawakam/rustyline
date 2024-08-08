@@ -30,17 +30,15 @@ enum Change {
 impl Change {
     fn undo(&self, line: &mut LineBuffer) {
         match *self {
-            Change::Begin | Change::End => {
-                unreachable!();
-            }
-            Change::Insert { idx, ref text } => {
+            Self::Begin | Self::End => unreachable!(),
+            Self::Insert { idx, ref text } => {
                 line.delete_range(idx..idx + text.len(), &mut NoListener);
             }
-            Change::Delete { idx, ref text } => {
+            Self::Delete { idx, ref text } => {
                 line.insert_str(idx, text, &mut NoListener);
                 line.set_pos(idx + text.len());
             }
-            Change::Replace {
+            Self::Replace {
                 idx,
                 ref old,
                 ref new,
@@ -53,16 +51,14 @@ impl Change {
     #[cfg(test)]
     fn redo(&self, line: &mut LineBuffer) {
         match *self {
-            Change::Begin | Change::End => {
-                unreachable!();
-            }
-            Change::Insert { idx, ref text } => {
+            Self::Begin | Self::End => unreachable!(),
+            Self::Insert { idx, ref text } => {
                 line.insert_str(idx, text, &mut NoListener);
             }
-            Change::Delete { idx, ref text } => {
+            Self::Delete { idx, ref text } => {
                 line.delete_range(idx..idx + text.len(), &mut NoListener);
             }
-            Change::Replace {
+            Self::Replace {
                 idx,
                 ref old,
                 ref new,
@@ -73,7 +69,7 @@ impl Change {
     }
 
     fn insert_seq(&self, indx: usize) -> bool {
-        if let Change::Insert { idx, ref text } = *self {
+        if let Self::Insert { idx, ref text } = *self {
             idx + text.len() == indx
         } else {
             false
@@ -81,7 +77,7 @@ impl Change {
     }
 
     fn delete_seq(&self, indx: usize, len: usize) -> bool {
-        if let Change::Delete { idx, .. } = *self {
+        if let Self::Delete { idx, .. } = *self {
             // delete or backspace
             idx == indx || idx == indx + len
         } else {
@@ -90,7 +86,7 @@ impl Change {
     }
 
     fn replace_seq(&self, indx: usize) -> bool {
-        if let Change::Replace { idx, ref new, .. } = *self {
+        if let Self::Replace { idx, ref new, .. } = *self {
             idx + new.len() == indx
         } else {
             false
@@ -109,8 +105,8 @@ impl Changeset {
     pub(crate) fn new() -> Self {
         Self {
             undo_group_level: 0,
-            undos: Vec::new(),
-            redos: Vec::new(),
+            undos: vec![],
+            redos: vec![],
         }
     }
 

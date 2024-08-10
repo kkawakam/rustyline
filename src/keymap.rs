@@ -19,7 +19,7 @@ pub enum Cmd {
     Abort, // Miscellaneous Command
     /// accept-line
     ///
-    /// See also AcceptOrInsertLine
+    /// See also `AcceptOrInsertLine`
     AcceptLine,
     /// beginning-of-history
     BeginningOfHistory,

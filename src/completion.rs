@@ -613,7 +613,7 @@ mod tests {
             assert_eq!(Some(s), lcp);
         }
 
-        let c3 = String::from("");
+        let c3 = String::new();
         candidates.push(c3);
         {
             let lcp = super::longest_common_prefix(&candidates);

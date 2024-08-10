@@ -21,7 +21,7 @@ mod vi_insert;
 fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> DefaultEditor {
     let config = Config::builder().edit_mode(mode).build();
     let mut editor = DefaultEditor::with_config(config).unwrap();
-    editor.term.keys.extend(keys.iter().cloned());
+    editor.term.keys.extend(keys.iter().copied());
     editor
 }
 

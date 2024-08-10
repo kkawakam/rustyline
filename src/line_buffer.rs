@@ -160,11 +160,7 @@ impl LineBuffer {
         let max = self.buf.capacity();
         if self.must_truncate(buf.len()) {
             self.insert_str(0, &buf[..max], cl);
-            if pos > max {
-                self.pos = max;
-            } else {
-                self.pos = pos;
-            }
+            self.pos = max.min(pos);
         } else {
             self.insert_str(0, buf, cl);
             self.pos = pos;

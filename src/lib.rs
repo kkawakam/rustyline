@@ -563,7 +563,7 @@ impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
     #[must_use]
     pub fn new(history: &'h dyn History) -> Self {
-        Context {
+        Self {
             history,
             history_index: history.len(),
         }

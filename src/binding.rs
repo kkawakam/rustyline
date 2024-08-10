@@ -21,7 +21,7 @@ pub enum Event {
 impl Event {
     /// See [`KeyEvent::normalize`]
     pub(crate) fn normalize(mut self) -> Self {
-        if let Event::KeySeq(ref mut keys) = self {
+        if let Self::KeySeq(ref mut keys) = self {
             for key in keys.iter_mut() {
                 *key = KeyEvent::normalize(*key);
             }
@@ -32,7 +32,7 @@ impl Event {
     /// Return `i`th key event
     #[must_use]
     pub fn get(&self, i: usize) -> Option<&KeyEvent> {
-        if let Event::KeySeq(ref ks) = self {
+        if let Self::KeySeq(ref ks) = self {
             ks.get(i)
         } else {
             None
@@ -41,8 +41,8 @@ impl Event {
 }
 
 impl From<KeyEvent> for Event {
-    fn from(k: KeyEvent) -> Event {
-        Event::KeySeq(vec![k])
+    fn from(k: KeyEvent) -> Self {
+        Self::KeySeq(vec![k])
     }
 }
 

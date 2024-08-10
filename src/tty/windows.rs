@@ -110,8 +110,8 @@ pub struct ConsoleRawReader {
 }
 
 impl ConsoleRawReader {
-    fn create(conin: HANDLE, pipe_reader: Option<Rc<AsyncPipe>>) -> ConsoleRawReader {
-        ConsoleRawReader { conin, pipe_reader }
+    fn create(conin: HANDLE, pipe_reader: Option<Rc<AsyncPipe>>) -> Self {
+        Self { conin, pipe_reader }
     }
 
     fn select(&mut self) -> Result<Event> {
@@ -296,10 +296,10 @@ pub struct ConsoleRenderer {
 }
 
 impl ConsoleRenderer {
-    fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> ConsoleRenderer {
+    fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> Self {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(conout);
-        ConsoleRenderer {
+        Self {
             conout,
             cols,
             buffer: String::with_capacity(1024),

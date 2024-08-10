@@ -1207,7 +1207,7 @@ struct SigWinCh {
 }
 impl SigWinCh {
     #[cfg(not(feature = "signal-hook"))]
-    fn install_sigwinch_handler() -> Result<SigWinCh> {
+    fn install_sigwinch_handler() -> Result<Self> {
         use nix::sys::signal;
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
@@ -1218,18 +1218,18 @@ impl SigWinCh {
             signal::SigSet::empty(),
         );
         let original = unsafe { signal::sigaction(signal::SIGWINCH, &sigwinch)? };
-        Ok(SigWinCh {
+        Ok(Self {
             pipe: pipe.into_raw_fd(),
             original,
         })
     }
 
     #[cfg(feature = "signal-hook")]
-    fn install_sigwinch_handler() -> Result<SigWinCh> {
+    fn install_sigwinch_handler() -> Result<Self> {
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
         let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
-        Ok(SigWinCh {
+        Ok(Self {
             pipe: pipe.into_raw_fd(),
             id,
         })

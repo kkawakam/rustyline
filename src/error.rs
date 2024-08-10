@@ -90,58 +90,58 @@ impl From<io::Error> for ReadlineError {
         if err.kind() == io::ErrorKind::Interrupted {
             if let Some(e) = err.get_ref() {
                 if e.downcast_ref::<WindowResizedError>().is_some() {
-                    return ReadlineError::WindowResized;
+                    return Self::WindowResized;
                 }
             }
         }
-        ReadlineError::Io(err)
+        Self::Io(err)
     }
 }
 
 impl From<io::ErrorKind> for ReadlineError {
     fn from(kind: io::ErrorKind) -> Self {
-        ReadlineError::Io(io::Error::from(kind))
+        Self::Io(io::Error::from(kind))
     }
 }
 
 #[cfg(unix)]
 impl From<nix::Error> for ReadlineError {
     fn from(err: nix::Error) -> Self {
-        ReadlineError::Errno(err)
+        Self::Errno(err)
     }
 }
 
 #[cfg(windows)]
 impl From<char::DecodeUtf16Error> for ReadlineError {
     fn from(err: char::DecodeUtf16Error) -> Self {
-        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
+        Self::Io(io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
 
 #[cfg(windows)]
 impl From<std::string::FromUtf8Error> for ReadlineError {
     fn from(err: std::string::FromUtf8Error) -> Self {
-        ReadlineError::Io(io::Error::new(io::ErrorKind::InvalidData, err))
+        Self::Io(io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
 
 #[cfg(unix)]
 impl From<fmt::Error> for ReadlineError {
     fn from(err: fmt::Error) -> Self {
-        ReadlineError::Io(io::Error::new(io::ErrorKind::Other, err))
+        Self::Io(io::Error::new(io::ErrorKind::Other, err))
     }
 }
 
 #[cfg(windows)]
 impl From<clipboard_win::ErrorCode> for ReadlineError {
     fn from(err: clipboard_win::ErrorCode) -> Self {
-        ReadlineError::SystemError(err)
+        Self::SystemError(err)
     }
 }
 
 #[cfg(feature = "with-sqlite-history")]
 impl From<rusqlite::Error> for ReadlineError {
     fn from(err: rusqlite::Error) -> Self {
-        ReadlineError::SQLiteError(err)
+        Self::SQLiteError(err)
     }
 }

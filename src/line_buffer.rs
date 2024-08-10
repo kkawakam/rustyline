@@ -1189,8 +1189,8 @@ mod test {
     }
 
     impl Listener {
-        fn new() -> Listener {
-            Listener { deleted_str: None }
+        fn new() -> Self {
+            Self { deleted_str: None }
         }
 
         fn assert_deleted_str_eq(&self, expected: &str) {

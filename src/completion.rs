@@ -265,9 +265,7 @@ impl Completer for FilenameCompleter {
 /// Remove escape char
 #[must_use]
 pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
-    let esc_char = if let Some(c) = esc_char {
-        c
-    } else {
+    let Some(esc_char) = esc_char else {
         return Borrowed(input);
     };
     if !input.chars().any(|c| c == esc_char) {
@@ -310,9 +308,7 @@ pub fn escape(
     if n == 0 {
         return input; // no need to escape
     }
-    let esc_char = if let Some(c) = esc_char {
-        c
-    } else {
+    let Some(esc_char) = esc_char else {
         if cfg!(windows) && quote == Quote::None {
             input.insert(0, '"'); // force double quote
             return input;

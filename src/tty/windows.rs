@@ -273,9 +273,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
             } else {
                 decode_utf16([surrogate, utf16].iter().copied()).next()
             };
-            let rc = if let Some(rc) = orc {
-                rc
-            } else {
+            let Some(rc) = orc else {
                 return Err(error::ReadlineError::Eof);
             };
             let c = rc?;

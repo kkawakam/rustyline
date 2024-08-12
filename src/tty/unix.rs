@@ -996,14 +996,18 @@ impl Renderer for PosixRenderer {
         let end_pos = new_layout.end;
 
         self.clear_old_rows(old_layout);
-
         if let Some(highlighter) = highlighter {
             // display the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+            // add continuation prompt to line if `highlighter.continuation_prompt` is not None
+            let line_str = match highlighter.continuation_prompt(prompt, default_prompt){
+                Some(continuation_prompt) => &line.as_str().replace('\n', &format!("\n{}", &continuation_prompt)),
+                None => line.as_str(),
+            };
             // display the input line
             self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+                .push_str(&highlighter.highlight(line_str, line.pos()));
         } else {
             // display the prompt
             self.buffer.push_str(prompt);

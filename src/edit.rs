@@ -37,6 +37,18 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     pub highlight_char: bool,        // `true` if a char has been highlighted
     pub forced_refresh: bool,        // `true` if line is redraw without hint or highlight_char
+    continuation_prompt_state: Option<ContinuationPromptState>,
+}
+
+pub struct ContinuationPromptState {
+    size: Position,
+    moved: bool,
+}
+
+impl ContinuationPromptState {
+    fn new(size: Position) -> Self {
+        Self { size, moved: false }
+    }
 }
 
 enum Info<'m> {
@@ -53,6 +65,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ctx: Context<'out>,
     ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
+        let continuation_prompt_state = helper
+            .and_then(|h|h.continuation_prompt(prompt, true))
+            .and_then(|s|
+                Some(
+                    ContinuationPromptState::new(out.calculate_position(&s, Position::default()))
+                )
+            );
         Self {
             out,
             prompt,
@@ -67,6 +86,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             hint: None,
             highlight_char: false,
             forced_refresh: false,
+            // FIXME
+            continuation_prompt_state,
         }
     }
 
@@ -122,6 +143,33 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         );
     }
 
+    fn continuation_prompt_move_cursor(&mut self) -> Result<()> {
+        if let Some(state) = self.continuation_prompt_state.as_mut() {
+            let need_continuation = self.line[..self.line.pos()].contains('\n');
+            if !state.moved && need_continuation {
+                self.out.move_cursor(
+                    self.layout.cursor,
+                    Position {
+                        col: self.layout.cursor.col+state.size.col,
+                        row: self.layout.cursor.row+state.size.row,
+                    }
+                )?;
+                state.moved = true;
+            }
+            if state.moved && !need_continuation {
+                self.out.move_cursor(
+                    self.layout.cursor,
+                    Position {
+                        col: self.layout.cursor.col-state.size.col,
+                        row: self.layout.cursor.row-state.size.row,
+                    }
+                )?;
+                state.moved = true;
+            }  
+        };
+        Ok(())
+    }
+
     pub fn move_cursor(&mut self) -> Result<()> {
         // calculate the desired position of the cursor
         let cursor = self
@@ -140,7 +188,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             debug_assert!(self.layout.prompt_size <= self.layout.cursor);
             debug_assert!(self.layout.cursor <= self.layout.end);
         }
-        Ok(())
+        self.continuation_prompt_move_cursor()
     }
 
     pub fn move_cursor_to_end(&mut self) -> Result<()> {
@@ -189,8 +237,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             highlighter,
         )?;
         self.layout = new_layout;
-
-        Ok(())
+        self.continuation_prompt_move_cursor()
     }
 
     pub fn hint(&mut self) {
@@ -766,6 +813,7 @@ pub fn init_state<'out, H: Helper>(
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
         forced_refresh: false,
+        continuation_prompt_state: None,
     }
 }
 

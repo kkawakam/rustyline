@@ -448,8 +448,14 @@ impl Renderer for ConsoleRenderer {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
             col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
+            // TODO need test for windows user
+            // add continuation prompt to line if `highlighter.continuation_prompt` is not None
+            let line_str = match highlighter.continuation_prompt(prompt, default_prompt){
+                Some(continuation_prompt) => &line.as_str().replace('\n', &format!("\n{}", &continuation_prompt)),
+                None => line.as_str(),
+            };
             // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+            col = self.wrap_at_eol(&highlighter.highlight(line_str, line.pos()), col);
         } else if self.colors_enabled {
             // append the prompt
             col = self.wrap_at_eol(prompt, col);

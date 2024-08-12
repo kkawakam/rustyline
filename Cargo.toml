@@ -83,6 +83,9 @@ required-features = ["custom-bindings", "derive"]
 name = "input_multiline"
 required-features = ["custom-bindings", "derive"]
 [[example]]
+name = "continuation_prompt"
+required-features = ["custom-bindings", "derive"]
+[[example]]
 name = "input_validation"
 required-features = ["derive"]
 [[example]]

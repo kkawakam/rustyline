@@ -11,6 +11,10 @@ use std::cell::Cell;
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
+    #[allow(unused_variables)]
+    fn continuation_prompt<'p,'b>(&self, prompt: &'p str, default: bool) -> Option<Cow<'b, str>> {
+        None
+    }
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
     ///

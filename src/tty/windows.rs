@@ -299,7 +299,7 @@ impl ConsoleRenderer {
     fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> ConsoleRenderer {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(conout);
-        ConsoleRenderer {
+        Self {
             conout,
             cols,
             buffer: String::with_capacity(1024),

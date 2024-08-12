@@ -28,8 +28,10 @@ fn main() -> Result<()> {
         KeyEvent(KeyCode::Char('s'), Modifiers::CTRL),
         EventHandler::Simple(Cmd::Newline),
     );
-    let input = rl.readline(">>>> ")?;
-    println!("Input:\n{input}");
+    loop {
+        let input = rl.readline(">>>> ")?;
+        println!("Input:\n{input}");
+    }
 
     Ok(())
 }

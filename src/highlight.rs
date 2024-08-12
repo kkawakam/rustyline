@@ -11,10 +11,6 @@ use std::cell::Cell;
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
-    #[allow(unused_variables)]
-    fn continuation_prompt<'p,'b>(&self, prompt: &'p str, default: bool) -> Option<Cow<'b, str>> {
-        None
-    }
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
     ///
@@ -33,6 +29,13 @@ pub trait Highlighter {
     ) -> Cow<'b, str> {
         let _ = default;
         Borrowed(prompt)
+    }
+    /// Takes the `prompt` and
+    /// returns the continuation prompt.
+    /// See more at [PR #793](https://github.com/kkawakam/rustyline/pull/793)
+    #[allow(unused_variables)]
+    fn continuation_prompt<'p,'b>(&self, prompt: &'p str, default: bool) -> Option<Cow<'b, str>> {
+        None
     }
     /// Takes the `hint` and
     /// returns the highlighted version (with ANSI color).

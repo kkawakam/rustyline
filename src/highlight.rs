@@ -3,6 +3,46 @@
 use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
+use std::fmt::Display;
+
+/// ANSI style
+pub trait Style {
+    /// Produce a ansi sequences which sets the graphic mode
+    fn start(&self) -> impl Display;
+    /// Produce a ansi sequences which ends the graphic mode
+    fn end(&self) -> impl Display;
+}
+
+/// Styled text
+pub trait StyledBlock {
+    /// Style impl
+    type Style: Style;
+    /// Raw text to be styled
+    fn text(&self) -> &str;
+    /// `Style` to be applied on `text`
+    fn style(&self) -> &Self::Style;
+}
+
+impl Style for ansi_str::Style {
+    fn start(&self) -> impl Display {
+        self.start()
+    }
+
+    fn end(&self) -> impl Display {
+        self.end()
+    }
+}
+impl StyledBlock for ansi_str::AnsiBlock<'_> {
+    type Style = ansi_str::Style;
+
+    fn text(&self) -> &str {
+        self.text()
+    }
+
+    fn style(&self) -> &Self::Style {
+        self.style()
+    }
+}
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
@@ -277,5 +317,16 @@ mod tests {
         use super::is_open_bracket;
         assert!(is_open_bracket(b'('));
         assert!(is_close_bracket(b')'));
+    }
+
+    #[test]
+    pub fn styled_text() {
+        use ansi_str::get_blocks;
+
+        let mut blocks = get_blocks("\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m");
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32mHello ").next());
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m\x1b[3mworld").next());
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m!").next());
+        assert!(blocks.next().is_none())
     }
 }

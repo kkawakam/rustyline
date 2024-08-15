@@ -23,6 +23,9 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
+# For highlighting
+# TODO make it optional
+ansi-str = { version = "0.8.0", optional = false }
 bitflags = "2.6"
 cfg-if = "1.0"
 # For file completion

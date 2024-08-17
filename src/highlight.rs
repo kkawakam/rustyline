@@ -3,9 +3,12 @@
 use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
+#[cfg(feature = "split-highlight")]
 use std::fmt::Display;
 
 /// ANSI style
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
 pub trait Style {
     /// Produce a ansi sequences which sets the graphic mode
     fn start(&self) -> impl Display;
@@ -14,15 +17,23 @@ pub trait Style {
 }
 
 /// Styled text
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
 pub trait StyledBlock {
     /// Style impl
-    type Style: Style;
+    type Style: Style
+    where
+        Self: Sized;
     /// Raw text to be styled
     fn text(&self) -> &str;
     /// `Style` to be applied on `text`
-    fn style(&self) -> &Self::Style;
+    fn style(&self) -> &Self::Style
+    where
+        Self: Sized;
 }
 
+#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl Style for ansi_str::Style {
     fn start(&self) -> impl Display {
         self.start()
@@ -32,6 +43,8 @@ impl Style for ansi_str::Style {
         self.end()
     }
 }
+#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl StyledBlock for ansi_str::AnsiBlock<'_> {
     type Style = ansi_str::Style;
 
@@ -41,6 +54,31 @@ impl StyledBlock for ansi_str::AnsiBlock<'_> {
 
     fn style(&self) -> &Self::Style {
         self.style()
+    }
+}
+
+/// Ordered list of styled block
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+pub trait StyledBlocks {
+    /// Styled block
+    type StyledBlock: StyledBlock
+    where
+        Self: Sized;
+
+    /// FIXME maybe we can use Iterator trait directly ?
+    fn next(&mut self) -> Option<Self::StyledBlock>
+    where
+        Self: Sized;
+}
+
+#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
+impl<'l> StyledBlocks for ansi_str::AnsiBlockIter<'l> {
+    type StyledBlock = ansi_str::AnsiBlock<'l>;
+
+    fn next(&mut self) -> Option<Self::StyledBlock> {
+        Iterator::next(self)
     }
 }
 
@@ -54,12 +92,26 @@ pub trait Highlighter {
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
     ///
+    ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
+    // TODO make it optional when split-highlight is activated
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         let _ = pos;
         Borrowed(line)
     }
+
+    /// Takes the currently edited `line` with the cursor `pos`ition and
+    /// returns the styled blocks.
+    #[cfg(feature = "split-highlight")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> &dyn StyledBlocks {
+        let _s = self.highlight(line, pos);
+        // it doesn't seem possible to return an AnsiBlockIter directly
+        //StyleBlocks::Whole(s)
+        todo!()
+    }
+
     /// Takes the `prompt` and
     /// returns the highlighted version (with ANSI color).
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -103,6 +155,7 @@ pub trait Highlighter {
 impl Highlighter for () {}
 
 impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         (**self).highlight(line, pos)
     }
@@ -151,6 +204,7 @@ impl MatchingBracketHighlighter {
 }
 
 impl Highlighter for MatchingBracketHighlighter {
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
@@ -320,6 +374,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ansi-str")]
     pub fn styled_text() {
         use ansi_str::get_blocks;
 

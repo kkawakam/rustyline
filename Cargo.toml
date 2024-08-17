@@ -23,9 +23,8 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
-# For highlighting
-# TODO make it optional
-ansi-str = { version = "0.8.0", optional = false }
+# For convenience, you can highlight the whole input buffer, ansi-str helps to split
+ansi-str = { version = "0.8.0", optional = true }
 bitflags = "2.6"
 cfg-if = "1.0"
 # For file completion
@@ -72,6 +71,9 @@ with-file-history = ["fd-lock"]
 with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+# For continuation prompt, indentation, scrolling
+# TODO make ansi-str optional
+split-highlight = ["ansi-str"]
 
 [[example]]
 name = "custom_key_bindings"
@@ -99,7 +101,14 @@ name = "sqlite_history"
 required-features = ["with-sqlite-history"]
 
 [package.metadata.docs.rs]
-features = ["custom-bindings", "derive", "with-dirs", "with-file-history", "with-fuzzy"]
+features = [
+    "custom-bindings",
+    "derive",
+    "with-dirs",
+    "with-file-history",
+    "with-fuzzy",
+    "split-highlight",
+]
 all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"

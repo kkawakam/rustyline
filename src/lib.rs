@@ -264,9 +264,8 @@ fn complete_line<H: Helper>(
 
 /// Completes the current hint
 fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
-    let hint = match s.hint.as_ref() {
-        Some(hint) => hint,
-        None => return Ok(()),
+    let Some(hint) = s.hint.as_ref() else {
+        return Ok(());
     };
     s.line.move_end();
     if let Some(text) = hint.completion() {
@@ -563,7 +562,7 @@ impl<'h> Context<'h> {
     /// Constructor. Visible for testing.
     #[must_use]
     pub fn new(history: &'h dyn History) -> Self {
-        Context {
+        Self {
             history,
             history_index: history.len(),
         }

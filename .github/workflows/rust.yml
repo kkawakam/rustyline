@@ -48,3 +48,16 @@ jobs:
         run: cargo check --workspace --no-default-features
         env:
           RUSTFLAGS: "-D warnings"
+
+  direct-minimal-versions:
+    name: Test min versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: hecrj/setup-rust-action@v2
+        with:
+          rust-version: nightly
+      - run: |
+          cargo update -Z direct-minimal-versions
+          cargo test --workspace --all-targets

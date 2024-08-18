@@ -143,7 +143,7 @@ impl Read for TtyIn {
             let res = unsafe {
                 libc::read(
                     self.fd,
-                    buf.as_mut_ptr() as *mut libc::c_void,
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
                     buf.len() as libc::size_t,
                 )
             };
@@ -1021,9 +1021,7 @@ impl Renderer for PosixRenderer {
         // we have to generate our own newline on line wrap
         if end_pos.col == 0
             && end_pos.row > 0
-            && !hint
-                .map(|h| h.ends_with('\n'))
-                .unwrap_or_else(|| line.ends_with('\n'))
+            && !hint.map_or_else(|| line.ends_with('\n'), |h| h.ends_with('\n'))
         {
             self.buffer.push('\n');
         }
@@ -1209,7 +1207,7 @@ struct SigWinCh {
 }
 impl SigWinCh {
     #[cfg(not(feature = "signal-hook"))]
-    fn install_sigwinch_handler() -> Result<SigWinCh> {
+    fn install_sigwinch_handler() -> Result<Self> {
         use nix::sys::signal;
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
@@ -1220,18 +1218,18 @@ impl SigWinCh {
             signal::SigSet::empty(),
         );
         let original = unsafe { signal::sigaction(signal::SIGWINCH, &sigwinch)? };
-        Ok(SigWinCh {
+        Ok(Self {
             pipe: pipe.into_raw_fd(),
             original,
         })
     }
 
     #[cfg(feature = "signal-hook")]
-    fn install_sigwinch_handler() -> Result<SigWinCh> {
+    fn install_sigwinch_handler() -> Result<Self> {
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
         let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
-        Ok(SigWinCh {
+        Ok(Self {
             pipe: pipe.into_raw_fd(),
             id,
         })
@@ -1442,6 +1440,7 @@ impl Term for PosixTerminal {
     }
 
     fn create_external_printer(&mut self) -> Result<ExternalPrinter> {
+        use nix::unistd::pipe;
         if let Some(ref writer) = self.pipe_writer {
             return Ok(ExternalPrinter {
                 writer: writer.clone(),
@@ -1452,7 +1451,6 @@ impl Term for PosixTerminal {
         if self.unsupported || !self.is_input_tty() || !self.is_output_tty() {
             return Err(nix::Error::ENOTTY.into());
         }
-        use nix::unistd::pipe;
         let (sender, receiver) = mpsc::sync_channel(1); // TODO validate: bound
         let (r, w) = pipe()?;
         let reader = Arc::new(Mutex::new((r.into(), receiver)));

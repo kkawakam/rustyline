@@ -187,9 +187,9 @@ impl Term for DummyTerminal {
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
         _enable_signals: bool,
-    ) -> Result<DummyTerminal> {
-        Ok(DummyTerminal {
-            keys: Vec::new(),
+    ) -> Result<Self> {
+        Ok(Self {
+            keys: vec![],
             cursor: 0,
             color_mode,
             bell_style,

@@ -47,7 +47,7 @@ impl SQLiteHistory {
 
     fn new(config: Config, path: Option<PathBuf>) -> Result<Self> {
         let conn = conn(path.as_ref())?;
-        let mut sh = SQLiteHistory {
+        let mut sh = Self {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             // not strictly consecutive...

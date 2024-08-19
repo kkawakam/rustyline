@@ -80,28 +80,20 @@ impl StyledBlock for (anstyle::Style, &str) {
     }
 }
 
+struct Ansi<'s>(Cow<'s, str>);
+
 /// Ordered list of styled block
-#[cfg(feature = "split-highlight")]
-#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-pub trait StyledBlocks {
-    /// Styled block
-    type StyledBlock: StyledBlock
-    where
-        Self: Sized;
-
-    /// FIXME maybe we can use Iterator trait directly ?
-    fn next(&mut self) -> Option<Self::StyledBlock>
-    where
-        Self: Sized;
-}
-
 #[cfg(feature = "ansi-str")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
-impl<'l> StyledBlocks for ansi_str::AnsiBlockIter<'l> {
-    type StyledBlock = ansi_str::AnsiBlock<'l>;
+impl<'s> IntoIterator for Ansi<'s> {
+    type IntoIter = ansi_str::AnsiBlockIter<'s>;
+    type Item = ansi_str::AnsiBlock<'s>;
 
-    fn next(&mut self) -> Option<Self::StyledBlock> {
-        Iterator::next(self)
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Ansi(Cow::Borrowed(s)) => ansi_str::get_blocks(s),
+            Ansi(Cow::Owned(s)) => ansi_str::get_blocks(&s), // self_cell ?
+        }
     }
 }
 
@@ -128,7 +120,7 @@ pub trait Highlighter {
     /// returns the styled blocks.
     #[cfg(feature = "split-highlight")]
     #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> &dyn StyledBlocks {
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> dyn IntoIterator {
         let _s = self.highlight(line, pos);
         // it doesn't seem possible to return an AnsiBlockIter directly
         //StyleBlocks::Whole(s)

@@ -15,6 +15,28 @@ pub trait Style {
     /// Produce a ansi sequences which ends the graphic mode
     fn end(&self) -> impl Display;
 }
+#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
+impl Style for ansi_str::Style {
+    fn start(&self) -> impl Display {
+        self.start()
+    }
+
+    fn end(&self) -> impl Display {
+        self.end()
+    }
+}
+#[cfg(feature = "anstyle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
+impl Style for anstyle::Style {
+    fn start(&self) -> impl Display {
+        self.render()
+    }
+
+    fn end(&self) -> impl Display {
+        self.render_reset()
+    }
+}
 
 /// Styled text
 #[cfg(feature = "split-highlight")]
@@ -31,18 +53,6 @@ pub trait StyledBlock {
     where
         Self: Sized;
 }
-
-#[cfg(feature = "ansi-str")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
-impl Style for ansi_str::Style {
-    fn start(&self) -> impl Display {
-        self.start()
-    }
-
-    fn end(&self) -> impl Display {
-        self.end()
-    }
-}
 #[cfg(feature = "ansi-str")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl StyledBlock for ansi_str::AnsiBlock<'_> {
@@ -54,6 +64,19 @@ impl StyledBlock for ansi_str::AnsiBlock<'_> {
 
     fn style(&self) -> &Self::Style {
         self.style()
+    }
+}
+#[cfg(feature = "anstyle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
+impl StyledBlock for (anstyle::Style, &str) {
+    type Style = anstyle::Style;
+
+    fn text(&self) -> &str {
+        self.1
+    }
+
+    fn style(&self) -> &Self::Style {
+        &self.0
     }
 }
 

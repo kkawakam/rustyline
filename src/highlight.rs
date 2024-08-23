@@ -90,10 +90,7 @@ impl<'s> IntoIterator for Ansi<'s> {
     type Item = ansi_str::AnsiBlock<'s>;
 
     fn into_iter(self) -> Self::IntoIter {
-        match self {
-            Ansi(Cow::Borrowed(s)) => ansi_str::get_blocks(s),
-            Ansi(Cow::Owned(s)) => ansi_str::get_blocks(&s), // self_cell ?
-        }
+        ansi_str::get_blocks(self.0)
     }
 }
 
@@ -118,13 +115,17 @@ pub trait Highlighter {
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the styled blocks.
-    #[cfg(feature = "split-highlight")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> dyn IntoIterator {
-        let _s = self.highlight(line, pos);
+    // #[cfg(feature = "split-highlight")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+    // fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> impl Iterator<Item = impl StyledBlock> {
         // it doesn't seem possible to return an AnsiBlockIter directly
-        //StyleBlocks::Whole(s)
-        todo!()
+        // StyledBlock::Whole(s)
+    // }
+    #[cfg(feature = "ansi-str")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> ansi_str::AnsiBlockIter<'l> {
+        let s = self.highlight(line, pos);
+        ansi_str::get_blocks(s)
     }
 
     /// Takes the `prompt` and
@@ -393,10 +394,10 @@ mod tests {
     pub fn styled_text() {
         use ansi_str::get_blocks;
 
-        let mut blocks = get_blocks("\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m");
-        assert_eq!(blocks.next(), get_blocks("\x1b[1;32mHello ").next());
-        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m\x1b[3mworld").next());
-        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m!").next());
+        let mut blocks = get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m"));
+        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32mHello ")).next());
+        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m\x1b[3mworld")).next());
+        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m!")).next());
         assert!(blocks.next().is_none())
     }
 }

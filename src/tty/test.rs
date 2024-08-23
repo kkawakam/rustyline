@@ -100,14 +100,14 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         _prompt: &str,
         _line: &LineBuffer,
         _hint: Option<&str>,
         _old_layout: &Layout,
         _new_layout: &Layout,
-        _highlighter: Option<&dyn Highlighter>,
+        _highlighter: Option<&H>,
     ) -> Result<()> {
         Ok(())
     }

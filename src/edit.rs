@@ -7,7 +7,6 @@ use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::error::ReadlineError;
-use crate::highlight::Highlighter;
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -70,9 +69,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    pub fn highlighter(&self) -> Option<&dyn Highlighter> {
+    pub fn highlighter(&self) -> Option<&'out H> {
         if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
+            self.helper
         } else {
             None
         }
@@ -168,11 +167,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             Info::Hint => self.hint.as_ref().map(|h| h.display()),
             Info::Msg(msg) => msg,
         };
-        let highlighter = if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
-        } else {
-            None
-        };
+        let highlighter = self.highlighter();
 
         let new_layout = self
             .out

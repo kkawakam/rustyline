@@ -979,14 +979,14 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
@@ -1675,7 +1675,10 @@ mod test {
         fn assert_sync<T: Sync>() {}
         assert_sync::<PosixTerminal>();
     }
-
+    #[derive(Debug)]
+    struct DummyHighlighter;
+    impl crate::highlight::Highlighter for DummyHighlighter {}
+    
     #[test]
     fn test_line_wrap() {
         let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
@@ -1695,7 +1698,8 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        
+        out.refresh_line::<DummyHighlighter>(prompt, &line, None, &old_layout, &new_layout, None)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

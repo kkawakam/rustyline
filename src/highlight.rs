@@ -115,17 +115,13 @@ pub trait Highlighter {
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the styled blocks.
-    // #[cfg(feature = "split-highlight")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-    // fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> impl Iterator<Item = impl StyledBlock> {
+    #[cfg(feature = "split-highlight")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+    // fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> ansi_str::AnsiBlockIter<'l> {
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> impl Iterator<Item = impl 'l+StyledBlock> {
         // it doesn't seem possible to return an AnsiBlockIter directly
-        // StyledBlock::Whole(s)
-    // }
-    #[cfg(feature = "ansi-str")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> ansi_str::AnsiBlockIter<'l> {
         let s = self.highlight(line, pos);
-        ansi_str::get_blocks(s)
+        Ansi(s).into_iter()
     }
 
     /// Takes the `prompt` and

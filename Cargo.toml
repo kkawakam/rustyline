@@ -24,8 +24,7 @@ members = ["rustyline-derive"]
 
 [dependencies]
 # For convenience, you can highlight the whole input buffer, ansi-str helps to split
-ansi-str = { package="ansi-str-forked", path="../ansi-str", optional = true }
-# ansi-str = { package="ansi-str-forked", version = "0.8.0", optional = true }
+ansi-str = { package="ansi-str-forked", version = "0.8.0", optional = true }
 anstyle = { version = "1.0.8", optional = true }
 bitflags = "2.6"
 cfg-if = "1.0"

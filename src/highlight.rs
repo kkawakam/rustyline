@@ -118,7 +118,11 @@ pub trait Highlighter {
     #[cfg(feature = "split-highlight")]
     #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
     // fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> ansi_str::AnsiBlockIter<'l> {
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> impl Iterator<Item = impl 'l+StyledBlock> {
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
         // it doesn't seem possible to return an AnsiBlockIter directly
         let s = self.highlight(line, pos);
         Ansi(s).into_iter()
@@ -390,10 +394,21 @@ mod tests {
     pub fn styled_text() {
         use ansi_str::get_blocks;
 
-        let mut blocks = get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m"));
-        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32mHello ")).next());
-        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m\x1b[3mworld")).next());
-        assert_eq!(blocks.next(), get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m!")).next());
+        let mut blocks = get_blocks(std::borrow::Cow::Borrowed(
+            "\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m",
+        ));
+        assert_eq!(
+            blocks.next(),
+            get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32mHello ")).next()
+        );
+        assert_eq!(
+            blocks.next(),
+            get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m\x1b[3mworld")).next()
+        );
+        assert_eq!(
+            blocks.next(),
+            get_blocks(std::borrow::Cow::Borrowed("\x1b[1;32m!")).next()
+        );
         assert!(blocks.next().is_none())
     }
 }

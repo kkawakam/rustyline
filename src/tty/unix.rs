@@ -1678,7 +1678,7 @@ mod test {
     #[derive(Debug)]
     struct DummyHighlighter;
     impl crate::highlight::Highlighter for DummyHighlighter {}
-    
+
     #[test]
     fn test_line_wrap() {
         let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
@@ -1698,7 +1698,7 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        
+
         out.refresh_line::<DummyHighlighter>(prompt, &line, None, &old_layout, &new_layout, None)
             .unwrap();
         #[rustfmt::skip]

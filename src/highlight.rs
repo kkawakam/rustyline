@@ -80,6 +80,8 @@ impl StyledBlock for (anstyle::Style, &str) {
     }
 }
 
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
 struct Ansi<'s>(Cow<'s, str>);
 
 /// Ordered list of styled block

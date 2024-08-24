@@ -27,7 +27,7 @@ use utf8parse::{Parser, Receiver};
 
 use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
-use crate::highlight::{Highlighter, Style};
+use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
@@ -1010,6 +1010,7 @@ impl Renderer for PosixRenderer {
                     self.buffer
                         .push_str(&highlighter.highlight(line, line.pos()));
                 } else {
+                    use crate::highlight::Style;
                     for (style, block) in highlighter.highlight_line(line, line.pos()) {
                         write!(self.buffer, "{}", style.start())?;
                         self.buffer.push_str(block);

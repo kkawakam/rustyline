@@ -249,7 +249,11 @@ impl MatchingBracketHighlighter {
     }
 }
 
-#[cfg(any(not(feature = "split-highlight"), feature = "anstyle"))]
+#[cfg(any(
+    not(feature = "split-highlight"),
+    feature = "anstyle",
+    feature = "ansi-str"
+))]
 impl Highlighter for MatchingBracketHighlighter {
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
     type Style = anstyle::Style;
@@ -264,7 +268,7 @@ impl Highlighter for MatchingBracketHighlighter {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
                 copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
-                return Owned(copy);
+                return Cow::Owned(copy);
             }
         }
         Borrowed(line)

@@ -53,6 +53,7 @@ jobs:
           cargo check --workspace --all-targets --features 'split-highlight'
           cargo check --workspace --all-targets --features 'split-highlight ansi-str'
           cargo check --workspace --all-targets --features 'split-highlight anstyle'
+          cargo check --workspace --all-targets --features 'split-highlight anstyle derive'
 
   direct-minimal-versions:
     name: Test min versions

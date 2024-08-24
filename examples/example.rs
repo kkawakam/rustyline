@@ -21,6 +21,9 @@ struct MyHelper {
 }
 
 impl Highlighter for MyHelper {
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style = anstyle::Style;
+
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
@@ -37,8 +40,18 @@ impl Highlighter for MyHelper {
         Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
     }
 
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         self.highlighter.highlight(line, pos)
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)> {
+        self.highlighter.highlight_line(line, pos)
     }
 
     fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {

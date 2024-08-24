@@ -50,6 +50,7 @@ impl Style for anstyle::Style {
     }
 }
 
+/*
 /// Styled text
 #[cfg(feature = "split-highlight")]
 #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
@@ -91,6 +92,7 @@ impl StyledBlock for (anstyle::Style, &str) {
         &self.0
     }
 }
+*/
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
@@ -129,13 +131,16 @@ pub trait Highlighter {
         docsrs,
         doc(cfg(all(feature = "split-highlight", not(feature = "ansi-str"))))
     )]
-    // TODO try to return an `IntoIterator` instead of a `Vec`
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> Vec<(Self::Style, &'l str)>
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)>
     where
         Self: Sized,
     {
         let _ = (line, pos);
-        vec![]
+        std::iter::empty()
     }
 
     /// Takes the `prompt` and
@@ -193,7 +198,11 @@ impl<'r, H: Highlighter> Highlighter for &'r H {
     }
 
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> Vec<(Self::Style, &'l str)>
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)>
     where
         Self: Sized,
     {
@@ -275,20 +284,25 @@ impl Highlighter for MatchingBracketHighlighter {
     }
 
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    fn highlight_line<'l>(&self, line: &'l str, _pos: usize) -> Vec<(Self::Style, &'l str)> {
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        _pos: usize,
+    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)> {
         if line.len() <= 1 {
-            return vec![];
+            return vec![].into_iter();
         }
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
                 return vec![
-                    (Self::Style::default(), &line[0..idx]),
-                    (self.style, &line[idx..=idx]),
-                    (Self::Style::default(), &line[idx + 1..]),
-                ];
+                    (Self::Style::default(), Borrowed(&line[0..idx])),
+                    (self.style, Borrowed(&line[idx..=idx])),
+                    (Self::Style::default(), Borrowed(&line[idx + 1..])),
+                ]
+                .into_iter();
             }
         }
-        vec![]
+        vec![].into_iter()
     }
 
     fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {

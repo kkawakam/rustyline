@@ -1013,7 +1013,7 @@ impl Renderer for PosixRenderer {
                     use crate::highlight::Style;
                     for (style, block) in highlighter.highlight_line(line, line.pos()) {
                         write!(self.buffer, "{}", style.start())?;
-                        self.buffer.push_str(block);
+                        self.buffer.push_str(&block);
                         write!(self.buffer, "{}", style.end())?;
                     }
                 }

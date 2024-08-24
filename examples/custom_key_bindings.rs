@@ -13,6 +13,9 @@ use rustyline::{Completer, Helper, Hinter, Validator};
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);
 
 impl Highlighter for MyHelper {
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style = ();
+
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,

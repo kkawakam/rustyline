@@ -80,23 +80,6 @@ impl StyledBlock for (anstyle::Style, &str) {
     }
 }
 
-struct Ansi<'s>(Cow<'s, str>);
-
-/// Ordered list of styled block
-#[cfg(feature = "ansi-str")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
-impl<'s> IntoIterator for Ansi<'s> {
-    type IntoIter = ansi_str::AnsiBlockIter<'s>;
-    type Item = ansi_str::AnsiBlock<'s>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            Ansi(Cow::Borrowed(s)) => ansi_str::get_blocks(s),
-            Ansi(Cow::Owned(s)) => ansi_str::get_blocks(&s), // self_cell ?
-        }
-    }
-}
-
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
 /// when not supported natively (windows <10).
@@ -104,13 +87,22 @@ impl<'s> IntoIterator for Ansi<'s> {
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
+    /// ANSI Style
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style: Style + Default
+    where
+        Self: Sized;
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
     ///
     ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
-    // TODO make it optional when split-highlight is activated
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(not(feature = "split-highlight"), feature = "ansi-str")))
+    )]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         let _ = pos;
         Borrowed(line)
@@ -118,13 +110,19 @@ pub trait Highlighter {
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the styled blocks.
-    #[cfg(feature = "split-highlight")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> dyn IntoIterator {
-        let _s = self.highlight(line, pos);
-        // it doesn't seem possible to return an AnsiBlockIter directly
-        //StyleBlocks::Whole(s)
-        todo!()
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "split-highlight", not(feature = "ansi-str"))))
+    )]
+    // TODO try to return an `IntoIterator` instead of a `Vec`
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> Vec<(Self::Style, &'l str)>
+    where
+        Self: Sized,
+    {
+        let _ = pos;
+        // TODO default style vs empty vec to indicated no highlighting
+        vec![(Self::Style::default(), line)]
     }
 
     /// Takes the `prompt` and
@@ -167,12 +165,21 @@ pub trait Highlighter {
     }
 }
 
+#[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))] // FIXME
 impl Highlighter for () {}
 
 impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
     #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         (**self).highlight(line, pos)
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(&self, line: &'l str, pos: usize) -> Vec<(Self::Style, &'l str)>
+    where
+        Self: Sized,
+    {
+        (**self).highlight_line(line, pos)
     }
 
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(

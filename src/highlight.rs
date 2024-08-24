@@ -101,7 +101,7 @@ impl StyledBlock for (anstyle::Style, &str) {
 pub trait Highlighter {
     /// ANSI Style
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style: Style + Default
+    type Style: Style
     where
         Self: Sized;
     /// Takes the currently edited `line` with the cursor `pos`ition and
@@ -122,6 +122,8 @@ pub trait Highlighter {
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the styled blocks.
+    ///
+    /// Returns an empty vec when there is no highlighting.
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
     #[cfg_attr(
         docsrs,
@@ -132,9 +134,8 @@ pub trait Highlighter {
     where
         Self: Sized,
     {
-        let _ = pos;
-        // TODO default style vs empty vec to indicate no highlighting
-        vec![(Self::Style::default(), line)]
+        let _ = (line, pos);
+        vec![]
     }
 
     /// Takes the `prompt` and
@@ -229,6 +230,8 @@ impl<'r, H: Highlighter> Highlighter for &'r H {
 /// Highlight matching bracket when typed or cursor moved on.
 #[derive(Default)]
 pub struct MatchingBracketHighlighter {
+    #[cfg(feature = "anstyle")]
+    style: anstyle::Style,
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
 }
 
@@ -237,13 +240,21 @@ impl MatchingBracketHighlighter {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "anstyle")]
+            style: anstyle::Style::new()
+                .bold()
+                .fg_color(Some(anstyle::AnsiColor::Blue.into())),
             bracket: Cell::new(None),
         }
     }
 }
 
-#[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
+#[cfg(any(not(feature = "split-highlight"), feature = "anstyle"))]
 impl Highlighter for MatchingBracketHighlighter {
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style = anstyle::Style;
+
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
@@ -257,6 +268,23 @@ impl Highlighter for MatchingBracketHighlighter {
             }
         }
         Borrowed(line)
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(&self, line: &'l str, _pos: usize) -> Vec<(Self::Style, &'l str)> {
+        if line.len() <= 1 {
+            return vec![];
+        }
+        if let Some((bracket, pos)) = self.bracket.get() {
+            if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
+                return vec![
+                    (Self::Style::default(), &line[0..idx]),
+                    (self.style, &line[idx..=idx]),
+                    (Self::Style::default(), &line[idx + 1..]),
+                ];
+            }
+        }
+        vec![]
     }
 
     fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {

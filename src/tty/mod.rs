@@ -47,14 +47,14 @@ pub trait Renderer {
 
     /// Display `prompt`, line and cursor in terminal output
     #[allow(clippy::too_many_arguments)]
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -126,14 +126,14 @@ impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
         (**self).move_cursor(old, new)
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()> {
         (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
     }

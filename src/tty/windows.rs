@@ -429,14 +429,14 @@ impl Renderer for ConsoleRenderer {
             .map(|_| ())
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;

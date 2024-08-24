@@ -73,8 +73,7 @@ with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
 # For continuation prompt, indentation, scrolling
-# TODO make ansi-str optional
-split-highlight = ["ansi-str"]
+split-highlight = []
 
 [[example]]
 name = "custom_key_bindings"

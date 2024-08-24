@@ -1,7 +1,7 @@
 //! Syntax highlighting
 
 use crate::config::CompletionType;
-use std::borrow::Cow::{self, Borrowed, Owned};
+use std::borrow::Cow::{self, Borrowed};
 use std::cell::Cell;
 #[cfg(feature = "split-highlight")]
 use std::fmt::Display;
@@ -15,6 +15,18 @@ pub trait Style {
     /// Produce a ansi sequences which ends the graphic mode
     fn end(&self) -> impl Display;
 }
+
+#[cfg(feature = "split-highlight")]
+impl Style for () {
+    fn start(&self) -> impl Display {
+        ""
+    }
+
+    fn end(&self) -> impl Display {
+        ""
+    }
+}
+
 #[cfg(feature = "ansi-str")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl Style for ansi_str::Style {
@@ -121,7 +133,7 @@ pub trait Highlighter {
         Self: Sized,
     {
         let _ = pos;
-        // TODO default style vs empty vec to indicated no highlighting
+        // TODO default style vs empty vec to indicate no highlighting
         vec![(Self::Style::default(), line)]
     }
 
@@ -165,10 +177,15 @@ pub trait Highlighter {
     }
 }
 
-#[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))] // FIXME
-impl Highlighter for () {}
+impl Highlighter for () {
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style = ();
+}
 
-impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
+impl<'r, H: Highlighter> Highlighter for &'r H {
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    type Style = H::Style;
+
     #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         (**self).highlight(line, pos)
@@ -225,8 +242,8 @@ impl MatchingBracketHighlighter {
     }
 }
 
+#[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
 impl Highlighter for MatchingBracketHighlighter {
-    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);

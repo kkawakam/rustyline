@@ -112,10 +112,7 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                     &self,
                     line: &'l str,
                     pos: usize,
-                ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, ::std::borrow::Cow<'l, str>)>
-                where
-                    Self: Sized,
-                {
+                ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, &'l str)> {
                     ::rustyline::highlight::Highlighter::highlight_line(&self.#field_name_or_index, line, pos)
                 }
 

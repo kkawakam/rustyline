@@ -137,10 +137,7 @@ pub trait Highlighter {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)>
-    where
-        Self: Sized,
-    {
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
         let _ = (line, pos);
         std::iter::empty()
     }
@@ -198,10 +195,7 @@ impl<'r, H: Highlighter> Highlighter for &'r H {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)>
-    where
-        Self: Sized,
-    {
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
         (**self).highlight_line(line, pos)
     }
 
@@ -281,16 +275,16 @@ impl Highlighter for MatchingBracketHighlighter {
         &self,
         line: &'l str,
         _pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)> {
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
         if line.len() <= 1 {
             return vec![].into_iter();
         }
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
                 return vec![
-                    (AnsiStyle::default(), Borrowed(&line[0..idx])),
-                    (self.style, Borrowed(&line[idx..=idx])),
-                    (AnsiStyle::default(), Borrowed(&line[idx + 1..])),
+                    (AnsiStyle::default(), &line[0..idx]),
+                    (self.style, &line[idx..=idx]),
+                    (AnsiStyle::default(), &line[idx + 1..]),
                 ]
                 .into_iter();
             }

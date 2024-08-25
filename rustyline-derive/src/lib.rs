@@ -112,7 +112,7 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                     &self,
                     line: &'l str,
                     pos: usize,
-                ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, &'l str)> {
+                ) -> impl Iterator<Item = impl 'l + ::rustyline::highlight::StyledBlock> {
                     ::rustyline::highlight::Highlighter::highlight_line(&self.#field_name_or_index, line, pos)
                 }
 

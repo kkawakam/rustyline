@@ -9,7 +9,7 @@ use std::fmt::Display;
 /// ANSI style
 #[cfg(feature = "split-highlight")]
 #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
-pub trait Style {
+pub trait Style: Default {
     /// Produce a ansi sequences which sets the graphic mode
     fn start(&self) -> impl Display;
     /// Produce a ansi sequences which ends the graphic mode
@@ -27,7 +27,7 @@ impl Style for () {
     }
 }
 
-#[cfg(feature = "ansi-str")]
+/*#[cfg(feature = "ansi-str")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl Style for ansi_str::Style {
     fn start(&self) -> impl Display {
@@ -37,7 +37,7 @@ impl Style for ansi_str::Style {
     fn end(&self) -> impl Display {
         self.end()
     }
-}
+}*/
 #[cfg(feature = "anstyle")]
 #[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
 impl Style for anstyle::Style {
@@ -58,7 +58,6 @@ pub type AnsiStyle = anstyle::Style;
 #[cfg(not(feature = "anstyle"))]
 pub type AnsiStyle = ();
 
-/*
 /// Styled text
 #[cfg(feature = "split-highlight")]
 #[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
@@ -74,7 +73,7 @@ pub trait StyledBlock {
     where
         Self: Sized;
 }
-#[cfg(feature = "ansi-str")]
+/*#[cfg(feature = "ansi-str")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
 impl StyledBlock for ansi_str::AnsiBlock<'_> {
     type Style = ansi_str::Style;
@@ -86,11 +85,11 @@ impl StyledBlock for ansi_str::AnsiBlock<'_> {
     fn style(&self) -> &Self::Style {
         self.style()
     }
-}
-#[cfg(feature = "anstyle")]
-#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
-impl StyledBlock for (anstyle::Style, &str) {
-    type Style = anstyle::Style;
+}*/
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+impl StyledBlock for (AnsiStyle, &str) {
+    type Style = AnsiStyle;
 
     fn text(&self) -> &str {
         self.1
@@ -100,7 +99,6 @@ impl StyledBlock for (anstyle::Style, &str) {
         &self.0
     }
 }
-*/
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows
@@ -126,8 +124,6 @@ pub trait Highlighter {
 
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the styled blocks.
-    ///
-    /// Returns an empty vec when there is no highlighting.
     #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
     #[cfg_attr(
         docsrs,
@@ -137,9 +133,9 @@ pub trait Highlighter {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
         let _ = (line, pos);
-        std::iter::empty()
+        vec![(AnsiStyle::default(), line)].into_iter()
     }
 
     /// Takes the `prompt` and
@@ -195,7 +191,7 @@ impl<'r, H: Highlighter> Highlighter for &'r H {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
         (**self).highlight_line(line, pos)
     }
 
@@ -275,9 +271,9 @@ impl Highlighter for MatchingBracketHighlighter {
         &self,
         line: &'l str,
         _pos: usize,
-    ) -> impl ExactSizeIterator<Item = (AnsiStyle, &'l str)> {
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
         if line.len() <= 1 {
-            return vec![].into_iter();
+            return vec![(AnsiStyle::default(), line)].into_iter();
         }
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
@@ -289,7 +285,7 @@ impl Highlighter for MatchingBracketHighlighter {
                 .into_iter();
             }
         }
-        vec![].into_iter()
+        vec![(AnsiStyle::default(), line)].into_iter()
     }
 
     fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {

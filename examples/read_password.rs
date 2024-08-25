@@ -24,14 +24,14 @@ impl Highlighter for MaskingHighlighter {
         &self,
         line: &'l str,
         _pos: usize,
-    ) -> impl ExactSizeIterator<Item = (rustyline::highlight::AnsiStyle, &'l str)> {
+    ) -> impl Iterator<Item = impl 'l + rustyline::highlight::StyledBlock> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
             [(rustyline::highlight::AnsiStyle::default(), " ")]
                 .repeat(line.width())
                 .into_iter()
         } else {
-            vec![].into_iter()
+            vec![(rustyline::highlight::AnsiStyle::default(), line)].into_iter()
         }
     }
 

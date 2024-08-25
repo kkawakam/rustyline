@@ -47,7 +47,7 @@ impl Highlighter for MyHelper {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, &'l str)> {
+    ) -> impl Iterator<Item = impl 'l + rustyline::highlight::StyledBlock> {
         self.highlighter.highlight_line(line, pos)
     }
 

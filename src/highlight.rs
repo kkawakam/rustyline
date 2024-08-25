@@ -99,6 +99,18 @@ impl StyledBlock for (AnsiStyle, &str) {
         &self.0
     }
 }
+#[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+impl StyledBlock for (AnsiStyle, String) {
+    type Style = AnsiStyle;
+
+    fn text(&self) -> &str {
+        &self.1
+    }
+
+    fn style(&self) -> &Self::Style {
+        &self.0
+    }
+}
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 /// Rustyline will try to handle escape sequence for ANSI color on windows

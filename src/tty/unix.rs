@@ -1011,10 +1011,15 @@ impl Renderer for PosixRenderer {
                         .push_str(&highlighter.highlight(line, line.pos()));
                 } else {
                     use crate::highlight::Style;
-                    for (style, block) in highlighter.highlight_line(line, line.pos()) {
-                        write!(self.buffer, "{}", style.start())?;
-                        self.buffer.push_str(&block);
-                        write!(self.buffer, "{}", style.end())?;
+                    let it = highlighter.highlight_line(line, line.pos());
+                    if it.len() == 0 {
+                        self.buffer.push_str(line);
+                    } else {
+                        for (style, block) in it {
+                            write!(self.buffer, "{}", style.start())?;
+                            self.buffer.push_str(&block);
+                            write!(self.buffer, "{}", style.end())?;
+                        }
                     }
                 }
             }

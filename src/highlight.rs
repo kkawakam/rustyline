@@ -50,6 +50,14 @@ impl Style for anstyle::Style {
     }
 }
 
+/// ANSI Style
+#[cfg(feature = "anstyle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
+pub type AnsiStyle = anstyle::Style;
+/// ANSI Style
+#[cfg(not(feature = "anstyle"))]
+pub type AnsiStyle = ();
+
 /*
 /// Styled text
 #[cfg(feature = "split-highlight")]
@@ -101,14 +109,8 @@ impl StyledBlock for (anstyle::Style, &str) {
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
-    /// ANSI Style
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style: Style
-    where
-        Self: Sized;
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
-    ///
     ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
@@ -135,7 +137,7 @@ pub trait Highlighter {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)>
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)>
     where
         Self: Sized,
     {
@@ -183,15 +185,9 @@ pub trait Highlighter {
     }
 }
 
-impl Highlighter for () {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = ();
-}
+impl Highlighter for () {}
 
 impl<'r, H: Highlighter> Highlighter for &'r H {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = H::Style;
-
     #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         (**self).highlight(line, pos)
@@ -202,7 +198,7 @@ impl<'r, H: Highlighter> Highlighter for &'r H {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)>
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)>
     where
         Self: Sized,
     {
@@ -264,9 +260,6 @@ impl MatchingBracketHighlighter {
     feature = "ansi-str"
 ))]
 impl Highlighter for MatchingBracketHighlighter {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = anstyle::Style;
-
     #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
@@ -288,16 +281,16 @@ impl Highlighter for MatchingBracketHighlighter {
         &self,
         line: &'l str,
         _pos: usize,
-    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)> {
+    ) -> impl ExactSizeIterator<Item = (AnsiStyle, Cow<'l, str>)> {
         if line.len() <= 1 {
             return vec![].into_iter();
         }
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
                 return vec![
-                    (Self::Style::default(), Borrowed(&line[0..idx])),
+                    (AnsiStyle::default(), Borrowed(&line[0..idx])),
                     (self.style, Borrowed(&line[idx..=idx])),
-                    (Self::Style::default(), Borrowed(&line[idx + 1..])),
+                    (AnsiStyle::default(), Borrowed(&line[idx + 1..])),
                 ]
                 .into_iter();
             }

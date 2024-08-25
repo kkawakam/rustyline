@@ -102,11 +102,6 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
-                #[cfg(all(feature = "split-highlight", not(feature = "ansi-str"), feature = "anstyle"))]
-                type Style = anstyle::Style;
-                #[cfg(all(feature = "split-highlight", not(feature = "ansi-str"), not(feature = "anstyle")))]
-                type Style = ();
-
                 #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
                 fn highlight<'l>(&self, line: &'l str, pos: usize) -> ::std::borrow::Cow<'l, str> {
                     ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos)
@@ -117,7 +112,7 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                     &self,
                     line: &'l str,
                     pos: usize,
-                ) -> impl ExactSizeIterator<Item = (Self::Style, ::std::borrow::Cow<'l, str>)>
+                ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, ::std::borrow::Cow<'l, str>)>
                 where
                     Self: Sized,
                 {
@@ -153,8 +148,6 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
-                #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-                type Style = ();
             }
         }
     };

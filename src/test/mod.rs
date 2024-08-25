@@ -56,10 +56,7 @@ impl Hinter for SimpleCompleter {
 }
 
 impl Helper for SimpleCompleter {}
-impl Highlighter for SimpleCompleter {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = ();
-}
+impl Highlighter for SimpleCompleter {}
 impl Validator for SimpleCompleter {}
 
 #[test]

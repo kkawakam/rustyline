@@ -21,9 +21,6 @@ struct MyHelper {
 }
 
 impl Highlighter for MyHelper {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = anstyle::Style;
-
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
@@ -50,7 +47,7 @@ impl Highlighter for MyHelper {
         &self,
         line: &'l str,
         pos: usize,
-    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)> {
+    ) -> impl ExactSizeIterator<Item = (::rustyline::highlight::AnsiStyle, Cow<'l, str>)> {
         self.highlighter.highlight_line(line, pos)
     }
 

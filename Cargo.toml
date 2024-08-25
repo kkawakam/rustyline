@@ -11,10 +11,7 @@ keywords = ["readline"]
 license = "MIT"
 categories = ["command-line-interface"]
 
-exclude = [
-  "/.github/*",
-  "/rustfmt.toml",
-]
+exclude = ["/.github/*", "/rustfmt.toml"]
 
 [badges]
 maintenance = { status = "actively-developed" }

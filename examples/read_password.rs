@@ -11,9 +11,6 @@ struct MaskingHighlighter {
 }
 
 impl Highlighter for MaskingHighlighter {
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    type Style = ();
-
     #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         use unicode_width::UnicodeWidthStr;
@@ -29,10 +26,14 @@ impl Highlighter for MaskingHighlighter {
         &self,
         line: &'l str,
         _pos: usize,
-    ) -> impl ExactSizeIterator<Item = (Self::Style, Cow<'l, str>)> {
+    ) -> impl ExactSizeIterator<Item = (rustyline::highlight::AnsiStyle, Cow<'l, str>)> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
-            vec![((), Owned(" ".repeat(line.width())))].into_iter()
+            vec![(
+                rustyline::highlight::AnsiStyle::default(),
+                Owned(" ".repeat(line.width())),
+            )]
+            .into_iter()
         } else {
             vec![].into_iter()
         }

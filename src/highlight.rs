@@ -5,8 +5,6 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-/// Rustyline will try to handle escape sequence for ANSI color on windows
-/// when not supported natively (windows <10).
 ///
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.

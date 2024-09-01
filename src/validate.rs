@@ -17,14 +17,11 @@ pub enum ValidationResult {
 
 impl ValidationResult {
     pub(crate) fn is_valid(&self) -> bool {
-        matches!(self, ValidationResult::Valid(_))
+        matches!(self, Self::Valid(_))
     }
 
     pub(crate) fn has_message(&self) -> bool {
-        matches!(
-            self,
-            ValidationResult::Valid(Some(_)) | ValidationResult::Invalid(Some(_))
-        )
+        matches!(self, Self::Valid(Some(_)) | Self::Invalid(Some(_)))
     }
 }
 
@@ -51,10 +48,11 @@ impl<'i> ValidationContext<'i> {
 }
 
 /// This trait provides an extension interface for determining whether
-/// the current input buffer is valid. Rustyline uses the method
-/// provided by this trait to decide whether hitting the enter key
-/// will end the current editing session and return the current line
-/// buffer to the caller of `Editor::readline` or variants.
+/// the current input buffer is valid.
+///
+/// Rustyline uses the method provided by this trait to decide whether hitting
+/// the enter key will end the current editing session and return the current
+/// line buffer to the caller of `Editor::readline` or variants.
 pub trait Validator {
     /// Takes the currently edited `input` and returns a
     /// `ValidationResult` indicating whether it is valid or not along

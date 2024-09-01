@@ -11,8 +11,6 @@ use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 #[cfg(feature = "with-file-history")]
 use std::io::SeekFrom;
-#[cfg(feature = "with-file-history")]
-use std::iter::DoubleEndedIterator;
 use std::ops::Index;
 use std::path::Path;
 #[cfg(feature = "with-file-history")]
@@ -589,7 +587,7 @@ impl FileHistory {
         )) = self.path_info
         {
             if previous_path.as_path() != path {
-                *previous_path = path.to_owned();
+                path.clone_into(previous_path);
             }
             *previous_modified = modified;
             *previous_size = size;

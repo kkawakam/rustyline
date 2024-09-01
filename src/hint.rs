@@ -55,8 +55,8 @@ pub struct HistoryHinter {}
 
 impl HistoryHinter {
     /// Create a new `HistoryHinter`
-    pub fn new() -> HistoryHinter {
-        HistoryHinter::default()
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

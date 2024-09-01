@@ -5,8 +5,6 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-/// Rustyline will try to handle escape sequence for ANSI color on windows
-/// when not supported natively (windows <10).
 ///
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
@@ -49,7 +47,8 @@ pub trait Highlighter {
     }
     /// Tells if `line` needs to be highlighted when a specific char is typed or
     /// when cursor is moved under a specific char.
-    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient vs final highlight).
+    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient
+    /// vs final highlight).
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.

@@ -1,5 +1,4 @@
 //! Tests specific definitions
-use std::iter::IntoIterator;
 use std::slice::Iter;
 use std::time::Duration;
 use std::vec::IntoIter;
@@ -13,6 +12,7 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
+pub type Buffer = ();
 pub type KeyMap = ();
 pub type Mode = ();
 
@@ -23,6 +23,8 @@ impl RawMode for Mode {
 }
 
 impl<'a> RawReader for Iter<'a, KeyEvent> {
+    type Buffer = Buffer;
+
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         self.next_key(single_esc_abort).map(Event::KeyPress)
     }
@@ -47,12 +49,18 @@ impl<'a> RawReader for Iter<'a, KeyEvent> {
         None
     }
 
+    fn unbuffer(self) -> Option<Buffer> {
+        None
+    }
+
     fn poll(&mut self, _timeout: Duration) -> Result<bool> {
         Ok(true)
     }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
+    type Buffer = Buffer;
+
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         self.next_key(single_esc_abort).map(Event::KeyPress)
     }
@@ -79,6 +87,10 @@ impl RawReader for IntoIter<KeyEvent> {
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
+        None
+    }
+
+    fn unbuffer(self) -> Option<Buffer> {
         None
     }
 
@@ -169,6 +181,8 @@ pub struct DummyTerminal {
 }
 
 impl Term for DummyTerminal {
+    type Buffer = Buffer;
+    type CursorGuard = ();
     type ExternalPrinter = DummyExternalPrinter;
     type KeyMap = KeyMap;
     type Mode = Mode;
@@ -181,9 +195,10 @@ impl Term for DummyTerminal {
         _tab_stop: usize,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
-    ) -> Result<DummyTerminal> {
-        Ok(DummyTerminal {
-            keys: Vec::new(),
+        _enable_signals: bool,
+    ) -> Result<Self> {
+        Ok(Self {
+            keys: vec![],
             cursor: 0,
             color_mode,
             bell_style,
@@ -216,7 +231,7 @@ impl Term for DummyTerminal {
         Ok(((), ()))
     }
 
-    fn create_reader(&self, _: &Config, _: KeyMap) -> Self::Reader {
+    fn create_reader(&self, _: Option<Buffer>, _: &Config, _: KeyMap) -> Self::Reader {
         self.keys.clone().into_iter()
     }
 
@@ -226,6 +241,10 @@ impl Term for DummyTerminal {
 
     fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
         Ok(DummyExternalPrinter {})
+    }
+
+    fn set_cursor_visibility(&mut self, _: bool) -> Result<Option<()>> {
+        Ok(None)
     }
 
     fn writeln(&self) -> Result<()> {

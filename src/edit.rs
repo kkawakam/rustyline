@@ -100,9 +100,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
-    ) -> State<'out, 'prompt, H> {
+    ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
-        State {
+        Self {
             out,
             prompt,
             prompt_size,

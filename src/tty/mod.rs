@@ -24,6 +24,7 @@ pub enum Event {
 
 /// Translate bytes read from stdin to keys.
 pub trait RawReader {
+    type Buffer;
     /// Blocking wait for either a key press or an external print
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event>; // TODO replace calls to `next_key` by `wait_for_input` where relevant
     /// Blocking read of key pressed.
@@ -35,6 +36,8 @@ pub trait RawReader {
     fn read_pasted_text(&mut self) -> Result<String>;
     /// Check if `key` is bound to a peculiar command
     fn find_binding(&self, key: &KeyEvent) -> Option<Cmd>;
+    /// Backup type ahead
+    fn unbuffer(self) -> Option<Buffer>;
     /// Poll input
     fn poll(&mut self, timeout: Duration) -> Result<bool>;
 }
@@ -218,11 +221,13 @@ pub trait ExternalPrinter {
 
 /// Terminal contract
 pub trait Term {
+    type Buffer;
     type KeyMap;
-    type Reader: RawReader; // rl_instream
+    type Reader: RawReader<Buffer = Self::Buffer>; // rl_instream
     type Writer: Renderer<Reader = Self::Reader>; // rl_outstream
     type Mode: RawMode;
     type ExternalPrinter: ExternalPrinter;
+    type CursorGuard;
 
     fn new(
         color_mode: ColorMode,
@@ -230,6 +235,7 @@ pub trait Term {
         tab_stop: usize,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
+        enable_signals: bool,
     ) -> Result<Self>
     where
         Self: Sized;
@@ -243,26 +249,33 @@ pub trait Term {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
-    fn create_reader(&self, config: &Config, key_map: Self::KeyMap) -> Self::Reader;
+    fn create_reader(
+        &self,
+        buffer: Option<Self::Buffer>,
+        config: &Config,
+        key_map: Self::KeyMap,
+    ) -> Self::Reader;
     /// Create a writer
     fn create_writer(&self) -> Self::Writer;
     fn writeln(&self) -> Result<()>;
     /// Create an external printer
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;
+    /// Change cursor visibility
+    fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<Self::CursorGuard>>;
 }
 
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope
 #[cfg(all(windows, not(target_arch = "wasm32")))]
 mod windows;
-#[cfg(all(windows, not(target_arch = "wasm32")))]
+#[cfg(all(windows, not(target_arch = "wasm32"), not(test)))]
 pub use self::windows::*;
 
 // If on Unix platform import Unix TTY module
 // and re-export into mod.rs scope
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod unix;
-#[cfg(all(unix, not(target_arch = "wasm32")))]
+#[cfg(all(unix, not(target_arch = "wasm32"), not(test)))]
 pub use self::unix::*;
 
 #[cfg(any(test, target_arch = "wasm32"))]

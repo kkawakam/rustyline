@@ -265,9 +265,7 @@ impl Completer for FilenameCompleter {
 /// Remove escape char
 #[must_use]
 pub fn unescape(input: &str, esc_char: Option<char>) -> Cow<'_, str> {
-    let esc_char = if let Some(c) = esc_char {
-        c
-    } else {
+    let Some(esc_char) = esc_char else {
         return Borrowed(input);
     };
     if !input.chars().any(|c| c == esc_char) {
@@ -310,9 +308,7 @@ pub fn escape(
     if n == 0 {
         return input; // no need to escape
     }
-    let esc_char = if let Some(c) = esc_char {
-        c
-    } else {
+    let Some(esc_char) = esc_char else {
         if cfg!(windows) && quote == Quote::None {
             input.insert(0, '"'); // force double quote
             return input;
@@ -375,7 +371,7 @@ fn filename_complete(
         dir_path.to_path_buf()
     };
 
-    let mut entries: Vec<Pair> = Vec::new();
+    let mut entries: Vec<Pair> = vec![];
 
     // if dir doesn't exist, then don't offer any completions
     if !dir.exists() {
@@ -419,6 +415,7 @@ fn normalize(s: &str) -> Cow<str> {
 
 /// Given a `line` and a cursor `pos`ition,
 /// try to find backward the start of a word.
+///
 /// Return (0, `line[..pos]`) if no break char has been found.
 /// Return the word and its start position (idx, `line[idx..pos]`) otherwise.
 #[must_use]
@@ -617,7 +614,7 @@ mod tests {
             assert_eq!(Some(s), lcp);
         }
 
-        let c3 = String::from("");
+        let c3 = String::new();
         candidates.push(c3);
         {
             let lcp = super::longest_common_prefix(&candidates);

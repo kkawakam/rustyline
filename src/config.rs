@@ -16,7 +16,7 @@ pub struct Config {
     completion_prompt_limit: usize,
     /// Duration (milliseconds) Rustyline will wait for a character when
     /// reading an ambiguous key sequence.
-    keyseq_timeout: i32,
+    keyseq_timeout: Option<u16>,
     /// Emacs or Vi mode
     edit_mode: EditMode,
     /// If true, each nonblank line returned by `readline` will be
@@ -36,6 +36,8 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// Whether to disable or not the signals in termios
+    enable_signals: bool,
     /// To avoid freezing the UI
     refresh_rate_limit: Duration,
 }
@@ -109,7 +111,7 @@ impl Config {
     ///
     /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
     #[must_use]
-    pub fn keyseq_timeout(&self) -> i32 {
+    pub fn keyseq_timeout(&self) -> Option<u16> {
         self.keyseq_timeout
     }
 
@@ -197,6 +199,18 @@ impl Config {
         self.enable_bracketed_paste
     }
 
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    #[must_use]
+    pub fn enable_signals(&self) -> bool {
+        self.enable_signals
+    }
+
+    pub(crate) fn set_enable_signals(&mut self, enable_signals: bool) {
+        self.enable_signals = enable_signals;
+    }
+
     /// Used to batch input events before repainting edited line.
     pub fn refresh_rate_limit(&self) -> Duration {
         self.refresh_rate_limit
@@ -211,7 +225,7 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
-            keyseq_timeout: -1,
+            keyseq_timeout: None,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
             bell_style: BellStyle::default(),
@@ -221,6 +235,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            enable_signals: false,
             refresh_rate_limit: Duration::from_millis(500),
         }
     }
@@ -242,12 +257,12 @@ pub enum BellStyle {
 impl Default for BellStyle {
     #[cfg(any(windows, target_arch = "wasm32"))]
     fn default() -> Self {
-        BellStyle::None
+        Self::None
     }
 
     #[cfg(unix)]
     fn default() -> Self {
-        BellStyle::Audible
+        Self::Audible
     }
 }
 
@@ -377,7 +392,7 @@ impl Builder {
     /// After seeing an ESC key, wait at most `keyseq_timeout_ms` for another
     /// byte.
     #[must_use]
-    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: i32) -> Self {
+    pub fn keyseq_timeout(mut self, keyseq_timeout_ms: Option<u16>) -> Self {
         self.set_keyseq_timeout(keyseq_timeout_ms);
         self
     }
@@ -459,6 +474,15 @@ impl Builder {
         self
     }
 
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    #[must_use]
+    pub fn enable_signals(mut self, enable_signals: bool) -> Self {
+        self.p.set_enable_signals(enable_signals);
+        self
+    }
+
     /// Used to batch input events before repainting edited line.
     ///
     /// By default, 500 ms
@@ -520,7 +544,7 @@ pub trait Configurer {
     }
 
     /// Timeout for ambiguous key sequences in milliseconds.
-    fn set_keyseq_timeout(&mut self, keyseq_timeout_ms: i32) {
+    fn set_keyseq_timeout(&mut self, keyseq_timeout_ms: Option<u16>) {
         self.config_mut().keyseq_timeout = keyseq_timeout_ms;
     }
 
@@ -528,8 +552,8 @@ pub trait Configurer {
     fn set_edit_mode(&mut self, edit_mode: EditMode) {
         self.config_mut().edit_mode = edit_mode;
         match edit_mode {
-            EditMode::Emacs => self.set_keyseq_timeout(-1), // no timeout
-            EditMode::Vi => self.set_keyseq_timeout(500),
+            EditMode::Emacs => self.set_keyseq_timeout(None), // no timeout
+            EditMode::Vi => self.set_keyseq_timeout(Some(500)),
         }
     }
 
@@ -584,6 +608,13 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Enable or disable signals in termios
+    ///
+    /// By default, it's disabled.
+    fn set_enable_signals(&mut self, enable_signals: bool) {
+        self.config_mut().set_enable_signals(enable_signals);
     }
 
     /// Used to batch input events before repainting edited line.

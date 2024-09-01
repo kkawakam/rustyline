@@ -160,11 +160,7 @@ impl LineBuffer {
         let max = self.buf.capacity();
         if self.must_truncate(buf.len()) {
             self.insert_str(0, &buf[..max], cl);
-            if pos > max {
-                self.pos = max;
-            } else {
-                self.pos = pos;
-            }
+            self.pos = max.min(pos);
         } else {
             self.insert_str(0, buf, cl);
             self.pos = pos;
@@ -1119,6 +1115,7 @@ impl LineBuffer {
             .map_or_else(|| self.buf.len(), |pos| end + pos);
         let mut index = start;
         if dedent {
+            #[allow(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 let max = line.len() - line.trim_start().len();
                 let deleting = min(max, amount);
@@ -1134,6 +1131,7 @@ impl LineBuffer {
                 index += line.len() + 1 - deleting;
             }
         } else {
+            #[allow(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 for off in (0..amount).step_by(INDENT.len()) {
                     self.insert_str(index, &INDENT[..min(amount - off, INDENT.len())], cl);
@@ -1191,8 +1189,8 @@ mod test {
     }
 
     impl Listener {
-        fn new() -> Listener {
-            Listener { deleted_str: None }
+        fn new() -> Self {
+            Self { deleted_str: None }
         }
 
         fn assert_deleted_str_eq(&self, expected: &str) {

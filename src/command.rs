@@ -127,6 +127,9 @@ pub fn execute<H: Helper>(
         Cmd::Newline => {
             s.edit_insert('\n', 1)?;
         }
+        Cmd::Repaint => {
+            s.refresh_line()?;
+        }
         Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } => {
             let validation_result = s.validate()?;
             let valid = validation_result.is_valid();

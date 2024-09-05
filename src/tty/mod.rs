@@ -46,7 +46,6 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
-    #[allow(clippy::too_many_arguments)]
     fn refresh_line(
         &mut self,
         prompt: &str,

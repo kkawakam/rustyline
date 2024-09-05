@@ -211,7 +211,6 @@ impl FilenameCompleter {
     /// partial path to be completed.
     pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, mut matches) = self.complete_path_unsorted(line, pos)?;
-        #[allow(clippy::unnecessary_sort_by)]
         matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
     }

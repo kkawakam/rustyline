@@ -24,7 +24,6 @@ impl KeyEvent {
             }
             return E(K::Char(c), mods);
         }
-        #[allow(clippy::match_same_arms)]
         match c {
             '\x00' => E(K::Char('@'), mods | M::CTRL), // '\0'
             '\x01' => E(K::Char('A'), mods | M::CTRL),

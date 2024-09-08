@@ -818,7 +818,7 @@ impl RawReader for PosixRawReader {
 
     #[cfg(feature = "signal-hook")]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        self.select(single_esc_abort)
+        self.select(None, single_esc_abort)
     }
 
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {

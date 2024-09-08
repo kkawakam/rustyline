@@ -19,7 +19,6 @@ use nix::poll::{self, PollFlags, PollTimeout};
 use nix::sys::select::{self, FdSet};
 #[cfg(not(feature = "termios"))]
 use nix::sys::termios::Termios;
-#[cfg(target_os = "macos")]
 use nix::sys::time::TimeValLike;
 use nix::unistd::{close, isatty, read, write};
 #[cfg(feature = "termios")]

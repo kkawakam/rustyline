@@ -444,7 +444,7 @@ fn reverse_incremental_search<H: Helper, I: History>(
 
 struct Guard<'m>(&'m tty::Mode);
 
-#[allow(unused_must_use)]
+#[expect(unused_must_use)]
 impl Drop for Guard<'_> {
     fn drop(&mut self) {
         let Guard(mode) = *self;
@@ -596,7 +596,6 @@ pub struct Editor<H: Helper, I: History> {
 /// Default editor with no helper and `DefaultHistory`
 pub type DefaultEditor = Editor<(), DefaultHistory>;
 
-#[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H, DefaultHistory> {
     /// Create an editor with the default configuration
     pub fn new() -> Result<Self> {

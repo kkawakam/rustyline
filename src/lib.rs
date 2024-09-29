@@ -300,7 +300,7 @@ fn page_completions<C: Candidate, H: Helper>(
     let num_cols = cols / max_width;
 
     let mut pause_row = s.out.get_rows() - 1;
-    let num_rows = (candidates.len() + num_cols - 1) / num_cols;
+    let num_rows = candidates.len().div_ceil(num_cols);
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {

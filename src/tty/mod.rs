@@ -1,5 +1,6 @@
 //! This module implements and describes common TTY methods & traits
 
+use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
@@ -37,6 +38,8 @@ pub trait RawReader {
     fn find_binding(&self, key: &KeyEvent) -> Option<Cmd>;
     /// Backup type ahead
     fn unbuffer(self) -> Option<Buffer>;
+    /// Poll input
+    fn poll(&mut self, timeout: Duration) -> Result<bool>;
 }
 
 /// Display prompt, line and cursor in terminal output

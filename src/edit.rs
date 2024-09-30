@@ -1,7 +1,9 @@
 //! Command processor
 
+use crate::Config;
 use log::debug;
 use std::fmt;
+use std::time::{Duration, Instant};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthChar;
 
@@ -16,10 +18,55 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
 };
-use crate::tty::{Renderer, Term, Terminal};
+use crate::tty::{RawReader, Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 use crate::KillRing;
+
+struct RefreshRateLimit {
+    limit: Duration,
+    last_refresh_time: Instant,
+    refresh_skipped: bool,
+    forced: bool,
+}
+
+impl RefreshRateLimit {
+    fn new(limit: Duration) -> RefreshRateLimit {
+        RefreshRateLimit {
+            limit,
+            last_refresh_time: Instant::now(),
+            refresh_skipped: false,
+            forced: true,
+        }
+    }
+}
+impl RefreshRateLimit {
+    /// Should be called to unconditionally refresh screen
+    fn force(&mut self) {
+        self.forced = true;
+    }
+
+    /// Should be called before refreshing screen
+    fn should_skip(&mut self) -> bool {
+        if self.forced || cfg!(test) {
+            self.forced = false;
+            return false;
+        }
+        if self.last_refresh_time.elapsed() < self.limit {
+            debug!(target: "rustyline", "refresh skipped");
+            //self.last_refresh_time = now;
+            self.refresh_skipped = true;
+            return true;
+        }
+        false
+    }
+
+    /// Should be called after refreshing screen
+    fn reset(&mut self) {
+        self.last_refresh_time = Instant::now();
+        self.refresh_skipped = false;
+    }
+}
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -37,6 +84,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     pub highlight_char: bool,        // `true` if a char has been highlighted
     pub forced_refresh: bool,        // `true` if line is redraw without hint or highlight_char
+    refresh_rate_limit: RefreshRateLimit,
 }
 
 enum Info<'m> {
@@ -47,6 +95,7 @@ enum Info<'m> {
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
+        config: &Config,
         out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
         helper: Option<&'out H>,
@@ -67,6 +116,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             hint: None,
             highlight_char: false,
             forced_refresh: false,
+            refresh_rate_limit: RefreshRateLimit::new(config.refresh_rate_limit()),
         }
     }
 
@@ -86,6 +136,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ignore_external_print: bool,
     ) -> Result<Cmd> {
         loop {
+            if self.refresh_rate_limit.refresh_skipped
+                && !rdr.poll(self.refresh_rate_limit.limit)?
+            {
+                self.refresh_line()?;
+            }
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if let Err(ReadlineError::WindowResized) = rc {
                 debug!(target: "rustyline", "SIGWINCH");
@@ -163,6 +218,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         default_prompt: bool,
         info: Info<'_>,
     ) -> Result<()> {
+        if self.refresh_rate_limit.should_skip() {
+            return Ok(());
+        }
         let info = match info {
             Info::NoHint => None,
             Info::Hint => self.hint.as_ref().map(|h| h.display()),
@@ -189,7 +247,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             highlighter,
         )?;
         self.layout = new_layout;
-
+        self.refresh_rate_limit.reset();
         Ok(())
     }
 
@@ -274,6 +332,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
         let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char();
+        self.refresh_rate_limit.force();
         self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
     }
 
@@ -362,6 +421,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     && self.layout.cursor.col + width < self.out.get_columns()
                     && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
                     && !self.highlight_char()
+                    && !self.refresh_rate_limit.refresh_skipped
                 {
                     // Avoid a full update of the line in the trivial case.
                     self.layout.cursor.col += width;
@@ -369,7 +429,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
-                    self.out.write_and_flush(bits)
+                    self.out.write_and_flush(bits)?;
+                    self.refresh_rate_limit.reset();
+                    Ok(())
                 } else {
                     self.refresh(self.prompt, prompt_size, true, Info::Hint)
                 }
@@ -766,6 +828,7 @@ pub fn init_state<'out, H: Helper>(
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
         forced_refresh: false,
+        refresh_rate_limit: RefreshRateLimit::new(Duration::from_millis(0)),
     }
 }
 

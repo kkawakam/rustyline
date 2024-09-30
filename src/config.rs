@@ -1,6 +1,7 @@
 //! Customize line editor
 use crate::Result;
 use std::default::Default;
+use std::time::Duration;
 
 /// User preferences
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,6 +38,8 @@ pub struct Config {
     enable_bracketed_paste: bool,
     /// Whether to disable or not the signals in termios
     enable_signals: bool,
+    /// To avoid freezing the UI
+    refresh_rate_limit: Duration,
 }
 
 impl Config {
@@ -207,6 +210,11 @@ impl Config {
     pub(crate) fn set_enable_signals(&mut self, enable_signals: bool) {
         self.enable_signals = enable_signals;
     }
+
+    /// Used to batch input events before repainting edited line.
+    pub fn refresh_rate_limit(&self) -> Duration {
+        self.refresh_rate_limit
+    }
 }
 
 impl Default for Config {
@@ -228,6 +236,7 @@ impl Default for Config {
             check_cursor_position: false,
             enable_bracketed_paste: true,
             enable_signals: false,
+            refresh_rate_limit: Duration::from_millis(500),
         }
     }
 }
@@ -474,6 +483,15 @@ impl Builder {
         self
     }
 
+    /// Used to batch input events before repainting edited line.
+    ///
+    /// By default, 500 ms
+    #[must_use]
+    pub fn refresh_rate_limit(mut self, refresh_rate_limit: Duration) -> Self {
+        self.set_refresh_rate_limit(refresh_rate_limit);
+        self
+    }
+
     /// Builds a `Config` with the settings specified so far.
     #[must_use]
     pub fn build(self) -> Config {
@@ -597,5 +615,12 @@ pub trait Configurer {
     /// By default, it's disabled.
     fn set_enable_signals(&mut self, enable_signals: bool) {
         self.config_mut().set_enable_signals(enable_signals);
+    }
+
+    /// Used to batch input events before repainting edited line.
+    ///
+    /// By default, 500 ms
+    fn set_refresh_rate_limit(&mut self, refresh_rate_limit: Duration) {
+        self.config_mut().refresh_rate_limit = refresh_rate_limit;
     }
 }

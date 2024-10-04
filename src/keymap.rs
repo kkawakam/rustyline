@@ -565,8 +565,8 @@ impl<'b> InputState<'b> {
                     Cmd::CompleteBackward
                 }
             }
-            // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
+            E(K::Right, M::ALT) if wrt.has_hint() => Cmd::CompleteHint,
             E(K::Char('K'), M::CTRL) => Cmd::Kill(if positive {
                 Movement::EndOfLine
             } else {

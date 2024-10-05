@@ -34,6 +34,7 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
+pub mod parse;
 #[cfg(feature = "with-sqlite-history")]
 pub mod sqlite_history;
 mod tty;
@@ -48,7 +49,7 @@ use std::result;
 use log::debug;
 #[cfg(feature = "derive")]
 #[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
-pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
+pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Parser, Validator};
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
@@ -66,6 +67,7 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, Repeat
 use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
+use crate::parse::Parser;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -84,10 +86,12 @@ fn complete_line<H: Helper>(
     use skim::prelude::{
         unbounded, Skim, SkimItem, SkimItemReceiver, SkimItemSender, SkimOptionsBuilder,
     };
-
-    let completer = s.helper.unwrap();
     // get a list of completions
-    let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
+    let (start, candidates) = s
+        .helper
+        .as_mut()
+        .unwrap()
+        .complete(&s.line, s.line.pos(), &s.ctx)?;
     // if no completions, we are done
     if candidates.is_empty() {
         s.out.beep()?;
@@ -109,7 +113,10 @@ fn complete_line<H: Helper>(
                 } else {
                     Borrowed(candidate)
                 };*/
-                completer.update(&mut s.line, start, candidate, &mut s.changes);
+                s.helper
+                    .as_mut()
+                    .unwrap()
+                    .update(&mut s.line, start, candidate, &mut s.changes);
             } else {
                 // Restore current edited line
                 s.line.update(&backup, backup_pos, &mut s.changes);
@@ -152,7 +159,10 @@ fn complete_line<H: Helper>(
         if let Some(lcp) = longest_common_prefix(&candidates) {
             // if we can extend the item, extend it
             if lcp.len() > s.line.pos() - start || candidates.len() == 1 {
-                completer.update(&mut s.line, start, lcp, &mut s.changes);
+                s.helper
+                    .as_mut()
+                    .unwrap()
+                    .update(&mut s.line, start, lcp, &mut s.changes);
                 s.refresh_line()?;
             }
         }
@@ -247,7 +257,7 @@ fn complete_line<H: Helper>(
                         .downcast_ref::<Candidate>() // downcast to concrete type
                         .expect("something wrong with downcast");
                     if let Some(candidate) = candidates.get(item.index) {
-                        completer.update(
+                        s.helper.as_mut().unwrap().update(
                             &mut s.line,
                             start,
                             candidate.replacement(),
@@ -482,7 +492,7 @@ fn apply_backspace_direct(input: &str) -> String {
 fn readline_direct(
     mut reader: impl BufRead,
     mut writer: impl Write,
-    validator: &Option<impl Validator>,
+    mut validator: Option<&mut impl Validator>,
 ) -> Result<String> {
     let mut input = String::new();
 
@@ -506,9 +516,9 @@ fn readline_direct(
 
         input = apply_backspace_direct(&input);
 
-        match validator.as_ref() {
+        match validator {
             None => return Ok(input),
-            Some(v) => {
+            Some(ref mut v) => {
                 let mut ctx = input.as_str();
                 let mut ctx = validate::ValidationContext::new(&mut ctx);
 
@@ -544,13 +554,13 @@ fn readline_direct(
 /// (parse current line once)
 pub trait Helper
 where
-    Self: Completer + Hinter + Highlighter + Validator,
+    Self: Completer + Hinter + Highlighter + Parser + Validator,
 {
 }
 
 impl Helper for () {}
 
-impl<'h, H: ?Sized + Helper> Helper for &'h H {}
+impl<'h, H: ?Sized + Helper> Helper for &'h mut H {}
 
 /// Completion/suggestion context
 pub struct Context<'h> {
@@ -659,7 +669,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_mut())
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
             let guard = Guard(&original_mode);
@@ -675,7 +685,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_mut())
         }
     }
 
@@ -693,7 +703,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
-        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
+        let mut s = State::new(&mut stdout, prompt, self.helper.as_mut(), ctx);
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 

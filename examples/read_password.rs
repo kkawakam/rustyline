@@ -3,15 +3,15 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::config::Configurer;
 use rustyline::highlight::Highlighter;
 use rustyline::{ColorMode, Editor, Result};
-use rustyline::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Parser, Validator};
 
-#[derive(Completer, Helper, Hinter, Validator)]
+#[derive(Completer, Helper, Hinter, Parser, Validator)]
 struct MaskingHighlighter {
     masking: bool,
 }
 
 impl Highlighter for MaskingHighlighter {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+    fn highlight<'l>(&mut self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
             Owned(" ".repeat(line.width()))
@@ -20,7 +20,7 @@ impl Highlighter for MaskingHighlighter {
         }
     }
 
-    fn highlight_char(&self, _line: &str, _pos: usize, _forced: bool) -> bool {
+    fn highlight_char(&mut self, _line: &str, _pos: usize, _forced: bool) -> bool {
         self.masking
     }
 }

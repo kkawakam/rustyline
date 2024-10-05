@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use rustyline::hint::{Hint, Hinter};
 use rustyline::history::DefaultHistory;
 use rustyline::Context;
-use rustyline::{Completer, Helper, Highlighter, Validator};
+use rustyline::{Completer, Helper, Highlighter, Parser, Validator};
 use rustyline::{Editor, Result};
 
-#[derive(Completer, Helper, Validator, Highlighter)]
+#[derive(Completer, Helper, Highlighter, Parser, Validator)]
 struct DIYHinter {
     // It's simple example of rustyline, for more efficient, please use ** radix trie **
     hints: HashSet<CommandHint>,
@@ -52,7 +52,7 @@ impl CommandHint {
 impl Hinter for DIYHinter {
     type Hint = CommandHint;
 
-    fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
+    fn hint(&mut self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
         if line.is_empty() || pos < line.len() {
             return None;
         }

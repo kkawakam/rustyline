@@ -51,16 +51,16 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
                 type Candidate = <#field_type as ::rustyline::completion::Completer>::Candidate;
 
                 fn complete(
-                    &self,
+                    &mut self,
                     line: &str,
                     pos: usize,
                     ctx: &::rustyline::Context<'_>,
                 ) -> ::rustyline::Result<(usize, ::std::vec::Vec<Self::Candidate>)> {
-                    ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, ctx)
+                    ::rustyline::completion::Completer::complete(&mut self.#field_name_or_index, line, pos, ctx)
                 }
 
-                fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
-                    ::rustyline::completion::Completer::update(&self.#field_name_or_index, line, start, elected, cl)
+                fn update(&mut self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
+                    ::rustyline::completion::Completer::update(&mut self.#field_name_or_index, line, start, elected, cl)
                 }
             }
         }
@@ -102,32 +102,42 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
-                fn highlight<'l>(&self, line: &'l str, pos: usize) -> ::std::borrow::Cow<'l, str> {
-                    ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos)
+                #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
+                fn highlight<'l>(&mut self, line: &'l str, pos: usize) -> ::std::borrow::Cow<'l, str> {
+                    ::rustyline::highlight::Highlighter::highlight(&mut self.#field_name_or_index, line, pos)
+                }
+
+                #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+                fn highlight_line<'l>(
+                    &mut self,
+                    line: &'l str,
+                    pos: usize,
+                ) -> impl Iterator<Item = impl 'l + ::rustyline::highlight::StyledBlock> {
+                    ::rustyline::highlight::Highlighter::highlight_line(&mut self.#field_name_or_index, line, pos)
                 }
 
                 fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-                    &'s self,
+                    &'s mut self,
                     prompt: &'p str,
                     default: bool,
                 ) -> ::std::borrow::Cow<'b, str> {
-                    ::rustyline::highlight::Highlighter::highlight_prompt(&self.#field_name_or_index, prompt, default)
+                    ::rustyline::highlight::Highlighter::highlight_prompt(&mut self.#field_name_or_index, prompt, default)
                 }
 
-                fn highlight_hint<'h>(&self, hint: &'h str) -> ::std::borrow::Cow<'h, str> {
-                    ::rustyline::highlight::Highlighter::highlight_hint(&self.#field_name_or_index, hint)
+                fn highlight_hint<'h>(&mut self, hint: &'h str) -> ::std::borrow::Cow<'h, str> {
+                    ::rustyline::highlight::Highlighter::highlight_hint(&mut self.#field_name_or_index, hint)
                 }
 
                 fn highlight_candidate<'c>(
-                    &self,
+                    &mut self,
                     candidate: &'c str,
                     completion: ::rustyline::config::CompletionType,
                 ) -> ::std::borrow::Cow<'c, str> {
-                    ::rustyline::highlight::Highlighter::highlight_candidate(&self.#field_name_or_index, candidate, completion)
+                    ::rustyline::highlight::Highlighter::highlight_candidate(&mut self.#field_name_or_index, candidate, completion)
                 }
 
-                fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-                    ::rustyline::highlight::Highlighter::highlight_char(&self.#field_name_or_index, line, pos, forced)
+                fn highlight_char(&mut self, line: &str, pos: usize, forced: bool) -> bool {
+                    ::rustyline::highlight::Highlighter::highlight_char(&mut self.#field_name_or_index, line, pos, forced)
                 }
             }
         }
@@ -156,8 +166,8 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
             impl #impl_generics ::rustyline::hint::Hinter for #name #ty_generics #where_clause {
                 type Hint = <#field_type as ::rustyline::hint::Hinter>::Hint;
 
-                fn hint(&self, line: &str, pos: usize, ctx: &::rustyline::Context<'_>) -> ::std::option::Option<Self::Hint> {
-                    ::rustyline::hint::Hinter::hint(&self.#field_name_or_index, line, pos, ctx)
+                fn hint(&mut self, line: &str, pos: usize, ctx: &::rustyline::Context<'_>) -> ::std::option::Option<Self::Hint> {
+                    ::rustyline::hint::Hinter::hint(&mut self.#field_name_or_index, line, pos, ctx)
                 }
             }
         }
@@ -185,14 +195,14 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
                 fn validate(
-                    &self,
+                    &mut self,
                     ctx: &mut ::rustyline::validate::ValidationContext,
                 ) -> ::rustyline::Result<::rustyline::validate::ValidationResult> {
-                    ::rustyline::validate::Validator::validate(&self.#field_name_or_index, ctx)
+                    ::rustyline::validate::Validator::validate(&mut self.#field_name_or_index, ctx)
                 }
 
-                fn validate_while_typing(&self) -> bool {
-                    ::rustyline::validate::Validator::validate_while_typing(&self.#field_name_or_index)
+                fn validate_while_typing(&mut self) -> bool {
+                    ::rustyline::validate::Validator::validate_while_typing(&mut self.#field_name_or_index)
                 }
             }
         }
@@ -200,6 +210,37 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
+            }
+        }
+    };
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Parser, attributes(rustyline))]
+pub fn parser_macro_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let expanded = if let Some((index, field)) = get_field_by_attr(&input.data, "Parser") {
+        let field_name_or_index = field_name_or_index_token(index, field);
+
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
+                fn parse(
+                    &mut self,
+                    line: &str,
+                    change: ::rustyline::parse::InputEdit,
+                ) {
+                    ::rustyline::parse::Parser::parse(&mut self.#field_name_or_index, line, change);
+                }
+            }
+        }
+    } else {
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
             }
         }
     };

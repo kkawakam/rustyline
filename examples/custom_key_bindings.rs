@@ -7,14 +7,14 @@ use rustyline::{
     Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
     Result,
 };
-use rustyline::{Completer, Helper, Hinter, Validator};
+use rustyline::{Completer, Helper, Hinter, Parser, Validator};
 
-#[derive(Completer, Helper, Hinter, Validator)]
+#[derive(Completer, Helper, Hinter, Parser, Validator)]
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);
 
 impl Highlighter for MyHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
+        &'s mut self,
         prompt: &'p str,
         default: bool,
     ) -> Cow<'b, str> {
@@ -25,7 +25,7 @@ impl Highlighter for MyHelper {
         }
     }
 
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+    fn highlight_hint<'h>(&mut self, hint: &'h str) -> Cow<'h, str> {
         Owned(format!("\x1b[1m{hint}\x1b[m"))
     }
 }

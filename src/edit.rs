@@ -16,7 +16,6 @@ use crate::layout::{Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
 };
-use crate::parse::{InputEdit, Parser, Point};
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
@@ -215,23 +214,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    fn parser(&mut self) {
-        if let Some(ref mut helper) = self.helper {
-            helper.parse(
-                &self.line,
-                // TODO: get actual input change
-                InputEdit {
-                    start_byte: 0,
-                    old_end_byte: 0,
-                    new_end_byte: 0,
-                    start_position: Point::default(),
-                    old_end_position: Point::default(),
-                    new_end_position: Point::default(),
-                },
-            );
-        };
-    }
-
     fn highlight_char(&mut self) -> bool {
         // it is almost same as `fn highlighter`, only different is `Some(helper)` vs. `Some(*helper)`
         let highlighter = if self.out.colors_enabled() {
@@ -309,7 +291,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
-        self.parser();
         self.hint();
         self.highlight_char();
         self.refresh(self.prompt, prompt_size, true, Info::Hint)
@@ -317,7 +298,6 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
 
     fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
         let prompt_size = self.prompt_size;
-        self.parser();
         self.hint = None;
         self.highlight_char();
         self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
@@ -325,7 +305,6 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
-        self.parser();
         self.hint();
         self.highlight_char();
         self.refresh(prompt, prompt_size, false, Info::Hint)
@@ -399,7 +378,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Insert the character `ch` at cursor current position.
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
-            self.parser();
             if push {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();

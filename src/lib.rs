@@ -34,7 +34,6 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
-pub mod parse;
 #[cfg(feature = "with-sqlite-history")]
 pub mod sqlite_history;
 mod tty;
@@ -49,7 +48,7 @@ use std::result;
 use log::debug;
 #[cfg(feature = "derive")]
 #[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
-pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Parser, Validator};
+pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
@@ -67,7 +66,6 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, Repeat
 use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
-use crate::parse::Parser;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -554,7 +552,7 @@ fn readline_direct(
 /// (parse current line once)
 pub trait Helper
 where
-    Self: Completer + Hinter + Highlighter + Parser + Validator,
+    Self: Completer + Hinter + Highlighter + Validator,
 {
 }
 

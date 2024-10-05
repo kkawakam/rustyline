@@ -102,18 +102,8 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
-                #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
                 fn highlight<'l>(&mut self, line: &'l str, pos: usize) -> ::std::borrow::Cow<'l, str> {
                     ::rustyline::highlight::Highlighter::highlight(&mut self.#field_name_or_index, line, pos)
-                }
-
-                #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-                fn highlight_line<'l>(
-                    &mut self,
-                    line: &'l str,
-                    pos: usize,
-                ) -> impl Iterator<Item = impl 'l + ::rustyline::highlight::StyledBlock> {
-                    ::rustyline::highlight::Highlighter::highlight_line(&mut self.#field_name_or_index, line, pos)
                 }
 
                 fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -210,37 +200,6 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
-            }
-        }
-    };
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_derive(Parser, attributes(rustyline))]
-pub fn parser_macro_derive(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
-    let generics = input.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let expanded = if let Some((index, field)) = get_field_by_attr(&input.data, "Parser") {
-        let field_name_or_index = field_name_or_index_token(index, field);
-
-        quote! {
-            #[automatically_derived]
-            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
-                fn parse(
-                    &mut self,
-                    line: &str,
-                    change: ::rustyline::parse::InputEdit,
-                ) {
-                    ::rustyline::parse::Parser::parse(&mut self.#field_name_or_index, line, change);
-                }
-            }
-        }
-    } else {
-        quote! {
-            #[automatically_derived]
-            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
             }
         }
     };

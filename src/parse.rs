@@ -1,3 +1,4 @@
+//! Parser API
 use core::fmt;
 
 /// This trait provides an extension interface for tokenizer/parser.

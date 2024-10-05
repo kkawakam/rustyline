@@ -11,7 +11,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Invoke, Refresher};
+use crate::keymap::{InputState, Refresher};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,

@@ -11,7 +11,7 @@ use crate::highlight::Highlighter;
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Refresher};
+use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
@@ -249,11 +249,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(ref mut validator) = self.helper {
             self.changes.begin();
-            // We only use `self.line` to create `impl Invoke`.
-            // Using entire `State` to make a `impl Invoke` is too wasted
-            // when other `State` attributes' lifetime are required.
             let result =
-                (*validator).validate(&mut ValidationContext::new(&mut self.line.as_str()))?;
+                (*validator).validate(&mut ValidationContext::new(&mut self.line))?;
             let corrected = self.changes.end();
             match result {
                 ValidationResult::Incomplete => {}
@@ -278,15 +275,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-// We only use `self.line` to create `impl Invoke`.
-// Using entire `State` to make a `impl Invoke` is too wasted
-// when other `State` attributes' lifetime are required.
-// 
-// impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
-//     fn input(&self) -> &str {
-//         self.line.as_str()
-//     }
-// }
+impl Invoke for LineBuffer {
+    fn input(&self) -> &str {
+        self.as_str()
+    }
+}
 
 impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn refresh_line(&mut self) -> Result<()> {

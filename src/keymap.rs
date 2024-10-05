@@ -363,9 +363,9 @@ pub trait Invoke {
     //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
 }
 
-impl Invoke for &str {
+impl Invoke for String {
     fn input(&self) -> &str {
-        self
+        self.as_str()
     }
 }
 

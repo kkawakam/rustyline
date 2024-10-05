@@ -517,8 +517,7 @@ fn readline_direct(
         match validator {
             None => return Ok(input),
             Some(ref mut v) => {
-                let mut ctx = input.as_str();
-                let mut ctx = validate::ValidationContext::new(&mut ctx);
+                let mut ctx = validate::ValidationContext::new(&mut input);
 
                 match v.validate(&mut ctx)? {
                     validate::ValidationResult::Valid(msg) => {

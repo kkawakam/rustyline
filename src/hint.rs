@@ -30,7 +30,7 @@ pub trait Hinter {
     /// returns the string that should be displayed or `None`
     /// if no hint is available for the text the user currently typed.
     // TODO Validate: called while editing line but not while moving cursor.
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
+    fn hint(&mut self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
         let _ = (line, pos, ctx);
         None
     }
@@ -40,10 +40,10 @@ impl Hinter for () {
     type Hint = String;
 }
 
-impl<'r, H: ?Sized + Hinter> Hinter for &'r H {
+impl<'r, H: ?Sized + Hinter> Hinter for &'r mut H {
     type Hint = H::Hint;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
+    fn hint(&mut self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
         (**self).hint(line, pos, ctx)
     }
 }
@@ -63,7 +63,7 @@ impl HistoryHinter {
 impl Hinter for HistoryHinter {
     type Hint = String;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    fn hint(&mut self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         if line.is_empty() || pos < line.len() {
             return None;
         }
@@ -96,7 +96,7 @@ mod test {
     pub fn empty_history() {
         let history = DefaultHistory::new();
         let ctx = Context::new(&history);
-        let hinter = HistoryHinter {};
+        let mut hinter = HistoryHinter {};
         let hint = hinter.hint("test", 4, &ctx);
         assert_eq!(None, hint);
     }

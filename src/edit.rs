@@ -32,7 +32,7 @@ pub struct State<'out, 'prompt, H: Helper> {
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Changeset, // changes to line, for undo/redo
-    pub helper: Option<&'out H>,
+    pub helper: Option<&'out mut H>,
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     pub highlight_char: bool,        // `true` if a char has been highlighted
@@ -49,7 +49,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
         out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
-        helper: Option<&'out H>,
+        helper: Option<&'out mut H>,
         ctx: Context<'out>,
     ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
@@ -70,9 +70,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    pub fn highlighter(&self) -> Option<&dyn Highlighter> {
+    pub fn highlighter(&mut self) -> Option<&mut H> {
         if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
+            match self.helper {
+                Some(ref mut helper) => Some(*helper),
+                None => None,
+            }
         } else {
             None
         }
@@ -168,11 +171,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             Info::Hint => self.hint.as_ref().map(|h| h.display()),
             Info::Msg(msg) => msg,
         };
-        let highlighter = if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
-        } else {
-            None
-        };
 
         let new_layout = self
             .out
@@ -186,7 +184,18 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             info,
             &self.layout,
             &new_layout,
-            highlighter,
+            // it is same as `fn highlighter`,
+            // however `fn highlighter` will use entriely `self` as mutable
+            // but actually we only need `self.helper` to be mutable.
+            // Maybe use macro?
+            if self.out.colors_enabled() {
+                match self.helper {
+                    Some(ref mut helper) => Some(*helper),
+                    None => None,
+                }
+            } else {
+                None
+            },
         )?;
         self.layout = new_layout;
 
@@ -194,8 +203,8 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     pub fn hint(&mut self) {
-        if let Some(hinter) = self.helper {
-            let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
+        if let Some(ref mut hinter) = self.helper {
+            let hint = (*hinter).hint(self.line.as_str(), self.line.pos(), &self.ctx);
             self.hint = match hint {
                 Some(val) if !val.display().is_empty() => Some(Box::new(val) as Box<dyn Hint>),
                 _ => None,
@@ -206,7 +215,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     fn highlight_char(&mut self) -> bool {
-        if let Some(highlighter) = self.highlighter() {
+        // it is almost same as `fn highlighter`, only different is `Some(helper)` vs. `Some(*helper)`
+        let highlighter = if self.out.colors_enabled() {
+            match self.helper {
+                Some(ref mut helper) => Some(helper),
+                None => None,
+            }
+        } else {
+            None
+        };
+        if let Some(highlighter) = highlighter {
             let highlight_char =
                 highlighter.highlight_char(&self.line, self.line.pos(), self.forced_refresh);
             if highlight_char {
@@ -229,9 +247,10 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     pub fn validate(&mut self) -> Result<ValidationResult> {
-        if let Some(validator) = self.helper {
+        if let Some(ref mut validator) = self.helper {
             self.changes.begin();
-            let result = validator.validate(&mut ValidationContext::new(self))?;
+            let result =
+                (*validator).validate(&mut ValidationContext::new(&mut self.line))?;
             let corrected = self.changes.end();
             match result {
                 ValidationResult::Incomplete => {}
@@ -256,9 +275,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl Invoke for LineBuffer {
     fn input(&self) -> &str {
-        self.line.as_str()
+        self.as_str()
     }
 }
 
@@ -749,7 +768,7 @@ pub fn init_state<'out, H: Helper>(
     out: &'out mut <Terminal as Term>::Writer,
     line: &str,
     pos: usize,
-    helper: Option<&'out H>,
+    helper: Option<&'out mut H>,
     history: &'out crate::history::DefaultHistory,
 ) -> State<'out, 'static, H> {
     State {
@@ -782,8 +801,8 @@ mod test {
         history.add("line0").unwrap();
         history.add("line1").unwrap();
         let line = "current edited line";
-        let helper: Option<()> = None;
-        let mut s = init_state(&mut out, line, 6, helper.as_ref(), &history);
+        let mut helper: Option<()> = None;
+        let mut s = init_state(&mut out, line, 6, helper.as_mut(), &history);
         s.ctx.history_index = history.len();
 
         for _ in 0..2 {

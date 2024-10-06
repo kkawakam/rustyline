@@ -14,14 +14,14 @@ pub trait Highlighter {
     ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+    fn highlight<'l>(&mut self, line: &'l str, pos: usize) -> Cow<'l, str> {
         let _ = pos;
         Borrowed(line)
     }
     /// Takes the `prompt` and
     /// returns the highlighted version (with ANSI color).
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
+        &'s mut self,
         prompt: &'p str,
         default: bool,
     ) -> Cow<'b, str> {
@@ -30,7 +30,7 @@ pub trait Highlighter {
     }
     /// Takes the `hint` and
     /// returns the highlighted version (with ANSI color).
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+    fn highlight_hint<'h>(&mut self, hint: &'h str) -> Cow<'h, str> {
         Borrowed(hint)
     }
     /// Takes the completion `candidate` and
@@ -38,7 +38,7 @@ pub trait Highlighter {
     ///
     /// Currently, used only with `CompletionType::List`.
     fn highlight_candidate<'c>(
-        &self,
+        &mut self,
         candidate: &'c str, // FIXME should be Completer::Candidate
         completion: CompletionType,
     ) -> Cow<'c, str> {
@@ -52,7 +52,7 @@ pub trait Highlighter {
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+    fn highlight_char(&mut self, line: &str, pos: usize, forced: bool) -> bool {
         let _ = (line, pos, forced);
         false
     }
@@ -60,32 +60,32 @@ pub trait Highlighter {
 
 impl Highlighter for () {}
 
-impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+impl<'r, H: ?Sized + Highlighter> Highlighter for &'r mut H {
+    fn highlight<'l>(&mut self, line: &'l str, pos: usize) -> Cow<'l, str> {
         (**self).highlight(line, pos)
     }
 
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
+        &'s mut self,
         prompt: &'p str,
         default: bool,
     ) -> Cow<'b, str> {
         (**self).highlight_prompt(prompt, default)
     }
 
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+    fn highlight_hint<'h>(&mut self, hint: &'h str) -> Cow<'h, str> {
         (**self).highlight_hint(hint)
     }
 
     fn highlight_candidate<'c>(
-        &self,
+        &mut self,
         candidate: &'c str,
         completion: CompletionType,
     ) -> Cow<'c, str> {
         (**self).highlight_candidate(candidate, completion)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+    fn highlight_char(&mut self, line: &str, pos: usize, forced: bool) -> bool {
         (**self).highlight_char(line, pos, forced)
     }
 }
@@ -109,7 +109,7 @@ impl MatchingBracketHighlighter {
 }
 
 impl Highlighter for MatchingBracketHighlighter {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+    fn highlight<'l>(&mut self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
         }
@@ -124,7 +124,7 @@ impl Highlighter for MatchingBracketHighlighter {
         Borrowed(line)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+    fn highlight_char(&mut self, line: &str, pos: usize, forced: bool) -> bool {
         if forced {
             self.bracket.set(None);
             return false;

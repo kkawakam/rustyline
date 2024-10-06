@@ -59,7 +59,7 @@ pub trait Completer {
     ///
     /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
     fn complete(
-        &self, // FIXME should be `&mut self`
+        &mut self,
         line: &str,
         pos: usize,
         ctx: &Context<'_>,
@@ -68,7 +68,7 @@ pub trait Completer {
         Ok((0, Vec::with_capacity(0)))
     }
     /// Updates the edited `line` with the `elected` candidate.
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+    fn update(&mut self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
         let end = line.pos();
         line.replace(start..end, elected, cl);
     }
@@ -77,16 +77,22 @@ pub trait Completer {
 impl Completer for () {
     type Candidate = String;
 
-    fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str, _cl: &mut Changeset) {
+    fn update(
+        &mut self,
+        _line: &mut LineBuffer,
+        _start: usize,
+        _elected: &str,
+        _cl: &mut Changeset,
+    ) {
         unreachable!();
     }
 }
 
-impl<'c, C: ?Sized + Completer> Completer for &'c C {
+impl<'c, C: ?Sized + Completer> Completer for &'c mut C {
     type Candidate = C::Candidate;
 
     fn complete(
-        &self,
+        &mut self,
         line: &str,
         pos: usize,
         ctx: &Context<'_>,
@@ -94,21 +100,29 @@ impl<'c, C: ?Sized + Completer> Completer for &'c C {
         (**self).complete(line, pos, ctx)
     }
 
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+    fn update(&mut self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
         (**self).update(line, start, elected, cl);
     }
 }
-macro_rules! box_completer {
+macro_rules! rc_completer {
     ($($id: ident)*) => {
         $(
             impl<C: ?Sized + Completer> Completer for $id<C> {
                 type Candidate = C::Candidate;
 
-                fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
-                    (**self).complete(line, pos, ctx)
+                fn complete(&mut self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
+                    if let Some(c) = $id::get_mut(self){
+                        c.complete(line, pos, ctx)
+                    } else {
+                        unreachable!()
+                    }
                 }
-                fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
-                    (**self).update(line, start, elected, cl)
+                fn update(&mut self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+                    if let Some(c) = $id::get_mut(self){
+                        c.update(line, start, elected, cl)
+                    } else {
+                        unreachable!()
+                    }
                 }
             }
         )*
@@ -118,7 +132,23 @@ macro_rules! box_completer {
 use crate::undo::Changeset;
 use std::rc::Rc;
 use std::sync::Arc;
-box_completer! { Box Rc Arc }
+rc_completer! { Rc Arc }
+
+impl<C: ?Sized + Completer> Completer for Box<C> {
+    type Candidate = C::Candidate;
+
+    fn complete(
+        &mut self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Self::Candidate>)> {
+        (**self).complete(line, pos, ctx)
+    }
+    fn update(&mut self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
+        (**self).update(line, start, elected, cl)
+    }
+}
 
 /// A `Completer` for file and folder names.
 pub struct FilenameCompleter {
@@ -225,7 +255,12 @@ impl Default for FilenameCompleter {
 impl Completer for FilenameCompleter {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+    fn complete(
+        &mut self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>)> {
         self.complete_path(line, pos)
     }
 }

@@ -14,44 +14,13 @@ pub trait Candidate {
     fn replacement(&self) -> &str;
 }
 
-impl Candidate for String {
+impl<T: AsRef<str>> Candidate for T {
     fn display(&self) -> &str {
-        self.as_str()
+        self.as_ref()
     }
 
     fn replacement(&self) -> &str {
-        self.as_str()
-    }
-}
-
-/// #[deprecated = "Unusable"]
-impl Candidate for str {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
-    }
-}
-
-impl Candidate for &'_ str {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
-    }
-}
-
-impl Candidate for Rc<str> {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
+        self.as_ref()
     }
 }
 
@@ -646,5 +615,21 @@ mod tests {
     #[test]
     pub fn normalize() {
         assert_eq!(super::normalize("Windows"), "windows")
+    }
+
+    #[test]
+    pub fn candidate_impls() {
+        struct StrCmp;
+        impl super::Completer for StrCmp {
+            type Candidate = &'static str;
+        }
+        struct RcCmp;
+        impl super::Completer for RcCmp {
+            type Candidate = std::rc::Rc<str>;
+        }
+        struct ArcCmp;
+        impl super::Completer for ArcCmp {
+            type Candidate = std::sync::Arc<str>;
+        }
     }
 }

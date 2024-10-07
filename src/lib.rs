@@ -59,7 +59,7 @@ use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
 use crate::error::ReadlineError;
-use crate::highlight::Highlighter;
+use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hinter;
 use crate::history::{DefaultHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
@@ -790,9 +790,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         // Move to end, in case cursor was in the middle of the line, so that
         // next thing application prints goes after the input
-        s.forced_refresh = true;
-        s.edit_move_buffer_end()?;
-        s.forced_refresh = false;
+        s.edit_move_buffer_end(CmdKind::ForcedRefresh)?;
 
         if cfg!(windows) {
             let _ = original_mode; // silent warning

@@ -882,7 +882,7 @@ impl Receiver for Utf8 {
         self.valid = true;
     }
 
-    /// Called when an invalid_sequence is detected
+    /// Called when an invalid sequence is detected
     fn invalid_sequence(&mut self) {
         self.c = None;
         self.valid = false;

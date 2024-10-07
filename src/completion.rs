@@ -82,22 +82,6 @@ impl Completer for () {
     }
 }
 
-impl<'c, C: ?Sized + Completer> Completer for &'c C {
-    type Candidate = C::Candidate;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<Self::Candidate>)> {
-        (**self).complete(line, pos, ctx)
-    }
-
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
-        (**self).update(line, start, elected, cl);
-    }
-}
 macro_rules! box_completer {
     ($($id: ident)*) => {
         $(

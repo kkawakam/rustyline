@@ -550,8 +550,6 @@ where
 
 impl Helper for () {}
 
-impl<'h, H: ?Sized + Helper> Helper for &'h H {}
-
 /// Completion/suggestion context
 pub struct Context<'h> {
     history: &'h dyn History,

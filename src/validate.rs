@@ -86,16 +86,6 @@ pub trait Validator {
 
 impl Validator for () {}
 
-impl<'v, V: ?Sized + Validator> Validator for &'v V {
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
-        (**self).validate(ctx)
-    }
-
-    fn validate_while_typing(&self) -> bool {
-        (**self).validate_while_typing()
-    }
-}
-
 /// Simple matching bracket validator.
 #[derive(Default)]
 pub struct MatchingBracketValidator {

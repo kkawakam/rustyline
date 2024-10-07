@@ -252,3 +252,8 @@ literal newline to be added to the input buffer.
 
 The way to achieve multi-line editing is to implement the `Validator`
 trait.
+
+## Minimum supported Rust version (MSRV)
+
+Latest stable Rust version at the time of release. It might compile with older versions.
+

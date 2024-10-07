@@ -70,36 +70,6 @@ pub trait Highlighter {
 
 impl Highlighter for () {}
 
-impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        (**self).highlight(line, pos)
-    }
-
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
-        prompt: &'p str,
-        default: bool,
-    ) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt, default)
-    }
-
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        (**self).highlight_hint(hint)
-    }
-
-    fn highlight_candidate<'c>(
-        &self,
-        candidate: &'c str,
-        completion: CompletionType,
-    ) -> Cow<'c, str> {
-        (**self).highlight_candidate(candidate, completion)
-    }
-
-    fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
-        (**self).highlight_char(line, pos, kind)
-    }
-}
-
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.

@@ -2,6 +2,7 @@ use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
 use crate::error;
+use crate::highlight::CmdKind;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
 use crate::keymap::{InputState, Refresher};
@@ -28,9 +29,7 @@ pub fn execute<H: Helper>(
             if s.has_hint() || !s.is_default_prompt() || s.highlight_char {
                 // Force a refresh without hints to leave the previous
                 // line as the user typed it after a newline.
-                s.forced_refresh = true;
-                s.refresh_line_with_msg(None)?;
-                s.forced_refresh = false;
+                s.refresh_line_with_msg(None, CmdKind::ForcedRefresh)?;
             }
         }
         _ => {}
@@ -190,7 +189,7 @@ pub fn execute<H: Helper>(
         }
         Cmd::Move(Movement::EndOfBuffer) => {
             // Move to the end of the buffer.
-            s.edit_move_buffer_end()?;
+            s.edit_move_buffer_end(CmdKind::MoveCursor)?;
         }
         Cmd::DowncaseWord => {
             // lowercase word after point

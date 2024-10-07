@@ -188,7 +188,7 @@ For all modes:
 
 [Readline vi Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
 
-[Terminal codes (ANSI/VT100)](http://wiki.bash-hackers.org/scripting/terminalcodes)
+[ANSI escape code](https://en.wikipedia.org/wiki/ANSI_escape_code)
 
 ## Wine
 
@@ -256,4 +256,3 @@ trait.
 ## Minimum supported Rust version (MSRV)
 
 Latest stable Rust version at the time of release. It might compile with older versions.
-

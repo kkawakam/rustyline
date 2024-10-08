@@ -2,6 +2,7 @@
 use log::debug;
 
 use super::Result;
+use crate::highlight::CmdKind;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::{self, RawReader, Term, Terminal};
 use crate::{Config, EditMode};
@@ -131,7 +132,6 @@ impl Cmd {
     /// Tells if current command should reset kill ring.
     #[must_use]
     pub const fn should_reset_kill_ring(&self) -> bool {
-        #[allow(clippy::match_same_arms)]
         match *self {
             Self::Kill(Movement::BackwardChar(_) | Movement::ForwardChar(_)) => true,
             Self::ClearScreen
@@ -347,7 +347,7 @@ pub enum InputMode {
 /// Transform key(s) to commands based on current input mode
 pub struct InputState<'b> {
     pub(crate) mode: EditMode,
-    #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
+    #[cfg_attr(not(feature = "custom-bindings"), expect(dead_code))]
     custom_bindings: &'b Bindings,
     pub(crate) input_mode: InputMode, // vi only ?
     // numeric arguments: http://web.mit.edu/gnu/doc/html/rlman_1.html#SEC7
@@ -375,7 +375,7 @@ pub trait Refresher {
     /// cursor position, and number of columns of the terminal.
     fn refresh_line(&mut self) -> Result<()>;
     /// Same as [`refresh_line`] with a specific message instead of hint
-    fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()>;
+    fn refresh_line_with_msg(&mut self, msg: Option<&str>, kind: CmdKind) -> Result<()>;
     /// Same as `refresh_line` but with a dynamic prompt.
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()>;
     /// Vi only, switch to insert mode.
@@ -389,12 +389,12 @@ pub trait Refresher {
     /// Returns `true` if there is a hint displayed.
     fn has_hint(&self) -> bool;
     /// Returns the hint text that is shown after the current cursor position.
-    #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
+    #[cfg_attr(not(feature = "custom-bindings"), expect(dead_code))]
     fn hint_text(&self) -> Option<&str>;
     /// currently edited line
     fn line(&self) -> &str;
     /// Current cursor position (byte position)
-    #[cfg_attr(not(feature = "custom-bindings"), allow(dead_code))]
+    #[cfg_attr(not(feature = "custom-bindings"), expect(dead_code))]
     fn pos(&self) -> usize;
     /// Display `msg` above currently edited line.
     fn external_print(&mut self, msg: String) -> Result<()>;
@@ -474,7 +474,7 @@ impl<'b> InputState<'b> {
         wrt: &mut dyn Refresher,
         digit: char,
     ) -> Result<KeyEvent> {
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_possible_truncation)]
         match digit {
             '0'..='9' => {
                 self.num_args = digit.to_digit(10).unwrap() as i16;
@@ -487,7 +487,7 @@ impl<'b> InputState<'b> {
         loop {
             wrt.refresh_prompt_and_line(&format!("(arg: {}) ", self.num_args))?;
             let key = rdr.next_key(true)?;
-            #[allow(clippy::cast_possible_truncation)]
+            #[expect(clippy::cast_possible_truncation)]
             match key {
                 E(K::Char(digit @ '0'..='9'), m) if m == M::NONE || m == M::ALT => {
                     if self.num_args == -1 {
@@ -657,7 +657,7 @@ impl<'b> InputState<'b> {
         Ok(cmd)
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     fn vi_arg_digit<R: RawReader>(
         &mut self,
         rdr: &mut R,
@@ -911,7 +911,6 @@ impl<'b> InputState<'b> {
         };
         debug!(target: "rustyline", "Vi insert: {:?}", cmd);
         if cmd.is_repeatable_change() {
-            #[allow(clippy::if_same_then_else)]
             if let (Cmd::Replace(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
                 // replacing...
             } else if let (Cmd::SelfInsert(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
@@ -1101,7 +1100,7 @@ impl<'b> InputState<'b> {
         num_args
     }
 
-    #[allow(clippy::cast_sign_loss)]
+    #[expect(clippy::cast_sign_loss)]
     fn emacs_num_args(&mut self) -> (RepeatCount, bool) {
         let num_args = self.num_args();
         if num_args < 0 {
@@ -1115,7 +1114,6 @@ impl<'b> InputState<'b> {
         }
     }
 
-    #[allow(clippy::cast_sign_loss)]
     fn vi_num_args(&mut self) -> RepeatCount {
         let num_args = self.num_args();
         if num_args < 0 {

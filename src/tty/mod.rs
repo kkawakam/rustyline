@@ -46,7 +46,6 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
-    #[allow(clippy::too_many_arguments)]
     fn refresh_line(
         &mut self,
         prompt: &str,
@@ -117,66 +116,6 @@ pub trait Renderer {
 
     /// Make sure prompt is at the leftmost edge of the screen
     fn move_cursor_at_leftmost(&mut self, rdr: &mut Self::Reader) -> Result<()>;
-}
-
-impl<'a, R: Renderer + ?Sized> Renderer for &'a mut R {
-    type Reader = R::Reader;
-
-    fn move_cursor(&mut self, old: Position, new: Position) -> Result<()> {
-        (**self).move_cursor(old, new)
-    }
-
-    fn refresh_line(
-        &mut self,
-        prompt: &str,
-        line: &LineBuffer,
-        hint: Option<&str>,
-        old_layout: &Layout,
-        new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
-    ) -> Result<()> {
-        (**self).refresh_line(prompt, line, hint, old_layout, new_layout, highlighter)
-    }
-
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        (**self).calculate_position(s, orig)
-    }
-
-    fn write_and_flush(&mut self, buf: &str) -> Result<()> {
-        (**self).write_and_flush(buf)
-    }
-
-    fn beep(&mut self) -> Result<()> {
-        (**self).beep()
-    }
-
-    fn clear_screen(&mut self) -> Result<()> {
-        (**self).clear_screen()
-    }
-
-    fn clear_rows(&mut self, layout: &Layout) -> Result<()> {
-        (**self).clear_rows(layout)
-    }
-
-    fn update_size(&mut self) {
-        (**self).update_size();
-    }
-
-    fn get_columns(&self) -> usize {
-        (**self).get_columns()
-    }
-
-    fn get_rows(&self) -> usize {
-        (**self).get_rows()
-    }
-
-    fn colors_enabled(&self) -> bool {
-        (**self).colors_enabled()
-    }
-
-    fn move_cursor_at_leftmost(&mut self, rdr: &mut R::Reader) -> Result<()> {
-        (**self).move_cursor_at_leftmost(rdr)
-    }
 }
 
 // ignore ANSI escape sequence

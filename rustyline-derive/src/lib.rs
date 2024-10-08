@@ -136,8 +136,8 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                     ::rustyline::highlight::Highlighter::highlight_candidate(&self.#field_name_or_index, candidate, completion)
                 }
 
-                fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-                    ::rustyline::highlight::Highlighter::highlight_char(&self.#field_name_or_index, line, pos, forced)
+                fn highlight_char(&self, line: &str, pos: usize, kind: ::rustyline::highlight::CmdKind) -> bool {
+                    ::rustyline::highlight::Highlighter::highlight_char(&self.#field_name_or_index, line, pos, kind)
                 }
             }
         }

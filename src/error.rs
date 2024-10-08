@@ -8,7 +8,7 @@ use std::io;
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library
 // #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
+#[expect(clippy::module_name_repetitions)]
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ReadlineError {

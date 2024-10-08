@@ -59,7 +59,7 @@ use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
 use crate::edit::State;
 use crate::error::ReadlineError;
-use crate::highlight::Highlighter;
+use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hinter;
 use crate::history::{DefaultHistory, History, SearchDirection};
 pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, RepeatCount, Word};
@@ -300,7 +300,7 @@ fn page_completions<C: Candidate, H: Helper>(
     let num_cols = cols / max_width;
 
     let mut pause_row = s.out.get_rows() - 1;
-    let num_rows = (candidates.len() + num_cols - 1) / num_cols;
+    let num_rows = candidates.len().div_ceil(num_cols);
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
@@ -444,7 +444,7 @@ fn reverse_incremental_search<H: Helper, I: History>(
 
 struct Guard<'m>(&'m tty::Mode);
 
-#[allow(unused_must_use)]
+#[expect(unused_must_use)]
 impl Drop for Guard<'_> {
     fn drop(&mut self) {
         let Guard(mode) = *self;
@@ -550,8 +550,6 @@ where
 
 impl Helper for () {}
 
-impl<'h, H: Helper> Helper for &'h H {}
-
 /// Completion/suggestion context
 pub struct Context<'h> {
     history: &'h dyn History,
@@ -596,7 +594,6 @@ pub struct Editor<H: Helper, I: History> {
 /// Default editor with no helper and `DefaultHistory`
 pub type DefaultEditor = Editor<(), DefaultHistory>;
 
-#[allow(clippy::new_without_default)]
 impl<H: Helper> Editor<H, DefaultHistory> {
     /// Create an editor with the default configuration
     pub fn new() -> Result<Self> {
@@ -791,9 +788,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         // Move to end, in case cursor was in the middle of the line, so that
         // next thing application prints goes after the input
-        s.forced_refresh = true;
-        s.edit_move_buffer_end()?;
-        s.forced_refresh = false;
+        s.edit_move_buffer_end(CmdKind::ForcedRefresh)?;
 
         if cfg!(windows) {
             let _ = original_mode; // silent warning

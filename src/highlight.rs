@@ -112,6 +112,18 @@ impl StyledBlock for (AnsiStyle, String) {
     }
 }
 
+/// Describe which kind of action has been triggering the call to `Highlighter`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CmdKind {
+    /// Cursor moved
+    MoveCursor,
+    /// Other action
+    Other,
+    /// Forced / final refresh (no auto-suggestion / hint, no matching bracket
+    /// highlighted, ...)
+    ForcedRefresh,
+}
+
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
 ///
 /// Currently, the highlighted version *must* have the same display width as
@@ -177,58 +189,16 @@ pub trait Highlighter {
     }
     /// Tells if `line` needs to be highlighted when a specific char is typed or
     /// when cursor is moved under a specific char.
-    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient
-    /// vs final highlight).
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        let _ = (line, pos, forced);
+    fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
+        let _ = (line, pos, kind);
         false
     }
 }
 
 impl Highlighter for () {}
-
-impl<'r, H: Highlighter> Highlighter for &'r H {
-    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        (**self).highlight(line, pos)
-    }
-
-    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
-    fn highlight_line<'l>(
-        &self,
-        line: &'l str,
-        pos: usize,
-    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
-        (**self).highlight_line(line, pos)
-    }
-
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
-        prompt: &'p str,
-        default: bool,
-    ) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt, default)
-    }
-
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        (**self).highlight_hint(hint)
-    }
-
-    fn highlight_candidate<'c>(
-        &self,
-        candidate: &'c str,
-        completion: CompletionType,
-    ) -> Cow<'c, str> {
-        (**self).highlight_candidate(candidate, completion)
-    }
-
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        (**self).highlight_char(line, pos, forced)
-    }
-}
 
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
@@ -298,8 +268,8 @@ impl Highlighter for MatchingBracketHighlighter {
         vec![(AnsiStyle::default(), line)].into_iter()
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        if forced {
+    fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
+        if kind == CmdKind::ForcedRefresh {
             self.bracket.set(None);
             return false;
         }

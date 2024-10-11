@@ -253,13 +253,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl<H: Helper> Invoke for State<'_, '_, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
+impl<H: Helper> Refresher for State<'_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
@@ -325,7 +325,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
+impl<H: Helper> fmt::Debug for State<'_, '_, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -338,7 +338,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<H: Helper> State<'_, '_, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();

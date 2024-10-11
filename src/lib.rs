@@ -967,7 +967,7 @@ struct Iter<'a, H: Helper, I: History> {
     prompt: &'a str,
 }
 
-impl<'a, H: Helper, I: History> Iterator for Iter<'a, H, I> {
+impl<H: Helper, I: History> Iterator for Iter<'_, H, I> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {

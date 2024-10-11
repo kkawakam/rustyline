@@ -1,5 +1,3 @@
-use std::borrow::Cow::{self, Borrowed, Owned};
-
 use rustyline::config::Configurer;
 use rustyline::highlight::{CmdKind, Highlighter};
 use rustyline::{ColorMode, Editor, Result};
@@ -11,12 +9,31 @@ struct MaskingHighlighter {
 }
 
 impl Highlighter for MaskingHighlighter {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
+    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
-            Owned(" ".repeat(line.width()))
+            std::borrow::Cow::Owned(" ".repeat(line.width()))
         } else {
-            Borrowed(line)
+            std::borrow::Cow::Borrowed(line)
+        }
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        _pos: usize,
+    ) -> impl Iterator<Item = impl 'l + rustyline::highlight::StyledBlock> {
+        use unicode_width::UnicodeWidthStr;
+        if self.masking {
+            vec![(
+                rustyline::highlight::AnsiStyle::default(),
+                " ".repeat(line.width()),
+            )]
+            .into_iter()
+        } else {
+            vec![(rustyline::highlight::AnsiStyle::default(), line.to_owned())].into_iter()
         }
     }
 

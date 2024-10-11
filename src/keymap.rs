@@ -1125,7 +1125,7 @@ impl<'b> InputState<'b> {
 }
 
 #[cfg(feature = "custom-bindings")]
-impl<'b> InputState<'b> {
+impl InputState<'_> {
     /// Application customized binding
     fn custom_binding(
         &self,

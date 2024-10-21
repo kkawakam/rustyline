@@ -987,9 +987,8 @@ impl Renderer for PosixRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        continuation: &str,
     ) -> Result<()> {
-        let continuation = "| ";
-
         use std::fmt::Write;
         self.buffer.clear();
 
@@ -1069,9 +1068,7 @@ impl Renderer for PosixRenderer {
 
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
-        let continuation = "| ";
-
+    fn calculate_position(&self, s: &str, orig: Position, continuation: &str) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
@@ -1671,7 +1668,7 @@ mod test {
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), "");
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }
@@ -1702,10 +1699,10 @@ mod test {
         let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
         let prompt = "> ";
         let default_prompt = true;
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), "");
 
         let mut line = LineBuffer::init("", 0);
-        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None, "");
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
@@ -1713,10 +1710,10 @@ mod test {
             Some(true),
             line.insert('a', out.cols - prompt_size.col + 1, &mut NoListener)
         );
-        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None, "");
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None, "")
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

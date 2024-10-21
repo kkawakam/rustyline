@@ -635,7 +635,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        self.readline_with(prompt, None)
+        self.readline_with(prompt, "", None)
     }
 
     /// This function behaves in the exact same manner as `readline`, except
@@ -646,10 +646,10 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// the cursor and the string on the right is what will appear to the
     /// right of the cursor.
     pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
-        self.readline_with(prompt, Some(initial))
+        self.readline_with(prompt, "", Some(initial))
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
+    fn readline_with(&mut self, prompt: &str, continuation: &str, initial: Option<(&str, &str)>) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
@@ -661,7 +661,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
             let guard = Guard(&original_mode);
-            let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
+            let user_input = self.readline_edit(prompt, continuation, initial, &original_mode, term_key_map);
             if self.config.auto_add_history() {
                 if let Ok(ref line) = user_input {
                     self.add_history_entry(line.as_str())?;
@@ -683,6 +683,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     fn readline_edit(
         &mut self,
         prompt: &str,
+        continuation: &str,
         initial: Option<(&str, &str)>,
         original_mode: &tty::Mode,
         term_key_map: tty::KeyMap,
@@ -691,7 +692,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
-        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
+        let mut s = State::new(&mut stdout, prompt, continuation, self.helper.as_ref(), ctx);
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 

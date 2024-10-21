@@ -7,6 +7,7 @@ use std::fs::{File, OpenOptions};
 #[cfg(not(feature = "buffer-redux"))]
 use std::io::BufReader;
 use std::io::{self, ErrorKind, Read, Write};
+use std::ops::Deref;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -987,6 +988,8 @@ impl Renderer for PosixRenderer {
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
+        let continuation = "| ";
+
         use std::fmt::Write;
         self.buffer.clear();
 
@@ -996,19 +999,34 @@ impl Renderer for PosixRenderer {
 
         self.clear_old_rows(old_layout);
 
+        // display the prompt
         if let Some(highlighter) = highlighter {
-            // display the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
         } else {
-            // display the prompt
             self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
         }
+
+        // display the input line
+        let line = if let Some(highlighter) = highlighter {
+            highlighter.highlight(line, line.pos())
+        } else {
+            std::borrow::Cow::from(line.deref())
+        };
+        if continuation.is_empty() {
+            self.buffer.push_str(&line);
+        } else {
+            let mut lines = line.split('\n');
+            if let Some(first) = lines.next() {
+                self.buffer.push_str(first);
+            }
+            for line in lines {
+                self.buffer.push('\n');
+                self.buffer.push_str(continuation);
+                self.buffer.push_str(line);
+            }
+        }
+
         // display hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
@@ -1023,6 +1041,9 @@ impl Renderer for PosixRenderer {
             && !hint.map_or_else(|| line.ends_with('\n'), |h| h.ends_with('\n'))
         {
             self.buffer.push('\n');
+            if !continuation.is_empty() {
+                self.buffer.push_str(continuation);
+            }
         }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
@@ -1049,12 +1070,14 @@ impl Renderer for PosixRenderer {
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        let continuation = "| ";
+
         let mut pos = orig;
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
                 pos.row += 1;
-                pos.col = 0;
+                pos.col = continuation.len();
                 continue;
             }
             let cw = if c == "\t" {
@@ -1069,7 +1092,7 @@ impl Renderer for PosixRenderer {
             }
         }
         if pos.col == self.cols {
-            pos.col = 0;
+            pos.col = continuation.len();
             pos.row += 1;
         }
         pos

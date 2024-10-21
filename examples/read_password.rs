@@ -35,14 +35,14 @@ fn main() -> Result<()> {
     let mut rl = Editor::new()?;
     rl.set_helper(Some(h));
 
-    let username = rl.readline("Username:")?;
+    let username = rl.readline("Username:", "")?;
     println!("Username: {username}");
 
     rl.helper_mut().expect("No helper").masking = true;
     rl.set_color_mode(ColorMode::Forced); // force masking
     rl.set_auto_add_history(false); // make sure password is not added to history
     let mut guard = rl.set_cursor_visibility(false)?;
-    let passwd = rl.readline("Password:")?;
+    let passwd = rl.readline("Password:", "")?;
     guard.take();
     println!("Secret: {passwd}");
     Ok(())

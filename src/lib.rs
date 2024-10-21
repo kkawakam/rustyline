@@ -9,7 +9,7 @@
 //!
 //! ```
 //! let mut rl = rustyline::DefaultEditor::new()?;
-//! let readline = rl.readline(">> ");
+//! let readline = rl.readline(">> ", "");
 //! match readline {
 //!     Ok(line) => println!("Line: {:?}", line),
 //!     Err(_) => println!("No input"),
@@ -884,7 +884,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Iterator ends at [EOF](ReadlineError::Eof).
     /// ```
     /// let mut rl = rustyline::DefaultEditor::new()?;
-    /// for readline in rl.iter("> ") {
+    /// for readline in rl.iter("> ", "") {
     ///     match readline {
     ///         Ok(line) => {
     ///             println!("Line: {}", line);

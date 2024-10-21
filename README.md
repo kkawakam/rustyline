@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         println!("No previous history.");
     }
     loop {
-        let readline = rl.readline(">> ");
+        let readline = rl.readline(">> ", "");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());

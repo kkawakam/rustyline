@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     };
     let mut rl: Editor<(), _> = Editor::with_history(config, history)?;
     loop {
-        let line = rl.readline("> ")?;
+        let line = rl.readline("> ", "")?;
         println!("{line}");
     }
 }

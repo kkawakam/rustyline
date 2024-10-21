@@ -104,7 +104,7 @@ fn complete_symbol() {
 // `expected_line`: line after enter key
 fn assert_line(mode: EditMode, keys: &[KeyEvent], expected_line: &str) {
     let mut editor = init_editor(mode, keys);
-    let actual_line = editor.readline(">>").unwrap();
+    let actual_line = editor.readline(">>", "").unwrap();
     assert_eq!(expected_line, actual_line);
 }
 
@@ -118,7 +118,7 @@ fn assert_line_with_initial(
     expected_line: &str,
 ) {
     let mut editor = init_editor(mode, keys);
-    let actual_line = editor.readline_with_initial(">>", initial).unwrap();
+    let actual_line = editor.readline_with_initial(">>", "", initial).unwrap();
     assert_eq!(expected_line, actual_line);
 }
 
@@ -127,7 +127,7 @@ fn assert_line_with_initial(
 // `expected`: line status before enter key: strings before and after cursor
 fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyEvent], expected: (&str, &str)) {
     let mut editor = init_editor(mode, keys);
-    let actual_line = editor.readline_with_initial("", initial).unwrap();
+    let actual_line = editor.readline_with_initial("", "", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
     assert_eq!(expected.0.len(), editor.term.cursor);
 }
@@ -146,7 +146,7 @@ fn assert_history(
     for entry in entries {
         editor.history.add(entry).unwrap();
     }
-    let actual_line = editor.readline(prompt).unwrap();
+    let actual_line = editor.readline(prompt, "").unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
     if prompt.is_empty() {
         assert_eq!(expected.0.len(), editor.term.cursor);

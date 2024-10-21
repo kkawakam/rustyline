@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         EventHandler::Simple(Cmd::Newline),
     );
 
-    let input = rl.readline("> ")?;
+    let input = rl.readline("ml> ", "... ")?;
     println!("Input: {input}");
 
     Ok(())

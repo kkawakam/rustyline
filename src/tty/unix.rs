@@ -1642,6 +1642,7 @@ mod termios_ {
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
+    use crate::layout::Layout;
     use crate::line_buffer::{LineBuffer, NoListener};
 
     #[test]
@@ -1682,7 +1683,7 @@ mod test {
         let prompt_size = out.calculate_position(prompt, Position::default());
 
         let mut line = LineBuffer::init("", 0);
-        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let old_layout = Layout::compute(&out, prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
@@ -1690,7 +1691,7 @@ mod test {
             Some(true),
             line.insert('a', out.cols - prompt_size.col + 1, &mut NoListener)
         );
-        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let new_layout = Layout::compute(&out, prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
         out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)

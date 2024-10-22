@@ -122,9 +122,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn move_cursor(&mut self, kind: CmdKind) -> Result<()> {
         // calculate the desired position of the cursor
+
+        let (_, span) = self.layout.find_span_by_offset(self.line.pos());
         let cursor = self
             .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+            .calculate_position(&self.line[span.offset..self.line.pos()], span.pos);
+
         if self.layout.cursor == cursor {
             return Ok(());
         }
@@ -133,9 +136,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, cursor)?;
-            self.layout.prompt_size = self.prompt_size;
             self.layout.cursor = cursor;
-            debug_assert!(self.layout.prompt_size <= self.layout.cursor);
             debug_assert!(self.layout.cursor <= self.layout.end);
         }
         Ok(())
@@ -172,9 +173,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             None
         };
 
-        let new_layout = self
-            .out
-            .compute_layout(prompt_size, default_prompt, &self.line, info);
+        let new_layout = Layout::compute(self.out, prompt_size, default_prompt, &self.line, info);
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
         debug!(target: "rustyline", "new layout: {:?}", new_layout);
@@ -363,7 +362,6 @@ impl<H: Helper> State<'_, '_, H> {
                     // Avoid a full update of the line in the trivial case.
                     self.layout.cursor.col += width;
                     self.layout.end.col += width;
-                    debug_assert!(self.layout.prompt_size <= self.layout.cursor);
                     debug_assert!(self.layout.cursor <= self.layout.end);
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     self.out.write_and_flush(bits)
@@ -578,7 +576,7 @@ impl<H: Helper> State<'_, '_, H> {
 
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_up(n) {
+        if self.line.move_to_line(-(n as isize), &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
@@ -586,9 +584,9 @@ impl<H: Helper> State<'_, '_, H> {
         }
     }
 
-    /// Moves the cursor to the same column in the line above
+    /// Moves the cursor to the same column in the line below
     pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_down(n) {
+        if self.line.move_to_line(n as isize, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {

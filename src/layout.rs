@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Position {
-    pub col: usize, // The leftmost column is number 0.
-    pub row: usize, // The highest row is number 0.
+    pub col: u16, // The leftmost column is number 0.
+    pub row: u16, // The highest row is number 0.
 }
 
 impl PartialOrd for Position {

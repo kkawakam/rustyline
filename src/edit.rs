@@ -353,7 +353,7 @@ impl<H: Helper> State<'_, '_, H> {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
-                let width = ch.width().unwrap_or(0);
+                let width = u16::try_from(ch.width().unwrap_or(0)).unwrap();
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()
@@ -382,7 +382,7 @@ impl<H: Helper> State<'_, '_, H> {
     pub fn edit_replace_char(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         self.changes.begin();
         let succeed = if let Some(chars) = self.line.delete(n, &mut self.changes) {
-            let count = chars.graphemes(true).count();
+            let count = u16::try_from(chars.graphemes(true).count()).unwrap();
             self.line.insert(ch, count, &mut self.changes);
             self.line.move_backward(1);
             true
@@ -732,7 +732,7 @@ impl<H: Helper> State<'_, '_, H> {
     }
 
     /// Change the indentation of the lines covered by movement
-    pub fn edit_indent(&mut self, mvt: &Movement, amount: usize, dedent: bool) -> Result<()> {
+    pub fn edit_indent(&mut self, mvt: &Movement, amount: u8, dedent: bool) -> Result<()> {
         if self.line.indent(mvt, amount, dedent, &mut self.changes) {
             self.refresh_line()
         } else {

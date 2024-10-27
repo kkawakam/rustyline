@@ -1032,7 +1032,7 @@ impl Renderer for PosixRenderer {
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
+            write!(self.buffer, "\r\x1b[{}C", cursor.col)?;
         } else {
             self.buffer.push('\r');
         }

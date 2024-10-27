@@ -14,44 +14,13 @@ pub trait Candidate {
     fn replacement(&self) -> &str;
 }
 
-impl Candidate for String {
+impl<T: AsRef<str>> Candidate for T {
     fn display(&self) -> &str {
-        self.as_str()
+        self.as_ref()
     }
 
     fn replacement(&self) -> &str {
-        self.as_str()
-    }
-}
-
-/// #[deprecated = "Unusable"]
-impl Candidate for str {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
-    }
-}
-
-impl Candidate for &'_ str {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
-    }
-}
-
-impl Candidate for Rc<str> {
-    fn display(&self) -> &str {
-        self
-    }
-
-    fn replacement(&self) -> &str {
-        self
+        self.as_ref()
     }
 }
 
@@ -113,22 +82,6 @@ impl Completer for () {
     }
 }
 
-impl<'c, C: ?Sized + Completer> Completer for &'c C {
-    type Candidate = C::Candidate;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        ctx: &Context<'_>,
-    ) -> Result<(usize, Vec<Self::Candidate>)> {
-        (**self).complete(line, pos, ctx)
-    }
-
-    fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
-        (**self).update(line, start, elected, cl);
-    }
-}
 macro_rules! box_completer {
     ($($id: ident)*) => {
         $(
@@ -211,7 +164,6 @@ impl FilenameCompleter {
     /// partial path to be completed.
     pub fn complete_path(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
         let (start, mut matches) = self.complete_path_unsorted(line, pos)?;
-        #[allow(clippy::unnecessary_sort_by)]
         matches.sort_by(|a, b| a.display().cmp(b.display()));
         Ok((start, matches))
     }
@@ -544,6 +496,8 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
 
 #[cfg(test)]
 mod tests {
+    use super::{Completer, FilenameCompleter};
+
     #[test]
     pub fn extract_word() {
         let break_chars = super::default_break_chars;
@@ -647,5 +601,28 @@ mod tests {
     #[test]
     pub fn normalize() {
         assert_eq!(super::normalize("Windows"), "windows")
+    }
+
+    #[test]
+    pub fn candidate_impls() {
+        struct StrCmp;
+        impl Completer for StrCmp {
+            type Candidate = &'static str;
+        }
+        struct RcCmp;
+        impl Completer for RcCmp {
+            type Candidate = std::rc::Rc<str>;
+        }
+        struct ArcCmp;
+        impl Completer for ArcCmp {
+            type Candidate = std::sync::Arc<str>;
+        }
+    }
+
+    #[test]
+    pub fn completer_impls() {
+        struct Wrapper<T: Completer>(T);
+        let boxed = Box::new(FilenameCompleter::new());
+        let _ = Wrapper(boxed);
     }
 }

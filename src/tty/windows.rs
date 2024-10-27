@@ -1,5 +1,5 @@
 //! Windows specific definitions
-#![allow(clippy::try_err)] // suggested fix does not work (cannot infer...)
+#![expect(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
 use std::fs::OpenOptions;
 use std::io;

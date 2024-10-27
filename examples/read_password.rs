@@ -1,7 +1,7 @@
 use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::config::Configurer;
-use rustyline::highlight::Highlighter;
+use rustyline::highlight::{CmdKind, Highlighter};
 use rustyline::{ColorMode, Editor, Result};
 use rustyline::{Completer, Helper, Hinter, Validator};
 
@@ -20,12 +20,16 @@ impl Highlighter for MaskingHighlighter {
         }
     }
 
-    fn highlight_char(&self, _line: &str, _pos: usize, _forced: bool) -> bool {
-        self.masking
+    fn highlight_char(&self, _line: &str, _pos: usize, kind: CmdKind) -> bool {
+        match kind {
+            CmdKind::MoveCursor => false,
+            _ => self.masking,
+        }
     }
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     println!("This is just a hack. Reading passwords securely requires more than that.");
     let h = MaskingHighlighter { masking: false };
     let mut rl = Editor::new()?;

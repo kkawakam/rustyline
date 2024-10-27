@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::error::ReadlineError;
-use crate::highlight::Highlighter;
+use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -83,7 +83,6 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     pub highlight_char: bool,        // `true` if a char has been highlighted
-    pub forced_refresh: bool,        // `true` if line is redraw without hint or highlight_char
     refresh_rate_limit: RefreshRateLimit,
 }
 
@@ -115,7 +114,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
-            forced_refresh: false,
             refresh_rate_limit: RefreshRateLimit::new(config.refresh_rate_limit()),
         }
     }
@@ -177,7 +175,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         );
     }
 
-    pub fn move_cursor(&mut self) -> Result<()> {
+    pub fn move_cursor(&mut self, kind: CmdKind) -> Result<()> {
         // calculate the desired position of the cursor
         let cursor = self
             .out
@@ -185,7 +183,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         if self.layout.cursor == cursor {
             return Ok(());
         }
-        if self.highlight_char() {
+        if self.highlight_char(kind) {
             let prompt_size = self.prompt_size;
             self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
         } else {
@@ -263,10 +261,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         }
     }
 
-    fn highlight_char(&mut self) -> bool {
+    fn highlight_char(&mut self, kind: CmdKind) -> bool {
         if let Some(highlighter) = self.highlighter() {
-            let highlight_char =
-                highlighter.highlight_char(&self.line, self.line.pos(), self.forced_refresh);
+            let highlight_char = highlighter.highlight_char(&self.line, self.line.pos(), kind);
             if highlight_char {
                 self.highlight_char = true;
                 true
@@ -298,12 +295,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     if corrected || self.has_hint() || msg.is_some() {
                         // Force a refresh without hints to leave the previous
                         // line as the user typed it after a newline.
-                        self.refresh_line_with_msg(msg.as_deref())?;
+                        self.refresh_line_with_msg(msg.as_deref(), CmdKind::ForcedRefresh)?;
                     }
                 }
                 ValidationResult::Invalid(ref msg) => {
                     if corrected || self.has_hint() || msg.is_some() {
-                        self.refresh_line_with_msg(msg.as_deref())?;
+                        self.refresh_line_with_msg(msg.as_deref(), CmdKind::Other)?;
                     }
                 }
             }
@@ -314,24 +311,24 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl<H: Helper> Invoke for State<'_, '_, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
+impl<H: Helper> Refresher for State<'_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
-        self.highlight_char();
+        self.highlight_char(CmdKind::Other);
         self.refresh(self.prompt, prompt_size, true, Info::Hint)
     }
 
-    fn refresh_line_with_msg(&mut self, msg: Option<&str>) -> Result<()> {
+    fn refresh_line_with_msg(&mut self, msg: Option<&str>, kind: CmdKind) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint = None;
-        self.highlight_char();
+        self.highlight_char(kind);
         self.refresh_rate_limit.force();
         self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
     }
@@ -339,7 +336,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
         self.hint();
-        self.highlight_char();
+        self.highlight_char(CmdKind::Other);
         self.refresh(prompt, prompt_size, false, Info::Hint)
     }
 
@@ -387,7 +384,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
+impl<H: Helper> fmt::Debug for State<'_, '_, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -400,7 +397,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<H: Helper> State<'_, '_, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -420,7 +417,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()
                     && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
-                    && !self.highlight_char()
+                    && !self.highlight_char(CmdKind::Other)
                     && !self.refresh_rate_limit.refresh_skipped
                 {
                     // Avoid a full update of the line in the trivial case.
@@ -516,7 +513,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Move cursor on the left.
     pub fn edit_move_backward(&mut self, n: RepeatCount) -> Result<()> {
         if self.line.move_backward(n) {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -525,7 +522,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Move cursor on the right.
     pub fn edit_move_forward(&mut self, n: RepeatCount) -> Result<()> {
         if self.line.move_forward(n) {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -534,7 +531,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Move cursor to the start of the line.
     pub fn edit_move_home(&mut self) -> Result<()> {
         if self.line.move_home() {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -543,7 +540,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Move cursor to the end of the line.
     pub fn edit_move_end(&mut self) -> Result<()> {
         if self.line.move_end() {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -552,16 +549,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Move cursor to the start of the buffer.
     pub fn edit_move_buffer_start(&mut self) -> Result<()> {
         if self.line.move_buffer_start() {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
     }
 
     /// Move cursor to the end of the buffer.
-    pub fn edit_move_buffer_end(&mut self) -> Result<()> {
+    pub fn edit_move_buffer_end(&mut self, kind: CmdKind) -> Result<()> {
         if self.line.move_buffer_end() {
-            self.move_cursor()
+            self.move_cursor(kind)
         } else {
             Ok(())
         }
@@ -627,7 +624,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn edit_move_to_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Result<()> {
         if self.line.move_to_prev_word(word_def, n) {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -635,7 +632,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn edit_move_to_next_word(&mut self, at: At, word_def: Word, n: RepeatCount) -> Result<()> {
         if self.line.move_to_next_word(at, word_def, n) {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -644,7 +641,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
         if self.line.move_to_line_up(n) {
-            self.move_cursor()?;
+            self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
             Ok(false)
@@ -654,7 +651,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
         if self.line.move_to_line_down(n) {
-            self.move_cursor()?;
+            self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
             Ok(false)
@@ -663,7 +660,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn edit_move_to(&mut self, cs: CharSearch, n: RepeatCount) -> Result<()> {
         if self.line.move_to(cs, n) {
-            self.move_cursor()
+            self.move_cursor(CmdKind::MoveCursor)
         } else {
             Ok(())
         }
@@ -827,7 +824,6 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
-        forced_refresh: false,
         refresh_rate_limit: RefreshRateLimit::new(Duration::from_millis(0)),
     }
 }

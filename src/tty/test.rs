@@ -22,7 +22,7 @@ impl RawMode for Mode {
     }
 }
 
-impl<'a> RawReader for Iter<'a, KeyEvent> {
+impl RawReader for Iter<'_, KeyEvent> {
     type Buffer = Buffer;
 
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {

@@ -578,7 +578,7 @@ impl<H: Helper> State<'_, '_, H> {
 
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_up(n) {
+        if self.line.move_to_line_up(n, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
@@ -588,7 +588,7 @@ impl<H: Helper> State<'_, '_, H> {
 
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_down(n) {
+        if self.line.move_to_line_down(n, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {

@@ -1,5 +1,6 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
+use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
@@ -581,35 +582,10 @@ impl LineBuffer {
         }
     }
 
-    /// Moves the cursor to the same column in the line above
-    pub fn move_to_line_up(&mut self, n: RepeatCount) -> bool {
-        match self.buf[..self.pos].rfind('\n') {
-            Some(off) => {
-                let column = self.buf[off + 1..self.pos].graphemes(true).count();
-
-                let mut dest_start = self.buf[..off].rfind('\n').map_or(0, |n| n + 1);
-                let mut dest_end = off;
-                for _ in 1..n {
-                    if dest_start == 0 {
-                        break;
-                    }
-                    dest_end = dest_start - 1;
-                    dest_start = self.buf[..dest_end].rfind('\n').map_or(0, |n| n + 1);
-                }
-                let gidx = self.buf[dest_start..dest_end]
-                    .grapheme_indices(true)
-                    .nth(column);
-
-                self.pos = gidx.map_or(off, |(idx, _)| dest_start + idx); // if there's no enough columns
-                true
-            }
-            None => false,
-        }
-    }
-
     /// N lines up starting from the current one
     ///
     /// Fails if the cursor is on the first line
+    // FIXME
     fn n_lines_up(&self, n: RepeatCount) -> Option<(usize, usize)> {
         let mut start = if let Some(off) = self.buf[..self.pos].rfind('\n') {
             off + 1
@@ -633,6 +609,7 @@ impl LineBuffer {
     /// N lines down starting from the current one
     ///
     /// Fails if the cursor is on the last line
+    // FIXME
     fn n_lines_down(&self, n: RepeatCount) -> Option<(usize, usize)> {
         let mut end = if let Some(off) = self.buf[self.pos..].find('\n') {
             self.pos + off + 1
@@ -651,34 +628,42 @@ impl LineBuffer {
         Some((start, end))
     }
 
-    /// Moves the cursor to the same column in the line above
-    pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
-        match self.buf[self.pos..].find('\n') {
-            Some(off) => {
-                let line_start = self.buf[..self.pos].rfind('\n').map_or(0, |n| n + 1);
-                let column = self.buf[line_start..self.pos].graphemes(true).count();
-                let mut dest_start = self.pos + off + 1;
-                let mut dest_end = self.buf[dest_start..]
-                    .find('\n')
-                    .map_or_else(|| self.buf.len(), |v| dest_start + v);
-                for _ in 1..n {
-                    if dest_end == self.buf.len() {
-                        break;
-                    }
-                    dest_start = dest_end + 1;
-                    dest_end = self.buf[dest_start..]
-                        .find('\n')
-                        .map_or_else(|| self.buf.len(), |v| dest_start + v);
-                }
-                self.pos = self.buf[dest_start..dest_end]
-                    .grapheme_indices(true)
-                    .nth(column)
-                    .map_or(dest_end, |(idx, _)| dest_start + idx); // if there's no enough columns
-                debug_assert!(self.pos <= self.buf.len());
-                true
-            }
-            None => false,
+    /// Moves the cursor to line `current_line + n` the buffer, into the same column.
+    /// Positive n mean down, negative mean up.
+    /// Returns false when no move was performed, true otherwise.
+    pub fn move_to_line(&mut self, n: isize, layout: &Layout) -> bool {
+        let current_pos = layout.cursor;
+
+        if n == 0 || current_pos.row == 0 && n < 0 {
+            return false;
         }
+
+        let target_row = (current_pos.row as isize).saturating_add(n).max(0) as usize;
+        let (target_span, target_span_end) =
+            if let Some((i, target_span)) = layout.find_span_by_row(target_row) {
+                let target_span_end = layout
+                    .spans
+                    .get(i + 1)
+                    .map(|s| s.offset - 1)
+                    .unwrap_or_else(|| self.buf.len());
+
+                (target_span, target_span_end)
+            } else {
+                (layout.spans.last().unwrap(), self.buf.len())
+            };
+
+        let target_offset = self.buf[target_span.offset..target_span_end]
+            .grapheme_indices(true)
+            .nth(current_pos.col.saturating_sub(target_span.pos.col))
+            .map(|(offset, _)| target_span.offset + offset)
+            .unwrap_or(target_span_end);
+
+        if self.pos == target_offset {
+            return false;
+        }
+
+        self.pos = target_offset;
+        true
     }
 
     fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
@@ -1183,6 +1168,8 @@ mod test {
         ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
     };
     use crate::keymap::{At, CharSearch, Word};
+    use crate::layout::{Layout, Position};
+    use crate::tty::Sink;
 
     struct Listener {
         deleted_str: Option<String>,
@@ -1817,41 +1804,89 @@ mod test {
 
     #[test]
     fn move_by_line() {
+        fn move_to_line(s: &mut LineBuffer, prompt_size: Position, n: isize) -> bool {
+            let renderer = Sink {};
+            let layout = Layout::compute(&renderer, prompt_size, false, s, None);
+            s.move_to_line(n, &layout)
+        }
+
+        let prompt_size = Position { row: 0, col: 0 };
         let text = "aa123\nsdf bc\nasdf";
         let mut s = LineBuffer::init(text, 14);
+
         // move up
-        let ok = s.move_to_line_up(1);
+        let ok = move_to_line(&mut s, prompt_size, -1);
         assert_eq!(7, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_up(1);
+        let ok = move_to_line(&mut s, prompt_size, -1);
         assert_eq!(1, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_up(1);
+        let ok = move_to_line(&mut s, prompt_size, -1);
         assert_eq!(1, s.pos);
         assert!(!ok);
 
         // move down
-        let ok = s.move_to_line_down(1);
+        let ok = move_to_line(&mut s, prompt_size, 1);
         assert_eq!(7, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(1);
+        let ok = move_to_line(&mut s, prompt_size, 1);
         assert_eq!(14, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(1);
+        let ok = move_to_line(&mut s, prompt_size, 1);
         assert_eq!(14, s.pos);
         assert!(!ok);
 
         // move by multiple steps
-        let ok = s.move_to_line_up(2);
+        let ok = move_to_line(&mut s, prompt_size, -2);
         assert_eq!(1, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(2);
+        let ok = move_to_line(&mut s, prompt_size, 2);
         assert_eq!(14, s.pos);
+        assert!(ok);
+
+        // non-empty prompt
+        let prompt_size = Position { row: 0, col: 3 };
+        let text = "aa123\nsdf bc\nasdf";
+        let mut s = LineBuffer::init(text, 14);
+
+        // move up
+        let ok = move_to_line(&mut s, prompt_size, -1);
+        assert_eq!(7, s.pos);
+        assert!(ok);
+
+        let ok = move_to_line(&mut s, prompt_size, -1);
+        assert_eq!(0, s.pos);
+        assert!(ok);
+
+        let ok = move_to_line(&mut s, prompt_size, -1);
+        assert_eq!(0, s.pos);
+        assert!(!ok);
+
+        // move down
+        let ok = move_to_line(&mut s, prompt_size, 1);
+        assert_eq!(9, s.pos);
+        assert!(ok);
+
+        let ok = move_to_line(&mut s, prompt_size, 1);
+        assert_eq!(16, s.pos);
+        assert!(ok);
+
+        let ok = move_to_line(&mut s, prompt_size, 1);
+        assert_eq!(16, s.pos);
+        assert!(!ok);
+
+        // move by multiple steps
+        let ok = move_to_line(&mut s, prompt_size, -2);
+        assert_eq!(0, s.pos);
+        assert!(ok);
+
+        let ok = move_to_line(&mut s, prompt_size, 2);
+        assert_eq!(16, s.pos);
         assert!(ok);
     }
 

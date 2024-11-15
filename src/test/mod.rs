@@ -129,7 +129,10 @@ fn assert_cursor(mode: EditMode, initial: (&str, &str), keys: &[KeyEvent], expec
     let mut editor = init_editor(mode, keys);
     let actual_line = editor.readline_with_initial("", initial).unwrap();
     assert_eq!(expected.0.to_owned() + expected.1, actual_line);
-    assert_eq!(expected.0.len(), editor.term.cursor);
+    assert_eq!(
+        expected.0.len() - expected.0.rfind('\n').map_or(0, |x| x + 1),
+        editor.term.cursor
+    );
 }
 
 // `entries`: history entries before `keys` pressed

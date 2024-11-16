@@ -52,13 +52,13 @@ fn check(rc: BOOL) -> io::Result<()> {
     }
 }
 
-fn get_win_size(handle: HANDLE) -> (usize, usize) {
+fn get_win_size(handle: HANDLE) -> (u16, u16) {
     let mut info = unsafe { mem::zeroed() };
     match unsafe { console::GetConsoleScreenBufferInfo(handle, &mut info) } {
         FALSE => (80, 24),
         _ => (
-            info.dwSize.X as usize,
-            (1 + info.srWindow.Bottom - info.srWindow.Top) as usize,
+            u16::try_from(info.dwSize.X).unwrap(),
+            u16::try_from(1 + info.srWindow.Bottom - info.srWindow.Top).unwrap(),
         ), // (info.srWindow.Right - info.srWindow.Left + 1)
     }
 }
@@ -286,7 +286,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 
 pub struct ConsoleRenderer {
     conout: HANDLE,
-    cols: usize, // Number of columns in terminal
+    cols: u16, // Number of columns in terminal
     buffer: String,
     utf16: Vec<u16>,
     colors_enabled: bool,
@@ -343,7 +343,7 @@ impl ConsoleRenderer {
 
     // You can't have both ENABLE_WRAP_AT_EOL_OUTPUT and
     // ENABLE_VIRTUAL_TERMINAL_PROCESSING. So we need to wrap manually.
-    fn wrap_at_eol(&mut self, s: &str, mut col: usize) -> usize {
+    fn wrap_at_eol(&mut self, s: &str, mut col: u16) -> u16 {
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
@@ -501,7 +501,7 @@ impl Renderer for ConsoleRenderer {
                 pos.col = 0;
                 pos.row += 1;
             } else {
-                let cw = c.width();
+                let cw = u16::try_from(c.width()).unwrap();
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;
@@ -544,13 +544,13 @@ impl Renderer for ConsoleRenderer {
         self.cols = cols;
     }
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> u16 {
         self.cols
     }
 
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> u16 {
         let (_, rows) = get_win_size(self.conout);
         rows
     }
@@ -659,7 +659,7 @@ impl Term for Console {
     fn new(
         color_mode: ColorMode,
         behavior: Behavior,
-        _tab_stop: usize,
+        _tab_stop: u8,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
         _enable_signals: bool,

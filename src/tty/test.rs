@@ -114,7 +114,7 @@ impl Renderer for Sink {
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
-        pos.col += s.len();
+        pos.col += u16::try_from(s.len()).unwrap();
         pos
     }
 
@@ -136,11 +136,11 @@ impl Renderer for Sink {
 
     fn update_size(&mut self) {}
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> u16 {
         80
     }
 
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> u16 {
         24
     }
 
@@ -183,7 +183,7 @@ impl Term for DummyTerminal {
     fn new(
         color_mode: ColorMode,
         _behavior: Behavior,
-        _tab_stop: usize,
+        _tab_stop: u8,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
         _enable_signals: bool,

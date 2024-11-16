@@ -108,9 +108,9 @@ pub trait Renderer {
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
-    fn get_columns(&self) -> usize;
+    fn get_columns(&self) -> u16;
     /// Get the number of rows in the current terminal.
-    fn get_rows(&self) -> usize;
+    fn get_rows(&self) -> u16;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
 
@@ -119,7 +119,7 @@ pub trait Renderer {
 }
 
 // ignore ANSI escape sequence
-fn width(s: &str, esc_seq: &mut u8) -> usize {
+fn width(s: &str, esc_seq: &mut u8) -> u16 {
     if *esc_seq == 1 {
         if s == "[" {
             // CSI
@@ -145,7 +145,7 @@ fn width(s: &str, esc_seq: &mut u8) -> usize {
     } else if s == "\n" {
         0
     } else {
-        s.width()
+        u16::try_from(s.width()).unwrap()
     }
 }
 
@@ -168,7 +168,7 @@ pub trait Term {
     fn new(
         color_mode: ColorMode,
         behavior: Behavior,
-        tab_stop: usize,
+        tab_stop: u8,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
         enable_signals: bool,

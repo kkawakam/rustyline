@@ -691,8 +691,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
-        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
-
+        let mut s = State::new(&self.config, &mut stdout, prompt, self.helper.as_ref(), ctx);
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 
         if let Some((left, right)) = initial {

@@ -3,6 +3,7 @@
 use buffer_redux::BufReader;
 use std::cmp;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 #[cfg(not(feature = "buffer-redux"))]
 use std::io::BufReader;
@@ -12,6 +13,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use log::{debug, warn};
 use nix::errno::Errno;
@@ -302,7 +304,7 @@ impl PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            match self.poll(timeout) {
+            match self.poll_input(timeout) {
                 // Ignore poll errors, it's very likely we'll pick them up on
                 // the next read anyway.
                 Ok(0) | Err(_) => Ok(E::ESC),
@@ -701,7 +703,7 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: PollTimeout) -> Result<i32> {
+    fn poll_input(&mut self, timeout_ms: PollTimeout) -> Result<i32> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
             return Ok(n as i32);
@@ -798,7 +800,7 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            match self.poll(timeout_ms) {
+            match self.poll_input(timeout_ms) {
                 Ok(0) => {
                     // single escape
                 }
@@ -872,6 +874,11 @@ impl RawReader for PosixRawReader {
     fn unbuffer(self) -> Option<PosixBuffer> {
         let (_, buffer) = self.tty_in.into_inner_with_buffer();
         Some(buffer)
+    }
+
+    fn poll(&mut self, timeout: Duration) -> Result<bool> {
+        self.poll_input(PollTimeout::try_from(timeout).expect("invalid timeout"))
+            .map(|i| i != 0)
     }
 }
 
@@ -1116,14 +1123,14 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
-        if rdr.poll(PollTimeout::ZERO)? != 0 {
+        if rdr.poll_input(PollTimeout::ZERO)? != 0 {
             debug!(target: "rustyline", "cannot request cursor location");
             return Ok(());
         }
         /* Report cursor location */
         self.write_and_flush("\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
-        if rdr.poll(PollTimeout::from(100u8))? == 0
+        if rdr.poll_input(PollTimeout::from(100u8))? == 0
             || rdr.next_char()? != '\x1b'
             || rdr.next_char()? != '['
             || read_digits_until(rdr, ';')?.is_none()

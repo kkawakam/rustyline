@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
@@ -124,8 +125,7 @@ impl ConsoleRawReader {
         loop {
             let rc = unsafe { WaitForMultipleObjects(n, handles.as_ptr(), FALSE, INFINITE) };
             if rc == WAIT_OBJECT_0 {
-                let mut count = 0;
-                check(unsafe { console::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
+                let count = self.get_number_of_events()?;
                 match read_input(self.conin, count)? {
                     KeyEvent(K::UnknownEscSeq, M::NONE) => continue, // no relevant
                     key => return Ok(Event::KeyPress(key)),
@@ -141,6 +141,12 @@ impl ConsoleRawReader {
                 Err(io::Error::last_os_error())?
             }
         }
+    }
+
+    fn get_number_of_events(&self) -> Result<u32> {
+        let mut count = 0;
+        check(unsafe { console::GetNumberOfConsoleInputEvents(self.conin, &mut count) })?;
+        Ok(count)
     }
 }
 
@@ -168,6 +174,69 @@ impl RawReader for ConsoleRawReader {
 
     fn unbuffer(self) -> Option<ConsoleBuffer> {
         None
+    }
+
+    fn poll(&mut self, mut timeout: Duration) -> Result<bool> {
+        use foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+        use threading::WaitForSingleObject;
+
+        let start = Instant::now();
+        loop {
+            let mut noe = self.get_number_of_events()?;
+            if noe == 0 {
+                let rc = unsafe {
+                    WaitForSingleObject(
+                        self.conin,
+                        u32::try_from(timeout.as_millis()).expect("invalid timeout"),
+                    )
+                };
+                match rc {
+                    WAIT_OBJECT_0 => {
+                        noe = self.get_number_of_events()?;
+                    }
+                    WAIT_TIMEOUT => {
+                        return Ok(false);
+                    }
+                    _ => Err(io::Error::last_os_error())?,
+                }
+            }
+
+            let mut rec: console::INPUT_RECORD = unsafe { mem::zeroed() };
+            let mut count = 0;
+            while noe > 0 {
+                check(unsafe { console::PeekConsoleInputW(self.conin, &mut rec, 1, &mut count) })?;
+                if count > 0 {
+                    noe -= count;
+                    if u32::from(rec.EventType) == console::WINDOW_BUFFER_SIZE_EVENT {
+                        return Ok(true);
+                    } else if u32::from(rec.EventType) != console::KEY_EVENT {
+                        // read the event to unsignal the handle
+                        check(unsafe {
+                            console::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
+                        })?;
+                    } else {
+                        let key_event = unsafe { rec.Event.KeyEvent };
+                        if key_event.bKeyDown == 0
+                            && key_event.wVirtualKeyCode != KeyboardAndMouse::VK_MENU
+                        {
+                            // read the event to unsignal the handle
+                            check(unsafe {
+                                console::ReadConsoleInputW(self.conin, &mut rec, 1, &mut count)
+                            })?;
+                        } else {
+                            return Ok(true);
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            if let Some(t) = timeout.checked_sub(start.elapsed()) {
+                timeout = t;
+            } else {
+                return Ok(false);
+            }
+        }
     }
 }
 

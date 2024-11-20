@@ -1,5 +1,6 @@
 //! Tests specific definitions
 use std::slice::Iter;
+use std::time::Duration;
 use std::vec::IntoIter;
 
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
@@ -51,6 +52,10 @@ impl RawReader for Iter<'_, KeyEvent> {
     fn unbuffer(self) -> Option<Buffer> {
         None
     }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 impl RawReader for IntoIter<KeyEvent> {
@@ -87,6 +92,10 @@ impl RawReader for IntoIter<KeyEvent> {
 
     fn unbuffer(self) -> Option<Buffer> {
         None
+    }
+
+    fn poll(&mut self, _timeout: Duration) -> Result<bool> {
+        Ok(true)
     }
 }
 

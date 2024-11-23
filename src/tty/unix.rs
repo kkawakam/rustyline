@@ -751,7 +751,7 @@ impl PosixRawReader {
                     continue;
                 }
             };
-            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
+            if sigwinch_pipe.is_some_and(|fd| readfds.contains(fd)) {
                 self.tty_in.get_ref().sigwinch()?;
                 return Err(ReadlineError::WindowResized);
             } else if readfds.contains(tty_in) {

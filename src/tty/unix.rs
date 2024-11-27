@@ -757,14 +757,22 @@ impl PosixRawReader {
             } else if readfds.contains(tty_in) {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
-            } else { match self.pipe_reader { Some(ref pipe_reader) => {
-                let mut guard = pipe_reader.lock().unwrap();
-                let mut buf = [0; 1];
-                guard.0.read_exact(&mut buf)?;
-                match guard.1.try_recv() { Ok(msg) => {
-                    return Ok(Event::ExternalPrint(msg));
-                } _ => {}}
-            } _ => {}}}
+            } else {
+                match self.pipe_reader {
+                    Some(ref pipe_reader) => {
+                        let mut guard = pipe_reader.lock().unwrap();
+                        let mut buf = [0; 1];
+                        guard.0.read_exact(&mut buf)?;
+                        match guard.1.try_recv() {
+                            Ok(msg) => {
+                                return Ok(Event::ExternalPrint(msg));
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -1304,19 +1312,20 @@ impl Term for PosixTerminal {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
             if behavior == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
-                match tty { Ok(tty) => {
-                    let fd = tty.into_raw_fd();
-                    let is_a_tty = is_a_tty(fd); // TODO: useless ?
-                    (fd, is_a_tty, fd, is_a_tty, true)
-                } _ => {
-                    (
+                match tty {
+                    Ok(tty) => {
+                        let fd = tty.into_raw_fd();
+                        let is_a_tty = is_a_tty(fd); // TODO: useless ?
+                        (fd, is_a_tty, fd, is_a_tty, true)
+                    }
+                    _ => (
                         libc::STDIN_FILENO,
                         is_a_tty(libc::STDIN_FILENO),
                         libc::STDOUT_FILENO,
                         is_a_tty(libc::STDOUT_FILENO),
                         false,
-                    )
-                }}
+                    ),
+                }
             } else {
                 (
                     libc::STDIN_FILENO,
@@ -1494,16 +1503,21 @@ impl super::ExternalPrinter for ExternalPrinter {
         // write directly to stdout/stderr while not in raw mode
         if !self.raw_mode.load(Ordering::SeqCst) {
             write_all(self.tty_out, msg.as_str())?;
-        } else { match self.writer.0.lock() { Ok(mut writer) => {
-            self.writer
-                .1
-                .send(msg)
-                .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
-            writer.write_all(b"m")?;
-            writer.flush()?;
-        } _ => {
-            return Err(io::Error::from(ErrorKind::Other).into()); // FIXME
-        }}}
+        } else {
+            match self.writer.0.lock() {
+                Ok(mut writer) => {
+                    self.writer
+                        .1
+                        .send(msg)
+                        .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
+                    writer.write_all(b"m")?;
+                    writer.flush()?;
+                }
+                _ => {
+                    return Err(io::Error::from(ErrorKind::Other).into()); // FIXME
+                }
+            }
+        }
         Ok(())
     }
 }

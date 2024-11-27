@@ -229,25 +229,31 @@ impl MemHistory {
                     .skip(self.len() - 1 - start)
                     .enumerate()
                 {
-                    match test(entry) { Some(cursor) => {
-                        return Some(SearchResult {
-                            idx: start - idx,
-                            entry: Cow::Borrowed(entry),
-                            pos: cursor,
-                        });
-                    } _ => {}}
+                    match test(entry) {
+                        Some(cursor) => {
+                            return Some(SearchResult {
+                                idx: start - idx,
+                                entry: Cow::Borrowed(entry),
+                                pos: cursor,
+                            });
+                        }
+                        _ => {}
+                    }
                 }
                 None
             }
             SearchDirection::Forward => {
                 for (idx, entry) in self.entries.iter().skip(start).enumerate() {
-                    match test(entry) { Some(cursor) => {
-                        return Some(SearchResult {
-                            idx: idx + start,
-                            entry: Cow::Borrowed(entry),
-                            pos: cursor,
-                        });
-                    } _ => {}}
+                    match test(entry) {
+                        Some(cursor) => {
+                            return Some(SearchResult {
+                                idx: idx + start,
+                                entry: Cow::Borrowed(entry),
+                                pos: cursor,
+                            });
+                        }
+                        _ => {}
+                    }
                 }
                 None
             }

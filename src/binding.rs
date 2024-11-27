@@ -32,7 +32,7 @@ impl Event {
     /// Return `i`th key event
     #[must_use]
     pub fn get(&self, i: usize) -> Option<&KeyEvent> {
-        if let Self::KeySeq(ref ks) = self {
+        if let &Self::KeySeq(ref ks) = self {
             ks.get(i)
         } else {
             None

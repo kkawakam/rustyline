@@ -707,12 +707,15 @@ impl<H: Helper, I: History> Editor<H, I> {
             .term
             .create_reader(self.buffer.take(), &self.config, term_key_map);
         if self.term.is_output_tty() && self.config.check_cursor_position() {
-            if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-                if let ReadlineError::WindowResized = e {
-                    s.out.update_size();
-                } else {
-                    return Err(e);
+            match s.move_cursor_at_leftmost(&mut rdr) {
+                Err(e) => {
+                    if let ReadlineError::WindowResized = e {
+                        s.out.update_size();
+                    } else {
+                        return Err(e);
+                    }
                 }
+                _ => {}
             }
         }
         s.refresh_line()?;

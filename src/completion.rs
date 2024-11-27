@@ -334,10 +334,10 @@ fn filename_complete(
     if let Ok(read_dir) = dir.read_dir() {
         let file_name = normalize(file_name);
         for entry in read_dir.flatten() {
-            if let Some(s) = entry.file_name().to_str() {
+            match entry.file_name().to_str() { Some(s) => {
                 let ns = normalize(s);
                 if ns.starts_with(file_name.as_ref()) {
-                    if let Ok(metadata) = fs::metadata(entry.path()) {
+                    match fs::metadata(entry.path()) { Ok(metadata) => {
                         let mut path = String::from(dir_name) + s;
                         if metadata.is_dir() {
                             path.push(sep);
@@ -346,9 +346,9 @@ fn filename_complete(
                             display: String::from(s),
                             replacement: escape(path, esc_char, is_break_char, quote),
                         });
-                    } // else ignore PermissionDenied
+                    } _ => {}} // else ignore PermissionDenied
                 }
-            }
+            } _ => {}}
         }
     }
     entries

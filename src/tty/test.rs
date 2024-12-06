@@ -108,11 +108,12 @@ impl Renderer for Sink {
         _old_layout: &Layout,
         _new_layout: &Layout,
         _highlighter: Option<&dyn Highlighter>,
+        _continuation: &str,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, _c: &str) -> Position {
         let mut pos = orig;
         pos.col += s.len();
         pos

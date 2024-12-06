@@ -27,7 +27,8 @@ pub struct State<'out, 'prompt, H: Helper> {
     pub out: &'out mut <Terminal as Term>::Writer,
     prompt: &'prompt str,  // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
-    pub line: LineBuffer,  // Edited line buffer
+    continuation: &'prompt str,
+    pub line: LineBuffer, // Edited line buffer
     pub layout: Layout,
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
@@ -48,14 +49,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn new(
         out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
+        continuation: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> Self {
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), continuation);
         Self {
             out,
             prompt,
             prompt_size,
+            continuation,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             layout: Layout::default(),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
@@ -93,9 +96,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 if new_cols != old_cols
                     && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
                 {
-                    self.prompt_size = self
-                        .out
-                        .calculate_position(self.prompt, Position::default());
+                    self.prompt_size = self.out.calculate_position(
+                        self.prompt,
+                        Position::default(),
+                        self.continuation,
+                    );
                     self.refresh_line()?;
                 }
                 continue;
@@ -122,9 +127,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn move_cursor(&mut self, kind: CmdKind) -> Result<()> {
         // calculate the desired position of the cursor
-        let cursor = self
-            .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+        let cursor = self.out.calculate_position(
+            &self.line[..self.line.pos()],
+            self.prompt_size,
+            self.continuation,
+        );
         if self.layout.cursor == cursor {
             return Ok(());
         }
@@ -172,9 +179,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             None
         };
 
-        let new_layout = self
-            .out
-            .compute_layout(prompt_size, default_prompt, &self.line, info);
+        let new_layout = self.out.compute_layout(
+            prompt_size,
+            default_prompt,
+            &self.line,
+            info,
+            self.continuation,
+        );
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
         debug!(target: "rustyline", "new layout: {:?}", new_layout);
@@ -185,6 +196,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             &self.layout,
             &new_layout,
             highlighter,
+            self.continuation,
         )?;
         self.layout = new_layout;
 
@@ -275,7 +287,9 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.out.calculate_position(prompt, Position::default());
+        let prompt_size =
+            self.out
+                .calculate_position(prompt, Position::default(), self.continuation);
         self.hint();
         self.highlight_char(CmdKind::Other);
         self.refresh(prompt, prompt_size, false, Info::Hint)
@@ -753,6 +767,7 @@ pub fn init_state<'out, H: Helper>(
         out,
         prompt: "",
         prompt_size: Position::default(),
+        continuation: "",
         line: LineBuffer::init(line, pos),
         layout: Layout::default(),
         saved_line_for_history: LineBuffer::with_capacity(100),

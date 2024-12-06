@@ -54,6 +54,7 @@ pub trait Renderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        continuation: &str,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -65,18 +66,19 @@ pub trait Renderer {
         default_prompt: bool,
         line: &LineBuffer,
         info: Option<&str>,
+        continuation: &str,
     ) -> Layout {
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let cursor = self.calculate_position(&line[..pos], prompt_size);
+        let cursor = self.calculate_position(&line[..pos], prompt_size, continuation);
         // calculate the position of the end of the input line
         let mut end = if pos == line.len() {
             cursor
         } else {
-            self.calculate_position(&line[pos..], cursor)
+            self.calculate_position(&line[pos..], cursor, continuation)
         };
         if let Some(info) = info {
-            end = self.calculate_position(info, end);
+            end = self.calculate_position(info, end, continuation);
         }
 
         let new_layout = Layout {
@@ -92,7 +94,7 @@ pub trait Renderer {
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position) -> Position;
+    fn calculate_position(&self, s: &str, orig: Position, continuation: &str) -> Position;
 
     fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 

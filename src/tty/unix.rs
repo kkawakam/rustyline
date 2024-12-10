@@ -798,16 +798,26 @@ impl RawReader for PosixRawReader {
             } else {
                 self.timeout_ms
             };
-            match self.poll(timeout_ms) {
-                Ok(0) => {
-                    // single escape
-                }
-                Ok(_) => {
-                    // escape sequence
+            if timeout_ms == PollTimeout::ZERO {
+                // Don't bother polling at all if [timeout_ms] is 0. (Also because
+                // calling [poll] on /dev/tty on MacOS is broken.) If there's any
+                // buffered input we'll treat it as an escape sequence, and otherwise
+                // we'll assume it's a single escape.
+                if !self.tty_in.buffer().is_empty() {
                     key = self.escape_sequence()?
                 }
-                // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e),
+            } else {
+                match self.poll(timeout_ms) {
+                    Ok(0) => {
+                        // single escape
+                    }
+                    Ok(_) => {
+                        // escape sequence
+                        key = self.escape_sequence()?
+                    }
+                    // Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e),
+                }
             }
         }
         debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);

@@ -184,7 +184,8 @@ impl Cmd {
                     if let Movement::ForwardChar(0) = mvt {
                         Self::Replace(
                             Movement::ForwardChar(
-                                u16::try_from(last_insert.as_ref().map_or(0, String::len)).unwrap(),
+                                RepeatCount::try_from(last_insert.as_ref().map_or(0, String::len))
+                                    .unwrap(),
                             ),
                             last_insert,
                         )

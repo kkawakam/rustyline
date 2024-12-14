@@ -29,7 +29,7 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, ReadlineError, Result};
 
@@ -41,7 +41,7 @@ const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-fn get_win_size(fd: RawFd) -> (u16, u16) {
+fn get_win_size(fd: RawFd) -> (Unit, Unit) {
     use std::mem::zeroed;
 
     if cfg!(test) {
@@ -58,7 +58,7 @@ fn get_win_size(fd: RawFd) -> (u16, u16) {
                 // infinite rows
                 let cols = if size.ws_col == 0 { 80 } else { size.ws_col };
                 let rows = if size.ws_row == 0 {
-                    u16::MAX
+                    Unit::MAX
                 } else {
                     size.ws_row
                 };
@@ -888,15 +888,15 @@ impl Receiver for Utf8 {
 /// Console output writer
 pub struct PosixRenderer {
     out: RawFd,
-    cols: u16, // Number of columns in terminal
+    cols: Unit, // Number of columns in terminal
     buffer: String,
-    tab_stop: u16,
+    tab_stop: Unit,
     colors_enabled: bool,
     bell_style: BellStyle,
 }
 
 impl PosixRenderer {
-    fn new(out: RawFd, tab_stop: u16, colors_enabled: bool, bell_style: BellStyle) -> Self {
+    fn new(out: RawFd, tab_stop: Unit, colors_enabled: bool, bell_style: BellStyle) -> Self {
         let (cols, _) = get_win_size(out);
         Self {
             out,
@@ -1096,13 +1096,13 @@ impl Renderer for PosixRenderer {
         self.cols = cols;
     }
 
-    fn get_columns(&self) -> u16 {
+    fn get_columns(&self) -> Unit {
         self.cols
     }
 
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
-    fn get_rows(&self) -> u16 {
+    fn get_rows(&self) -> Unit {
         let (_, rows) = get_win_size(self.out);
         rows
     }
@@ -1420,7 +1420,7 @@ impl Term for PosixTerminal {
     fn create_writer(&self) -> PosixRenderer {
         PosixRenderer::new(
             self.tty_out,
-            u16::from(self.tab_stop),
+            Unit::from(self.tab_stop),
             self.colors_enabled(),
             self.bell_style,
         )

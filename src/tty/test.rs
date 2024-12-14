@@ -7,7 +7,7 @@ use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -136,11 +136,11 @@ impl Renderer for Sink {
 
     fn update_size(&mut self) {}
 
-    fn get_columns(&self) -> u16 {
+    fn get_columns(&self) -> Unit {
         80
     }
 
-    fn get_rows(&self) -> u16 {
+    fn get_rows(&self) -> Unit {
         24
     }
 

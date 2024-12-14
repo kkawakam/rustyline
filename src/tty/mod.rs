@@ -1,11 +1,9 @@
 //! This module implements and describes common TTY methods & traits
 
-use unicode_width::UnicodeWidthStr;
-
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position};
+use crate::layout::{swidth, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -108,9 +106,9 @@ pub trait Renderer {
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);
     /// Get the number of columns in the current terminal.
-    fn get_columns(&self) -> u16;
+    fn get_columns(&self) -> Unit;
     /// Get the number of rows in the current terminal.
-    fn get_rows(&self) -> u16;
+    fn get_rows(&self) -> Unit;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
 
@@ -119,7 +117,7 @@ pub trait Renderer {
 }
 
 // ignore ANSI escape sequence
-fn width(s: &str, esc_seq: &mut u8) -> u16 {
+fn width(s: &str, esc_seq: &mut u8) -> Unit {
     if *esc_seq == 1 {
         if s == "[" {
             // CSI
@@ -145,7 +143,7 @@ fn width(s: &str, esc_seq: &mut u8) -> u16 {
     } else if s == "\n" {
         0
     } else {
-        u16::try_from(s.width()).unwrap()
+        swidth(s)
     }
 }
 

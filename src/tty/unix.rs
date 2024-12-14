@@ -782,14 +782,17 @@ impl PosixRawReader {
                 self.tty_in.get_ref().sigwinch()?;
                 return Err(ReadlineError::WindowResized);
             } else if readfds.contains(tty_in) {
+                #[cfg(target_os = "macos")]
                 if timeout.is_some() {
                     return Ok(Event::Timeout(false));
-                } else {
-                    // prefer user input over external print
-                    return self.next_key(single_esc_abort).map(Event::KeyPress);
                 }
+                // prefer user input over external print
+                return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else if timeout.is_some() {
+                #[cfg(target_os = "macos")]
                 return Ok(Event::Timeout(true));
+                #[cfg(not(target_os = "macos"))]
+                unreachable!()
             } else if let Some(ref pipe_reader) = self.pipe_reader {
                 let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];

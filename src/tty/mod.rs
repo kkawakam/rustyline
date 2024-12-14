@@ -19,7 +19,7 @@ pub trait RawMode: Sized {
 pub enum Event {
     KeyPress(KeyEvent),
     ExternalPrint(String),
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     Timeout(bool),
 }
 

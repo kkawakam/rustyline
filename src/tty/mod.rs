@@ -1,5 +1,8 @@
 //! This module implements and describes common TTY methods & traits
 
+/// Unsupported Terminals that don't support RAW mode
+const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
+
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
@@ -200,6 +203,22 @@ pub trait Term {
     fn set_cursor_visibility(&mut self, visible: bool) -> Result<Option<Self::CursorGuard>>;
 }
 
+/// Check TERM environment variable to see if current term is in our
+/// unsupported list
+fn is_unsupported_term() -> bool {
+    match std::env::var("TERM") {
+        Ok(term) => {
+            for iter in &UNSUPPORTED_TERM {
+                if (*iter).eq_ignore_ascii_case(&term) {
+                    return true;
+                }
+            }
+            false
+        }
+        Err(_) => false,
+    }
+}
+
 // If on Windows platform import Windows TTY module
 // and re-export into mod.rs scope
 #[cfg(all(windows, not(target_arch = "wasm32")))]
@@ -218,3 +237,15 @@ pub use self::unix::*;
 mod test;
 #[cfg(any(test, target_arch = "wasm32"))]
 pub use self::test::*;
+
+#[cfg(test)]
+mod test_ {
+    #[test]
+    fn test_unsupported_term() {
+        std::env::set_var("TERM", "xterm");
+        assert!(!super::is_unsupported_term());
+
+        std::env::set_var("TERM", "dumb");
+        assert!(super::is_unsupported_term());
+    }
+}

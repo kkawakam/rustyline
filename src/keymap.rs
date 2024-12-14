@@ -441,6 +441,7 @@ impl<'b> InputState<'b> {
                     tty::Event::ExternalPrint(msg) => {
                         wrt.external_print(msg)?;
                     }
+                    #[cfg(target_os = "macos")]
                     _ => {}
                 }
             }

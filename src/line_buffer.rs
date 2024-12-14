@@ -1,6 +1,6 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
-use crate::layout::Layout;
+use crate::layout::{swidth, Layout};
 use std::cmp::min;
 use std::fmt;
 use std::iter;
@@ -588,7 +588,7 @@ impl LineBuffer {
     pub fn move_to_line_up(&mut self, n: RepeatCount, layout: &Layout) -> bool {
         match self.buf[..self.pos].rfind('\n') {
             Some(off) => {
-                let column = self.buf[off + 1..self.pos].graphemes(true).count();
+                let column = swidth(&self.buf[off + 1..self.pos]);
 
                 let mut dest_start = self.buf[..off].rfind('\n').map_or(0, |n| n + 1);
                 let mut dest_end = off;
@@ -606,7 +606,7 @@ impl LineBuffer {
                 };
                 let gidx = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
-                    .nth(column.saturating_sub(offset));
+                    .nth(column.saturating_sub(offset) as usize);
 
                 self.pos = gidx.map_or(off, |(idx, _)| dest_start + idx); // if there's no enough columns
                 true
@@ -669,7 +669,7 @@ impl LineBuffer {
                 } else {
                     0
                 };
-                let column = self.buf[line_start..self.pos].graphemes(true).count() + offset;
+                let column = swidth(&self.buf[line_start..self.pos]) + offset;
                 let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
@@ -685,7 +685,7 @@ impl LineBuffer {
                 }
                 self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
-                    .nth(column)
+                    .nth(column as usize)
                     .map_or(dest_end, |(idx, _)| dest_start + idx); // if there's no enough columns
                 debug_assert!(self.pos <= self.buf.len());
                 true

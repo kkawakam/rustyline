@@ -49,7 +49,6 @@ use log::debug;
 #[cfg(feature = "derive")]
 #[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
-use unicode_width::UnicodeWidthStr;
 
 use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
 
@@ -66,6 +65,7 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, Repeat
 use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
+use crate::layout::{swidth, Unit};
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -292,15 +292,16 @@ fn page_completions<C: Candidate, H: Helper>(
         cols,
         candidates
             .iter()
-            .map(|s| s.display().width())
+            .map(|s| swidth(s.display()))
             .max()
             .unwrap()
             + min_col_pad,
     );
     let num_cols = cols / max_width;
+    let nbc = u16::try_from(candidates.len()).unwrap();
 
     let mut pause_row = s.out.get_rows() - 1;
-    let num_rows = candidates.len().div_ceil(num_cols);
+    let num_rows = nbc.div_ceil(num_cols);
     let mut ab = String::new();
     for row in 0..num_rows {
         if row == pause_row {
@@ -334,15 +335,15 @@ fn page_completions<C: Candidate, H: Helper>(
         ab.clear();
         for col in 0..num_cols {
             let i = (col * num_rows) + row;
-            if i < candidates.len() {
-                let candidate = &candidates[i].display();
-                let width = candidate.width();
+            if i < nbc {
+                let candidate = &candidates[i as usize].display();
+                let width = swidth(candidate);
                 if let Some(highlighter) = s.highlighter() {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
                 }
-                if ((col + 1) * num_rows) + row < candidates.len() {
+                if ((col + 1) * num_rows) + row < nbc {
                     for _ in width..max_width {
                         ab.push(' ');
                     }
@@ -776,7 +777,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 cmd,
                 Cmd::AcceptLine | Cmd::Newline | Cmd::AcceptOrInsertLine { .. }
             ) {
-                self.term.cursor = s.layout.cursor.col;
+                self.term.cursor = s.layout.cursor.col as usize;
             }
 
             // Execute things can be done solely on a state object
@@ -894,7 +895,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// If output stream is a tty, this function returns its width and height as
     /// a number of characters.
-    pub fn dimensions(&mut self) -> Option<(usize, usize)> {
+    pub fn dimensions(&mut self) -> Option<(Unit, Unit)> {
         if self.term.is_output_tty() {
             let out = self.term.create_writer();
             Some((out.get_columns(), out.get_rows()))

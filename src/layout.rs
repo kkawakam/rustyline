@@ -1,9 +1,21 @@
 use std::cmp::Ordering;
 
+/// Height, width
+pub type Unit = u16;
+
+pub(crate) fn cwidh(c: char) -> Unit {
+    use unicode_width::UnicodeWidthChar;
+    Unit::try_from(c.width().unwrap_or(0)).unwrap()
+}
+pub(crate) fn swidth(s: &str) -> Unit {
+    use unicode_width::UnicodeWidthStr;
+    Unit::try_from(s.width()).unwrap()
+}
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Position {
-    pub col: usize, // The leftmost column is number 0.
-    pub row: usize, // The highest row is number 0.
+    pub col: Unit, // The leftmost column is number 0.
+    pub row: Unit, // The highest row is number 0.
 }
 
 impl PartialOrd for Position {

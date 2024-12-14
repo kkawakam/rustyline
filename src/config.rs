@@ -28,9 +28,9 @@ pub struct Config {
     /// Whether to use stdio or not
     behavior: Behavior,
     /// Horizontal space taken by a tab.
-    tab_stop: usize,
+    tab_stop: u8,
     /// Indentation size for indent/dedent commands
-    indent_size: usize,
+    indent_size: u8,
     /// Check if cursor position is at leftmost before displaying prompt
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
@@ -160,11 +160,11 @@ impl Config {
     ///
     /// By default, 8.
     #[must_use]
-    pub fn tab_stop(&self) -> usize {
+    pub fn tab_stop(&self) -> u8 {
         self.tab_stop
     }
 
-    pub(crate) fn set_tab_stop(&mut self, tab_stop: usize) {
+    pub(crate) fn set_tab_stop(&mut self, tab_stop: u8) {
         self.tab_stop = tab_stop;
     }
 
@@ -180,11 +180,11 @@ impl Config {
     ///
     /// By default, 2.
     #[must_use]
-    pub fn indent_size(&self) -> usize {
+    pub fn indent_size(&self) -> u8 {
         self.indent_size
     }
 
-    pub(crate) fn set_indent_size(&mut self, indent_size: usize) {
+    pub(crate) fn set_indent_size(&mut self, indent_size: u8) {
         self.indent_size = indent_size;
     }
 
@@ -433,7 +433,7 @@ impl Builder {
     ///
     /// By default, `8`
     #[must_use]
-    pub fn tab_stop(mut self, tab_stop: usize) -> Self {
+    pub fn tab_stop(mut self, tab_stop: u8) -> Self {
         self.set_tab_stop(tab_stop);
         self
     }
@@ -451,7 +451,7 @@ impl Builder {
     ///
     /// By default, `2`
     #[must_use]
-    pub fn indent_size(mut self, indent_size: usize) -> Self {
+    pub fn indent_size(mut self, indent_size: u8) -> Self {
         self.set_indent_size(indent_size);
         self
     }
@@ -568,7 +568,7 @@ pub trait Configurer {
     /// Horizontal space taken by a tab.
     ///
     /// By default, `8`
-    fn set_tab_stop(&mut self, tab_stop: usize) {
+    fn set_tab_stop(&mut self, tab_stop: u8) {
         self.config_mut().set_tab_stop(tab_stop);
     }
 
@@ -581,7 +581,7 @@ pub trait Configurer {
     /// Indentation size for indent/dedent commands
     ///
     /// By default, `2`
-    fn set_indent_size(&mut self, size: usize) {
+    fn set_indent_size(&mut self, size: u8) {
         self.config_mut().set_indent_size(size);
     }
 

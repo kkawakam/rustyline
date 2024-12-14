@@ -202,7 +202,7 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .take(n)
+            .take(usize::from(n))
             .last()
             .map(|(i, s)| i + self.pos + s.len())
     }
@@ -216,7 +216,7 @@ impl LineBuffer {
         self.buf[..self.pos]
             .grapheme_indices(true)
             .rev()
-            .take(n)
+            .take(usize::from(n))
             .last()
             .map(|(i, _)| i)
     }
@@ -231,6 +231,7 @@ impl LineBuffer {
         n: RepeatCount,
         cl: &mut C,
     ) -> Option<bool> {
+        let n = usize::from(n);
         let shift = ch.len_utf8() * n;
         if self.must_truncate(self.buf.len() + shift) {
             return None;
@@ -257,6 +258,7 @@ impl LineBuffer {
         n: RepeatCount,
         cl: &mut C,
     ) -> Option<bool> {
+        let n = usize::from(n);
         let shift = text.len() * n;
         if text.is_empty() || self.must_truncate(self.buf.len() + shift) {
             return None;
@@ -682,6 +684,7 @@ impl LineBuffer {
     }
 
     fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
+        let n = usize::from(n);
         let mut shift = 0;
         let search_result = match cs {
             CharSearch::Backward(c) | CharSearch::BackwardAfter(c) => self.buf[..self.pos]
@@ -1083,7 +1086,7 @@ impl LineBuffer {
     pub fn indent<C: ChangeListener>(
         &mut self,
         mvt: &Movement,
-        amount: usize,
+        amount: u8,
         dedent: bool,
         cl: &mut C,
     ) -> bool {
@@ -1108,6 +1111,7 @@ impl LineBuffer {
             Movement::LineUp(n) => self.n_lines_up(n),
             Movement::LineDown(n) => self.n_lines_down(n),
         };
+        let amount = usize::from(amount);
         let (start, end) = pair.unwrap_or((self.pos, self.pos));
         let start = self.buf[..start].rfind('\n').map_or(0, |pos| pos + 1);
         let end = self.buf[end..]

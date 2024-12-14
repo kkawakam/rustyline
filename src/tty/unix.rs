@@ -716,8 +716,7 @@ impl PosixRawReader {
         if self.is_dev_tty {
             // poll doesn't work for /dev/tty on MacOS but select does
             return Ok(match self.select(Some(timeout), false /* ignored */)? {
-                // ugly but ESC means timeout...
-                Event::KeyPress(KeyEvent::ESC) => false,
+                Event::Timeout(true) => false,
                 _ => true,
             });
         }
@@ -784,15 +783,13 @@ impl PosixRawReader {
                 return Err(ReadlineError::WindowResized);
             } else if readfds.contains(tty_in) {
                 if timeout.is_some() {
-                    // ugly but ENTER means success (no timeout)...
-                    return Ok(Event::KeyPress(KeyEvent::ENTER));
+                    return Ok(Event::Timeout(false));
                 } else {
                     // prefer user input over external print
                     return self.next_key(single_esc_abort).map(Event::KeyPress);
                 }
             } else if timeout.is_some() {
-                // ugly but ESC means timeout...
-                return Ok(Event::KeyPress(KeyEvent::ESC));
+                return Ok(Event::Timeout(true));
             } else if let Some(ref pipe_reader) = self.pipe_reader {
                 let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];

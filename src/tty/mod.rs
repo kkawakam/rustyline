@@ -19,6 +19,8 @@ pub trait RawMode: Sized {
 pub enum Event {
     KeyPress(KeyEvent),
     ExternalPrint(String),
+    #[cfg(unix)]
+    Timeout(bool),
 }
 
 /// Translate bytes read from stdin to keys.

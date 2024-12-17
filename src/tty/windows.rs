@@ -718,9 +718,8 @@ impl Term for Console {
         })
     }
 
-    /// Checking for an unsupported TERM in windows is a no-op
     fn is_unsupported(&self) -> bool {
-        false
+        super::is_unsupported_term()
     }
 
     fn is_input_tty(&self) -> bool {

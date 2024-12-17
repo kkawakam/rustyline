@@ -34,9 +34,6 @@ use crate::layout::{Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, ReadlineError, Result};
 
-/// Unsupported Terminals that don't support RAW mode
-const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
-
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 
@@ -67,22 +64,6 @@ fn get_win_size(fd: RawFd) -> (Unit, Unit) {
             }
             _ => (80, 24),
         }
-    }
-}
-
-/// Check TERM environment variable to see if current term is in our
-/// unsupported list
-fn is_unsupported_term() -> bool {
-    match std::env::var("TERM") {
-        Ok(term) => {
-            for iter in &UNSUPPORTED_TERM {
-                if (*iter).eq_ignore_ascii_case(&term) {
-                    return true;
-                }
-            }
-            false
-        }
-        Err(_) => false,
     }
 }
 
@@ -1357,7 +1338,7 @@ impl Term for PosixTerminal {
                     false,
                 )
             };
-        let unsupported = is_unsupported_term();
+        let unsupported = super::is_unsupported_term();
         let sigwinch = if !unsupported && is_in_a_tty && is_out_a_tty {
             Some(SigWinCh::install_sigwinch_handler()?)
         } else {
@@ -1684,15 +1665,6 @@ mod test {
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
-    }
-
-    #[test]
-    fn test_unsupported_term() {
-        std::env::set_var("TERM", "xterm");
-        assert!(!super::is_unsupported_term());
-
-        std::env::set_var("TERM", "dumb");
-        assert!(super::is_unsupported_term());
     }
 
     #[test]

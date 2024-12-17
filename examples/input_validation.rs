@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let mut rl = Editor::new()?;
     rl.set_helper(Some(h));
 
-    let input = rl.readline("> ")?;
+    let input = rl.readline("> ", "")?;
     println!("Input: {input}");
     Ok(())
 }

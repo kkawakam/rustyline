@@ -5,6 +5,7 @@ use std::fs::{File, OpenOptions};
 #[cfg(not(feature = "buffer-redux"))]
 use std::io::BufReader;
 use std::io::{self, ErrorKind, Read, Write};
+use std::ops::Deref;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -998,6 +999,7 @@ impl Renderer for PosixRenderer {
         old_layout: &Layout,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
+        continuation: &str,
     ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
@@ -1008,19 +1010,34 @@ impl Renderer for PosixRenderer {
 
         self.clear_old_rows(old_layout);
 
+        // display the prompt
         if let Some(highlighter) = highlighter {
-            // display the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
         } else {
-            // display the prompt
             self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
         }
+
+        // display the input line
+        let line = if let Some(highlighter) = highlighter {
+            highlighter.highlight(line, line.pos())
+        } else {
+            std::borrow::Cow::from(line.deref())
+        };
+        if continuation.is_empty() {
+            self.buffer.push_str(&line);
+        } else {
+            let mut lines = line.split('\n');
+            if let Some(first) = lines.next() {
+                self.buffer.push_str(first);
+            }
+            for line in lines {
+                self.buffer.push('\n');
+                self.buffer.push_str(continuation);
+                self.buffer.push_str(line);
+            }
+        }
+
         // display hint
         if let Some(hint) = hint {
             if let Some(highlighter) = highlighter {
@@ -1035,6 +1052,9 @@ impl Renderer for PosixRenderer {
             && !hint.map_or_else(|| line.ends_with('\n'), |h| h.ends_with('\n'))
         {
             self.buffer.push('\n');
+            if !continuation.is_empty() {
+                self.buffer.push_str(continuation);
+            }
         }
         // position the cursor
         let new_cursor_row_movement = end_pos.row - cursor.row;
@@ -1060,13 +1080,13 @@ impl Renderer for PosixRenderer {
 
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(&self, s: &str, orig: Position, continuation: &str) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
                 pos.row += 1;
-                pos.col = 0;
+                pos.col = continuation.len();
                 continue;
             }
             let cw = if c == "\t" {
@@ -1081,7 +1101,7 @@ impl Renderer for PosixRenderer {
             }
         }
         if pos.col == self.cols {
-            pos.col = 0;
+            pos.col = continuation.len();
             pos.row += 1;
         }
         pos
@@ -1662,7 +1682,7 @@ mod test {
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), "");
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }
@@ -1684,10 +1704,10 @@ mod test {
         let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
         let prompt = "> ";
         let default_prompt = true;
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), "");
 
         let mut line = LineBuffer::init("", 0);
-        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None, "");
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
@@ -1695,10 +1715,10 @@ mod test {
             Some(true),
             line.insert('a', out.cols - prompt_size.col + 1, &mut NoListener)
         );
-        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None, "");
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None, "")
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

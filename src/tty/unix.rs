@@ -1,6 +1,4 @@
 //! Unix specific definitions
-#[cfg(feature = "buffer-redux")]
-use buffer_redux::BufReader;
 use std::cmp;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -13,12 +11,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "buffer-redux")]
+use buffer_redux::BufReader;
 use log::{debug, warn};
 use nix::errno::Errno;
 use nix::poll::{self, PollFlags, PollTimeout};
 use nix::sys::select::{self, FdSet};
 #[cfg(not(feature = "termios"))]
 use nix::sys::termios::Termios;
+use nix::sys::time::TimeValLike;
 use nix::unistd::{close, isatty, read, write};
 #[cfg(feature = "termios")]
 use termios::Termios;
@@ -29,19 +30,16 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, ReadlineError, Result};
-
-/// Unsupported Terminals that don't support RAW mode
-const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-fn get_win_size(fd: RawFd) -> (usize, usize) {
+fn get_win_size(fd: RawFd) -> (Unit, Unit) {
     use std::mem::zeroed;
 
     if cfg!(test) {
@@ -56,36 +54,16 @@ fn get_win_size(fd: RawFd) -> (usize, usize) {
                 // zero. If host application didn't initialize the correct
                 // size before start we treat zero size as 80 columns and
                 // infinite rows
-                let cols = if size.ws_col == 0 {
-                    80
-                } else {
-                    size.ws_col as usize
-                };
+                let cols = if size.ws_col == 0 { 80 } else { size.ws_col };
                 let rows = if size.ws_row == 0 {
-                    usize::MAX
+                    Unit::MAX
                 } else {
-                    size.ws_row as usize
+                    size.ws_row
                 };
                 (cols, rows)
             }
             _ => (80, 24),
         }
-    }
-}
-
-/// Check TERM environment variable to see if current term is in our
-/// unsupported list
-fn is_unsupported_term() -> bool {
-    match std::env::var("TERM") {
-        Ok(term) => {
-            for iter in &UNSUPPORTED_TERM {
-                if (*iter).eq_ignore_ascii_case(&term) {
-                    return true;
-                }
-            }
-            false
-        }
-        Err(_) => false,
     }
 }
 
@@ -194,6 +172,8 @@ pub struct PosixRawReader {
     key_map: PosixKeyMap,
     // external print reader
     pipe_reader: Option<PipeReader>,
+    #[cfg(target_os = "macos")]
+    is_dev_tty: bool,
 }
 
 impl AsFd for PosixRawReader {
@@ -242,6 +222,7 @@ impl PosixRawReader {
         config: &Config,
         key_map: PosixKeyMap,
         pipe_reader: Option<PipeReader>,
+        #[cfg(target_os = "macos")] is_dev_tty: bool,
     ) -> Self {
         let inner = TtyIn { fd, sigwinch_pipe };
         #[cfg(any(not(feature = "buffer-redux"), test))]
@@ -258,6 +239,8 @@ impl PosixRawReader {
             parser: Parser::new(),
             key_map,
             pipe_reader,
+            #[cfg(target_os = "macos")]
+            is_dev_tty,
         }
     }
 
@@ -305,9 +288,8 @@ impl PosixRawReader {
             match self.poll(timeout) {
                 // Ignore poll errors, it's very likely we'll pick them up on
                 // the next read anyway.
-                Ok(0) | Err(_) => Ok(E::ESC),
-                Ok(n) => {
-                    debug_assert!(n > 0, "{}", n);
+                Ok(false) | Err(_) => Ok(E::ESC),
+                Ok(true) => {
                     // recurse, and add the alt modifier.
                     let E(k, m) = self._do_escape_sequence(false)?;
                     Ok(E(k, m | M::ALT))
@@ -701,38 +683,52 @@ impl PosixRawReader {
         })
     }
 
-    fn poll(&mut self, timeout_ms: PollTimeout) -> Result<i32> {
+    fn poll(&mut self, timeout: PollTimeout) -> Result<bool> {
         let n = self.tty_in.buffer().len();
         if n > 0 {
-            return Ok(n as i32);
+            return Ok(true);
         }
+        #[cfg(target_os = "macos")]
+        if self.is_dev_tty {
+            // poll doesn't work for /dev/tty on MacOS but select does
+            return Ok(match self.select(Some(timeout), false /* ignored */)? {
+                Event::Timeout(true) => false,
+                _ => true,
+            });
+        }
+        debug!(target: "rustyline", "poll with: {:?}", timeout);
         let mut fds = [poll::PollFd::new(self.as_fd(), PollFlags::POLLIN)];
-        let r = poll::poll(&mut fds, timeout_ms);
+        let r = poll::poll(&mut fds, timeout);
+        debug!(target: "rustyline", "poll returns: {:?}", r);
         match r {
-            Ok(n) => Ok(n),
+            Ok(n) => Ok(n != 0),
             Err(Errno::EINTR) => {
                 if self.tty_in.get_ref().sigwinch()? {
                     Err(ReadlineError::WindowResized)
                 } else {
-                    Ok(0) // Ignore EINTR while polling
+                    Ok(false) // Ignore EINTR while polling
                 }
             }
             Err(e) => Err(e.into()),
         }
     }
 
-    fn select(&mut self, single_esc_abort: bool) -> Result<Event> {
+    // timeout is used only with /dev/tty on MacOs
+    fn select(&mut self, timeout: Option<PollTimeout>, single_esc_abort: bool) -> Result<Event> {
         let tty_in = self.as_fd();
         let sigwinch_pipe = self
             .tty_in
             .get_ref()
             .sigwinch_pipe
             .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
-        let pipe_reader = self
-            .pipe_reader
-            .as_ref()
-            .map(|pr| pr.lock().unwrap().0.as_raw_fd())
-            .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
+        let pipe_reader = if timeout.is_some() {
+            None
+        } else {
+            self.pipe_reader
+                .as_ref()
+                .map(|pr| pr.lock().unwrap().0.as_raw_fd())
+                .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) })
+        };
         loop {
             let mut readfds = FdSet::new();
             if let Some(sigwinch_pipe) = sigwinch_pipe {
@@ -742,7 +738,14 @@ impl PosixRawReader {
             if let Some(pipe_reader) = pipe_reader {
                 readfds.insert(pipe_reader);
             }
-            if let Err(err) = select::select(None, Some(&mut readfds), None, None, None) {
+            let mut timeout = match timeout {
+                Some(pt) => pt
+                    .as_millis()
+                    .map(|ms| nix::sys::time::TimeVal::milliseconds(ms as i64)),
+                None => None,
+            };
+            if let Err(err) = select::select(None, Some(&mut readfds), None, None, timeout.as_mut())
+            {
                 if err == Errno::EINTR && self.tty_in.get_ref().sigwinch()? {
                     return Err(ReadlineError::WindowResized);
                 } else if err != Errno::EINTR {
@@ -751,12 +754,21 @@ impl PosixRawReader {
                     continue;
                 }
             };
-            if sigwinch_pipe.map_or(false, |fd| readfds.contains(fd)) {
+            if sigwinch_pipe.is_some_and(|fd| readfds.contains(fd)) {
                 self.tty_in.get_ref().sigwinch()?;
                 return Err(ReadlineError::WindowResized);
             } else if readfds.contains(tty_in) {
+                #[cfg(target_os = "macos")]
+                if timeout.is_some() {
+                    return Ok(Event::Timeout(false));
+                }
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
+            } else if timeout.is_some() {
+                #[cfg(target_os = "macos")]
+                return Ok(Event::Timeout(true));
+                #[cfg(not(target_os = "macos"))]
+                unreachable!()
             } else if let Some(ref pipe_reader) = self.pipe_reader {
                 let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];
@@ -775,14 +787,14 @@ impl RawReader for PosixRawReader {
     #[cfg(not(feature = "signal-hook"))]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
         match self.pipe_reader {
-            Some(_) => self.select(single_esc_abort),
+            Some(_) => self.select(None, single_esc_abort),
             None => self.next_key(single_esc_abort).map(Event::KeyPress),
         }
     }
 
     #[cfg(feature = "signal-hook")]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        self.select(single_esc_abort)
+        self.select(None, single_esc_abort)
     }
 
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
@@ -799,7 +811,7 @@ impl RawReader for PosixRawReader {
                 self.timeout_ms
             };
             match self.poll(timeout_ms) {
-                Ok(0) => {
+                Ok(false) => {
                     // single escape
                 }
                 Ok(_) => {
@@ -892,15 +904,15 @@ impl Receiver for Utf8 {
 /// Console output writer
 pub struct PosixRenderer {
     out: RawFd,
-    cols: usize, // Number of columns in terminal
+    cols: Unit, // Number of columns in terminal
     buffer: String,
-    tab_stop: usize,
+    tab_stop: Unit,
     colors_enabled: bool,
     bell_style: BellStyle,
 }
 
 impl PosixRenderer {
-    fn new(out: RawFd, tab_stop: usize, colors_enabled: bool, bell_style: BellStyle) -> Self {
+    fn new(out: RawFd, tab_stop: Unit, colors_enabled: bool, bell_style: BellStyle) -> Self {
         let (cols, _) = get_win_size(out);
         Self {
             out,
@@ -1047,7 +1059,7 @@ impl Renderer for PosixRenderer {
         }
         // position the cursor within the line
         if cursor.col > 0 {
-            write!(self.buffer, "\r\x1b[{}C", cursor.col).unwrap();
+            write!(self.buffer, "\r\x1b[{}C", cursor.col)?;
         } else {
             self.buffer.push('\r');
         }
@@ -1115,13 +1127,13 @@ impl Renderer for PosixRenderer {
         self.cols = cols;
     }
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> Unit {
         self.cols
     }
 
     /// Try to get the number of rows in the current terminal,
     /// or assume 24 if it fails.
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> Unit {
         let (_, rows) = get_win_size(self.out);
         rows
     }
@@ -1131,14 +1143,14 @@ impl Renderer for PosixRenderer {
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
-        if rdr.poll(PollTimeout::ZERO)? != 0 {
+        if rdr.poll(PollTimeout::ZERO)? {
             debug!(target: "rustyline", "cannot request cursor location");
             return Ok(());
         }
         /* Report cursor location */
         self.write_and_flush("\x1b[6n")?;
         /* Read the response: ESC [ rows ; cols R */
-        if rdr.poll(PollTimeout::from(100u8))? == 0
+        if !rdr.poll(PollTimeout::from(100u8))?
             || rdr.next_char()? != '\x1b'
             || rdr.next_char()? != '['
             || read_digits_until(rdr, ';')?.is_none()
@@ -1277,7 +1289,7 @@ pub struct PosixTerminal {
     is_out_a_tty: bool,
     close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
-    tab_stop: usize,
+    tab_stop: u8,
     bell_style: BellStyle,
     enable_bracketed_paste: bool,
     raw_mode: Arc<AtomicBool>,
@@ -1311,7 +1323,7 @@ impl Term for PosixTerminal {
     fn new(
         color_mode: ColorMode,
         behavior: Behavior,
-        tab_stop: usize,
+        tab_stop: u8,
         bell_style: BellStyle,
         enable_bracketed_paste: bool,
         enable_signals: bool,
@@ -1341,7 +1353,7 @@ impl Term for PosixTerminal {
                     false,
                 )
             };
-        let unsupported = is_unsupported_term();
+        let unsupported = super::is_unsupported_term();
         let sigwinch = if !unsupported && is_in_a_tty && is_out_a_tty {
             Some(SigWinCh::install_sigwinch_handler()?)
         } else {
@@ -1433,13 +1445,15 @@ impl Term for PosixTerminal {
             config,
             key_map,
             self.pipe_reader.clone(),
+            #[cfg(target_os = "macos")]
+            self.close_on_drop,
         )
     }
 
     fn create_writer(&self) -> PosixRenderer {
         PosixRenderer::new(
             self.tty_out,
-            self.tab_stop,
+            Unit::from(self.tab_stop),
             self.colors_enabled(),
             self.bell_style,
         )
@@ -1666,15 +1680,6 @@ mod test {
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
-    }
-
-    #[test]
-    fn test_unsupported_term() {
-        std::env::set_var("TERM", "xterm");
-        assert!(!super::is_unsupported_term());
-
-        std::env::set_var("TERM", "dumb");
-        assert!(super::is_unsupported_term());
     }
 
     #[test]

@@ -3,7 +3,6 @@
 use log::debug;
 use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthChar;
 
 use super::{Context, Helper, Result};
 use crate::error::ReadlineError;
@@ -12,7 +11,7 @@ use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
-use crate::layout::{Layout, Position};
+use crate::layout::{cwidh, Layout, Position};
 use crate::line_buffer::{
     ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
 };
@@ -253,13 +252,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> Invoke for State<'out, 'prompt, H> {
+impl<H: Helper> Invoke for State<'_, '_, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
+impl<H: Helper> Refresher for State<'_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
@@ -325,7 +324,7 @@ impl<'out, 'prompt, H: Helper> Refresher for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
+impl<H: Helper> fmt::Debug for State<'_, '_, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -338,7 +337,7 @@ impl<'out, 'prompt, H: Helper> fmt::Debug for State<'out, 'prompt, H> {
     }
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<H: Helper> State<'_, '_, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -353,7 +352,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                 let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
-                let width = ch.width().unwrap_or(0);
+                let width = cwidh(ch);
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()
@@ -382,7 +381,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn edit_replace_char(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         self.changes.begin();
         let succeed = if let Some(chars) = self.line.delete(n, &mut self.changes) {
-            let count = chars.graphemes(true).count();
+            let count = RepeatCount::try_from(chars.graphemes(true).count()).unwrap();
             self.line.insert(ch, count, &mut self.changes);
             self.line.move_backward(1);
             true
@@ -578,7 +577,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_up(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_up(n) {
+        if self.line.move_to_line_up(n, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
@@ -588,7 +587,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     /// Moves the cursor to the same column in the line above
     pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
-        if self.line.move_to_line_down(n) {
+        if self.line.move_to_line_down(n, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;
             Ok(true)
         } else {
@@ -732,7 +731,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     /// Change the indentation of the lines covered by movement
-    pub fn edit_indent(&mut self, mvt: &Movement, amount: usize, dedent: bool) -> Result<()> {
+    pub fn edit_indent(&mut self, mvt: &Movement, amount: u8, dedent: bool) -> Result<()> {
         if self.line.indent(mvt, amount, dedent, &mut self.changes) {
             self.refresh_line()
         } else {

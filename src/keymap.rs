@@ -10,7 +10,7 @@ use crate::{Config, EditMode};
 use crate::{Event, EventContext, EventHandler};
 
 /// The number of times one command should be repeated.
-pub type RepeatCount = usize;
+pub type RepeatCount = u16;
 
 /// Commands
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -183,7 +183,10 @@ impl Cmd {
                     let last_insert = wrt.last_insert();
                     if let Movement::ForwardChar(0) = mvt {
                         Self::Replace(
-                            Movement::ForwardChar(last_insert.as_ref().map_or(0, String::len)),
+                            Movement::ForwardChar(
+                                RepeatCount::try_from(last_insert.as_ref().map_or(0, String::len))
+                                    .unwrap(),
+                            ),
                             last_insert,
                         )
                     } else {
@@ -441,6 +444,8 @@ impl<'b> InputState<'b> {
                     tty::Event::ExternalPrint(msg) => {
                         wrt.external_print(msg)?;
                     }
+                    #[cfg(target_os = "macos")]
+                    _ => {}
                 }
             }
         }
@@ -1125,7 +1130,7 @@ impl<'b> InputState<'b> {
 }
 
 #[cfg(feature = "custom-bindings")]
-impl<'b> InputState<'b> {
+impl InputState<'_> {
     /// Application customized binding
     fn custom_binding(
         &self,

@@ -496,6 +496,8 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
 
 #[cfg(test)]
 mod tests {
+    use super::{Completer, FilenameCompleter};
+
     #[test]
     pub fn extract_word() {
         let break_chars = super::default_break_chars;
@@ -604,16 +606,23 @@ mod tests {
     #[test]
     pub fn candidate_impls() {
         struct StrCmp;
-        impl super::Completer for StrCmp {
+        impl Completer for StrCmp {
             type Candidate = &'static str;
         }
         struct RcCmp;
-        impl super::Completer for RcCmp {
+        impl Completer for RcCmp {
             type Candidate = std::rc::Rc<str>;
         }
         struct ArcCmp;
-        impl super::Completer for ArcCmp {
+        impl Completer for ArcCmp {
             type Candidate = std::sync::Arc<str>;
         }
+    }
+
+    #[test]
+    pub fn completer_impls() {
+        struct Wrapper<T: Completer>(T);
+        let boxed = Box::new(FilenameCompleter::new());
+        let _ = Wrapper(boxed);
     }
 }

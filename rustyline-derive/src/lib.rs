@@ -10,7 +10,7 @@ fn get_field_by_attr<'a>(data: &'a Data, ident: &str) -> Option<(usize, &'a Fiel
                 attr.path().is_ident("rustyline")
                     && attr
                         .parse_args::<Path>()
-                        .map_or(false, |arg| arg.is_ident(ident))
+                        .is_ok_and(|arg| arg.is_ident(ident))
             })
         });
 

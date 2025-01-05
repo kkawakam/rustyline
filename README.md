@@ -67,7 +67,7 @@ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyline = "14.0.0"
+rustyline = "15.0.0"
 ```
 
 ## Features
@@ -188,7 +188,7 @@ For all modes:
 
 [Readline vi Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
 
-[Terminal codes (ANSI/VT100)](http://wiki.bash-hackers.org/scripting/terminalcodes)
+[ANSI escape code](https://en.wikipedia.org/wiki/ANSI_escape_code)
 
 ## Wine
 
@@ -252,3 +252,7 @@ literal newline to be added to the input buffer.
 
 The way to achieve multi-line editing is to implement the `Validator`
 trait.
+
+## Minimum supported Rust version (MSRV)
+
+Latest stable Rust version at the time of release. It might compile with older versions.

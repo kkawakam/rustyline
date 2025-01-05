@@ -147,7 +147,7 @@ impl Changeset {
     pub(crate) fn insert(&mut self, idx: usize, c: char) {
         debug!(target: "rustyline", "Changeset::insert({}, {:?})", idx, c);
         self.redos.clear();
-        if !c.is_alphanumeric() || !self.undos.last().map_or(false, |lc| lc.insert_seq(idx)) {
+        if !c.is_alphanumeric() || !self.undos.last().is_some_and(|lc| lc.insert_seq(idx)) {
             self.undos.push(Self::insert_char(idx, c));
             return;
         }
@@ -188,7 +188,7 @@ impl Changeset {
             || !self
                 .undos
                 .last()
-                .map_or(false, |lc| lc.delete_seq(indx, string.as_ref().len()))
+                .is_some_and(|lc| lc.delete_seq(indx, string.as_ref().len()))
         {
             self.undos.push(Change::Delete {
                 idx: indx,
@@ -217,9 +217,10 @@ impl Changeset {
 
     fn single_char(s: &str) -> bool {
         let mut graphemes = s.graphemes(true);
-        graphemes.next().map_or(false, |grapheme| {
-            grapheme.chars().all(char::is_alphanumeric)
-        }) && graphemes.next().is_none()
+        graphemes
+            .next()
+            .is_some_and(|grapheme| grapheme.chars().all(char::is_alphanumeric))
+            && graphemes.next().is_none()
     }
 
     pub(crate) fn replace<S: AsRef<str> + Into<String> + Debug>(
@@ -231,7 +232,7 @@ impl Changeset {
         debug!(target: "rustyline", "Changeset::replace({}, {:?}, {:?})", indx, old_, new_);
         self.redos.clear();
 
-        if !self.undos.last().map_or(false, |lc| lc.replace_seq(indx)) {
+        if !self.undos.last().is_some_and(|lc| lc.replace_seq(indx)) {
             self.undos.push(Change::Replace {
                 idx: indx,
                 old: old_.into(),

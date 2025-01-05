@@ -69,8 +69,14 @@ pub trait History {
     // reedline: fn append(&mut self, entry: &str);
 
     /// Add a new entry in the history.
+    ///
+    /// Return false if the `line` has been ignored (blank line / duplicate /
+    /// ...).
     fn add(&mut self, line: &str) -> Result<bool>;
     /// Add a new entry in the history.
+    ///
+    /// Return false if the `line` has been ignored (blank line / duplicate /
+    /// ...).
     fn add_owned(&mut self, line: String) -> Result<bool>; // TODO check AsRef<str> + Into<String> vs object safe
 
     /// Return the number of entries in the history.
@@ -253,7 +259,7 @@ impl MemHistory {
             return true;
         }
         if line.is_empty()
-            || (self.ignore_space && line.chars().next().map_or(true, char::is_whitespace))
+            || (self.ignore_space && line.chars().next().is_none_or(char::is_whitespace))
         {
             return true;
         }

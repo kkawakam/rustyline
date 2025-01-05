@@ -1,5 +1,6 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
+use crate::layout::{swidth, Layout};
 use std::cmp::min;
 use std::fmt;
 use std::iter;
@@ -202,7 +203,7 @@ impl LineBuffer {
         }
         self.buf[self.pos..]
             .grapheme_indices(true)
-            .take(n)
+            .take(usize::from(n))
             .last()
             .map(|(i, s)| i + self.pos + s.len())
     }
@@ -216,7 +217,7 @@ impl LineBuffer {
         self.buf[..self.pos]
             .grapheme_indices(true)
             .rev()
-            .take(n)
+            .take(usize::from(n))
             .last()
             .map(|(i, _)| i)
     }
@@ -231,6 +232,7 @@ impl LineBuffer {
         n: RepeatCount,
         cl: &mut C,
     ) -> Option<bool> {
+        let n = usize::from(n);
         let shift = ch.len_utf8() * n;
         if self.must_truncate(self.buf.len() + shift) {
             return None;
@@ -257,6 +259,7 @@ impl LineBuffer {
         n: RepeatCount,
         cl: &mut C,
     ) -> Option<bool> {
+        let n = usize::from(n);
         let shift = text.len() * n;
         if text.is_empty() || self.must_truncate(self.buf.len() + shift) {
             return None;
@@ -582,10 +585,10 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the same column in the line above
-    pub fn move_to_line_up(&mut self, n: RepeatCount) -> bool {
+    pub fn move_to_line_up(&mut self, n: RepeatCount, layout: &Layout) -> bool {
         match self.buf[..self.pos].rfind('\n') {
             Some(off) => {
-                let column = self.buf[off + 1..self.pos].graphemes(true).count();
+                let column = swidth(&self.buf[off + 1..self.pos]);
 
                 let mut dest_start = self.buf[..off].rfind('\n').map_or(0, |n| n + 1);
                 let mut dest_end = off;
@@ -596,9 +599,14 @@ impl LineBuffer {
                     dest_end = dest_start - 1;
                     dest_start = self.buf[..dest_end].rfind('\n').map_or(0, |n| n + 1);
                 }
+                let offset = if dest_start == 0 {
+                    layout.prompt_size.col
+                } else {
+                    0
+                };
                 let gidx = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
-                    .nth(column);
+                    .nth(column.saturating_sub(offset) as usize);
 
                 self.pos = gidx.map_or(off, |(idx, _)| dest_start + idx); // if there's no enough columns
                 true
@@ -652,11 +660,16 @@ impl LineBuffer {
     }
 
     /// Moves the cursor to the same column in the line above
-    pub fn move_to_line_down(&mut self, n: RepeatCount) -> bool {
+    pub fn move_to_line_down(&mut self, n: RepeatCount, layout: &Layout) -> bool {
         match self.buf[self.pos..].find('\n') {
             Some(off) => {
                 let line_start = self.buf[..self.pos].rfind('\n').map_or(0, |n| n + 1);
-                let column = self.buf[line_start..self.pos].graphemes(true).count();
+                let offset = if line_start == 0 {
+                    layout.prompt_size.col
+                } else {
+                    0
+                };
+                let column = swidth(&self.buf[line_start..self.pos]) + offset;
                 let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
@@ -672,7 +685,7 @@ impl LineBuffer {
                 }
                 self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
-                    .nth(column)
+                    .nth(column as usize)
                     .map_or(dest_end, |(idx, _)| dest_start + idx); // if there's no enough columns
                 debug_assert!(self.pos <= self.buf.len());
                 true
@@ -682,6 +695,7 @@ impl LineBuffer {
     }
 
     fn search_char_pos(&self, cs: CharSearch, n: RepeatCount) -> Option<usize> {
+        let n = usize::from(n);
         let mut shift = 0;
         let search_result = match cs {
             CharSearch::Backward(c) | CharSearch::BackwardAfter(c) => self.buf[..self.pos]
@@ -1083,7 +1097,7 @@ impl LineBuffer {
     pub fn indent<C: ChangeListener>(
         &mut self,
         mvt: &Movement,
-        amount: usize,
+        amount: u8,
         dedent: bool,
         cl: &mut C,
     ) -> bool {
@@ -1108,6 +1122,7 @@ impl LineBuffer {
             Movement::LineUp(n) => self.n_lines_up(n),
             Movement::LineDown(n) => self.n_lines_down(n),
         };
+        let amount = usize::from(amount);
         let (start, end) = pair.unwrap_or((self.pos, self.pos));
         let start = self.buf[..start].rfind('\n').map_or(0, |pos| pos + 1);
         let end = self.buf[end..]
@@ -1115,7 +1130,7 @@ impl LineBuffer {
             .map_or_else(|| self.buf.len(), |pos| end + pos);
         let mut index = start;
         if dedent {
-            #[allow(clippy::unnecessary_to_owned)]
+            #[expect(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 let max = line.len() - line.trim_start().len();
                 let deleting = min(max, amount);
@@ -1131,7 +1146,7 @@ impl LineBuffer {
                 index += line.len() + 1 - deleting;
             }
         } else {
-            #[allow(clippy::unnecessary_to_owned)]
+            #[expect(clippy::unnecessary_to_owned)]
             for line in self.buf[start..end].to_string().split('\n') {
                 for off in (0..amount).step_by(INDENT.len()) {
                     self.insert_str(index, &INDENT[..min(amount - off, INDENT.len())], cl);
@@ -1182,7 +1197,10 @@ mod test {
     use super::{
         ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
     };
-    use crate::keymap::{At, CharSearch, Word};
+    use crate::{
+        keymap::{At, CharSearch, Word},
+        layout::Layout,
+    };
 
     struct Listener {
         deleted_str: Option<String>,
@@ -1819,40 +1837,50 @@ mod test {
     fn move_by_line() {
         let text = "aa123\nsdf bc\nasdf";
         let mut s = LineBuffer::init(text, 14);
+        let mut layout = Layout::default();
         // move up
-        let ok = s.move_to_line_up(1);
+        let ok = s.move_to_line_up(1, &layout);
         assert_eq!(7, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_up(1);
+        let ok = s.move_to_line_up(1, &layout);
         assert_eq!(1, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_up(1);
+        let ok = s.move_to_line_up(1, &layout);
         assert_eq!(1, s.pos);
         assert!(!ok);
 
         // move down
-        let ok = s.move_to_line_down(1);
+        let ok = s.move_to_line_down(1, &layout);
         assert_eq!(7, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(1);
+        let ok = s.move_to_line_down(1, &layout);
         assert_eq!(14, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(1);
+        let ok = s.move_to_line_down(1, &layout);
         assert_eq!(14, s.pos);
         assert!(!ok);
 
         // move by multiple steps
-        let ok = s.move_to_line_up(2);
+        let ok = s.move_to_line_up(2, &layout);
         assert_eq!(1, s.pos);
         assert!(ok);
 
-        let ok = s.move_to_line_down(2);
+        let ok = s.move_to_line_down(2, &layout);
         assert_eq!(14, s.pos);
         assert!(ok);
+
+        // non-empty prompt
+        layout.prompt_size.col = 2;
+        s.move_to_line_up(1, &layout);
+        assert_eq!(7, s.pos);
+        s.move_to_line_up(1, &layout);
+        assert_eq!(0, s.pos);
+        s.move_to_line_down(1, &layout);
+        assert_eq!(8, s.pos);
     }
 
     #[test]

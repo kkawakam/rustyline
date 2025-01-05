@@ -10,7 +10,7 @@ fn get_field_by_attr<'a>(data: &'a Data, ident: &str) -> Option<(usize, &'a Fiel
                 attr.path().is_ident("rustyline")
                     && attr
                         .parse_args::<Path>()
-                        .map_or(false, |arg| arg.is_ident(ident))
+                        .is_ok_and(|arg| arg.is_ident(ident))
             })
         });
 
@@ -126,8 +126,8 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                     ::rustyline::highlight::Highlighter::highlight_candidate(&self.#field_name_or_index, candidate, completion)
                 }
 
-                fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-                    ::rustyline::highlight::Highlighter::highlight_char(&self.#field_name_or_index, line, pos, forced)
+                fn highlight_char(&self, line: &str, pos: usize, kind: ::rustyline::highlight::CmdKind) -> bool {
+                    ::rustyline::highlight::Highlighter::highlight_char(&self.#field_name_or_index, line, pos, kind)
                 }
             }
         }

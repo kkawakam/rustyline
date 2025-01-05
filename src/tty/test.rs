@@ -7,7 +7,7 @@ use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position};
+use crate::layout::{Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -21,7 +21,7 @@ impl RawMode for Mode {
     }
 }
 
-impl<'a> RawReader for Iter<'a, KeyEvent> {
+impl RawReader for Iter<'_, KeyEvent> {
     type Buffer = Buffer;
 
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
@@ -114,7 +114,7 @@ impl Renderer for Sink {
 
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
         let mut pos = orig;
-        pos.col += s.len();
+        pos.col += u16::try_from(s.len()).unwrap();
         pos
     }
 
@@ -136,11 +136,11 @@ impl Renderer for Sink {
 
     fn update_size(&mut self) {}
 
-    fn get_columns(&self) -> usize {
+    fn get_columns(&self) -> Unit {
         80
     }
 
-    fn get_rows(&self) -> usize {
+    fn get_rows(&self) -> Unit {
         24
     }
 
@@ -183,7 +183,7 @@ impl Term for DummyTerminal {
     fn new(
         color_mode: ColorMode,
         _behavior: Behavior,
-        _tab_stop: usize,
+        _tab_stop: u8,
         bell_style: BellStyle,
         _enable_bracketed_paste: bool,
         _enable_signals: bool,

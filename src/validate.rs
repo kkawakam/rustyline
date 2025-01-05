@@ -48,10 +48,11 @@ impl<'i> ValidationContext<'i> {
 }
 
 /// This trait provides an extension interface for determining whether
-/// the current input buffer is valid. Rustyline uses the method
-/// provided by this trait to decide whether hitting the enter key
-/// will end the current editing session and return the current line
-/// buffer to the caller of `Editor::readline` or variants.
+/// the current input buffer is valid.
+///
+/// Rustyline uses the method provided by this trait to decide whether hitting
+/// the enter key will end the current editing session and return the current
+/// line buffer to the caller of `Editor::readline` or variants.
 pub trait Validator {
     /// Takes the currently edited `input` and returns a
     /// `ValidationResult` indicating whether it is valid or not along
@@ -84,16 +85,6 @@ pub trait Validator {
 }
 
 impl Validator for () {}
-
-impl<'v, V: ?Sized + Validator> Validator for &'v V {
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
-        (**self).validate(ctx)
-    }
-
-    fn validate_while_typing(&self) -> bool {
-        (**self).validate_while_typing()
-    }
-}
 
 /// Simple matching bracket validator.
 #[derive(Default)]

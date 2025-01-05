@@ -4,9 +4,19 @@ use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
+/// Describe which kind of action has been triggering the call to `Highlighter`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CmdKind {
+    /// Cursor moved
+    MoveCursor,
+    /// Other action
+    Other,
+    /// Forced / final refresh (no auto-suggestion / hint, no matching bracket
+    /// highlighted, ...)
+    ForcedRefresh,
+}
+
 /// Syntax highlighter with [ANSI color](https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters).
-/// Rustyline will try to handle escape sequence for ANSI color on windows
-/// when not supported natively (windows <10).
 ///
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
@@ -49,48 +59,16 @@ pub trait Highlighter {
     }
     /// Tells if `line` needs to be highlighted when a specific char is typed or
     /// when cursor is moved under a specific char.
-    /// `forced` flag is `true` mainly when user presses Enter (i.e. transient
-    /// vs final highlight).
     ///
     /// Used to optimize refresh when a character is inserted or the cursor is
     /// moved.
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        let _ = (line, pos, forced);
+    fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
+        let _ = (line, pos, kind);
         false
     }
 }
 
 impl Highlighter for () {}
-
-impl<'r, H: ?Sized + Highlighter> Highlighter for &'r H {
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        (**self).highlight(line, pos)
-    }
-
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
-        prompt: &'p str,
-        default: bool,
-    ) -> Cow<'b, str> {
-        (**self).highlight_prompt(prompt, default)
-    }
-
-    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        (**self).highlight_hint(hint)
-    }
-
-    fn highlight_candidate<'c>(
-        &self,
-        candidate: &'c str,
-        completion: CompletionType,
-    ) -> Cow<'c, str> {
-        (**self).highlight_candidate(candidate, completion)
-    }
-
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        (**self).highlight_char(line, pos, forced)
-    }
-}
 
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
@@ -126,8 +104,8 @@ impl Highlighter for MatchingBracketHighlighter {
         Borrowed(line)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
-        if forced {
+    fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
+        if kind == CmdKind::ForcedRefresh {
             self.bracket.set(None);
             return false;
         }

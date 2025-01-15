@@ -631,6 +631,8 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// This method will read a line from STDIN and will display a `prompt`.
     ///
+    /// `prompt` should not be styled (in case the terminal doesn't support ANSI) directly: use `Highlighter::highlight_prompt` instead.
+    ///
     /// It uses terminal-style interaction if `stdin` is connected to a
     /// terminal.
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),

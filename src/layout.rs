@@ -13,6 +13,23 @@ pub(crate) fn swidth(s: &str) -> Unit {
     Unit::try_from(s.width()).unwrap()
 }
 
+fn wcwidth(s: &str) -> Unit {
+    let mut width = 0;
+    for c in s.chars() {
+        width += cwidh(c);
+    }
+    width
+}
+
+const ZWJ: char = '\u{200D}';
+fn no_zwj(s: &str) -> Unit {
+    let mut width = 0;
+    for x in s.split(ZWJ) {
+        width += swidth(x);
+    }
+    width
+}
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Position {
     pub col: Unit, // The leftmost column is number 0.
@@ -43,4 +60,35 @@ pub struct Layout {
     pub cursor: Position,
     /// Number of rows used so far (from start of prompt to end of input)
     pub end: Position,
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn unicode_width() {
+        assert_eq!(1, super::swidth("a"));
+        assert_eq!(2, super::swidth("👩‍🚀"));
+        assert_eq!(2, super::swidth("👋🏿"));
+        assert_eq!(2, super::swidth("👨‍👩‍👧‍👦"));
+        assert_eq!(2, super::swidth("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
+        assert_eq!(2, super::swidth("❤️"));
+    }
+    #[test]
+    fn test_wcwidth() {
+        assert_eq!(1, super::wcwidth("a"));
+        assert_eq!(4, super::wcwidth("👩‍🚀"));
+        assert_eq!(4, super::wcwidth("👋🏿"));
+        assert_eq!(8, super::wcwidth("👨‍👩‍👧‍👦"));
+        assert_eq!(16, super::wcwidth("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
+        assert_eq!(1, super::wcwidth("❤️"));
+    }
+    #[test]
+    fn test_no_zwj() {
+        assert_eq!(1, super::no_zwj("a"));
+        assert_eq!(4, super::no_zwj("👩‍🚀"));
+        assert_eq!(2, super::no_zwj("👋🏿"));
+        assert_eq!(8, super::no_zwj("👨‍👩‍👧‍👦"));
+        assert_eq!(8, super::no_zwj("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
+        assert_eq!(2, super::no_zwj("❤️"));
+    }
 }

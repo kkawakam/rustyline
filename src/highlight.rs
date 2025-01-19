@@ -4,7 +4,8 @@ use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
 
-/// Describe which kind of action has been triggering the call to `Highlighter`.
+/// Describe which kind of action has been triggering the call to
+/// [`Highlighter`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CmdKind {
     /// Cursor moved
@@ -48,7 +49,7 @@ pub trait Highlighter {
     /// Takes the completion `candidate` and
     /// returns the highlighted version (with ANSI color).
     ///
-    /// Currently, used only with `CompletionType::List`.
+    /// Currently, used only with [`CompletionType::List`].
     fn highlight_candidate<'c>(
         &self,
         candidate: &'c str, // FIXME should be Completer::Candidate

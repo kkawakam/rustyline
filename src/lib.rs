@@ -65,7 +65,8 @@ pub use crate::keymap::{Anchor, At, CharSearch, Cmd, InputMode, Movement, Repeat
 use crate::keymap::{Bindings, InputState, Refresher};
 pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
-use crate::layout::{swidth, Unit};
+pub use crate::layout::GraphemeClusterMode;
+use crate::layout::Unit;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -292,7 +293,7 @@ fn page_completions<C: Candidate, H: Helper>(
         cols,
         candidates
             .iter()
-            .map(|s| swidth(s.display()))
+            .map(|c| s.layout.width(c.display()))
             .max()
             .unwrap()
             + min_col_pad,
@@ -337,7 +338,7 @@ fn page_completions<C: Candidate, H: Helper>(
             let i = (col * num_rows) + row;
             if i < nbc {
                 let candidate = &candidates[i as usize].display();
-                let width = swidth(candidate);
+                let width = s.layout.width(candidate);
                 if let Some(highlighter) = s.highlighter() {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
@@ -612,6 +613,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     pub fn with_history(config: Config, history: I) -> Result<Self> {
         let term = Terminal::new(
             config.color_mode(),
+            config.grapheme_cluster_mode(),
             config.behavior(),
             config.tab_stop(),
             config.bell_style(),
@@ -631,7 +633,8 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// This method will read a line from STDIN and will display a `prompt`.
     ///
-    /// `prompt` should not be styled (in case the terminal doesn't support ANSI) directly: use `Highlighter::highlight_prompt` instead.
+    /// `prompt` should not be styled (in case the terminal doesn't support
+    /// ANSI) directly: use `Highlighter::highlight_prompt` instead.
     ///
     /// It uses terminal-style interaction if `stdin` is connected to a
     /// terminal.

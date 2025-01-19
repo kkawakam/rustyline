@@ -51,12 +51,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         ctx: Context<'out>,
     ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
+        let gcm = out.grapheme_cluster_mode();
         Self {
             out,
             prompt,
             prompt_size,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
-            layout: Layout::default(),
+            layout: Layout::new(gcm),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
             changes: Changeset::new(),

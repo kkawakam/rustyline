@@ -405,7 +405,7 @@ pub fn extract_word(
     }
 }
 
-/// Returns the longest common prefix among all `Candidate::replacement()`s.
+/// Returns the longest common prefix among all [`Candidate::replacement()`]s.
 pub fn longest_common_prefix<C: Candidate>(candidates: &[C]) -> Option<&str> {
     if candidates.is_empty() {
         return None;

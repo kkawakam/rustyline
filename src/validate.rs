@@ -52,7 +52,7 @@ impl<'i> ValidationContext<'i> {
 ///
 /// Rustyline uses the method provided by this trait to decide whether hitting
 /// the enter key will end the current editing session and return the current
-/// line buffer to the caller of `Editor::readline` or variants.
+/// line buffer to the caller of [`crate::Editor::readline`] or variants.
 pub trait Validator {
     /// Takes the currently edited `input` and returns a
     /// `ValidationResult` indicating whether it is valid or not along
@@ -62,8 +62,8 @@ pub trait Validator {
     /// delimiters are fully balanced.
     ///
     /// If you implement more complex validation checks it's probably
-    /// a good idea to also implement a `Hinter` to provide feedback
-    /// about what is invalid.
+    /// a good idea to also implement a [`crate::hint::Hinter`] to provide
+    /// feedback about what is invalid.
     ///
     /// For auto-correction like a missing closing quote or to reject invalid
     /// char while typing, the input will be mutable (TODO).

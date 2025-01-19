@@ -631,7 +631,8 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// This method will read a line from STDIN and will display a `prompt`.
     ///
-    /// `prompt` should not be styled (in case the terminal doesn't support ANSI) directly: use `Highlighter::highlight_prompt` instead.
+    /// `prompt` should not be styled (in case the terminal doesn't support
+    /// ANSI) directly: use [`Highlighter::highlight_prompt`] instead.
     ///
     /// It uses terminal-style interaction if `stdin` is connected to a
     /// terminal.
@@ -641,8 +642,8 @@ impl<H: Helper, I: History> Editor<H, I> {
         self.readline_with(prompt, None)
     }
 
-    /// This function behaves in the exact same manner as `readline`, except
-    /// that it pre-populates the input area.
+    /// This function behaves in the exact same manner as [`Editor::readline`],
+    /// except that it pre-populates the input area.
     ///
     /// The text that resides in the input area is given as a 2-tuple.
     /// The string on the left of the tuple is what will appear to the left of

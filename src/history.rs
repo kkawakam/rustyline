@@ -194,9 +194,9 @@ impl MemHistory {
     }
 
     /// Customized constructor with:
-    /// - `Config::max_history_size()`,
-    /// - `Config::history_ignore_space()`,
-    /// - `Config::history_duplicates()`.
+    /// - [`Config::max_history_size()`],
+    /// - [`Config::history_ignore_space()`],
+    /// - [`Config::history_duplicates()`].
     #[must_use]
     pub fn with_config(config: Config) -> Self {
         Self {
@@ -473,9 +473,9 @@ impl FileHistory {
     }
 
     /// Customized constructor with:
-    /// - `Config::max_history_size()`,
-    /// - `Config::history_ignore_space()`,
-    /// - `Config::history_duplicates()`.
+    /// - [`Config::max_history_size()`],
+    /// - [`Config::history_ignore_space()`],
+    /// - [`Config::history_duplicates()`].
     #[must_use]
     pub fn with_config(config: Config) -> Self {
         Self {

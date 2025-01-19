@@ -88,14 +88,14 @@ impl Config {
 
     /// Completion behaviour.
     ///
-    /// By default, `CompletionType::Circular`.
+    /// By default, [`CompletionType::Circular`].
     #[must_use]
     pub fn completion_type(&self) -> CompletionType {
         self.completion_type
     }
 
     /// When listing completion alternatives, only display
-    /// one screen of possibilities at a time (used for `CompletionType::List`
+    /// one screen of possibilities at a time (used for [`CompletionType::List`]
     /// mode).
     #[must_use]
     pub fn completion_prompt_limit(&self) -> usize {
@@ -103,10 +103,10 @@ impl Config {
     }
 
     /// Duration (milliseconds) Rustyline will wait for a character when
-    /// reading an ambiguous key sequence (used for `EditMode::Vi` mode on unix
-    /// platform).
+    /// reading an ambiguous key sequence (used for [`EditMode::Vi`] mode on
+    /// unix platform).
     ///
-    /// By default, no timeout (-1) or 500ms if `EditMode::Vi` is activated.
+    /// By default, no timeout (-1) or 500ms if [`EditMode::Vi`] is activated.
     #[must_use]
     pub fn keyseq_timeout(&self) -> Option<u16> {
         self.keyseq_timeout
@@ -329,7 +329,7 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// Returns a `Config` builder.
+    /// Returns a [`Config`] builder.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -474,7 +474,7 @@ impl Builder {
         self
     }
 
-    /// Builds a `Config` with the settings specified so far.
+    /// Builds a [`Config`] with the settings specified so far.
     #[must_use]
     pub fn build(self) -> Config {
         self.p
@@ -487,7 +487,7 @@ impl Configurer for Builder {
     }
 }
 
-/// Trait for component that holds a `Config`.
+/// Trait for component that holds a [`Config`].
 pub trait Configurer {
     /// `Config` accessor.
     fn config_mut(&mut self) -> &mut Config;

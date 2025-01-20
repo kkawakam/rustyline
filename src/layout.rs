@@ -18,14 +18,8 @@ impl GraphemeClusterMode {
         GraphemeClusterMode::default()
     }
 
-    /// Return WcWidth
-    #[cfg(all(not(test), windows))]
-    pub fn from_env() -> Self {
-        GraphemeClusterMode::WcWidth
-    }
-
     /// Use environment variables to guess current mode
-    #[cfg(not(any(test, windows)))]
+    #[cfg(not(test))]
     pub fn from_env() -> Self {
         let gcm = match std::env::var("TERM_PROGRAM").as_deref() {
             Ok("Apple_Terminal") => GraphemeClusterMode::Unicode,

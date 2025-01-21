@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     rl.set_helper(Some(h));
 
     loop {
-        let input = rl.readline("> ")?;
+        let input = rl.readline("> ", "")?;
         println!("input: {input}");
     }
 }

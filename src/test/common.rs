@@ -157,7 +157,7 @@ fn newline_key() {
 fn eof_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         let mut editor = init_editor(*mode, &[E::ctrl('D')]);
-        let err = editor.readline(">>");
+        let err = editor.readline(">>", "");
         assert_matches!(err, Err(ReadlineError::Eof));
     }
     assert_line(
@@ -176,16 +176,16 @@ fn eof_key() {
 fn interrupt_key() {
     for mode in &[EditMode::Emacs, EditMode::Vi] {
         let mut editor = init_editor(*mode, &[E::ctrl('C')]);
-        let err = editor.readline(">>");
+        let err = editor.readline(">>", "");
         assert_matches!(err, Err(ReadlineError::Interrupted));
 
         let mut editor = init_editor(*mode, &[E::ctrl('C')]);
-        let err = editor.readline_with_initial(">>", ("Hi", ""));
+        let err = editor.readline_with_initial(">>", "", ("Hi", ""));
         assert_matches!(err, Err(ReadlineError::Interrupted));
         if *mode == EditMode::Vi {
             // vi command mode
             let mut editor = init_editor(*mode, &[E::ESC, E::ctrl('C')]);
-            let err = editor.readline_with_initial(">>", ("Hi", ""));
+            let err = editor.readline_with_initial(">>", "", ("Hi", ""));
             assert_matches!(err, Err(ReadlineError::Interrupted));
         }
     }

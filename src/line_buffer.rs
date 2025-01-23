@@ -1,6 +1,6 @@
 //! Line buffer with current cursor position
 use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
-use crate::layout::{swidth, Layout};
+use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
@@ -588,7 +588,7 @@ impl LineBuffer {
     pub fn move_to_line_up(&mut self, n: RepeatCount, layout: &Layout) -> bool {
         match self.buf[..self.pos].rfind('\n') {
             Some(off) => {
-                let column = swidth(&self.buf[off + 1..self.pos]);
+                let column = layout.width(&self.buf[off + 1..self.pos]);
 
                 let mut dest_start = self.buf[..off].rfind('\n').map_or(0, |n| n + 1);
                 let mut dest_end = off;
@@ -669,7 +669,7 @@ impl LineBuffer {
                 } else {
                     0
                 };
-                let column = swidth(&self.buf[line_start..self.pos]) + offset;
+                let column = layout.width(&self.buf[line_start..self.pos]) + offset;
                 let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')

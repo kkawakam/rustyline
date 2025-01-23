@@ -1,5 +1,5 @@
 //! Customize line editor
-use crate::Result;
+use crate::{layout::GraphemeClusterMode, Result};
 use std::default::Default;
 
 /// User preferences
@@ -25,6 +25,8 @@ pub struct Config {
     bell_style: BellStyle,
     /// if colors should be enabled.
     color_mode: ColorMode,
+    /// if terminal supports grapheme clustering
+    grapheme_cluster_mode: GraphemeClusterMode,
     /// Whether to use stdio or not
     behavior: Behavior,
     /// Horizontal space taken by a tab.
@@ -140,6 +142,12 @@ impl Config {
         self.color_mode
     }
 
+    /// Tell if terminal supports grapheme clustering
+    #[must_use]
+    pub fn grapheme_cluster_mode(&self) -> GraphemeClusterMode {
+        self.grapheme_cluster_mode
+    }
+
     pub(crate) fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.color_mode = color_mode;
     }
@@ -222,6 +230,7 @@ impl Default for Config {
             auto_add_history: false,
             bell_style: BellStyle::default(),
             color_mode: ColorMode::Enabled,
+            grapheme_cluster_mode: GraphemeClusterMode::from_env(),
             behavior: Behavior::default(),
             tab_stop: 8,
             indent_size: 2,
@@ -420,6 +429,13 @@ impl Builder {
         self
     }
 
+    /// Tell if terminal supports grapheme clustering
+    #[must_use]
+    pub fn grapheme_cluster_mode(mut self, grapheme_cluster_mode: GraphemeClusterMode) -> Self {
+        self.set_grapheme_cluster_mode(grapheme_cluster_mode);
+        self
+    }
+
     /// Whether to use stdio or not
     ///
     /// By default, stdio is used.
@@ -556,6 +572,11 @@ pub trait Configurer {
     /// By default, colorization is on except if stdout is not a TTY.
     fn set_color_mode(&mut self, color_mode: ColorMode) {
         self.config_mut().set_color_mode(color_mode);
+    }
+
+    /// Tell if terminal supports grapheme clustering
+    fn set_grapheme_cluster_mode(&mut self, grapheme_cluster_mode: GraphemeClusterMode) {
+        self.config_mut().grapheme_cluster_mode = grapheme_cluster_mode;
     }
 
     /// Whether to use stdio or not

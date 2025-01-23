@@ -7,7 +7,7 @@ use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{Layout, Position, Unit};
+use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -148,6 +148,10 @@ impl Renderer for Sink {
         false
     }
 
+    fn grapheme_cluster_mode(&self) -> GraphemeClusterMode {
+        GraphemeClusterMode::Unicode
+    }
+
     fn move_cursor_at_leftmost(&mut self, _: &mut IntoIter<KeyEvent>) -> Result<()> {
         Ok(())
     }
@@ -182,6 +186,7 @@ impl Term for DummyTerminal {
 
     fn new(
         color_mode: ColorMode,
+        _grapheme_cluster_mode: GraphemeClusterMode,
         _behavior: Behavior,
         _tab_stop: u8,
         bell_style: BellStyle,

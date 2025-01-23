@@ -22,7 +22,7 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
-use crate::layout::{swidth, Layout, Position, Unit};
+use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
@@ -289,11 +289,17 @@ pub struct ConsoleRenderer {
     buffer: String,
     utf16: Vec<u16>,
     colors_enabled: bool,
+    grapheme_cluster_mode: GraphemeClusterMode,
     bell_style: BellStyle,
 }
 
 impl ConsoleRenderer {
-    fn new(conout: HANDLE, colors_enabled: bool, bell_style: BellStyle) -> Self {
+    fn new(
+        conout: HANDLE,
+        colors_enabled: bool,
+        grapheme_cluster_mode: GraphemeClusterMode,
+        bell_style: BellStyle,
+    ) -> Self {
         // Multi line editing is enabled by ENABLE_WRAP_AT_EOL_OUTPUT mode
         let (cols, _) = get_win_size(conout);
         Self {
@@ -302,6 +308,7 @@ impl ConsoleRenderer {
             buffer: String::with_capacity(1024),
             utf16: Vec::with_capacity(1024),
             colors_enabled,
+            grapheme_cluster_mode,
             bell_style,
         }
     }
@@ -348,7 +355,7 @@ impl ConsoleRenderer {
             if c == "\n" {
                 col = 0;
             } else {
-                let cw = width(c, &mut esc_seq);
+                let cw = width(self.grapheme_cluster_mode, c, &mut esc_seq);
                 col += cw;
                 if col > self.cols {
                     self.buffer.push('\n');
@@ -500,7 +507,7 @@ impl Renderer for ConsoleRenderer {
                 pos.col = 0;
                 pos.row += 1;
             } else {
-                let cw = swidth(c);
+                let cw = self.grapheme_cluster_mode.width(c);
                 pos.col += cw;
                 if pos.col > self.cols {
                     pos.row += 1;
@@ -556,6 +563,10 @@ impl Renderer for ConsoleRenderer {
 
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
+    }
+
+    fn grapheme_cluster_mode(&self) -> GraphemeClusterMode {
+        self.grapheme_cluster_mode
     }
 
     fn move_cursor_at_leftmost(&mut self, _: &mut ConsoleRawReader) -> Result<()> {
@@ -626,6 +637,7 @@ pub struct Console {
     conout: HANDLE,
     close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
+    grapheme_cluster_mode: GraphemeClusterMode,
     ansi_colors_supported: bool,
     bell_style: BellStyle,
     raw_mode: Arc<AtomicBool>,
@@ -657,6 +669,7 @@ impl Term for Console {
 
     fn new(
         color_mode: ColorMode,
+        grapheme_cluster_mode: GraphemeClusterMode,
         behavior: Behavior,
         _tab_stop: u8,
         bell_style: BellStyle,
@@ -710,6 +723,7 @@ impl Term for Console {
             conout: conout.unwrap_or(ptr::null_mut()),
             close_on_drop,
             color_mode,
+            grapheme_cluster_mode,
             ansi_colors_supported: false,
             bell_style,
             raw_mode: Arc::new(AtomicBool::new(false)),
@@ -819,7 +833,12 @@ impl Term for Console {
     }
 
     fn create_writer(&self) -> ConsoleRenderer {
-        ConsoleRenderer::new(self.conout, self.colors_enabled(), self.bell_style)
+        ConsoleRenderer::new(
+            self.conout,
+            self.colors_enabled(),
+            self.grapheme_cluster_mode,
+            self.bell_style,
+        )
     }
 
     fn writeln(&self) -> Result<()> {

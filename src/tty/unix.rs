@@ -30,7 +30,7 @@ use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
-use crate::layout::{Layout, Position, Unit};
+use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, ReadlineError, Result};
 
@@ -908,11 +908,18 @@ pub struct PosixRenderer {
     buffer: String,
     tab_stop: Unit,
     colors_enabled: bool,
+    grapheme_cluster_mode: GraphemeClusterMode,
     bell_style: BellStyle,
 }
 
 impl PosixRenderer {
-    fn new(out: RawFd, tab_stop: Unit, colors_enabled: bool, bell_style: BellStyle) -> Self {
+    fn new(
+        out: RawFd,
+        tab_stop: Unit,
+        colors_enabled: bool,
+        grapheme_cluster_mode: GraphemeClusterMode,
+        bell_style: BellStyle,
+    ) -> Self {
         let (cols, _) = get_win_size(out);
         Self {
             out,
@@ -920,6 +927,7 @@ impl PosixRenderer {
             buffer: String::with_capacity(1024),
             tab_stop,
             colors_enabled,
+            grapheme_cluster_mode,
             bell_style,
         }
     }
@@ -1072,7 +1080,7 @@ impl Renderer for PosixRenderer {
             let cw = if c == "\t" {
                 self.tab_stop - (pos.col % self.tab_stop)
             } else {
-                width(c, &mut esc_seq)
+                width(self.grapheme_cluster_mode, c, &mut esc_seq)
             };
             pos.col += cw;
             if pos.col > self.cols {
@@ -1125,6 +1133,10 @@ impl Renderer for PosixRenderer {
 
     fn colors_enabled(&self) -> bool {
         self.colors_enabled
+    }
+
+    fn grapheme_cluster_mode(&self) -> GraphemeClusterMode {
+        self.grapheme_cluster_mode
     }
 
     fn move_cursor_at_leftmost(&mut self, rdr: &mut PosixRawReader) -> Result<()> {
@@ -1274,6 +1286,7 @@ pub struct PosixTerminal {
     is_out_a_tty: bool,
     close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
+    grapheme_cluster_mode: GraphemeClusterMode,
     tab_stop: u8,
     bell_style: BellStyle,
     enable_bracketed_paste: bool,
@@ -1307,6 +1320,7 @@ impl Term for PosixTerminal {
 
     fn new(
         color_mode: ColorMode,
+        grapheme_cluster_mode: GraphemeClusterMode,
         behavior: Behavior,
         tab_stop: u8,
         bell_style: BellStyle,
@@ -1352,6 +1366,7 @@ impl Term for PosixTerminal {
             is_out_a_tty,
             close_on_drop,
             color_mode,
+            grapheme_cluster_mode,
             tab_stop,
             bell_style,
             enable_bracketed_paste,
@@ -1440,6 +1455,7 @@ impl Term for PosixTerminal {
             self.tty_out,
             Unit::from(self.tab_stop),
             self.colors_enabled(),
+            self.grapheme_cluster_mode,
             self.bell_style,
         )
     }
@@ -1656,12 +1672,19 @@ mod termios_ {
 mod test {
     use super::{Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
+    use crate::layout::GraphemeClusterMode;
     use crate::line_buffer::{LineBuffer, NoListener};
 
     #[test]
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
-        let out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
+        let out = PosixRenderer::new(
+            libc::STDOUT_FILENO,
+            4,
+            true,
+            GraphemeClusterMode::default(),
+            BellStyle::default(),
+        );
         let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
@@ -1681,7 +1704,13 @@ mod test {
 
     #[test]
     fn test_line_wrap() {
-        let mut out = PosixRenderer::new(libc::STDOUT_FILENO, 4, true, BellStyle::default());
+        let mut out = PosixRenderer::new(
+            libc::STDOUT_FILENO,
+            4,
+            true,
+            GraphemeClusterMode::default(),
+            BellStyle::default(),
+        );
         let prompt = "> ";
         let default_prompt = true;
         let prompt_size = out.calculate_position(prompt, Position::default());

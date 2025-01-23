@@ -6,7 +6,7 @@ const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
-use crate::layout::{swidth, Layout, Position, Unit};
+use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
@@ -83,6 +83,7 @@ pub trait Renderer {
         }
 
         let new_layout = Layout {
+            grapheme_cluster_mode: self.grapheme_cluster_mode(),
             prompt_size,
             default_prompt,
             cursor,
@@ -116,13 +117,15 @@ pub trait Renderer {
     fn get_rows(&self) -> Unit;
     /// Check if output supports colors.
     fn colors_enabled(&self) -> bool;
+    /// Tell how grapheme clusters are rendered.
+    fn grapheme_cluster_mode(&self) -> GraphemeClusterMode;
 
     /// Make sure prompt is at the leftmost edge of the screen
     fn move_cursor_at_leftmost(&mut self, rdr: &mut Self::Reader) -> Result<()>;
 }
 
 // ignore ANSI escape sequence
-fn width(s: &str, esc_seq: &mut u8) -> Unit {
+fn width(gcm: GraphemeClusterMode, s: &str, esc_seq: &mut u8) -> Unit {
     if *esc_seq == 1 {
         if s == "[" {
             // CSI
@@ -148,7 +151,7 @@ fn width(s: &str, esc_seq: &mut u8) -> Unit {
     } else if s == "\n" {
         0
     } else {
-        swidth(s)
+        gcm.width(s)
     }
 }
 
@@ -170,6 +173,7 @@ pub trait Term {
 
     fn new(
         color_mode: ColorMode,
+        grapheme_cluster_mode: GraphemeClusterMode,
         behavior: Behavior,
         tab_stop: u8,
         bell_style: BellStyle,

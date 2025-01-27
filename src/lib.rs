@@ -754,6 +754,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
             #[cfg(unix)]
             if cmd == Cmd::Suspend {
+                debug!(target: "rustyline", "SIGTSTP");
                 original_mode.disable_raw_mode()?;
                 tty::suspend()?;
                 let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed

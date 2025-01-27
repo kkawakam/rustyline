@@ -81,17 +81,13 @@ pub enum Signal {
     Interrupt,
     /// SIGWINCH / WINDOW_BUFFER_SIZE_EVENT
     Resize,
-    /// SIGTSTP
-    #[cfg(unix)]
-    Suspend,
 }
 
 #[cfg(unix)]
 impl Signal {
     pub(crate) fn from(b: u8) -> Self {
         match b {
-            b'C' => Self::Interrupt,
-            b'Z' => Self::Suspend,
+            b'I' => Self::Interrupt,
             b'W' => Self::Resize,
             _ => unreachable!(),
         }
@@ -99,8 +95,7 @@ impl Signal {
 
     pub(crate) fn to_byte(sig: libc::c_int) -> u8 {
         match sig {
-            libc::SIGINT => b'C',
-            libc::SIGTSTP => b'Z',
+            libc::SIGINT => b'I',
             libc::SIGWINCH => b'W',
             _ => unreachable!(),
         }

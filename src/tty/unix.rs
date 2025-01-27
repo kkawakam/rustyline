@@ -1230,8 +1230,6 @@ struct Sig {
     #[cfg(not(feature = "signal-hook"))]
     original_sigint: nix::sys::signal::SigAction,
     #[cfg(not(feature = "signal-hook"))]
-    original_sigtstp: nix::sys::signal::SigAction,
-    #[cfg(not(feature = "signal-hook"))]
     original_sigwinch: nix::sys::signal::SigAction,
     #[cfg(feature = "signal-hook")]
     id: signal_hook::SigId,
@@ -1249,12 +1247,10 @@ impl Sig {
             signal::SigSet::empty(),
         );
         let original_sigint = unsafe { signal::sigaction(signal::SIGINT, &sa)? };
-        let original_sigtstp = unsafe { signal::sigaction(signal::SIGTSTP, &sa)? };
         let original_sigwinch = unsafe { signal::sigaction(signal::SIGWINCH, &sa)? };
         Ok(Self {
             pipe: pipe.into_raw_fd(),
             original_sigint,
-            original_sigtstp,
             original_sigwinch,
         })
     }
@@ -1274,7 +1270,6 @@ impl Sig {
     fn uninstall_sigwinch_handler(self) -> Result<()> {
         use nix::sys::signal;
         let _ = unsafe { signal::sigaction(signal::SIGINT, &self.original_sigint)? };
-        let _ = unsafe { signal::sigaction(signal::SIGTSTP, &self.original_sigtstp)? };
         let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
         close(self.pipe)?;
         unsafe { close(SIG_PIPE)? };

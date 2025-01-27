@@ -107,11 +107,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                         }
                         continue;
                     }
-                    #[cfg(unix)]
-                    Signal::Suspend => {
-                        debug!(target: "rustyline", "SIGTSTP");
-                        return Ok(Cmd::Suspend);
-                    }
                 }
             }
             if let Ok(Cmd::Replace(..)) = rc {

@@ -49,14 +49,14 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,

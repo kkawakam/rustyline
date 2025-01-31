@@ -998,14 +998,14 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()> {
         use std::fmt::Write;
         self.buffer.clear();
@@ -1021,8 +1021,23 @@ impl Renderer for PosixRenderer {
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
             // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature = "split-highlight"))] {
+                    self.buffer
+                        .push_str(&highlighter.highlight(line, line.pos()));
+                } else if #[cfg(feature = "ansi-str")] {
+                    self.buffer
+                        .push_str(&highlighter.highlight(line, line.pos()));
+                } else {
+                    use crate::highlight::{Style, StyledBlock};
+                    for sb in highlighter.highlight_line(line, line.pos()) {
+                        let style = sb.style();
+                        write!(self.buffer, "{}", style.start())?;
+                        self.buffer.push_str(sb.text());
+                        write!(self.buffer, "{}", style.end())?;
+                    }
+                }
+            }
         } else {
             // display the prompt
             self.buffer.push_str(prompt);
@@ -1727,7 +1742,7 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        out.refresh_line::<()>(prompt, &line, None, &old_layout, &new_layout, None)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

@@ -20,6 +20,10 @@ maintenance = { status = "actively-developed" }
 members = ["rustyline-derive"]
 
 [dependencies]
+# For convenience / compatibilty, you can highlight the whole input buffer, ansi-str helps to split
+ansi-str = { version = "0.8.0", optional = true }
+# ansi_str::Style is immutable so we use anstyle::Style instead
+anstyle = { version = "1.0.8", optional = true }
 bitflags = "2.6"
 cfg-if = "1.0"
 # For file completion
@@ -81,6 +85,8 @@ with-file-history = ["fd-lock"]
 with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+# For continuation prompt, indentation, scrolling
+split-highlight = []
 
 [[example]]
 name = "custom_key_bindings"
@@ -114,6 +120,8 @@ features = [
     "with-dirs",
     "with-file-history",
     "with-fuzzy",
+    "split-highlight",
+    "anstyle",
 ]
 all-features = false
 no-default-features = true

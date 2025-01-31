@@ -1,8 +1,116 @@
 //! Syntax highlighting
 
 use crate::config::CompletionType;
-use std::borrow::Cow::{self, Borrowed, Owned};
+use std::borrow::Cow::{self, Borrowed};
 use std::cell::Cell;
+#[cfg(feature = "split-highlight")]
+use std::fmt::Display;
+
+/// ANSI style
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+pub trait Style: Default {
+    /// Produce a ansi sequences which sets the graphic mode
+    fn start(&self) -> impl Display;
+    /// Produce a ansi sequences which ends the graphic mode
+    fn end(&self) -> impl Display;
+}
+
+#[cfg(feature = "split-highlight")]
+impl Style for () {
+    fn start(&self) -> impl Display {
+        ""
+    }
+
+    fn end(&self) -> impl Display {
+        ""
+    }
+}
+
+/*#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
+impl Style for ansi_str::Style {
+    fn start(&self) -> impl Display {
+        self.start()
+    }
+
+    fn end(&self) -> impl Display {
+        self.end()
+    }
+}*/
+#[cfg(feature = "anstyle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
+impl Style for anstyle::Style {
+    fn start(&self) -> impl Display {
+        self.render()
+    }
+
+    fn end(&self) -> impl Display {
+        self.render_reset()
+    }
+}
+
+/// ANSI Style
+#[cfg(feature = "anstyle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anstyle")))]
+pub type AnsiStyle = anstyle::Style;
+/// ANSI Style
+#[cfg(not(feature = "anstyle"))]
+pub type AnsiStyle = ();
+
+/// Styled text
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+pub trait StyledBlock {
+    /// Style impl
+    type Style: Style
+    where
+        Self: Sized;
+    /// Raw text to be styled
+    fn text(&self) -> &str;
+    /// `Style` to be applied on `text`
+    fn style(&self) -> &Self::Style
+    where
+        Self: Sized;
+}
+/*#[cfg(feature = "ansi-str")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ansi-str")))]
+impl StyledBlock for ansi_str::AnsiBlock<'_> {
+    type Style = ansi_str::Style;
+
+    fn text(&self) -> &str {
+        self.text()
+    }
+
+    fn style(&self) -> &Self::Style {
+        self.style()
+    }
+}*/
+#[cfg(feature = "split-highlight")]
+#[cfg_attr(docsrs, doc(cfg(feature = "split-highlight")))]
+impl StyledBlock for (AnsiStyle, &str) {
+    type Style = AnsiStyle;
+
+    fn text(&self) -> &str {
+        self.1
+    }
+
+    fn style(&self) -> &Self::Style {
+        &self.0
+    }
+}
+#[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+impl StyledBlock for (AnsiStyle, String) {
+    type Style = AnsiStyle;
+
+    fn text(&self) -> &str {
+        &self.1
+    }
+
+    fn style(&self) -> &Self::Style {
+        &self.0
+    }
+}
 
 /// Describe which kind of action has been triggering the call to
 /// [`Highlighter`].
@@ -27,10 +135,32 @@ pub trait Highlighter {
     ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(not(feature = "split-highlight"), feature = "ansi-str")))
+    )]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         let _ = pos;
         Borrowed(line)
     }
+
+    /// Takes the currently edited `line` with the cursor `pos`ition and
+    /// returns the styled blocks.
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "split-highlight", not(feature = "ansi-str"))))
+    )]
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
+        let _ = (line, pos);
+        vec![(AnsiStyle::default(), line)].into_iter()
+    }
+
     /// Takes the `prompt` and
     /// returns the highlighted version (with ANSI color).
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -76,6 +206,8 @@ impl Highlighter for () {}
 /// Highlight matching bracket when typed or cursor moved on.
 #[derive(Default)]
 pub struct MatchingBracketHighlighter {
+    #[cfg(feature = "anstyle")]
+    style: anstyle::Style,
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
 }
 
@@ -84,12 +216,22 @@ impl MatchingBracketHighlighter {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "anstyle")]
+            style: anstyle::Style::new()
+                .bold()
+                .fg_color(Some(anstyle::AnsiColor::Blue.into())),
             bracket: Cell::new(None),
         }
     }
 }
 
+#[cfg(any(
+    not(feature = "split-highlight"),
+    feature = "anstyle",
+    feature = "ansi-str"
+))]
 impl Highlighter for MatchingBracketHighlighter {
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
@@ -99,10 +241,32 @@ impl Highlighter for MatchingBracketHighlighter {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
                 copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
-                return Owned(copy);
+                return Cow::Owned(copy);
             }
         }
         Borrowed(line)
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        _pos: usize,
+    ) -> impl Iterator<Item = impl 'l + StyledBlock> {
+        if line.len() <= 1 {
+            return vec![(AnsiStyle::default(), line)].into_iter();
+        }
+        if let Some((bracket, pos)) = self.bracket.get() {
+            if let Some((_, idx)) = find_matching_bracket(line, pos, bracket) {
+                return vec![
+                    (AnsiStyle::default(), &line[0..idx]),
+                    (self.style, &line[idx..=idx]),
+                    (AnsiStyle::default(), &line[idx + 1..]),
+                ]
+                .into_iter();
+            }
+        }
+        vec![(AnsiStyle::default(), line)].into_iter()
     }
 
     fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {
@@ -256,5 +420,17 @@ mod tests {
         use super::is_open_bracket;
         assert!(is_open_bracket(b'('));
         assert!(is_close_bracket(b')'));
+    }
+
+    #[test]
+    #[cfg(feature = "ansi-str")]
+    pub fn styled_text() {
+        use ansi_str::get_blocks;
+
+        let mut blocks = get_blocks("\x1b[1;32mHello \x1b[3mworld\x1b[23m!\x1b[0m");
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32mHello ").next());
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m\x1b[3mworld").next());
+        assert_eq!(blocks.next(), get_blocks("\x1b[1;32m!").next());
+        assert!(blocks.next().is_none())
     }
 }

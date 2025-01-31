@@ -435,14 +435,14 @@ impl Renderer for ConsoleRenderer {
             .map(|_| ())
     }
 
-    fn refresh_line(
+    fn refresh_line<H: Highlighter>(
         &mut self,
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
+        highlighter: Option<&H>,
     ) -> Result<()> {
         let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
@@ -455,7 +455,22 @@ impl Renderer for ConsoleRenderer {
             // append the prompt
             col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
             // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature = "split-highlight"))] {
+                    col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+                } else if #[cfg(feature = "ansi-str")] {
+                    col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
+                } else {
+                    use std::fmt::Write;
+                    use crate::highlight::{Style, StyledBlock};
+                    for sb in highlighter.highlight_line(line, line.pos()) {
+                        let style = sb.style();
+                        write!(self.buffer, "{}", style.start())?;
+                        col = self.wrap_at_eol(sb.text(), col);
+                        write!(self.buffer, "{}", style.end())?;
+                    }
+                }
+            }
         } else if self.colors_enabled {
             // append the prompt
             col = self.wrap_at_eol(prompt, col);

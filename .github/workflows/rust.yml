@@ -48,6 +48,13 @@ jobs:
         run: cargo check --workspace --no-default-features
         env:
           RUSTFLAGS: "-D warnings"
+      - name: Check split-highlight feature
+        run: |
+          cargo check --workspace --all-targets --features 'split-highlight'
+          cargo check --workspace --all-targets --features 'split-highlight ansi-str'
+          cargo check --workspace --all-targets --features 'split-highlight anstyle'
+          cargo check --workspace --all-targets --features 'split-highlight ansi-str derive'
+          cargo check --workspace --all-targets --features 'split-highlight anstyle derive'
 
   direct-minimal-versions:
     name: Test min versions

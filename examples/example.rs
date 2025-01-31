@@ -37,8 +37,18 @@ impl Highlighter for MyHelper {
         Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
     }
 
+    #[cfg(any(not(feature = "split-highlight"), feature = "ansi-str"))]
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         self.highlighter.highlight(line, pos)
+    }
+
+    #[cfg(all(feature = "split-highlight", not(feature = "ansi-str")))]
+    fn highlight_line<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+    ) -> impl Iterator<Item = impl 'l + rustyline::highlight::StyledBlock> {
+        self.highlighter.highlight_line(line, pos)
     }
 
     fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {

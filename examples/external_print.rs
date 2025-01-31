@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 
 use rustyline::{DefaultEditor, ExternalPrinter, Result};
 
@@ -9,13 +9,13 @@ fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut printer = rl.create_external_printer()?;
     thread::spawn(move || {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let mut i = 0usize;
         loop {
             printer
                 .print(format!("External message #{i}"))
                 .expect("External print failure");
-            let wait_ms = rng.gen_range(1000..10000);
+            let wait_ms = rng.random_range(1000..10000);
             thread::sleep(Duration::from_millis(wait_ms));
             i += 1;
         }

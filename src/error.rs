@@ -22,7 +22,7 @@ pub enum ReadlineError {
     #[cfg(unix)]
     Errno(nix::Error),
     /// Error generated on `WINDOW_BUFFER_SIZE_EVENT` / `SIGWINCH` signal
-    WindowResized,
+    Signal(Signal),
     /// Like Utf8Error on unix
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
@@ -42,7 +42,7 @@ impl fmt::Display for ReadlineError {
             Self::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             Self::Errno(ref err) => err.fmt(f),
-            Self::WindowResized => write!(f, "WindowResized"),
+            Self::Signal(ref sig) => write!(f, "Signal({:?})", sig),
             #[cfg(windows)]
             Self::Decode(ref err) => err.fmt(f),
             #[cfg(windows)]
@@ -61,7 +61,7 @@ impl Error for ReadlineError {
             Self::Interrupted => None,
             #[cfg(unix)]
             Self::Errno(ref err) => Some(err),
-            Self::WindowResized => None,
+            Self::Signal(_) => None,
             #[cfg(windows)]
             Self::Decode(ref err) => Some(err),
             #[cfg(windows)]
@@ -72,25 +72,55 @@ impl Error for ReadlineError {
     }
 }
 
+/// Signal received from terminal
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Signal {
+    /// SIGINT
+    #[cfg(unix)]
+    Interrupt,
+    /// SIGWINCH / WINDOW_BUFFER_SIZE_EVENT
+    Resize,
+}
+
+#[cfg(unix)]
+impl Signal {
+    pub(crate) fn from(b: u8) -> Self {
+        match b {
+            b'I' => Self::Interrupt,
+            b'W' => Self::Resize,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn to_byte(sig: libc::c_int) -> u8 {
+        match sig {
+            libc::SIGINT => b'I',
+            libc::SIGWINCH => b'W',
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[cfg(unix)]
 #[derive(Debug)]
-pub(crate) struct WindowResizedError;
+pub(crate) struct SignalError(pub Signal);
 #[cfg(unix)]
-impl fmt::Display for WindowResizedError {
+impl fmt::Display for SignalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WindowResized")
+        write!(f, "Signal({:?})", self.0)
     }
 }
 #[cfg(unix)]
-impl Error for WindowResizedError {}
+impl Error for SignalError {}
 
 impl From<io::Error> for ReadlineError {
     fn from(err: io::Error) -> Self {
         #[cfg(unix)]
         if err.kind() == io::ErrorKind::Interrupted {
             if let Some(e) = err.get_ref() {
-                if e.downcast_ref::<WindowResizedError>().is_some() {
-                    return Self::WindowResized;
+                if let Some(se) = e.downcast_ref::<SignalError>() {
+                    return Self::Signal(se.0);
                 }
             }
         }

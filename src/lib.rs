@@ -714,7 +714,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             .create_reader(self.buffer.take(), &self.config, term_key_map);
         if self.term.is_output_tty() && self.config.check_cursor_position() {
             if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-                if let ReadlineError::WindowResized = e {
+                if let ReadlineError::Signal(error::Signal::Resize) = e {
                     s.out.update_size();
                 } else {
                     return Err(e);
@@ -754,6 +754,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
             #[cfg(unix)]
             if cmd == Cmd::Suspend {
+                debug!(target: "rustyline", "SIGTSTP");
                 original_mode.disable_raw_mode()?;
                 tty::suspend()?;
                 let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed

@@ -190,7 +190,7 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
 
         if u32::from(rec.EventType) == console::WINDOW_BUFFER_SIZE_EVENT {
             debug!(target: "rustyline", "SIGWINCH");
-            return Err(error::ReadlineError::WindowResized);
+            return Err(error::ReadlineError::Signal(error::Signal::Resize));
         } else if u32::from(rec.EventType) != console::KEY_EVENT {
             continue;
         }

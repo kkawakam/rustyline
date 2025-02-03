@@ -5,7 +5,7 @@ use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{Context, Helper, Result};
-use crate::error::ReadlineError;
+use crate::error::{ReadlineError, Signal};
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hint;
 use crate::history::SearchDirection;
@@ -85,20 +85,29 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     ) -> Result<Cmd> {
         loop {
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
-            if let Err(ReadlineError::WindowResized) = rc {
-                debug!(target: "rustyline", "SIGWINCH");
-                let old_cols = self.out.get_columns();
-                self.out.update_size();
-                let new_cols = self.out.get_columns();
-                if new_cols != old_cols
-                    && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
-                {
-                    self.prompt_size = self
-                        .out
-                        .calculate_position(self.prompt, Position::default());
-                    self.refresh_line()?;
+            if let Err(ReadlineError::Signal(signal)) = rc {
+                match signal {
+                    #[cfg(unix)]
+                    Signal::Interrupt => {
+                        debug!(target: "rustyline", "SIGINT");
+                        return Ok(Cmd::Interrupt);
+                    }
+                    Signal::Resize => {
+                        debug!(target: "rustyline", "SIGWINCH");
+                        let old_cols = self.out.get_columns();
+                        self.out.update_size();
+                        let new_cols = self.out.get_columns();
+                        if new_cols != old_cols
+                            && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
+                        {
+                            self.prompt_size = self
+                                .out
+                                .calculate_position(self.prompt, Position::default());
+                            self.refresh_line()?;
+                        }
+                        continue;
+                    }
                 }
-                continue;
             }
             if let Ok(Cmd::Replace(..)) = rc {
                 self.changes.begin();

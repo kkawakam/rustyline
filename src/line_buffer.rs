@@ -242,7 +242,7 @@ impl LineBuffer {
             self.buf.insert(self.pos, ch);
             cl.insert_char(self.pos, ch);
         } else {
-            let text = iter::repeat(ch).take(n).collect::<String>();
+            let text = iter::repeat_n(ch, n).collect::<String>();
             let pos = self.pos;
             self.insert_str(pos, &text, cl);
         }

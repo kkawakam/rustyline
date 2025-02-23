@@ -57,7 +57,7 @@ pub trait Completer {
     /// returns the start position and the completion candidates for the
     /// partial word to be completed.
     ///
-    /// ("ls /usr/loc", 11) => Ok((3, vec!["/usr/local/"]))
+    /// `("ls /usr/loc", 11)` => `Ok((3, vec!["/usr/local/"]))`
     fn complete(
         &self, // FIXME should be `&mut self`
         line: &str,

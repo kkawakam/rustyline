@@ -184,16 +184,18 @@ fn test_apply_backspace_direct() {
 fn test_readline_direct() {
     use std::io::Cursor;
 
+    let mut output = String::new();
     let mut write_buf = vec![];
-    let output = readline_direct(
+    readline_direct(
         Cursor::new("([)\n\u{0008}\n\n\r\n])".as_bytes()),
         Cursor::new(&mut write_buf),
         &Some(crate::validate::MatchingBracketValidator::new()),
-    );
+        &mut output,
+    ).unwrap();
 
     assert_eq!(
         &write_buf,
         b"Mismatched brackets: '[' is not properly closed"
     );
-    assert_eq!(&output.unwrap(), "([\n\n\r\n])");
+    assert_eq!(&output, "([\n\n\r\n])");
 }

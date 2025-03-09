@@ -3,6 +3,7 @@ use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
 use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
+use std::io;
 use std::iter;
 use std::ops::{Deref, DerefMut, Index, Range};
 use std::string::Drain;
@@ -99,6 +100,14 @@ impl<'a> From<Option<&'a mut String>> for LineBufferKind<'a> {
             .unwrap_or_else(|| Self::Owned(String::with_capacity(MAX_LINE)))
     }
 }
+impl From<LineBufferKind<'_>> for String {
+    fn from(buffer: LineBufferKind) -> String {
+        match buffer {
+            LineBufferKind::Borrowed(s) => s.clone(),
+            LineBufferKind::Owned(s) => s,
+        }
+    }
+}
 
 /// Represent the current input (text and cursor position).
 ///
@@ -161,15 +170,6 @@ impl<'a> LineBuffer<'a> {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.buf
-    }
-
-    /// Converts a buffer into a `String`. Will allocate if using a borrowed string.
-    #[must_use]
-    pub fn into_string(self) -> String {
-        match self.buf {
-            LineBufferKind::Borrowed(s) => s.clone(),
-            LineBufferKind::Owned(s) => s,
-        }
     }
 
     /// Current cursor position (byte position)
@@ -1204,11 +1204,32 @@ impl<'a> LineBuffer<'a> {
     }
 }
 
+impl From<LineBuffer<'_>> for String {
+    fn from(line: LineBuffer<'_>) -> String {
+        line.buf.into()
+    }
+}
+
 impl Deref for LineBuffer<'_> {
     type Target = str;
 
     fn deref(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl io::Write for LineBuffer<'_> {
+    fn write(&mut self, s: &[u8]) -> io::Result<usize> {
+        Ok(str::from_utf8(s)
+            .map(|s| {
+                self.insert_str(self.buf.len(), s, &mut NoListener);
+                self.buf.len()
+            })
+            .unwrap_or(0))
+    }
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -1238,7 +1259,7 @@ fn is_other_char(grapheme: &str) -> bool {
 #[cfg(test)]
 mod test {
     use super::{
-        ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
+        ChangeListener, DeleteListener, Direction, LineBuffer, LineBufferKind, NoListener, WordAction, MAX_LINE,
     };
     use crate::{
         keymap::{At, CharSearch, Word},
@@ -1301,18 +1322,18 @@ mod test {
     fn insert() {
         let mut s = LineBuffer::with_capacity(MAX_LINE);
         let push = s.insert('α', 1, &mut NoListener).unwrap();
-        assert_eq!("α", s.buf);
+        assert_eq!("α", s.buf.as_str());
         assert_eq!(2, s.pos);
         assert!(push);
 
         let push = s.insert('ß', 1, &mut NoListener).unwrap();
-        assert_eq!("αß", s.buf);
+        assert_eq!("αß", s.buf.as_str());
         assert_eq!(4, s.pos);
         assert!(push);
 
         s.pos = 0;
         let push = s.insert('γ', 1, &mut NoListener).unwrap();
-        assert_eq!("γαß", s.buf);
+        assert_eq!("γαß", s.buf.as_str());
         assert_eq!(2, s.pos);
         assert!(!push);
     }
@@ -1323,7 +1344,7 @@ mod test {
         s.move_forward(1);
         let ok = s.yank("γδε", 1, &mut NoListener);
         assert_eq!(Some(true), ok);
-        assert_eq!("αßγδε", s.buf);
+        assert_eq!("αßγδε", s.buf.as_str());
         assert_eq!(10, s.pos);
     }
 
@@ -1332,7 +1353,7 @@ mod test {
         let mut s = LineBuffer::init("αε", 2);
         let ok = s.yank("ßγδ", 1, &mut NoListener);
         assert_eq!(Some(false), ok);
-        assert_eq!("αßγδε", s.buf);
+        assert_eq!("αßγδε", s.buf.as_str());
         assert_eq!(8, s.pos);
     }
 
@@ -1340,22 +1361,22 @@ mod test {
     fn moves() {
         let mut s = LineBuffer::init("αß", 4);
         let ok = s.move_backward(1);
-        assert_eq!("αß", s.buf);
+        assert_eq!("αß", s.buf.as_str());
         assert_eq!(2, s.pos);
         assert!(ok);
 
         let ok = s.move_forward(1);
-        assert_eq!("αß", s.buf);
+        assert_eq!("αß", s.buf.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
 
         let ok = s.move_home();
-        assert_eq!("αß", s.buf);
+        assert_eq!("αß", s.buf.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
 
         let ok = s.move_end();
-        assert_eq!("αß", s.buf);
+        assert_eq!("αß", s.buf.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
     }
@@ -1365,22 +1386,22 @@ mod test {
         let text = "αa\nsdf ßc\nasdf";
         let mut s = LineBuffer::init(text, 7);
         let ok = s.move_home();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
 
         let ok = s.move_home();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(4, s.pos);
         assert!(!ok);
 
         let ok = s.move_end();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(11, s.pos);
         assert!(ok);
 
         let ok = s.move_end();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(11, s.pos);
         assert!(!ok);
     }
@@ -1390,22 +1411,22 @@ mod test {
         let text = "αa\nsdf ßc\nasdf";
         let mut s = LineBuffer::init(text, 7);
         let ok = s.move_buffer_start();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
 
         let ok = s.move_buffer_start();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(0, s.pos);
         assert!(!ok);
 
         let ok = s.move_buffer_end();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(text.len(), s.pos);
         assert!(ok);
 
         let ok = s.move_buffer_end();
-        assert_eq!(text, s.buf);
+        assert_eq!(text, s.buf.as_str());
         assert_eq!(text.len(), s.pos);
         assert!(!ok);
     }
@@ -1428,12 +1449,12 @@ mod test {
         let mut cl = Listener::new();
         let mut s = LineBuffer::init("αß", 2);
         let chars = s.delete(1, &mut cl);
-        assert_eq!("α", s.buf);
+        assert_eq!("α", s.as_str());
         assert_eq!(2, s.pos);
         assert_eq!(Some("ß".to_owned()), chars);
 
         let ok = s.backspace(1, &mut cl);
-        assert_eq!("", s.buf);
+        assert_eq!("", s.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("α");
@@ -1444,14 +1465,14 @@ mod test {
         let mut cl = Listener::new();
         let mut s = LineBuffer::init("αßγδε", 6);
         let ok = s.kill_line(&mut cl);
-        assert_eq!("αßγ", s.buf);
+        assert_eq!("αßγ", s.as_str());
         assert_eq!(6, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("δε");
 
         s.pos = 4;
         let ok = s.discard_line(&mut cl);
-        assert_eq!("γ", s.buf);
+        assert_eq!("γ", s.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("αß");
@@ -1463,19 +1484,19 @@ mod test {
         let mut s = LineBuffer::init("αß\nγδ 12\nε f4", 7);
 
         let ok = s.kill_line(&mut cl);
-        assert_eq!("αß\nγ\nε f4", s.buf);
+        assert_eq!("αß\nγ\nε f4", s.as_str());
         assert_eq!(7, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("δ 12");
 
         let ok = s.kill_line(&mut cl);
-        assert_eq!("αß\nγε f4", s.buf);
+        assert_eq!("αß\nγε f4", s.as_str());
         assert_eq!(7, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("\n");
 
         let ok = s.kill_line(&mut cl);
-        assert_eq!("αß\nγ", s.buf);
+        assert_eq!("αß\nγ", s.as_str());
         assert_eq!(7, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("ε f4");
@@ -1491,19 +1512,19 @@ mod test {
         let mut s = LineBuffer::init("αß\nc γδε", 9);
 
         let ok = s.discard_line(&mut cl);
-        assert_eq!("αß\nδε", s.buf);
+        assert_eq!("αß\nδε", s.as_str());
         assert_eq!(5, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("c γ");
 
         let ok = s.discard_line(&mut cl);
-        assert_eq!("αßδε", s.buf);
+        assert_eq!("αßδε", s.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("\n");
 
         let ok = s.discard_line(&mut cl);
-        assert_eq!("δε", s.buf);
+        assert_eq!("δε", s.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("αß");
@@ -1517,21 +1538,21 @@ mod test {
     fn transpose() {
         let mut s = LineBuffer::init("aßc", 1);
         let ok = s.transpose_chars(&mut NoListener);
-        assert_eq!("ßac", s.buf);
+        assert_eq!("ßac", s.as_str());
         assert_eq!(3, s.pos);
         assert!(ok);
 
-        s.buf = String::from("aßc");
+        s.buf = LineBufferKind::Owned(String::from("aßc"));
         s.pos = 3;
         let ok = s.transpose_chars(&mut NoListener);
-        assert_eq!("acß", s.buf);
+        assert_eq!("acß", s.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
 
-        s.buf = String::from("aßc");
+        s.buf = LineBufferKind::Owned(String::from("aßc"));
         s.pos = 4;
         let ok = s.transpose_chars(&mut NoListener);
-        assert_eq!("acß", s.buf);
+        assert_eq!("acß", s.as_str());
         assert_eq!(4, s.pos);
         assert!(ok);
     }
@@ -1540,7 +1561,7 @@ mod test {
     fn move_to_prev_word() {
         let mut s = LineBuffer::init("a ß  c", 6); // before 'c'
         let ok = s.move_to_prev_word(Word::Emacs, 1);
-        assert_eq!("a ß  c", s.buf);
+        assert_eq!("a ß  c", s.as_str());
         assert_eq!(2, s.pos); // before 'ß'
         assert!(ok);
 
@@ -1635,7 +1656,7 @@ mod test {
         let mut cl = Listener::new();
         let mut s = LineBuffer::init("a ß  c", 6);
         let ok = s.delete_prev_word(Word::Big, 1, &mut cl);
-        assert_eq!("a c", s.buf);
+        assert_eq!("a c", s.as_str());
         assert_eq!(2, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("ß  ");
@@ -1645,7 +1666,7 @@ mod test {
     fn move_to_next_word() {
         let mut s = LineBuffer::init("a ß  c", 1); // after 'a'
         let ok = s.move_to_next_word(At::AfterEnd, Word::Emacs, 1);
-        assert_eq!("a ß  c", s.buf);
+        assert_eq!("a ß  c", s.as_str());
         assert!(ok);
         assert_eq!(4, s.pos); // after 'ß'
 
@@ -1667,7 +1688,7 @@ mod test {
     fn move_to_end_of_word() {
         let mut s = LineBuffer::init("a ßeta  c", 1);
         let ok = s.move_to_next_word(At::BeforeEnd, Word::Vi, 1);
-        assert_eq!("a ßeta  c", s.buf);
+        assert_eq!("a ßeta  c", s.as_str());
         assert_eq!(6, s.pos);
         assert!(ok);
     }
@@ -1720,7 +1741,7 @@ mod test {
     fn move_to_start_of_word() {
         let mut s = LineBuffer::init("a ß  c", 2);
         let ok = s.move_to_next_word(At::Start, Word::Emacs, 1);
-        assert_eq!("a ß  c", s.buf);
+        assert_eq!("a ß  c", s.as_str());
         assert_eq!(6, s.pos);
         assert!(ok);
     }
@@ -1774,14 +1795,14 @@ mod test {
         let mut cl = Listener::new();
         let mut s = LineBuffer::init("a ß  c", 1);
         let ok = s.delete_word(At::AfterEnd, Word::Emacs, 1, &mut cl);
-        assert_eq!("a  c", s.buf);
+        assert_eq!("a  c", s.as_str());
         assert_eq!(1, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq(" ß");
 
         let mut s = LineBuffer::init("test", 0);
         let ok = s.delete_word(At::AfterEnd, Word::Vi, 1, &mut cl);
-        assert_eq!("", s.buf);
+        assert_eq!("", s.as_str());
         assert_eq!(0, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("test");
@@ -1792,7 +1813,7 @@ mod test {
         let mut cl = Listener::new();
         let mut s = LineBuffer::init("a ß  c", 2);
         let ok = s.delete_word(At::Start, Word::Emacs, 1, &mut cl);
-        assert_eq!("a c", s.buf);
+        assert_eq!("a c", s.as_str());
         assert_eq!(2, s.pos);
         assert!(ok);
         cl.assert_deleted_str_eq("ß  ");
@@ -1805,14 +1826,14 @@ mod test {
         let ok = s.delete_to(CharSearch::ForwardBefore('ε'), 1, &mut cl);
         assert!(ok);
         cl.assert_deleted_str_eq("ßγδ");
-        assert_eq!("αε", s.buf);
+        assert_eq!("αε", s.as_str());
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 2);
         let ok = s.delete_to(CharSearch::Forward('ε'), 1, &mut cl);
         assert!(ok);
         cl.assert_deleted_str_eq("ßγδε");
-        assert_eq!("α", s.buf);
+        assert_eq!("α", s.as_str());
         assert_eq!(2, s.pos);
     }
 
@@ -1823,14 +1844,14 @@ mod test {
         let ok = s.delete_to(CharSearch::BackwardAfter('α'), 1, &mut cl);
         assert!(ok);
         cl.assert_deleted_str_eq("ßγδ");
-        assert_eq!("αε", s.buf);
+        assert_eq!("αε", s.as_str());
         assert_eq!(2, s.pos);
 
         let mut s = LineBuffer::init("αßγδε", 8);
         let ok = s.delete_to(CharSearch::Backward('ß'), 1, &mut cl);
         assert!(ok);
         cl.assert_deleted_str_eq("ßγδ");
-        assert_eq!("αε", s.buf);
+        assert_eq!("αε", s.as_str());
         assert_eq!(2, s.pos);
     }
 
@@ -1838,22 +1859,22 @@ mod test {
     fn edit_word() {
         let mut s = LineBuffer::init("a ßeta  c", 1);
         assert!(s.edit_word(WordAction::Uppercase, &mut NoListener));
-        assert_eq!("a SSETA  c", s.buf);
+        assert_eq!("a SSETA  c", s.as_str());
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßetA  c", 1);
         assert!(s.edit_word(WordAction::Lowercase, &mut NoListener));
-        assert_eq!("a ßeta  c", s.buf);
+        assert_eq!("a ßeta  c", s.as_str());
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("a ßETA  c", 1);
         assert!(s.edit_word(WordAction::Capitalize, &mut NoListener));
-        assert_eq!("a SSeta  c", s.buf);
+        assert_eq!("a SSeta  c", s.as_str());
         assert_eq!(7, s.pos);
 
         let mut s = LineBuffer::init("test", 1);
         assert!(s.edit_word(WordAction::Capitalize, &mut NoListener));
-        assert_eq!("tEst", s.buf);
+        assert_eq!("tEst", s.as_str());
         assert_eq!(4, s.pos);
     }
 
@@ -1861,12 +1882,12 @@ mod test {
     fn transpose_words() {
         let mut s = LineBuffer::init("ßeta / δelta__", 15);
         assert!(s.transpose_words(1, &mut NoListener));
-        assert_eq!("δelta__ / ßeta", s.buf);
+        assert_eq!("δelta__ / ßeta", s.as_str());
         assert_eq!(16, s.pos);
 
         let mut s = LineBuffer::init("ßeta / δelta", 14);
         assert!(s.transpose_words(1, &mut NoListener));
-        assert_eq!("δelta / ßeta", s.buf);
+        assert_eq!("δelta / ßeta", s.as_str());
         assert_eq!(14, s.pos);
 
         let mut s = LineBuffer::init(" / δelta", 8);

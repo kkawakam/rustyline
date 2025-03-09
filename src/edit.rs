@@ -49,7 +49,7 @@ impl<'buffer, 'out, 'prompt, H: Helper> State<'buffer, 'out, 'prompt, H> {
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
-        line: Option<LineBuffer<'buffer>>,
+        line: LineBuffer<'buffer>,
     ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
         let gcm = out.grapheme_cluster_mode();
@@ -57,7 +57,7 @@ impl<'buffer, 'out, 'prompt, H: Helper> State<'buffer, 'out, 'prompt, H> {
             out,
             prompt,
             prompt_size,
-            line: line.unwrap_or_else(|| LineBuffer::with_capacity(MAX_LINE)).can_growth(true),
+            line: line.can_growth(true),
             layout: Layout::new(gcm),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
@@ -752,13 +752,13 @@ impl<H: Helper> State<'_, '_, '_, H> {
 }
 
 #[cfg(test)]
-pub fn init_state<'out, H: Helper>(
+pub fn init_state<'buffer, 'out, H: Helper>(
     out: &'out mut <Terminal as Term>::Writer,
     line: &str,
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::DefaultHistory,
-) -> State<'out, 'static, H> {
+) -> State<'static, 'out, 'static, H> {
     State {
         out,
         prompt: "",

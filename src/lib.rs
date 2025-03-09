@@ -67,6 +67,7 @@ pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::layout::GraphemeClusterMode;
 use crate::layout::Unit;
+use crate::line_buffer::{LineBuffer, LineBufferKind};
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -485,11 +486,12 @@ fn readline_direct(
     mut reader: impl BufRead,
     mut writer: impl Write,
     validator: &Option<impl Validator>,
-) -> Result<String> {
-    let mut input = String::new();
+    input: &mut String,
+) -> Result<()> {
+    //let mut input = String::new();
 
     loop {
-        if reader.read_line(&mut input)? == 0 {
+        if reader.read_line(input)? == 0 {
             return Err(ReadlineError::Eof);
         }
         // Remove trailing newline
@@ -506,10 +508,10 @@ fn readline_direct(
             trailing_r = false;
         }
 
-        input = apply_backspace_direct(&input);
+        *input = apply_backspace_direct(&input);
 
         match validator.as_ref() {
-            None => return Ok(input),
+            None => return Ok(()),
             Some(v) => {
                 let mut ctx = input.as_str();
                 let mut ctx = validate::ValidationContext::new(&mut ctx);
@@ -519,7 +521,7 @@ fn readline_direct(
                         if let Some(msg) = msg {
                             writer.write_all(msg.as_bytes())?;
                         }
-                        return Ok(input);
+                        return Ok(());
                     }
                     validate::ValidationResult::Invalid(Some(msg)) => {
                         writer.write_all(msg.as_bytes())?;
@@ -641,7 +643,14 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
     pub fn readline(&mut self, prompt: &str) -> Result<String> {
-        self.readline_with(prompt, None)
+        let mut buffer = String::new();
+        self.readline_into_buffer(prompt, &mut buffer)
+            .map(move |_| buffer)
+    }
+
+    /// Same as [`Self::readline`] but uses preallocated string.
+    pub fn readline_into_buffer(&mut self, prompt: &str, buffer: &mut String) -> Result<()> {
+        self.readline_with(prompt, None, buffer)
     }
 
     /// This function behaves in the exact same manner as [`Editor::readline`],
@@ -652,10 +661,17 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// the cursor and the string on the right is what will appear to the
     /// right of the cursor.
     pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
-        self.readline_with(prompt, Some(initial))
+        let mut buffer = String::new();
+        self.readline_with(prompt, Some(initial), &mut buffer)
+            .map(move |_| buffer)
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
+    /// Same as [`Self::readline_with_initial`] but uses preallocated string.
+    pub fn readline_into_buffer_with_initial(&mut self, prompt: &str, initial: (&str, &str), buffer: &mut String) -> Result<()> {
+        self.readline_with(prompt, Some(initial), buffer)
+    }
+
+    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>, buffer: &mut String) -> Result<()> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
@@ -663,14 +679,14 @@ impl<H: Helper, I: History> Editor<H, I> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper, buffer)
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
             let guard = Guard(&original_mode);
-            let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
+            let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map, buffer);
             if self.config.auto_add_history() {
                 if let Ok(ref line) = user_input {
-                    self.add_history_entry(line.as_str())?;
+                    self.add_history_entry(buffer.as_str())?;
                 }
             }
             drop(guard); // disable_raw_mode(original_mode)?;
@@ -679,7 +695,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), &self.helper, buffer)
         }
     }
 
@@ -692,12 +708,13 @@ impl<H: Helper, I: History> Editor<H, I> {
         initial: Option<(&str, &str)>,
         original_mode: &tty::Mode,
         term_key_map: tty::KeyMap,
-    ) -> Result<String> {
+        buffer: &mut String,
+    ) -> Result<()> {
         let mut stdout = self.term.create_writer();
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
-        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx, None);
+        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx, LineBuffer::with_buffer(buffer));
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 
@@ -801,7 +818,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             let _ = original_mode; // silent warning
         }
         self.buffer = rdr.unbuffer();
-        Ok(s.line.into_string())
+        Ok(())
     }
 
     /// Load the history from the specified file.

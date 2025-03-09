@@ -4,7 +4,7 @@ use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
-use std::ops::{Deref, Index, Range};
+use std::ops::{Deref, DerefMut, Index, Range};
 use std::string::Drain;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -70,16 +70,46 @@ impl ChangeListener for NoListener {
 
 // TODO split / cache lines ?
 
+/// Line storage.
+#[derive(Debug)]
+pub(crate) enum LineBufferKind<'a> {
+    Borrowed(&'a mut String),
+    Owned(String),
+}
+impl<'a> Deref for LineBufferKind<'a> {
+    type Target = String;
+    fn deref(&self) -> &String {
+        match self {
+            Self::Borrowed(s) => s,
+            Self::Owned(s) => &s,
+        }
+    }
+}
+impl<'a> DerefMut for LineBufferKind<'a> {
+    fn deref_mut(&mut self) -> &mut String {
+        match self {
+            Self::Borrowed(s) => s,
+            Self::Owned(s) => s,
+        }
+    }
+}
+impl<'a> From<Option<&'a mut String>> for LineBufferKind<'a> {
+    fn from(buffer: Option<&'a mut String>) -> Self {
+        buffer.map(Self::Borrowed)
+            .unwrap_or_else(|| Self::Owned(String::with_capacity(MAX_LINE)))
+    }
+}
+
 /// Represent the current input (text and cursor position).
 ///
 /// The methods do text manipulations or/and cursor movements.
-pub struct LineBuffer {
-    buf: String,      // Edited line buffer (rl_line_buffer)
-    pos: usize,       // Current cursor position (byte position) (rl_point)
-    can_growth: bool, // Whether to allow dynamic growth
+pub struct LineBuffer<'a> {
+    buf: LineBufferKind<'a>, // Edited line buffer (rl_line_buffer)
+    pos: usize,              // Current cursor position (byte position) (rl_point)
+    can_growth: bool,        // Whether to allow dynamic growth
 }
 
-impl fmt::Debug for LineBuffer {
+impl fmt::Debug for LineBuffer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LineBuffer")
             .field("buf", &self.buf)
@@ -88,12 +118,22 @@ impl fmt::Debug for LineBuffer {
     }
 }
 
-impl LineBuffer {
+impl<'a> LineBuffer<'a> {
+    /// Create a new line buffer that uses the given `buffer` instead of allocating.
+    #[must_use]
+    pub fn with_buffer(buffer: &'a mut String) -> Self {
+        Self {
+            buf: LineBufferKind::Borrowed(buffer),
+            pos: 0,
+            can_growth: false,
+        }
+    }
+
     /// Create a new line buffer with the given maximum `capacity`.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            buf: String::with_capacity(capacity),
+            buf: LineBufferKind::Owned(String::with_capacity(capacity)),
             pos: 0,
             can_growth: false,
         }
@@ -123,10 +163,13 @@ impl LineBuffer {
         &self.buf
     }
 
-    /// Converts a buffer into a `String` without copying or allocating.
+    /// Converts a buffer into a `String`. Will allocate if using a borrowed string.
     #[must_use]
     pub fn into_string(self) -> String {
-        self.buf
+        match self.buf {
+            LineBufferKind::Borrowed(s) => s.clone(),
+            LineBufferKind::Owned(s) => s,
+        }
     }
 
     /// Current cursor position (byte position)
@@ -1161,7 +1204,7 @@ impl LineBuffer {
     }
 }
 
-impl Deref for LineBuffer {
+impl Deref for LineBuffer<'_> {
     type Target = str;
 
     fn deref(&self) -> &str {

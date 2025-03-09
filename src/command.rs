@@ -17,7 +17,7 @@ pub enum Status {
 
 pub fn execute<H: Helper>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, '_, H>,
     input_state: &InputState,
     kill_ring: &mut KillRing,
     config: &Config,

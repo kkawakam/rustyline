@@ -95,13 +95,6 @@ impl DerefMut for LineBufferKind<'_> {
         }
     }
 }
-impl<'a> From<Option<&'a mut String>> for LineBufferKind<'a> {
-    fn from(buffer: Option<&'a mut String>) -> Self {
-        buffer
-            .map(Self::Borrowed)
-            .unwrap_or_else(|| Self::Owned(String::with_capacity(MAX_LINE)))
-    }
-}
 impl From<LineBufferKind<'_>> for String {
     fn from(buffer: LineBufferKind) -> String {
         match buffer {

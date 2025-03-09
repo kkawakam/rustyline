@@ -488,8 +488,6 @@ fn readline_direct(
     validator: &Option<impl Validator>,
     input: &mut String,
 ) -> Result<()> {
-    //let mut input = String::new();
-
     loop {
         if reader.read_line(input)? == 0 {
             return Err(ReadlineError::Eof);

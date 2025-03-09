@@ -13,8 +13,7 @@ use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{cwidh, Layout, Position};
 use crate::line_buffer::{
-    ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction,
-    MAX_LINE,
+    ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
 };
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;

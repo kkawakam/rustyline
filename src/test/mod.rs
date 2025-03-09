@@ -191,7 +191,8 @@ fn test_readline_direct() {
         Cursor::new(&mut write_buf),
         &Some(crate::validate::MatchingBracketValidator::new()),
         &mut output,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(
         &write_buf,

@@ -77,16 +77,17 @@ pub(crate) enum LineBufferKind<'a> {
     Borrowed(&'a mut String),
     Owned(String),
 }
-impl<'a> Deref for LineBufferKind<'a> {
+impl Deref for LineBufferKind<'_> {
     type Target = String;
+
     fn deref(&self) -> &String {
         match self {
             Self::Borrowed(s) => s,
-            Self::Owned(s) => &s,
+            Self::Owned(s) => s,
         }
     }
 }
-impl<'a> DerefMut for LineBufferKind<'a> {
+impl DerefMut for LineBufferKind<'_> {
     fn deref_mut(&mut self) -> &mut String {
         match self {
             Self::Borrowed(s) => s,
@@ -96,7 +97,8 @@ impl<'a> DerefMut for LineBufferKind<'a> {
 }
 impl<'a> From<Option<&'a mut String>> for LineBufferKind<'a> {
     fn from(buffer: Option<&'a mut String>) -> Self {
-        buffer.map(Self::Borrowed)
+        buffer
+            .map(Self::Borrowed)
             .unwrap_or_else(|| Self::Owned(String::with_capacity(MAX_LINE)))
     }
 }
@@ -128,7 +130,8 @@ impl fmt::Debug for LineBuffer<'_> {
 }
 
 impl<'a> LineBuffer<'a> {
-    /// Create a new line buffer that uses the given `buffer` instead of allocating.
+    /// Create a new line buffer that uses the given `buffer` instead of
+    /// allocating.
     #[must_use]
     pub fn with_buffer(buffer: &'a mut String) -> Self {
         Self {
@@ -1227,6 +1230,7 @@ impl io::Write for LineBuffer<'_> {
             })
             .unwrap_or(0))
     }
+
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
@@ -1259,7 +1263,8 @@ fn is_other_char(grapheme: &str) -> bool {
 #[cfg(test)]
 mod test {
     use super::{
-        ChangeListener, DeleteListener, Direction, LineBuffer, LineBufferKind, NoListener, WordAction, MAX_LINE,
+        ChangeListener, DeleteListener, Direction, LineBuffer, LineBufferKind, NoListener,
+        WordAction, MAX_LINE,
     };
     use crate::{
         keymap::{At, CharSearch, Word},

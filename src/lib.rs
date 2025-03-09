@@ -67,7 +67,7 @@ pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::layout::GraphemeClusterMode;
 use crate::layout::Unit;
-use crate::line_buffer::{LineBuffer, LineBufferKind};
+use crate::line_buffer::LineBuffer;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -508,7 +508,7 @@ fn readline_direct(
             trailing_r = false;
         }
 
-        *input = apply_backspace_direct(&input);
+        *input = apply_backspace_direct(input);
 
         match validator.as_ref() {
             None => return Ok(()),
@@ -667,11 +667,21 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     /// Same as [`Self::readline_with_initial`] but uses preallocated string.
-    pub fn readline_into_buffer_with_initial(&mut self, prompt: &str, initial: (&str, &str), buffer: &mut String) -> Result<()> {
+    pub fn readline_into_buffer_with_initial(
+        &mut self,
+        prompt: &str,
+        initial: (&str, &str),
+        buffer: &mut String,
+    ) -> Result<()> {
         self.readline_with(prompt, Some(initial), buffer)
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>, buffer: &mut String) -> Result<()> {
+    fn readline_with(
+        &mut self,
+        prompt: &str,
+        initial: Option<(&str, &str)>,
+        buffer: &mut String,
+    ) -> Result<()> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
@@ -683,11 +693,10 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
             let guard = Guard(&original_mode);
-            let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map, buffer);
-            if self.config.auto_add_history() {
-                if let Ok(ref line) = user_input {
-                    self.add_history_entry(buffer.as_str())?;
-                }
+            let user_input =
+                self.readline_edit(prompt, initial, &original_mode, term_key_map, buffer);
+            if self.config.auto_add_history() && user_input.is_ok() {
+                self.add_history_entry(buffer.as_str())?;
             }
             drop(guard); // disable_raw_mode(original_mode)?;
             self.term.writeln()?;
@@ -714,7 +723,13 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
-        let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx, LineBuffer::with_buffer(buffer));
+        let mut s = State::new(
+            &mut stdout,
+            prompt,
+            self.helper.as_ref(),
+            ctx,
+            LineBuffer::with_buffer(buffer),
+        );
 
         let mut input_state = InputState::new(&self.config, &self.custom_bindings);
 

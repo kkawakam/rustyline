@@ -13,7 +13,8 @@ use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{cwidh, Layout, Position};
 use crate::line_buffer::{
-    ChangeListener, DeleteListener, Direction, LineBuffer, LineBufferKind, NoListener, WordAction, MAX_LINE,
+    ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction,
+    MAX_LINE,
 };
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
@@ -24,8 +25,8 @@ use crate::KillRing;
 /// Implement rendering.
 pub struct State<'buffer, 'out, 'prompt, H: Helper> {
     pub out: &'out mut <Terminal as Term>::Writer,
-    prompt: &'prompt str,  // Prompt to display (rl_prompt)
-    prompt_size: Position, // Prompt Unicode/visible width and height
+    prompt: &'prompt str,          // Prompt to display (rl_prompt)
+    prompt_size: Position,         // Prompt Unicode/visible width and height
     pub line: LineBuffer<'buffer>, // Edited line buffer
     pub layout: Layout,
     saved_line_for_history: LineBuffer<'buffer>, // Current edited line before history browsing

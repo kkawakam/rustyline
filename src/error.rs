@@ -158,7 +158,7 @@ impl From<std::string::FromUtf8Error> for ReadlineError {
 #[cfg(unix)]
 impl From<fmt::Error> for ReadlineError {
     fn from(err: fmt::Error) -> Self {
-        Self::Io(io::Error::new(io::ErrorKind::Other, err))
+        Self::Io(io::Error::other(err))
     }
 }
 

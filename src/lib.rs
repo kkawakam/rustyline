@@ -163,11 +163,14 @@ fn complete_line<H: Helper>(
         } else {
             return Ok(None);
         }
-        // we can't complete any further, wait for second tab
-        let mut cmd = s.next_cmd(input_state, rdr, true, true)?;
-        // if any character other than tab, pass it to the main loop
-        if cmd != Cmd::Complete {
-            return Ok(Some(cmd));
+        let mut cmd = Cmd::Complete;
+        if !config.completion_show_all_if_ambiguous() {
+            // we can't complete any further, wait for second tab
+            cmd = s.next_cmd(input_state, rdr, true, true)?;
+            // if any character other than tab, pass it to the main loop
+            if cmd != Cmd::Complete {
+                return Ok(Some(cmd));
+            }
         }
         // move cursor to EOL to avoid overwriting the command line
         let save_pos = s.line.pos();

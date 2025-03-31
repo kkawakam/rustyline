@@ -10,6 +10,8 @@ pub struct Config {
     history_duplicates: HistoryDuplicates,
     history_ignore_space: bool,
     completion_type: CompletionType,
+    /// Directly show all alternatives or not when [`CompletionType::List`] is being used
+    completion_show_all_if_ambiguous: bool,
     /// When listing completion alternatives, only display
     /// one screen of possibilities at a time.
     completion_prompt_limit: usize,
@@ -102,6 +104,14 @@ impl Config {
     #[must_use]
     pub fn completion_prompt_limit(&self) -> usize {
         self.completion_prompt_limit
+    }
+
+    /// Directly show all alternatives when using list completion
+    ///
+    /// By default, they are not, a second tab is needed
+    #[must_use]
+    pub fn completion_show_all_if_ambiguous(&self) -> bool {
+        self.completion_show_all_if_ambiguous
     }
 
     /// Duration (milliseconds) Rustyline will wait for a character when
@@ -225,6 +235,7 @@ impl Default for Config {
             history_ignore_space: false,
             completion_type: CompletionType::Circular, // TODO Validate
             completion_prompt_limit: 100,
+            completion_show_all_if_ambiguous: false,
             keyseq_timeout: None,
             edit_mode: EditMode::Emacs,
             auto_add_history: false,
@@ -386,6 +397,18 @@ impl Builder {
         self
     }
 
+    /// Choose whether or not to show all alternatives immediately when using list completion
+    ///
+    /// By default, a second tab is needed.
+    #[must_use]
+    pub fn completion_show_all_if_ambiguous(
+        mut self,
+        completion_show_all_if_ambiguous: bool,
+    ) -> Self {
+        self.set_completion_show_all_if_ambiguous(completion_show_all_if_ambiguous);
+        self
+    }
+
     /// Timeout for ambiguous key sequences in milliseconds.
     /// Currently, it is used only to distinguish a single ESC from an ESC
     /// sequence.
@@ -533,6 +556,13 @@ pub trait Configurer {
     /// Set `completion_type`.
     fn set_completion_type(&mut self, completion_type: CompletionType) {
         self.config_mut().completion_type = completion_type;
+    }
+
+    /// Choose whether or not to show all alternatives immediately when using list completion
+    ///
+    /// By default, a second tab is needed.
+    fn set_completion_show_all_if_ambiguous(&mut self, completion_show_all_if_ambiguous: bool) {
+        self.config_mut().completion_show_all_if_ambiguous = completion_show_all_if_ambiguous;
     }
 
     /// The number of possible completions that determines when the user is

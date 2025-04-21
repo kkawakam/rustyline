@@ -7,7 +7,6 @@ use radix_trie::TrieKey;
 
 /// Input event
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
 pub enum Event {
     /// Wildcard.
     /// Useful if you want to filter out some keys.
@@ -121,7 +120,6 @@ impl TrieKey for Event {
 }
 
 /// Event handler
-#[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
 pub enum EventHandler {
     /// unconditional command
     Simple(Cmd),
@@ -138,7 +136,6 @@ impl From<Cmd> for EventHandler {
 }
 
 /// Give access to user input.
-#[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
 pub struct EventContext<'r> {
     mode: EditMode,
     input_mode: InputMode,
@@ -200,7 +197,6 @@ impl<'r> EventContext<'r> {
 ///  * original key pressed (when same command is bound to different key)
 ///  * hint
 ///  * ...
-#[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
 pub trait ConditionalEventHandler: Send + Sync {
     /// Takes the current input state and
     /// returns the command to be performed or `None` to perform the default

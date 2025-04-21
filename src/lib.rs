@@ -17,7 +17,7 @@
 //! # Ok::<(), rustyline::error::ReadlineError>(())
 //! ```
 #![warn(missing_docs)]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 #[cfg(feature = "custom-bindings")]
 mod binding;
@@ -47,7 +47,6 @@ use std::result;
 
 use log::debug;
 #[cfg(feature = "derive")]
-#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 
 use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
@@ -860,7 +859,6 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// Bind a sequence to a command.
     #[cfg(feature = "custom-bindings")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn bind_sequence<E: Into<Event>, R: Into<EventHandler>>(
         &mut self,
         key_seq: E,
@@ -872,7 +870,6 @@ impl<H: Helper, I: History> Editor<H, I> {
 
     /// Remove a binding for the given sequence.
     #[cfg(feature = "custom-bindings")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "custom-bindings")))]
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))

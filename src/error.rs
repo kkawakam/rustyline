@@ -23,7 +23,7 @@ pub enum ReadlineError {
     Errno(nix::Error),
     /// Error generated on `WINDOW_BUFFER_SIZE_EVENT` / `SIGWINCH` signal
     Signal(Signal),
-    /// Like Utf8Error on unix
+    /// Like `Utf8Error` on unix
     #[cfg(windows)]
     Decode(char::DecodeUtf16Error),
     /// Something went wrong calling a Windows API

@@ -32,11 +32,10 @@ fn get_std_handle(fd: console::STD_HANDLE) -> Result<HANDLE> {
 }
 
 fn check_handle(handle: HANDLE) -> Result<HANDLE> {
-    if handle == foundation::INVALID_HANDLE_VALUE {
+    if std::ptr::eq(handle, foundation::INVALID_HANDLE_VALUE) {
         Err(io::Error::last_os_error())?;
     } else if handle.is_null() {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
+        Err(io::Error::other(
             "no stdio handle available for this process",
         ))?;
     }
@@ -751,8 +750,7 @@ impl Term for Console {
     /// Enable RAW mode for the terminal.
     fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
         if !self.conin_isatty {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
+            Err(io::Error::other(
                 "no stdio handle available for this process",
             ))?;
         }

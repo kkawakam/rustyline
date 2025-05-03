@@ -186,7 +186,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             .compute_layout(prompt_size, default_prompt, &self.line, info);
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
-        debug!(target: "rustyline", "new layout: {:?}", new_layout);
+        debug!(target: "rustyline", "new layout: {new_layout:?}");
         self.out.refresh_line(
             prompt,
             &self.line,

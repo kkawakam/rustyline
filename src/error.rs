@@ -42,7 +42,7 @@ impl fmt::Display for ReadlineError {
             Self::Interrupted => write!(f, "Interrupted"),
             #[cfg(unix)]
             Self::Errno(ref err) => err.fmt(f),
-            Self::Signal(ref sig) => write!(f, "Signal({:?})", sig),
+            Self::Signal(ref sig) => write!(f, "Signal({sig:?})"),
             #[cfg(windows)]
             Self::Decode(ref err) => err.fmt(f),
             #[cfg(windows)]

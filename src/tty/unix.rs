@@ -308,7 +308,7 @@ impl PosixRawReader {
         if seq2.is_ascii_digit() {
             match seq2 {
                 '0' | '9' => {
-                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{seq2:?}");
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
                 _ => {
@@ -326,7 +326,7 @@ impl PosixRawReader {
                 'D' => E(K::F(4), M::NONE),
                 'E' => E(K::F(5), M::NONE),
                 _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: \\E[[{:?}", seq3);
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[[{seq3:?}");
                     E(K::UnknownEscSeq, M::NONE)
                 }
             })
@@ -352,7 +352,7 @@ impl PosixRawReader {
                 'c' => E(K::Right, M::SHIFT), // rxvt
                 'd' => E(K::Left, M::SHIFT),  // rxvt
                 _ => {
-                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{:?}", seq2);
+                    debug!(target: "rustyline", "unsupported esc sequence: \\E[{seq2:?}");
                     E(K::UnknownEscSeq, M::NONE)
                 }
             })
@@ -373,7 +373,7 @@ impl PosixRawReader {
                 PAGE_DOWN => E(K::PageDown, M::NONE),
                 _ => {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: \\E[{}~", seq2);
+                           "unsupported esc sequence: \\E[{seq2}~");
                     E(K::UnknownEscSeq, M::NONE)
                 }
             })
@@ -397,7 +397,7 @@ impl PosixRawReader {
                     //('6', '3') => KeyCode::ScrollDown,
                     _ => {
                         debug!(target: "rustyline",
-                               "unsupported esc sequence: \\E[{}{}~", seq2, seq3);
+                               "unsupported esc sequence: \\E[{seq2}{seq3}~");
                         E(K::UnknownEscSeq, M::NONE)
                     }
                 })
@@ -429,18 +429,18 @@ impl PosixRawReader {
                             //('2', '4', '6') => E(K::F(24), M::CTRL),
                             _ => {
                                 debug!(target: "rustyline",
-                                       "unsupported esc sequence: \\E[{}{};{}~", seq2, seq3, seq5);
+                                       "unsupported esc sequence: \\E[{seq2}{seq3};{seq5}~");
                                 E(K::UnknownEscSeq, M::NONE)
                             }
                         })
                     } else {
                         debug!(target: "rustyline",
-                               "unsupported esc sequence: \\E[{}{};{}{}", seq2, seq3, seq5, seq6);
+                               "unsupported esc sequence: \\E[{seq2}{seq3};{seq5}{seq6}");
                         Ok(E(K::UnknownEscSeq, M::NONE))
                     }
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: \\E[{}{};{:?}", seq2, seq3, seq5);
+                           "unsupported esc sequence: \\E[{seq2}{seq3};{seq5:?}");
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else if seq4.is_ascii_digit() {
@@ -451,18 +451,18 @@ impl PosixRawReader {
                         ('2', '0', '1') => E(K::BracketedPasteEnd, M::NONE),
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: \\E[{}{}{}~", seq2, seq3, seq4);
+                                   "unsupported esc sequence: \\E[{seq2}{seq3}{seq4}~");
                             E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: \\E[{}{}{}{}", seq2, seq3, seq4, seq5);
+                           "unsupported esc sequence: \\E[{seq2}{seq3}{seq4}{seq5}");
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
-                       "unsupported esc sequence: \\E[{}{}{:?}", seq2, seq3, seq4);
+                       "unsupported esc sequence: \\E[{seq2}{seq3}{seq4:?}");
                 Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else if seq3 == ';' {
@@ -573,7 +573,7 @@ impl PosixRawReader {
                         ('9', LEFT) => E(K::Left, M::ALT),
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: \\E[1;{}{:?}", seq4, seq5);
+                                   "unsupported esc sequence: \\E[1;{seq4}{seq5:?}");
                             E(K::UnknownEscSeq, M::NONE)
                         }
                     })
@@ -609,18 +609,18 @@ impl PosixRawReader {
                         (PAGE_DOWN, CTRL_ALT_SHIFT) => E(K::PageDown, M::CTRL_ALT_SHIFT),
                         _ => {
                             debug!(target: "rustyline",
-                                   "unsupported esc sequence: \\E[{};{:?}~", seq2, seq4);
+                                   "unsupported esc sequence: \\E[{seq2};{seq4:?}~");
                             E(K::UnknownEscSeq, M::NONE)
                         }
                     })
                 } else {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: \\E[{};{}{:?}", seq2, seq4, seq5);
+                           "unsupported esc sequence: \\E[{seq2};{seq4}{seq5:?}");
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 }
             } else {
                 debug!(target: "rustyline",
-                       "unsupported esc sequence: \\E[{};{:?}", seq2, seq4);
+                       "unsupported esc sequence: \\E[{seq2};{seq4:?}");
                 Ok(E(K::UnknownEscSeq, M::NONE))
             }
         } else {
@@ -645,7 +645,7 @@ impl PosixRawReader {
                 (RXVT_END, RXVT_CTRL_SHIFT) => E(K::End, M::CTRL_SHIFT),
                 _ => {
                     debug!(target: "rustyline",
-                           "unsupported esc sequence: \\E[{}{:?}", seq2, seq3);
+                           "unsupported esc sequence: \\E[{seq2}{seq3:?}");
                     E(K::UnknownEscSeq, M::NONE)
                 }
             })
@@ -679,7 +679,7 @@ impl PosixRawReader {
             'w' => E(K::F(9), M::NONE),  // kf9 or ka1
             'x' => E(K::F(10), M::NONE), // kf10 or ka2
             _ => {
-                debug!(target: "rustyline", "unsupported esc sequence: \\EO{:?}", seq2);
+                debug!(target: "rustyline", "unsupported esc sequence: \\EO{seq2:?}");
                 E(K::UnknownEscSeq, M::NONE)
             }
         })
@@ -698,10 +698,10 @@ impl PosixRawReader {
                 _ => true,
             });
         }
-        debug!(target: "rustyline", "poll with: {:?}", timeout);
+        debug!(target: "rustyline", "poll with: {timeout:?}");
         let mut fds = [poll::PollFd::new(self.as_fd(), PollFlags::POLLIN)];
         let r = poll::poll(&mut fds, timeout);
-        debug!(target: "rustyline", "poll returns: {:?}", r);
+        debug!(target: "rustyline", "poll returns: {r:?}");
         match r {
             Ok(n) => Ok(n != 0),
             Err(Errno::EINTR) => {
@@ -827,7 +827,7 @@ impl RawReader for PosixRawReader {
                 Err(e) => return Err(e),
             }
         }
-        debug!(target: "rustyline", "c: {:?} => key: {:?}", c, key);
+        debug!(target: "rustyline", "c: {c:?} => key: {key:?}");
         Ok(key)
     }
 
@@ -875,7 +875,7 @@ impl RawReader for PosixRawReader {
     fn find_binding(&self, key: &KeyEvent) -> Option<Cmd> {
         let cmd = self.key_map.get(key).cloned();
         if let Some(ref cmd) = cmd {
-            debug!(target: "rustyline", "terminal key binding: {:?} => {:?}", key, cmd);
+            debug!(target: "rustyline", "terminal key binding: {key:?} => {cmd:?}");
         }
         cmd
     }
@@ -1161,7 +1161,7 @@ impl Renderer for PosixRenderer {
             return Ok(());
         }
         let col = read_digits_until(rdr, 'R')?;
-        debug!(target: "rustyline", "initial cursor location: {:?}", col);
+        debug!(target: "rustyline", "initial cursor location: {col:?}");
         if col != Some(1) {
             self.write_and_flush("\n")?;
         }
@@ -1419,7 +1419,7 @@ impl Term for PosixTerminal {
         let out = if !self.enable_bracketed_paste {
             None
         } else if let Err(e) = write_all(self.tty_out, BRACKETED_PASTE_ON) {
-            debug!(target: "rustyline", "Cannot enable bracketed paste: {}", e);
+            debug!(target: "rustyline", "Cannot enable bracketed paste: {e}");
             None
         } else {
             Some(self.tty_out)
@@ -1618,7 +1618,7 @@ mod termios_ {
     ) {
         let cc = char::from(raw.control_chars[index as usize]);
         let key = KeyEvent::new(cc, M::NONE);
-        log::debug!(target: "rustyline", "{}: {:?}", name, key);
+        log::debug!(target: "rustyline", "{name}: {key:?}");
         key_map.insert(key, cmd);
     }
 }

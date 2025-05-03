@@ -145,7 +145,7 @@ impl Changeset {
     }
 
     pub(crate) fn insert(&mut self, idx: usize, c: char) {
-        debug!(target: "rustyline", "Changeset::insert({}, {:?})", idx, c);
+        debug!(target: "rustyline", "Changeset::insert({idx}, {c:?})");
         self.redos.clear();
         if !c.is_alphanumeric() || !self.undos.last().is_some_and(|lc| lc.insert_seq(idx)) {
             self.undos.push(Self::insert_char(idx, c));
@@ -166,7 +166,7 @@ impl Changeset {
         idx: usize,
         string: S,
     ) {
-        debug!(target: "rustyline", "Changeset::insert_str({}, {:?})", idx, string);
+        debug!(target: "rustyline", "Changeset::insert_str({idx}, {string:?})");
         self.redos.clear();
         if string.as_ref().is_empty() {
             return;
@@ -178,7 +178,7 @@ impl Changeset {
     }
 
     pub(crate) fn delete<S: AsRef<str> + Into<String> + Debug>(&mut self, indx: usize, string: S) {
-        debug!(target: "rustyline", "Changeset::delete({}, {:?})", indx, string);
+        debug!(target: "rustyline", "Changeset::delete({indx}, {string:?})");
         self.redos.clear();
         if string.as_ref().is_empty() {
             return;
@@ -229,7 +229,7 @@ impl Changeset {
         old_: S,
         new_: S,
     ) {
-        debug!(target: "rustyline", "Changeset::replace({}, {:?}, {:?})", indx, old_, new_);
+        debug!(target: "rustyline", "Changeset::replace({indx}, {old_:?}, {new_:?})");
         self.redos.clear();
 
         if !self.undos.last().is_some_and(|lc| lc.replace_seq(indx)) {
@@ -287,7 +287,7 @@ impl Changeset {
     }
 
     pub(crate) fn truncate(&mut self, len: usize) {
-        debug!(target: "rustyline", "Changeset::truncate({})", len);
+        debug!(target: "rustyline", "Changeset::truncate({len})");
         self.undos.truncate(len);
     }
 

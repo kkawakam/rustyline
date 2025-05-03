@@ -93,6 +93,7 @@ impl Signal {
         }
     }
 
+    #[cfg(not(feature = "signal-hook"))]
     pub(crate) fn to_byte(sig: libc::c_int) -> u8 {
         match sig {
             libc::SIGINT => b'I',

@@ -830,8 +830,7 @@ cfg_if::cfg_if! {
         }
 
         fn fix_perm(file: &File) {
-            use std::os::unix::io::AsRawFd;
-            let _ = fchmod(file.as_raw_fd(), Mode::S_IRUSR | Mode::S_IWUSR);
+            let _ = fchmod(file, Mode::S_IRUSR | Mode::S_IWUSR);
         }
     }
 }

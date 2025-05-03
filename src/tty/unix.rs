@@ -5,7 +5,7 @@ use std::fs::{File, OpenOptions};
 #[cfg(not(feature = "buffer-redux"))]
 use std::io::BufReader;
 use std::io::{self, ErrorKind, Read, Write};
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
@@ -39,7 +39,7 @@ const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
-fn get_win_size(fd: RawFd) -> (Unit, Unit) {
+fn get_win_size(fd: AltFd) -> (Unit, Unit) {
     use std::mem::zeroed;
 
     if cfg!(test) {
@@ -48,7 +48,7 @@ fn get_win_size(fd: RawFd) -> (Unit, Unit) {
 
     unsafe {
         let mut size: libc::winsize = zeroed();
-        match win_size(fd, &mut size) {
+        match win_size(fd.0, &mut size) {
             Ok(0) => {
                 // In linux pseudo-terminals are created with dimensions of
                 // zero. If host application didn't initialize the correct
@@ -67,8 +67,23 @@ fn get_win_size(fd: RawFd) -> (Unit, Unit) {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct AltFd(RawFd);
+impl IntoRawFd for AltFd {
+    #[inline]
+    fn into_raw_fd(self) -> RawFd {
+        self.0
+    }
+}
+impl AsFd for AltFd {
+    #[inline]
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.0) }
+    }
+}
+
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
-fn is_a_tty(fd: RawFd) -> bool {
+fn is_a_tty(fd: AltFd) -> bool {
     isatty(fd).unwrap_or(false)
 }
 
@@ -86,8 +101,8 @@ pub type KeyMap = PosixKeyMap;
 #[must_use = "You must restore default mode (disable_raw_mode)"]
 pub struct PosixMode {
     termios: Termios,
-    tty_in: RawFd,
-    tty_out: Option<RawFd>,
+    tty_in: AltFd,
+    tty_out: Option<AltFd>,
     raw_mode: Arc<AtomicBool>,
 }
 
@@ -110,8 +125,8 @@ impl RawMode for PosixMode {
 // Rust std::io::Stdin is buffered with no way to know if bytes are available.
 // So we use low-level stuff instead...
 struct TtyIn {
-    fd: RawFd,
-    sig_pipe: Option<RawFd>,
+    fd: AltFd,
+    sig_pipe: Option<AltFd>,
 }
 
 impl Read for TtyIn {
@@ -119,7 +134,7 @@ impl Read for TtyIn {
         loop {
             let res = unsafe {
                 libc::read(
-                    self.fd,
+                    self.fd.0,
                     buf.as_mut_ptr().cast::<libc::c_void>(),
                     buf.len() as libc::size_t,
                 )
@@ -180,8 +195,7 @@ pub struct PosixRawReader {
 
 impl AsFd for PosixRawReader {
     fn as_fd(&self) -> BorrowedFd<'_> {
-        let fd = self.tty_in.get_ref().fd;
-        unsafe { BorrowedFd::borrow_raw(fd) }
+        self.tty_in.get_ref().fd.as_fd()
     }
 }
 
@@ -218,8 +232,8 @@ const RXVT_CTRL_SHIFT: char = '@';
 
 impl PosixRawReader {
     fn new(
-        fd: RawFd,
-        sig_pipe: Option<RawFd>,
+        fd: AltFd,
+        sig_pipe: Option<AltFd>,
         buffer: Option<PosixBuffer>,
         config: &Config,
         key_map: PosixKeyMap,
@@ -718,11 +732,7 @@ impl PosixRawReader {
     // timeout is used only with /dev/tty on MacOs
     fn select(&mut self, timeout: Option<PollTimeout>, single_esc_abort: bool) -> Result<Event> {
         let tty_in = self.as_fd();
-        let sig_pipe = self
-            .tty_in
-            .get_ref()
-            .sig_pipe
-            .map(|fd| unsafe { BorrowedFd::borrow_raw(fd) });
+        let sig_pipe = self.tty_in.get_ref().sig_pipe.as_ref().map(|fd| fd.as_fd());
         let pipe_reader = if timeout.is_some() {
             None
         } else {
@@ -908,7 +918,7 @@ impl Receiver for Utf8 {
 
 /// Console output writer
 pub struct PosixRenderer {
-    out: RawFd,
+    out: AltFd,
     cols: Unit, // Number of columns in terminal
     buffer: String,
     tab_stop: Unit,
@@ -919,7 +929,7 @@ pub struct PosixRenderer {
 
 impl PosixRenderer {
     fn new(
-        out: RawFd,
+        out: AltFd,
         tab_stop: Unit,
         colors_enabled: bool,
         grapheme_cluster_mode: GraphemeClusterMode,
@@ -1186,10 +1196,10 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
     Ok(Some(num))
 }
 
-fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
+fn write_all(fd: AltFd, buf: &str) -> nix::Result<()> {
     let mut bytes = buf.as_bytes();
     while !bytes.is_empty() {
-        match write(unsafe { BorrowedFd::borrow_raw(fd) }, bytes) {
+        match write(fd, bytes) {
             Ok(0) => return Err(Errno::EIO),
             Ok(n) => bytes = &bytes[n..],
             Err(Errno::EINTR) => {}
@@ -1199,7 +1209,7 @@ fn write_all(fd: RawFd, buf: &str) -> nix::Result<()> {
     Ok(())
 }
 
-pub struct PosixCursorGuard(RawFd);
+pub struct PosixCursorGuard(AltFd);
 
 impl Drop for PosixCursorGuard {
     fn drop(&mut self) {
@@ -1207,7 +1217,7 @@ impl Drop for PosixCursorGuard {
     }
 }
 
-fn set_cursor_visibility(fd: RawFd, visible: bool) -> Result<Option<PosixCursorGuard>> {
+fn set_cursor_visibility(fd: AltFd, visible: bool) -> Result<Option<PosixCursorGuard>> {
     write_all(fd, if visible { "\x1b[?25h" } else { "\x1b[?25l" })?;
     Ok(if visible {
         None
@@ -1217,16 +1227,16 @@ fn set_cursor_visibility(fd: RawFd, visible: bool) -> Result<Option<PosixCursorG
 }
 
 #[cfg(not(feature = "signal-hook"))]
-static mut SIG_PIPE: RawFd = -1;
+static mut SIG_PIPE: AltFd = AltFd(-1);
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sig_handler(sig: libc::c_int) {
     let b = error::Signal::to_byte(sig);
-    let _ = unsafe { write(BorrowedFd::borrow_raw(SIG_PIPE), &[b]) };
+    let _ = unsafe { write(SIG_PIPE, &[b]) };
 }
 
 #[derive(Clone, Debug)]
 struct Sig {
-    pipe: RawFd,
+    pipe: AltFd,
     #[cfg(not(feature = "signal-hook"))]
     original_sigint: nix::sys::signal::SigAction,
     #[cfg(not(feature = "signal-hook"))]
@@ -1240,7 +1250,7 @@ impl Sig {
         use nix::sys::signal;
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
-        unsafe { SIG_PIPE = pipe_write.into_raw_fd() };
+        unsafe { SIG_PIPE = AltFd(pipe_write.into_raw_fd()) };
         let sa = signal::SigAction::new(
             signal::SigHandler::Handler(sig_handler),
             signal::SaFlags::empty(),
@@ -1249,7 +1259,7 @@ impl Sig {
         let original_sigint = unsafe { signal::sigaction(signal::SIGINT, &sa)? };
         let original_sigwinch = unsafe { signal::sigaction(signal::SIGWINCH, &sa)? };
         Ok(Self {
-            pipe: pipe.into_raw_fd(),
+            pipe: AltFd(pipe.into_raw_fd()),
             original_sigint,
             original_sigwinch,
         })
@@ -1261,7 +1271,7 @@ impl Sig {
         pipe.set_nonblocking(true)?;
         let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
         Ok(Self {
-            pipe: pipe.into_raw_fd(),
+            pipe: AltFd(pipe.into_raw_fd()),
             id,
         })
     }
@@ -1273,7 +1283,7 @@ impl Sig {
         let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
         close(self.pipe)?;
         unsafe { close(SIG_PIPE)? };
-        unsafe { SIG_PIPE = -1 };
+        unsafe { SIG_PIPE = AltFd(-1) };
         Ok(())
     }
 
@@ -1291,9 +1301,9 @@ pub type Terminal = PosixTerminal;
 #[derive(Clone, Debug)]
 pub struct PosixTerminal {
     unsupported: bool,
-    tty_in: RawFd,
+    tty_in: AltFd,
     is_in_a_tty: bool,
-    tty_out: RawFd,
+    tty_out: AltFd,
     is_out_a_tty: bool,
     close_on_drop: bool,
     pub(crate) color_mode: ColorMode,
@@ -1342,26 +1352,16 @@ impl Term for PosixTerminal {
             if behavior == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
                 if let Ok(tty) = tty {
-                    let fd = tty.into_raw_fd();
+                    let fd = AltFd(tty.into_raw_fd());
                     let is_a_tty = is_a_tty(fd); // TODO: useless ?
                     (fd, is_a_tty, fd, is_a_tty, true)
                 } else {
-                    (
-                        libc::STDIN_FILENO,
-                        is_a_tty(libc::STDIN_FILENO),
-                        libc::STDOUT_FILENO,
-                        is_a_tty(libc::STDOUT_FILENO),
-                        false,
-                    )
+                    let (i, o) = (AltFd(libc::STDIN_FILENO), AltFd(libc::STDOUT_FILENO));
+                    (i, is_a_tty(i), o, is_a_tty(o), false)
                 }
             } else {
-                (
-                    libc::STDIN_FILENO,
-                    is_a_tty(libc::STDIN_FILENO),
-                    libc::STDOUT_FILENO,
-                    is_a_tty(libc::STDOUT_FILENO),
-                    false,
-                )
+                let (i, o) = (AltFd(libc::STDIN_FILENO), AltFd(libc::STDOUT_FILENO));
+                (i, is_a_tty(i), o, is_a_tty(o), false)
             };
         let unsupported = super::is_unsupported_term();
         let sig = if !unsupported && is_in_a_tty && is_out_a_tty {
@@ -1527,7 +1527,7 @@ impl Drop for PosixTerminal {
 pub struct ExternalPrinter {
     writer: PipeWriter,
     raw_mode: Arc<AtomicBool>,
-    tty_out: RawFd,
+    tty_out: AltFd,
 }
 
 impl super::ExternalPrinter for ExternalPrinter {
@@ -1560,21 +1560,18 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(not(feature = "termios"))]
 mod termios_ {
-    use super::PosixKeyMap;
+    use super::{AltFd, PosixKeyMap};
     use crate::keys::{KeyEvent, Modifiers as M};
     use crate::{Cmd, Result};
     use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
     use std::collections::HashMap;
-    use std::os::unix::io::{BorrowedFd, RawFd};
-    pub fn disable_raw_mode(tty_in: RawFd, termios: &Termios) -> Result<()> {
-        let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
-        Ok(termios::tcsetattr(fd, SetArg::TCSADRAIN, termios)?)
+    pub fn disable_raw_mode(tty_in: AltFd, termios: &Termios) -> Result<()> {
+        Ok(termios::tcsetattr(tty_in, SetArg::TCSADRAIN, termios)?)
     }
-    pub fn enable_raw_mode(tty_in: RawFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
+    pub fn enable_raw_mode(tty_in: AltFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
 
-        let fd = unsafe { BorrowedFd::borrow_raw(tty_in) };
-        let original_mode = termios::tcgetattr(fd)?;
+        let original_mode = termios::tcgetattr(tty_in)?;
         let mut raw = original_mode.clone();
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
@@ -1606,7 +1603,7 @@ mod termios_ {
         map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
         map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
 
-        termios::tcsetattr(fd, SetArg::TCSADRAIN, &raw)?;
+        termios::tcsetattr(tty_in, SetArg::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))
     }
     fn map_key(
@@ -1624,17 +1621,16 @@ mod termios_ {
 }
 #[cfg(feature = "termios")]
 mod termios_ {
-    use super::PosixKeyMap;
+    use super::{AltFd, PosixKeyMap};
     use crate::keys::{KeyEvent, Modifiers as M};
     use crate::{Cmd, Result};
     use std::collections::HashMap;
-    use std::os::unix::io::RawFd;
     use termios::{self, Termios};
-    pub fn disable_raw_mode(tty_in: RawFd, termios: &Termios) -> Result<()> {
-        Ok(termios::tcsetattr(tty_in, termios::TCSADRAIN, termios)?)
+    pub fn disable_raw_mode(tty_in: AltFd, termios: &Termios) -> Result<()> {
+        Ok(termios::tcsetattr(tty_in.0, termios::TCSADRAIN, termios)?)
     }
-    pub fn enable_raw_mode(tty_in: RawFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
-        let original_mode = Termios::from_fd(tty_in)?;
+    pub fn enable_raw_mode(tty_in: AltFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
+        let original_mode = Termios::from_fd(tty_in.0)?;
         let mut raw = original_mode;
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
@@ -1662,7 +1658,7 @@ mod termios_ {
         map_key(&mut key_map, &raw, termios::VQUIT, "VQUIT", Cmd::Interrupt);
         map_key(&mut key_map, &raw, termios::VSUSP, "VSUSP", Cmd::Suspend);
 
-        termios::tcsetattr(tty_in, termios::TCSADRAIN, &raw)?;
+        termios::tcsetattr(tty_in.0, termios::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))
     }
     fn map_key(
@@ -1674,14 +1670,14 @@ mod termios_ {
     ) {
         let cc = char::from(raw.c_cc[index]);
         let key = KeyEvent::new(cc, M::NONE);
-        log::debug!(target: "rustyline", "{}: {:?}", name, key);
+        log::debug!(target: "rustyline", "{name}: {key:?}");
         key_map.insert(key, cmd);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{Position, PosixRenderer, PosixTerminal, Renderer};
+    use super::{AltFd, Position, PosixRenderer, PosixTerminal, Renderer};
     use crate::config::BellStyle;
     use crate::layout::GraphemeClusterMode;
     use crate::line_buffer::{LineBuffer, NoListener};
@@ -1690,7 +1686,7 @@ mod test {
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(
-            libc::STDOUT_FILENO,
+            AltFd(libc::STDOUT_FILENO),
             4,
             true,
             GraphemeClusterMode::default(),
@@ -1716,7 +1712,7 @@ mod test {
     #[test]
     fn test_line_wrap() {
         let mut out = PosixRenderer::new(
-            libc::STDOUT_FILENO,
+            AltFd(libc::STDOUT_FILENO),
             4,
             true,
             GraphemeClusterMode::default(),

@@ -566,7 +566,7 @@ impl FileHistory {
                         }
                         _ => {
                             // only line feed and back slash should have been escaped
-                            warn!(target: "rustyline", "bad escaped line: {}", line);
+                            warn!(target: "rustyline", "bad escaped line: {line}");
                             copy = None;
                             break;
                         }
@@ -600,7 +600,7 @@ impl FileHistory {
         } else {
             self.path_info = Some(PathInfo(path.to_owned(), modified, size));
         }
-        debug!(target: "rustyline", "PathInfo({:?}, {:?}, {})", path, modified, size);
+        debug!(target: "rustyline", "PathInfo({path:?}, {modified:?}, {size})");
         Ok(())
     }
 
@@ -609,7 +609,7 @@ impl FileHistory {
             self.path_info
         {
             if previous_path.as_path() != path {
-                debug!(target: "rustyline", "cannot append: {:?} <> {:?}", previous_path, path);
+                debug!(target: "rustyline", "cannot append: {previous_path:?} <> {path:?}");
                 return Ok(false);
             }
             let modified = file.metadata()?.modified()?;

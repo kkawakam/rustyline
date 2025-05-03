@@ -658,7 +658,7 @@ impl<'b> InputState<'b> {
             E(K::Char('Y' | 'y'), M::ALT) => Cmd::YankPop,
             _ => self.common(rdr, wrt, evt, key, n, positive)?,
         };
-        debug!(target: "rustyline", "Emacs command: {:?}", cmd);
+        debug!(target: "rustyline", "Emacs command: {cmd:?}");
         Ok(cmd)
     }
 
@@ -863,7 +863,7 @@ impl<'b> InputState<'b> {
             E::ESC => Cmd::Noop,
             _ => self.common(rdr, wrt, evt, key, n, true)?,
         };
-        debug!(target: "rustyline", "Vi command: {:?}", cmd);
+        debug!(target: "rustyline", "Vi command: {cmd:?}");
         if cmd.is_repeatable_change() {
             self.last_cmd = cmd.clone();
         }
@@ -900,7 +900,7 @@ impl<'b> InputState<'b> {
             // Don't complete hints when the cursor is not at the end of a line
             E(K::Right, M::NONE) if wrt.has_hint() && wrt.is_cursor_at_end() => Cmd::CompleteHint,
             E(K::Char(k), M::ALT) => {
-                debug!(target: "rustyline", "Vi fast command mode: {}", k);
+                debug!(target: "rustyline", "Vi fast command mode: {k}");
                 self.input_mode = InputMode::Command;
                 wrt.done_inserting();
 
@@ -914,7 +914,7 @@ impl<'b> InputState<'b> {
             }
             _ => self.common(rdr, wrt, evt, key, 1, true)?,
         };
-        debug!(target: "rustyline", "Vi insert: {:?}", cmd);
+        debug!(target: "rustyline", "Vi insert: {cmd:?}");
         if cmd.is_repeatable_change() {
             if let (Cmd::Replace(..), Cmd::SelfInsert(..)) = (&self.last_cmd, &cmd) {
                 // replacing...

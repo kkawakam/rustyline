@@ -31,7 +31,7 @@ impl GraphemeClusterMode {
             },
             _ => GraphemeClusterMode::WcWidth,
         };
-        log::debug!(target: "rustyline", "GraphemeClusterMode: {:?}", gcm);
+        log::debug!(target: "rustyline", "GraphemeClusterMode: {gcm:?}");
         gcm
     }
 

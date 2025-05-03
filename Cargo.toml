@@ -30,7 +30,7 @@ rusqlite = { version = "0.35.0", optional = true, default-features = false, feat
     "bundled",
     "backup",
 ] }
-libc = "0.2.155"
+libc = "0.2.172"
 log = "0.4.22"
 unicode-width = "0.2.0"
 unicode-segmentation = "1.0"

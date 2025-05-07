@@ -613,15 +613,7 @@ impl<H: Helper> Editor<H, DefaultHistory> {
 impl<H: Helper, I: History> Editor<H, I> {
     /// Create an editor with a custom history impl.
     pub fn with_history(config: Config, history: I) -> Result<Self> {
-        let term = Terminal::new(
-            config.color_mode(),
-            config.grapheme_cluster_mode(),
-            config.behavior(),
-            config.tab_stop(),
-            config.bell_style(),
-            config.enable_bracketed_paste(),
-            config.enable_signals(),
-        )?;
+        let term = Terminal::new(config)?;
         Ok(Self {
             term,
             buffer: None,

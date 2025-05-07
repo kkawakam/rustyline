@@ -90,7 +90,7 @@ name = "diy_hints"
 required-features = ["derive"]
 [[example]]
 name = "example"
-required-features = ["custom-bindings", "derive"]
+required-features = ["custom-bindings", "derive", "with-file-history"]
 [[example]]
 name = "input_multiline"
 required-features = ["custom-bindings", "derive"]

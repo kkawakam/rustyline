@@ -928,6 +928,8 @@ pub struct PosixRenderer {
     enable_synchronized_output: bool,
     grapheme_cluster_mode: GraphemeClusterMode,
     bell_style: BellStyle,
+    /// 0 when BSU is first used or after last ESU
+    synchronized_update: usize,
 }
 
 impl PosixRenderer {
@@ -949,6 +951,7 @@ impl PosixRenderer {
             enable_synchronized_output,
             grapheme_cluster_mode,
             bell_style,
+            synchronized_update: 0,
         }
     }
 
@@ -1187,14 +1190,20 @@ impl Renderer for PosixRenderer {
 
     fn begin_synchronized_update(&mut self) -> Result<()> {
         if self.enable_synchronized_output {
-            self.write_and_flush(BEGIN_SYNCHRONIZED_UPDATE)?;
+            if self.synchronized_update == 0 {
+                self.write_and_flush(BEGIN_SYNCHRONIZED_UPDATE)?;
+            }
+            self.synchronized_update = self.synchronized_update.saturating_add(1);
         }
         Ok(())
     }
 
     fn end_synchronized_update(&mut self) -> Result<()> {
         if self.enable_synchronized_output {
-            self.write_and_flush(END_SYNCHRONIZED_UPDATE)?;
+            self.synchronized_update = self.synchronized_update.saturating_sub(1);
+            if self.synchronized_update == 0 {
+                self.write_and_flush(END_SYNCHRONIZED_UPDATE)?;
+            }
         }
         Ok(())
     }

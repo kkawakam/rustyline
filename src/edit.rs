@@ -323,6 +323,7 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 
     fn external_print(&mut self, msg: String) -> Result<()> {
+        self.out.begin_synchronized_update()?;
         self.out.clear_rows(&self.layout)?;
         self.layout.end.row = 0;
         self.layout.cursor.row = 0;
@@ -330,7 +331,8 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
         if !msg.ends_with('\n') {
             self.out.write_and_flush("\n")?;
         }
-        self.refresh_line()
+        self.refresh_line()?;
+        self.out.end_synchronized_update()
     }
 }
 

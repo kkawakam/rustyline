@@ -666,16 +666,8 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(
-        color_mode: ColorMode,
-        grapheme_cluster_mode: GraphemeClusterMode,
-        behavior: Behavior,
-        _tab_stop: u8,
-        bell_style: BellStyle,
-        _enable_bracketed_paste: bool,
-        _enable_signals: bool,
-    ) -> Result<Self> {
-        let (conin, conout, close_on_drop) = if behavior == Behavior::PreferTerm {
+    fn new(config: Config) -> Result<Self> {
+        let (conin, conout, close_on_drop) = if config.behavior() == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (
                 OpenOptions::new().read(true).write(true).open("CONIN$"),
                 OpenOptions::new().read(true).write(true).open("CONOUT$"),
@@ -721,10 +713,10 @@ impl Term for Console {
             conout_isatty,
             conout: conout.unwrap_or(ptr::null_mut()),
             close_on_drop,
-            color_mode,
-            grapheme_cluster_mode,
+            color_mode: config.color_mode(),
+            grapheme_cluster_mode: config.grapheme_cluster_mode(),
             ansi_colors_supported: false,
-            bell_style,
+            bell_style: config.bell_style(),
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,

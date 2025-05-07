@@ -36,6 +36,8 @@ use crate::{error, error::Signal, Cmd, ReadlineError, Result};
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
+const BEGIN_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026h";
+const END_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026l";
 
 nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
 
@@ -923,6 +925,7 @@ pub struct PosixRenderer {
     buffer: String,
     tab_stop: Unit,
     colors_enabled: bool,
+    enable_synchronized_output: bool,
     grapheme_cluster_mode: GraphemeClusterMode,
     bell_style: BellStyle,
 }
@@ -932,6 +935,7 @@ impl PosixRenderer {
         out: AltFd,
         tab_stop: Unit,
         colors_enabled: bool,
+        enable_synchronized_output: bool,
         grapheme_cluster_mode: GraphemeClusterMode,
         bell_style: BellStyle,
     ) -> Self {
@@ -942,6 +946,7 @@ impl PosixRenderer {
             buffer: String::with_capacity(1024),
             tab_stop,
             colors_enabled,
+            enable_synchronized_output,
             grapheme_cluster_mode,
             bell_style,
         }
@@ -1023,6 +1028,7 @@ impl Renderer for PosixRenderer {
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         use std::fmt::Write;
+        self.begin_synchronized_update()?;
         self.buffer.clear();
 
         let default_prompt = new_layout.default_prompt;
@@ -1073,6 +1079,7 @@ impl Renderer for PosixRenderer {
         }
 
         write_all(self.out, self.buffer.as_str())?;
+        self.end_synchronized_update()?;
         Ok(())
     }
 
@@ -1174,6 +1181,20 @@ impl Renderer for PosixRenderer {
         debug!(target: "rustyline", "initial cursor location: {col:?}");
         if col != Some(1) {
             self.write_and_flush("\n")?;
+        }
+        Ok(())
+    }
+
+    fn begin_synchronized_update(&mut self) -> Result<()> {
+        if self.enable_synchronized_output {
+            self.write_and_flush(BEGIN_SYNCHRONIZED_UPDATE)?;
+        }
+        Ok(())
+    }
+
+    fn end_synchronized_update(&mut self) -> Result<()> {
+        if self.enable_synchronized_output {
+            self.write_and_flush(END_SYNCHRONIZED_UPDATE)?;
         }
         Ok(())
     }
@@ -1311,6 +1332,7 @@ pub struct PosixTerminal {
     tab_stop: u8,
     bell_style: BellStyle,
     enable_bracketed_paste: bool,
+    enable_synchronized_output: bool,
     raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<PipeReader>,
@@ -1339,17 +1361,9 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(
-        color_mode: ColorMode,
-        grapheme_cluster_mode: GraphemeClusterMode,
-        behavior: Behavior,
-        tab_stop: u8,
-        bell_style: BellStyle,
-        enable_bracketed_paste: bool,
-        enable_signals: bool,
-    ) -> Result<Self> {
+    fn new(config: Config) -> Result<Self> {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
-            if behavior == Behavior::PreferTerm {
+            if config.behavior() == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
                 if let Ok(tty) = tty {
                     let fd = AltFd(tty.into_raw_fd());
@@ -1376,16 +1390,17 @@ impl Term for PosixTerminal {
             tty_out,
             is_out_a_tty,
             close_on_drop,
-            color_mode,
-            grapheme_cluster_mode,
-            tab_stop,
-            bell_style,
-            enable_bracketed_paste,
+            color_mode: config.color_mode(),
+            grapheme_cluster_mode: config.grapheme_cluster_mode(),
+            tab_stop: config.tab_stop(),
+            bell_style: config.bell_style(),
+            enable_bracketed_paste: config.enable_bracketed_paste(),
+            enable_synchronized_output: config.enable_synchronized_output(),
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
             sig,
-            enable_signals,
+            enable_signals: config.enable_signals(),
         })
     }
 
@@ -1466,6 +1481,7 @@ impl Term for PosixTerminal {
             self.tty_out,
             Unit::from(self.tab_stop),
             self.colors_enabled(),
+            self.enable_synchronized_output,
             self.grapheme_cluster_mode,
             self.bell_style,
         )
@@ -1689,6 +1705,7 @@ mod test {
             AltFd(libc::STDOUT_FILENO),
             4,
             true,
+            true,
             GraphemeClusterMode::default(),
             BellStyle::default(),
         );
@@ -1714,6 +1731,7 @@ mod test {
         let mut out = PosixRenderer::new(
             AltFd(libc::STDOUT_FILENO),
             4,
+            true,
             true,
             GraphemeClusterMode::default(),
             BellStyle::default(),

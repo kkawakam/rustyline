@@ -3,7 +3,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
-use crate::config::{Behavior, BellStyle, ColorMode, Config};
+use crate::config::{BellStyle, ColorMode, Config};
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
@@ -184,20 +184,12 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyEvent>;
     type Writer = Sink;
 
-    fn new(
-        color_mode: ColorMode,
-        _grapheme_cluster_mode: GraphemeClusterMode,
-        _behavior: Behavior,
-        _tab_stop: u8,
-        bell_style: BellStyle,
-        _enable_bracketed_paste: bool,
-        _enable_signals: bool,
-    ) -> Result<Self> {
+    fn new(config: Config) -> Result<Self> {
         Ok(Self {
             keys: vec![],
             cursor: 0,
-            color_mode,
-            bell_style,
+            color_mode: config.color_mode(),
+            bell_style: config.bell_style(),
         })
     }
 

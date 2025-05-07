@@ -3,7 +3,7 @@
 /// Unsupported Terminals that don't support RAW mode
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
-use crate::config::{Behavior, BellStyle, ColorMode, Config};
+use crate::config::Config;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
@@ -122,6 +122,14 @@ pub trait Renderer {
 
     /// Make sure prompt is at the leftmost edge of the screen
     fn move_cursor_at_leftmost(&mut self, rdr: &mut Self::Reader) -> Result<()>;
+    /// Begin synchronized update on unix platform
+    fn begin_synchronized_update(&mut self) -> Result<()> {
+        Ok(())
+    }
+    /// End synchronized update on unix platform
+    fn end_synchronized_update(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 // ignore ANSI escape sequence
@@ -171,15 +179,7 @@ pub trait Term {
     type ExternalPrinter: ExternalPrinter;
     type CursorGuard;
 
-    fn new(
-        color_mode: ColorMode,
-        grapheme_cluster_mode: GraphemeClusterMode,
-        behavior: Behavior,
-        tab_stop: u8,
-        bell_style: BellStyle,
-        enable_bracketed_paste: bool,
-        enable_signals: bool,
-    ) -> Result<Self>
+    fn new(config: Config) -> Result<Self>
     where
         Self: Sized;
     /// Check if current terminal can provide a rich line-editing user

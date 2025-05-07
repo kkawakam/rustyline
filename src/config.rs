@@ -10,7 +10,8 @@ pub struct Config {
     history_duplicates: HistoryDuplicates,
     history_ignore_space: bool,
     completion_type: CompletionType,
-    /// Directly show all alternatives or not when [`CompletionType::List`] is being used
+    /// Directly show all alternatives or not when [`CompletionType::List`] is
+    /// being used
     completion_show_all_if_ambiguous: bool,
     /// When listing completion alternatives, only display
     /// one screen of possibilities at a time.
@@ -39,6 +40,8 @@ pub struct Config {
     check_cursor_position: bool,
     /// Bracketed paste on unix platform
     enable_bracketed_paste: bool,
+    /// Synchronized output on unix platform
+    enable_synchronized_output: bool,
     /// Whether to disable or not the signals in termios
     enable_signals: bool,
 }
@@ -214,6 +217,14 @@ impl Config {
         self.enable_bracketed_paste
     }
 
+    /// Synchronized output on unix platform
+    ///
+    /// By default, it's enabled.
+    #[must_use]
+    pub fn enable_synchronized_output(&self) -> bool {
+        self.enable_synchronized_output
+    }
+
     /// Enable or disable signals in termios
     ///
     /// By default, it's disabled.
@@ -247,6 +258,7 @@ impl Default for Config {
             indent_size: 2,
             check_cursor_position: false,
             enable_bracketed_paste: true,
+            enable_synchronized_output: true,
             enable_signals: false,
         }
     }
@@ -397,7 +409,8 @@ impl Builder {
         self
     }
 
-    /// Choose whether or not to show all alternatives immediately when using list completion
+    /// Choose whether or not to show all alternatives immediately when using
+    /// list completion
     ///
     /// By default, a second tab is needed.
     #[must_use]
@@ -558,7 +571,8 @@ pub trait Configurer {
         self.config_mut().completion_type = completion_type;
     }
 
-    /// Choose whether or not to show all alternatives immediately when using list completion
+    /// Choose whether or not to show all alternatives immediately when using
+    /// list completion
     ///
     /// By default, a second tab is needed.
     fn set_completion_show_all_if_ambiguous(&mut self, completion_show_all_if_ambiguous: bool) {
@@ -641,6 +655,13 @@ pub trait Configurer {
     /// By default, it's enabled.
     fn enable_bracketed_paste(&mut self, enabled: bool) {
         self.config_mut().enable_bracketed_paste = enabled;
+    }
+
+    /// Enable or disable synchronized output on unix platform
+    ///
+    /// By default, it's enabled.
+    fn enable_synchronized_output(&mut self, enabled: bool) {
+        self.config_mut().enable_synchronized_output = enabled;
     }
 
     /// Enable or disable signals in termios

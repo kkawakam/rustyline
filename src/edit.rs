@@ -22,13 +22,13 @@ use crate::KillRing;
 
 /// Represent the state during line editing.
 /// Implement rendering.
-pub struct State<'out, 'prompt, H: Helper> {
+pub struct State<'buffer, 'out, 'prompt, H: Helper> {
     pub out: &'out mut <Terminal as Term>::Writer,
-    prompt: &'prompt str,  // Prompt to display (rl_prompt)
-    prompt_size: Position, // Prompt Unicode/visible width and height
-    pub line: LineBuffer,  // Edited line buffer
+    prompt: &'prompt str,          // Prompt to display (rl_prompt)
+    prompt_size: Position,         // Prompt Unicode/visible width and height
+    pub line: LineBuffer<'buffer>, // Edited line buffer
     pub layout: Layout,
-    saved_line_for_history: LineBuffer, // Current edited line before history browsing
+    saved_line_for_history: LineBuffer<'buffer>, // Current edited line before history browsing
     byte_buffer: [u8; 4],
     pub changes: Changeset, // changes to line, for undo/redo
     pub helper: Option<&'out H>,
@@ -43,12 +43,13 @@ enum Info<'m> {
     Msg(Option<&'m str>),
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'buffer, 'out, 'prompt, H: Helper> State<'buffer, 'out, 'prompt, H> {
     pub fn new(
         out: &'out mut <Terminal as Term>::Writer,
         prompt: &'prompt str,
         helper: Option<&'out H>,
         ctx: Context<'out>,
+        line: LineBuffer<'buffer>,
     ) -> Self {
         let prompt_size = out.calculate_position(prompt, Position::default());
         let gcm = out.grapheme_cluster_mode();
@@ -56,7 +57,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             out,
             prompt,
             prompt_size,
-            line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
+            line: line.can_growth(true),
             layout: Layout::new(gcm),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             byte_buffer: [0; 4],
@@ -262,13 +263,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<H: Helper> Invoke for State<'_, '_, H> {
+impl<H: Helper> Invoke for State<'_, '_, '_, H> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<H: Helper> Refresher for State<'_, '_, H> {
+impl<H: Helper> Refresher for State<'_, '_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
         let prompt_size = self.prompt_size;
         self.hint();
@@ -336,7 +337,7 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 }
 
-impl<H: Helper> fmt::Debug for State<'_, '_, H> {
+impl<H: Helper> fmt::Debug for State<'_, '_, '_, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
             .field("prompt", &self.prompt)
@@ -349,7 +350,7 @@ impl<H: Helper> fmt::Debug for State<'_, '_, H> {
     }
 }
 
-impl<H: Helper> State<'_, '_, H> {
+impl<H: Helper> State<'_, '_, '_, H> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -753,13 +754,13 @@ impl<H: Helper> State<'_, '_, H> {
 }
 
 #[cfg(test)]
-pub fn init_state<'out, H: Helper>(
+pub fn init_state<'buffer, 'out, H: Helper>(
     out: &'out mut <Terminal as Term>::Writer,
     line: &str,
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::DefaultHistory,
-) -> State<'out, 'static, H> {
+) -> State<'static, 'out, 'static, H> {
     State {
         out,
         prompt: "",

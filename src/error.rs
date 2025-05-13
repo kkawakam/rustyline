@@ -89,6 +89,8 @@ impl Signal {
         match b {
             b'I' => Self::Interrupt,
             b'W' => Self::Resize,
+            #[cfg(feature = "signal-hook")]
+            b'X' => Self::Resize,
             _ => unreachable!(),
         }
     }

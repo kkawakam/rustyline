@@ -98,7 +98,8 @@ For all modes:
 | Ctrl-R                | Reverse Search history (Ctrl-S forward, Ctrl-G cancel)                      |
 | Ctrl-T                | Transpose previous character with current character                         |
 | Ctrl-U                | Delete from start of line to cursor                                         |
-| Ctrl-V                | Insert any special character without performing its associated action (#65) |
+| Ctrl-V (unix)         | Insert any special character without performing its associated action (#65) |
+| Ctrl-V (windows)      | Paste from clipboard                                                        |
 | Ctrl-W                | Delete word leading up to cursor (using white space as a word boundary)     |
 | Ctrl-Y                | Paste from Yank buffer                                                      |
 | Ctrl-Z                | Suspend (Unix only)                                                         |
@@ -111,21 +112,29 @@ For all modes:
 | Ctrl-A, Home      | Move cursor to the beginning of line                                                             |
 | Ctrl-B, Left      | Move cursor one character left                                                                   |
 | Ctrl-E, End       | Move cursor to end of line                                                                       |
-| Ctrl-F, Right     | Move cursor one character right                                                                  |
+| Ctrl-F, Right     | Move cursor one character right (or complete hint if cursor is at the end of line)               |
 | Ctrl-H, Backspace | Delete character before cursor                                                                   |
+| Shift-Tab         | Previous completion                                                                              |
 | Ctrl-I, Tab       | Next completion                                                                                  |
 | Ctrl-K            | Delete from cursor to end of line                                                                |
 | Ctrl-L            | Clear screen                                                                                     |
 | Ctrl-N, Down      | Next match from history                                                                          |
 | Ctrl-P, Up        | Previous match from history                                                                      |
+| Ctrl-X Ctrl-G     | Abort                                                                                            |
+| Ctrl-X Esc        | Abort                                                                                            |
 | Ctrl-X Ctrl-U     | Undo                                                                                             |
+| Ctrl-X Backspace  | Delete from cursor to the beginning of line                                                      |
 | Ctrl-Y            | Paste from Yank buffer (Meta-Y to paste next yank instead)                                       |
+| Ctrl-] <char>     | Search character forward                                                                         |
+| Ctrl-Alt-] <char> | Search character backward                                                                        |
 | Meta-<            | Move to first entry in history                                                                   |
 | Meta->            | Move to last entry in history                                                                    |
 | Meta-B, Alt-Left  | Move cursor to previous word                                                                     |
+| Ctrl-Left         | See Alt-Left                                                                                     |
 | Meta-C            | Capitalize the current word                                                                      |
 | Meta-D            | Delete forwards one word                                                                         |
 | Meta-F, Alt-Right | Move cursor to next word                                                                         |
+| Ctrl-Right        | See Alt-Right                                                                                    |
 | Meta-L            | Lower-case the next word                                                                         |
 | Meta-T            | Transpose words                                                                                  |
 | Meta-U            | Upper-case the next word                                                                         |
@@ -167,6 +176,7 @@ For all modes:
 | p                    | Insert the yanked text at the cursor (paste)                                |
 | P                    | Insert the yanked text before the cursor                                    |
 | r                    | Replaces a single character under the cursor (without leaving command mode) |
+| R                    | Replaces a single character under the cursor (entering the replace mode)    |
 | s                    | Delete a single character under the cursor and enter input mode             |
 | S                    | Change current line (equivalent to 0c$)                                     |
 | t<char>              | Move right to the next occurrence of `char`, then one char backward         |
@@ -177,14 +187,19 @@ For all modes:
 | x                    | Delete a single character under the cursor                                  |
 | X                    | Delete a character before the cursor                                        |
 | y<movement>          | Yank a movement into buffer (copy)                                          |
+| <<movement>          | Dedent                                                                      |
+| ><movement>          | Indent                                                                      |
 
 ### vi insert mode
 
-| Keystroke         | Action                         |
-| ----------------- | ------------------------------ |
-| Ctrl-H, Backspace | Delete character before cursor |
-| Ctrl-I, Tab       | Next completion                |
-| Esc               | Switch to command mode         |
+| Keystroke         | Action                                        |
+| ----------------- | --------------------------------------------- |
+| Ctrl-H, Backspace | Delete character before cursor                |
+| Shift-Tab         | Previous completion                           |
+| Ctrl-I, Tab       | Next completion                               |
+| Right             | Complete hint if cursor is at the end of line |
+| Alt-<char>        | Fast command mode                             |
+| Esc               | Switch to command mode                        |
 
 [Readline vi Editing Mode Cheat Sheet](http://www.catonmat.net/download/bash-vi-editing-mode-cheat-sheet.pdf)
 

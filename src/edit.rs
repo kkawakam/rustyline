@@ -202,7 +202,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
     pub fn hint(&mut self) {
         if let Some(hinter) = self.helper {
-            let hint = hinter.hint(self.line.as_str(), self.line.pos(), &self.ctx);
+            let hint = hinter.hint(
+                self.line.as_str(),
+                self.line.pos(),
+                #[cfg(feature = "parser")]
+                hinter.document(),
+                &self.ctx,
+            );
             self.hint = match hint {
                 Some(val) if !val.display().is_empty() => Some(Box::new(val) as Box<dyn Hint>),
                 _ => None,
@@ -237,7 +243,11 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     pub fn validate(&mut self) -> Result<ValidationResult> {
         if let Some(validator) = self.helper {
             self.changes.begin();
-            let result = validator.validate(&mut ValidationContext::new(self))?;
+            let result = validator.validate(
+                #[cfg(feature = "parser")]
+                validator.document(),
+                &mut ValidationContext::new(self),
+            )?;
             let corrected = self.changes.end();
             match result {
                 ValidationResult::Incomplete => {}

@@ -22,13 +22,24 @@ pub enum CmdKind {
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
+    #[cfg(feature = "parser")]
+    type Document;
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the highlighted version (with ANSI color).
     ///
     /// For example, you can implement
     /// [blink-matching-paren](https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File-Syntax.html).
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        let _ = pos;
+    fn highlight<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+        #[cfg(feature = "parser")] doc: &Self::Document,
+    ) -> Cow<'l, str> {
+        let _ = (
+            pos,
+            #[cfg(feature = "parser")]
+            doc,
+        );
         Borrowed(line)
     }
     /// Takes the `prompt` and
@@ -69,7 +80,10 @@ pub trait Highlighter {
     }
 }
 
-impl Highlighter for () {}
+impl Highlighter for () {
+    #[cfg(feature = "parser")]
+    type Document = ();
+}
 
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
@@ -90,7 +104,15 @@ impl MatchingBracketHighlighter {
 }
 
 impl Highlighter for MatchingBracketHighlighter {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
+    fn highlight<'l>(
+        &self,
+        line: &'l str,
+        _pos: usize,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+    ) -> Cow<'l, str> {
         if line.len() <= 1 {
             return Borrowed(line);
         }

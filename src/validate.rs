@@ -54,6 +54,8 @@ impl<'i> ValidationContext<'i> {
 /// the enter key will end the current editing session and return the current
 /// line buffer to the caller of [`crate::Editor::readline`] or variants.
 pub trait Validator {
+    #[cfg(feature = "parser")]
+    type Document;
     /// Takes the currently edited `input` and returns a
     /// `ValidationResult` indicating whether it is valid or not along
     /// with an option message to display about the result. The most
@@ -67,8 +69,16 @@ pub trait Validator {
     ///
     /// For auto-correction like a missing closing quote or to reject invalid
     /// char while typing, the input will be mutable (TODO).
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
-        let _ = ctx;
+    fn validate(
+        &self,
+        #[cfg(feature = "parser")] doc: &Self::Document,
+        ctx: &mut ValidationContext,
+    ) -> Result<ValidationResult> {
+        let _ = (
+            #[cfg(feature = "parser")]
+            doc,
+            ctx,
+        );
         Ok(ValidationResult::Valid(None))
     }
 
@@ -84,7 +94,10 @@ pub trait Validator {
     }
 }
 
-impl Validator for () {}
+impl Validator for () {
+    #[cfg(feature = "parser")]
+    type Document = ();
+}
 
 /// Simple matching bracket validator.
 #[derive(Default)]
@@ -101,7 +114,14 @@ impl MatchingBracketValidator {
 }
 
 impl Validator for MatchingBracketValidator {
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
+    fn validate(
+        &self,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+        ctx: &mut ValidationContext,
+    ) -> Result<ValidationResult> {
         Ok(validate_brackets(ctx.input()))
     }
 }

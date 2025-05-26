@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, DatabaseName, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::history::SearchResult;
 use crate::{Config, History, HistoryDuplicates, ReadlineError, Result, SearchDirection};
@@ -334,7 +334,7 @@ PRAGMA incremental_vacuum;
             }
         } else {
             // TODO Validate: backup whole history
-            self.conn.backup(DatabaseName::Main, path, None)?;
+            self.conn.backup(c"main", path, None)?;
             // TODO Validate: keep using original path
         }
         Ok(())

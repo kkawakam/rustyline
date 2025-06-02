@@ -8,6 +8,10 @@ use crate::hint::Hinter;
 use crate::history::History;
 use crate::keymap::{Bindings, Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
+#[cfg(feature = "parser")]
+use crate::line_buffer::{ChangeListener, DeleteListener};
+#[cfg(feature = "parser")]
+use crate::parse::Parser;
 use crate::tty::Sink;
 use crate::validate::Validator;
 use crate::{apply_backspace_direct, readline_direct, Context, DefaultEditor, Helper, Result};
@@ -28,11 +32,14 @@ fn init_editor(mode: EditMode, keys: &[KeyEvent]) -> DefaultEditor {
 struct SimpleCompleter;
 impl Completer for SimpleCompleter {
     type Candidate = String;
+    #[cfg(feature = "parser")]
+    type Document = ();
 
     fn complete(
         &self,
         line: &str,
         _pos: usize,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
         _ctx: &Context<'_>,
     ) -> Result<(usize, Vec<String>)> {
         Ok((
@@ -48,16 +55,44 @@ impl Completer for SimpleCompleter {
     }
 }
 impl Hinter for SimpleCompleter {
+    #[cfg(feature = "parser")]
+    type Document = ();
     type Hint = String;
 
-    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<Self::Hint> {
+    fn hint(
+        &self,
+        _line: &str,
+        _pos: usize,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+        _ctx: &Context<'_>,
+    ) -> Option<Self::Hint> {
         None
     }
 }
 
 impl Helper for SimpleCompleter {}
-impl Highlighter for SimpleCompleter {}
-impl Validator for SimpleCompleter {}
+impl Highlighter for SimpleCompleter {
+    #[cfg(feature = "parser")]
+    type Document = ();
+}
+impl Validator for SimpleCompleter {
+    #[cfg(feature = "parser")]
+    type Document = ();
+}
+#[cfg(feature = "parser")]
+impl Parser for SimpleCompleter {
+    type Document = ();
+
+    fn update(&mut self, _: &str) {}
+
+    fn document(&self) -> &Self::Document {
+        &()
+    }
+}
+#[cfg(feature = "parser")]
+impl ChangeListener for SimpleCompleter {}
+#[cfg(feature = "parser")]
+impl DeleteListener for SimpleCompleter {}
 
 #[test]
 fn complete_line() {

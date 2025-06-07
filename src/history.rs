@@ -213,7 +213,7 @@ impl MemHistory {
         start: usize,
         dir: SearchDirection,
         test: F,
-    ) -> Option<SearchResult>
+    ) -> Option<SearchResult<'_>>
     where
         F: Fn(&str) -> Option<usize>,
     {
@@ -288,7 +288,7 @@ impl Default for MemHistory {
 }
 
 impl History for MemHistory {
-    fn get(&self, index: usize, _: SearchDirection) -> Result<Option<SearchResult>> {
+    fn get(&self, index: usize, _: SearchDirection) -> Result<Option<SearchResult<'_>>> {
         Ok(self
             .entries
             .get(index)
@@ -364,7 +364,7 @@ impl History for MemHistory {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>> {
+    ) -> Result<Option<SearchResult<'_>>> {
         #[cfg(not(feature = "case_insensitive_history_search"))]
         {
             let test = |entry: &str| entry.find(term);
@@ -392,7 +392,7 @@ impl History for MemHistory {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>> {
+    ) -> Result<Option<SearchResult<'_>>> {
         #[cfg(not(feature = "case_insensitive_history_search"))]
         {
             let test = |entry: &str| {
@@ -644,7 +644,7 @@ pub type DefaultHistory = FileHistory;
 
 #[cfg(feature = "with-file-history")]
 impl History for FileHistory {
-    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>> {
+    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult<'_>>> {
         self.mem.get(index, dir)
     }
 
@@ -776,7 +776,7 @@ impl History for FileHistory {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>> {
+    ) -> Result<Option<SearchResult<'_>>> {
         self.mem.search(term, start, dir)
     }
 
@@ -785,7 +785,7 @@ impl History for FileHistory {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>> {
+    ) -> Result<Option<SearchResult<'_>>> {
         self.mem.starts_with(term, start, dir)
     }
 }

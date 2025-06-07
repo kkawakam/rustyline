@@ -355,7 +355,7 @@ fn filename_complete(
 }
 
 #[cfg(any(windows, target_os = "macos"))]
-fn normalize(s: &str) -> Cow<str> {
+fn normalize(s: &str) -> Cow<'_, str> {
     // case insensitive
     Owned(s.to_lowercase())
 }
@@ -604,6 +604,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(dead_code)]
     pub fn candidate_impls() {
         struct StrCmp;
         impl Completer for StrCmp {

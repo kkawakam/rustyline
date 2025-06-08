@@ -39,7 +39,9 @@ pub trait DeleteListener {
     /// word(s)/line(s) deletion
     fn start_killing(&mut self) {}
     /// `string` deleted at `idx` index
-    fn delete(&mut self, idx: usize, string: &str, dir: Direction);
+    fn delete(&mut self, idx: usize, string: &str, dir: Direction) {
+        let _ = (idx, string, dir);
+    }
     /// used to make the distinction between simple character(s) deletion and
     /// word(s)/line(s) deletion
     fn stop_killing(&mut self) {}
@@ -48,25 +50,23 @@ pub trait DeleteListener {
 /// Listener to be notified when the line is modified.
 pub trait ChangeListener: DeleteListener {
     /// `c`har inserted at `idx` index
-    fn insert_char(&mut self, idx: usize, c: char);
+    fn insert_char(&mut self, idx: usize, c: char) {
+        let _ = (idx, c);
+    }
     /// `string` inserted at `idx` index
-    fn insert_str(&mut self, idx: usize, string: &str);
+    fn insert_str(&mut self, idx: usize, string: &str) {
+        let _ = (idx, string);
+    }
     /// `old` text replaced by `new` text at `idx` index
-    fn replace(&mut self, idx: usize, old: &str, new: &str);
+    fn replace(&mut self, idx: usize, old: &str, new: &str) {
+        let _ = (idx, old, new);
+    }
 }
 
 pub(crate) struct NoListener;
 
-impl DeleteListener for NoListener {
-    fn delete(&mut self, _idx: usize, _string: &str, _dir: Direction) {}
-}
-impl ChangeListener for NoListener {
-    fn insert_char(&mut self, _idx: usize, _c: char) {}
-
-    fn insert_str(&mut self, _idx: usize, _string: &str) {}
-
-    fn replace(&mut self, _idx: usize, _old: &str, _new: &str) {}
-}
+impl DeleteListener for NoListener {}
+impl ChangeListener for NoListener {}
 
 // TODO split / cache lines ?
 

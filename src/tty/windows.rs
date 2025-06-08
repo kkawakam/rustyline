@@ -20,10 +20,8 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse;
 
 use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
-use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
-use crate::line_buffer::LineBuffer;
 use crate::{error, Cmd, Result};
 
 fn get_std_handle(fd: console::STD_HANDLE) -> Result<HANDLE> {
@@ -437,25 +435,18 @@ impl Renderer for ConsoleRenderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        line: &LineBuffer,
+        line: &str,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
         self.buffer.clear();
         let mut col = 0;
-        if let Some(highlighter) = highlighter {
-            // TODO handle ansi escape code (SetConsoleTextAttribute)
-            // append the prompt
-            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
-            // append the input line
-            col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
-        } else if self.colors_enabled {
+        // TODO handle ansi escape code (SetConsoleTextAttribute)
+        if self.colors_enabled {
             // append the prompt
             col = self.wrap_at_eol(prompt, col);
             // append the input line
@@ -468,9 +459,7 @@ impl Renderer for ConsoleRenderer {
         }
         // append hint
         if let Some(hint) = hint {
-            if let Some(highlighter) = highlighter {
-                self.wrap_at_eol(&highlighter.highlight_hint(hint), col);
-            } else if self.colors_enabled {
+            if self.colors_enabled {
                 self.wrap_at_eol(hint, col);
             } else {
                 self.buffer.push_str(hint);

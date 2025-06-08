@@ -158,14 +158,17 @@ fn validate_brackets(input: &str) -> ValidationResult {
 #[cfg(test)]
 impl crate::Completer for MatchingBracketValidator {
     type Candidate = String;
+    #[cfg(feature = "parser")]
     type Document = ();
 }
 #[cfg(test)]
 impl crate::Highlighter for MatchingBracketValidator {
+    #[cfg(feature = "parser")]
     type Document = ();
 }
 #[cfg(test)]
 impl crate::hint::Hinter for MatchingBracketValidator {
+    #[cfg(feature = "parser")]
     type Document = ();
     type Hint = String;
 }

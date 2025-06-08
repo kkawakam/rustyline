@@ -183,7 +183,12 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             if let (true, Some(helper)) = (self.out.colors_enabled(), self.helper) {
                 let default_prompt = new_layout.default_prompt;
                 highlighted_prompt = helper.highlight_prompt(prompt, default_prompt);
-                highlighted_line = helper.highlight(&self.line, self.line.pos(), helper.document());
+                highlighted_line = helper.highlight(
+                    &self.line,
+                    self.line.pos(),
+                    #[cfg(feature = "parser")]
+                    helper.document(),
+                );
                 if let Some(info) = info {
                     highlighted_info = helper.highlight_hint(info);
                     (

@@ -1,12 +1,13 @@
 //! Command processor
 
 use log::debug;
+use std::borrow::Cow;
 use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{Context, Helper, Result};
 use crate::error::{ReadlineError, Signal};
-use crate::highlight::{CmdKind, Highlighter};
+use crate::highlight::CmdKind;
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
@@ -65,14 +66,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             ctx,
             hint: None,
             highlight_char: false,
-        }
-    }
-
-    pub fn highlighter(&self) -> Option<&dyn Highlighter> {
-        if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
-        } else {
-            None
         }
     }
 
@@ -175,11 +168,6 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             Info::Hint => self.hint.as_ref().map(|h| h.display()),
             Info::Msg(msg) => msg,
         };
-        let highlighter = if self.out.colors_enabled() {
-            self.helper.map(|h| h as &dyn Highlighter)
-        } else {
-            None
-        };
 
         let new_layout = self
             .out
@@ -187,14 +175,31 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
 
         debug!(target: "rustyline", "old layout: {:?}", self.layout);
         debug!(target: "rustyline", "new layout: {new_layout:?}");
-        self.out.refresh_line(
-            prompt,
-            &self.line,
-            info,
-            &self.layout,
-            &new_layout,
-            highlighter,
-        )?;
+
+        let highlighted_prompt: Cow<'_, str>;
+        let highlighted_line: Cow<'_, str>;
+        let highlighted_info: Cow<'_, str>;
+        let (prompt, line, info) =
+            if let (true, Some(helper)) = (self.out.colors_enabled(), self.helper) {
+                let default_prompt = new_layout.default_prompt;
+                highlighted_prompt = helper.highlight_prompt(prompt, default_prompt);
+                highlighted_line = helper.highlight(&self.line, self.line.pos(), helper.document());
+                if let Some(info) = info {
+                    highlighted_info = helper.highlight_hint(info);
+                    (
+                        highlighted_prompt.as_ref(),
+                        highlighted_line.as_ref(),
+                        Some(highlighted_info.as_ref()),
+                    )
+                } else {
+                    (highlighted_prompt.as_ref(), highlighted_line.as_ref(), None)
+                }
+            } else {
+                (prompt, self.line.as_str(), info)
+            };
+
+        self.out
+            .refresh_line(prompt, line, info, &self.layout, &new_layout)?;
         self.layout = new_layout;
 
         Ok(())
@@ -219,7 +224,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 
     fn highlight_char(&mut self, kind: CmdKind) -> bool {
-        if let Some(highlighter) = self.highlighter() {
+        if let (true, Some(highlighter)) = (self.out.colors_enabled(), self.helper) {
             let highlight_char = highlighter.highlight_char(&self.line, self.line.pos(), kind);
             if highlight_char {
                 self.highlight_char = true;

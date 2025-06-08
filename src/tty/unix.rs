@@ -28,10 +28,8 @@ use utf8parse::{Parser, Receiver};
 
 use super::{width, Event, RawMode, RawReader, Renderer, Term};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
-use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
-use crate::line_buffer::LineBuffer;
 use crate::{error, error::Signal, Cmd, ReadlineError, Result};
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
@@ -1024,48 +1022,30 @@ impl Renderer for PosixRenderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        line: &LineBuffer,
+        line: &str,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         use std::fmt::Write;
         self.begin_synchronized_update()?;
         self.buffer.clear();
 
-        let default_prompt = new_layout.default_prompt;
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
         self.clear_old_rows(old_layout);
 
-        if let Some(highlighter) = highlighter {
-            // display the prompt
-            self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
-        } else {
-            // display the prompt
-            self.buffer.push_str(prompt);
-            // display the input line
-            self.buffer.push_str(line);
-        }
+        // display the prompt
+        self.buffer.push_str(prompt);
+        // display the input line
+        self.buffer.push_str(line);
         // display hint
         if let Some(hint) = hint {
-            if let Some(highlighter) = highlighter {
-                self.buffer.push_str(&highlighter.highlight_hint(hint));
-            } else {
-                self.buffer.push_str(hint);
-            }
+            self.buffer.push_str(hint);
         }
         // we have to generate our own newline on line wrap
-        if end_pos.col == 0
-            && end_pos.row > 0
-            && !hint.map_or_else(|| line.ends_with('\n'), |h| h.ends_with('\n'))
-        {
+        if new_layout.newline {
             self.buffer.push('\n');
         }
         // position the cursor
@@ -1761,7 +1741,7 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        out.refresh_line(prompt, &line, None, &old_layout, &new_layout)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

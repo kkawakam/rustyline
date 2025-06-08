@@ -25,6 +25,7 @@ impl Hint for String {
 pub trait Hinter {
     /// Specific hint type
     type Hint: Hint + 'static;
+    /// Parsed user input line(s)
     #[cfg(feature = "parser")]
     type Document;
     /// Takes the currently edited `line` with the cursor `pos`ition and

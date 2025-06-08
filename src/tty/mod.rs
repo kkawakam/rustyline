@@ -4,7 +4,6 @@
 const UNSUPPORTED_TERM: [&str; 3] = ["dumb", "cons25", "emacs"];
 
 use crate::config::Config;
-use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
@@ -52,11 +51,10 @@ pub trait Renderer {
     fn refresh_line(
         &mut self,
         prompt: &str,
-        line: &LineBuffer,
+        line: &str,
         hint: Option<&str>,
         old_layout: &Layout,
         new_layout: &Layout,
-        highlighter: Option<&dyn Highlighter>,
     ) -> Result<()>;
 
     /// Compute layout for rendering prompt + line + some info (either hint,
@@ -81,6 +79,10 @@ pub trait Renderer {
         if let Some(info) = info {
             end = self.calculate_position(info, end);
         }
+        #[cfg(unix)]
+        let newline = end.col == 0
+            && end.row > 0
+            && !info.map_or_else(|| line.ends_with('\n'), |h| h.ends_with('\n'));
 
         let new_layout = Layout {
             grapheme_cluster_mode: self.grapheme_cluster_mode(),
@@ -88,6 +90,8 @@ pub trait Renderer {
             default_prompt,
             cursor,
             end,
+            #[cfg(unix)]
+            newline,
         };
         debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);

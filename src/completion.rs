@@ -50,6 +50,7 @@ impl Candidate for Pair {
 pub trait Completer {
     /// Specific completion candidate.
     type Candidate: Candidate;
+    /// Parsed user input line(s)
     #[cfg(feature = "parser")]
     type Document;
 

@@ -22,6 +22,7 @@ pub enum CmdKind {
 /// Currently, the highlighted version *must* have the same display width as
 /// the original input.
 pub trait Highlighter {
+    /// Parsed user input line(s)
     #[cfg(feature = "parser")]
     type Document;
     /// Takes the currently edited `line` with the cursor `pos`ition and

@@ -351,7 +351,7 @@ fn page_completions<C: Candidate, H: Helper>(
             if i < nbc {
                 let candidate = &candidates[i as usize].display();
                 let width = s.layout.width(candidate);
-                if let Some(highlighter) = s.highlighter() {
+                if let (true, Some(highlighter)) = (s.out.colors_enabled(), s.helper) {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
@@ -493,13 +493,10 @@ fn apply_backspace_direct(input: &str) -> String {
     out
 }
 
-fn readline_direct(
+fn readline_direct<H: Helper>(
     mut reader: impl BufRead,
     mut writer: impl Write,
-    #[cfg(feature = "parser")] validator: &Option<
-        impl Parser + Validator<Document = Parser::Document>,
-    >,
-    #[cfg(not(feature = "parser"))] validator: &Option<impl Validator>,
+    validator: Option<&H>,
 ) -> Result<String> {
     let mut input = String::new();
 
@@ -523,7 +520,7 @@ fn readline_direct(
 
         input = apply_backspace_direct(&input);
 
-        match validator.as_ref() {
+        match validator {
             None => return Ok(input),
             Some(v) => {
                 let mut ctx = input.as_str();
@@ -678,7 +675,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
             let guard = Guard(&original_mode);
@@ -694,7 +691,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         }
     }
 

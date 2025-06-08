@@ -223,7 +223,7 @@ fn test_readline_direct() {
     let output = readline_direct(
         Cursor::new("([)\n\u{0008}\n\n\r\n])".as_bytes()),
         Cursor::new(&mut write_buf),
-        &Some(crate::validate::MatchingBracketValidator::new()),
+        Some(&crate::validate::MatchingBracketValidator::new()),
     );
 
     assert_eq!(

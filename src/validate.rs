@@ -54,6 +54,7 @@ impl<'i> ValidationContext<'i> {
 /// the enter key will end the current editing session and return the current
 /// line buffer to the caller of [`crate::Editor::readline`] or variants.
 pub trait Validator {
+    /// Parsed user input line(s)
     #[cfg(feature = "parser")]
     type Document;
     /// Takes the currently edited `input` and returns a
@@ -153,3 +154,35 @@ fn validate_brackets(input: &str) -> ValidationResult {
         ValidationResult::Incomplete
     }
 }
+
+#[cfg(test)]
+impl crate::Completer for MatchingBracketValidator {
+    type Candidate = String;
+    type Document = ();
+}
+#[cfg(test)]
+impl crate::Highlighter for MatchingBracketValidator {
+    type Document = ();
+}
+#[cfg(test)]
+impl crate::hint::Hinter for MatchingBracketValidator {
+    type Document = ();
+    type Hint = String;
+}
+#[cfg(all(test, feature = "parser"))]
+impl crate::Parser for MatchingBracketValidator {
+    type Document = ();
+
+    fn update(&mut self, _: &str) {}
+
+    fn document(&self) -> &Self::Document {
+        &()
+    }
+}
+#[cfg(all(test, feature = "parser"))]
+impl crate::line_buffer::ChangeListener for MatchingBracketValidator {}
+#[cfg(all(test, feature = "parser"))]
+impl crate::line_buffer::DeleteListener for MatchingBracketValidator {}
+
+#[cfg(test)]
+impl crate::Helper for MatchingBracketValidator {}

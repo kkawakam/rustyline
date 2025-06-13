@@ -13,7 +13,8 @@ use std::sync::Arc;
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation;
-use windows_sys::Win32::Foundation::{self as foundation, BOOL, FALSE, HANDLE, TRUE};
+use windows_sys::core::BOOL;
+use windows_sys::Win32::Foundation::{self as foundation, FALSE, HANDLE, TRUE};
 use windows_sys::Win32::System::Console as console;
 use windows_sys::Win32::System::Threading as threading;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse;

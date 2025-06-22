@@ -57,7 +57,7 @@ pub trait History {
     ///
     /// `SearchDirection` is useful only for implementations without direct
     /// indexing.
-    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult>>;
+    fn get(&self, index: usize, dir: SearchDirection) -> Result<Option<SearchResult<'_>>>;
 
     // termwiz: fn last(&self) -> Option<HistoryIndex>;
 
@@ -161,7 +161,7 @@ pub trait History {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>>;
+    ) -> Result<Option<SearchResult<'_>>>;
 
     /// Anchored search
     fn starts_with(
@@ -169,7 +169,7 @@ pub trait History {
         term: &str,
         start: usize,
         dir: SearchDirection,
-    ) -> Result<Option<SearchResult>>;
+    ) -> Result<Option<SearchResult<'_>>>;
 
     /* TODO How ? DoubleEndedIterator may be difficult to implement (for an SQLite backend)
     /// Return a iterator.

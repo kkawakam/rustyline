@@ -59,7 +59,7 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
                     #[cfg(feature = "parser")] doc: &Self::Document,
                     ctx: &::rustyline::Context<'_>,
                 ) -> ::rustyline::Result<(usize, ::std::vec::Vec<Self::Candidate>)> {
-                    ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, ctx)
+                    ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc, ctx)
                 }
 
                 fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
@@ -112,7 +112,7 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
                 type Document = <#field_type as ::rustyline::highlight::Highlighter>::Document;
 
                 fn highlight<'l>(&self, line: &'l str, pos: usize, #[cfg(feature = "parser")] doc: &Self::Document) -> ::std::borrow::Cow<'l, str> {
-                    ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos)
+                    ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc)
                 }
 
                 fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -170,7 +170,7 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
                 type Document = <#field_type as ::rustyline::hint::Hinter>::Document;
 
                 fn hint(&self, line: &str, pos: usize, #[cfg(feature = "parser")] doc: &Self::Document, ctx: &::rustyline::Context<'_>) -> ::std::option::Option<Self::Hint> {
-                    ::rustyline::hint::Hinter::hint(&self.#field_name_or_index, line, pos, ctx)
+                    ::rustyline::hint::Hinter::hint(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc, ctx)
                 }
             }
         }
@@ -208,7 +208,7 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
                     #[cfg(feature = "parser")] doc: &Self::Document,
                     ctx: &mut ::rustyline::validate::ValidationContext,
                 ) -> ::rustyline::Result<::rustyline::validate::ValidationResult> {
-                    ::rustyline::validate::Validator::validate(&self.#field_name_or_index, ctx)
+                    ::rustyline::validate::Validator::validate(&self.#field_name_or_index, #[cfg(feature = "parser")] doc, ctx)
                 }
 
                 fn validate_while_typing(&self) -> bool {

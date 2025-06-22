@@ -43,8 +43,18 @@ impl Highlighter for MyHelper {
         Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
     }
 
-    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
-        self.highlighter.highlight(line, pos)
+    fn highlight<'l>(
+        &self,
+        line: &'l str,
+        pos: usize,
+        #[cfg(feature = "parser")] doc: &Self::Document,
+    ) -> Cow<'l, str> {
+        self.highlighter.highlight(
+            line,
+            pos,
+            #[cfg(feature = "parser")]
+            doc,
+        )
     }
 
     fn highlight_char(&self, line: &str, pos: usize, kind: CmdKind) -> bool {

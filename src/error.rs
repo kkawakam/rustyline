@@ -79,7 +79,7 @@ pub enum Signal {
     /// SIGINT
     #[cfg(unix)]
     Interrupt,
-    /// SIGWINCH / WINDOW_BUFFER_SIZE_EVENT
+    /// SIGWINCH / `WINDOW_BUFFER_SIZE_EVENT`
     Resize,
 }
 

@@ -48,6 +48,8 @@ use std::path::Path;
 use std::result;
 
 use log::debug;
+#[cfg(all(feature = "derive", feature = "parser"))]
+pub use rustyline_derive::Parser;
 #[cfg(feature = "derive")]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 

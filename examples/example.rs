@@ -5,10 +5,13 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
+#[cfg(feature = "parser")]
+use rustyline::Parser;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
 use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Helper, Completer, Hinter, Validator)]
+#[cfg_attr(feature = "parser", derive(Parser))]
 struct MyHelper {
     #[rustyline(Completer)]
     completer: FilenameCompleter,
@@ -21,6 +24,9 @@ struct MyHelper {
 }
 
 impl Highlighter for MyHelper {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,

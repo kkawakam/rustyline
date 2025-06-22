@@ -1,9 +1,12 @@
 use rustyline::highlight::MatchingBracketHighlighter;
 use rustyline::validate::MatchingBracketValidator;
+#[cfg(feature = "parser")]
+use rustyline::Parser;
 use rustyline::{Cmd, Editor, EventHandler, KeyCode, KeyEvent, Modifiers, Result};
 use rustyline::{Completer, Helper, Highlighter, Hinter, Validator};
 
 #[derive(Completer, Helper, Highlighter, Hinter, Validator)]
+#[cfg_attr(feature = "parser", derive(Parser))]
 struct InputValidator {
     #[rustyline(Validator)]
     brackets: MatchingBracketValidator,

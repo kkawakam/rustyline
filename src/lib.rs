@@ -222,7 +222,7 @@ fn complete_line<H: Helper>(
                     text: String,
                 }
                 impl SkimItem for Candidate {
-                    fn text(&self) -> Cow<str> {
+                    fn text(&self) -> Cow<'_, str> {
                         Cow::Borrowed(&self.text)
                     }
                 }

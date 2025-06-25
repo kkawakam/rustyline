@@ -410,6 +410,14 @@ PRAGMA incremental_vacuum;
     ) -> Result<Option<SearchResult<'_>>> {
         self.search_match(term, start, dir, true)
     }
+
+    fn recent_index(&mut self) -> Option<usize> {
+        None // TODO
+    }
+
+    fn set_recent_index(&mut self, _entry: Option<(usize, &str)>) {
+        // TODO
+    }
 }
 
 fn conn(path: Option<&PathBuf>) -> rusqlite::Result<Connection> {

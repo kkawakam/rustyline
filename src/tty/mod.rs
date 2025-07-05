@@ -179,7 +179,7 @@ pub trait Term {
     type ExternalPrinter: ExternalPrinter;
     type CursorGuard;
 
-    fn new(config: Config) -> Result<Self>
+    fn new(config: &Config) -> Result<Self>
     where
         Self: Sized;
     /// Check if current terminal can provide a rich line-editing user
@@ -190,7 +190,7 @@ pub trait Term {
     /// check if output stream is connected to a terminal.
     fn is_output_tty(&self) -> bool;
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<(Self::Mode, Self::KeyMap)>;
+    fn enable_raw_mode(&mut self, config: &Config) -> Result<(Self::Mode, Self::KeyMap)>;
     /// Create a RAW reader
     fn create_reader(
         &self,
@@ -199,7 +199,7 @@ pub trait Term {
         key_map: Self::KeyMap,
     ) -> Self::Reader;
     /// Create a writer
-    fn create_writer(&self) -> Self::Writer;
+    fn create_writer(&self, config: &Config) -> Self::Writer;
     fn writeln(&self) -> Result<()>;
     /// Create an external printer
     fn create_external_printer(&mut self) -> Result<Self::ExternalPrinter>;

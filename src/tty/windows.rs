@@ -636,10 +636,7 @@ pub struct Console {
     conout_isatty: bool,
     conout: HANDLE,
     close_on_drop: bool,
-    pub(crate) color_mode: ColorMode,
-    grapheme_cluster_mode: GraphemeClusterMode,
     ansi_colors_supported: bool,
-    bell_style: BellStyle,
     raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<Rc<AsyncPipe>>,
@@ -648,9 +645,9 @@ pub struct Console {
 }
 
 impl Console {
-    fn colors_enabled(&self) -> bool {
+    fn colors_enabled(&self, config: &Config) -> bool {
         // TODO ANSI Colors & Windows <10
-        match self.color_mode {
+        match config.color_mode() {
             ColorMode::Enabled => self.conout_isatty && self.ansi_colors_supported,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
@@ -667,7 +664,7 @@ impl Term for Console {
     type Reader = ConsoleRawReader;
     type Writer = ConsoleRenderer;
 
-    fn new(config: Config) -> Result<Self> {
+    fn new(config: &Config) -> Result<Self> {
         let (conin, conout, close_on_drop) = if config.behavior() == Behavior::PreferTerm {
             if let (Ok(conin), Ok(conout)) = (
                 OpenOptions::new().read(true).write(true).open("CONIN$"),
@@ -714,10 +711,7 @@ impl Term for Console {
             conout_isatty,
             conout: conout.unwrap_or(ptr::null_mut()),
             close_on_drop,
-            color_mode: config.color_mode(),
-            grapheme_cluster_mode: config.grapheme_cluster_mode(),
             ansi_colors_supported: false,
-            bell_style: config.bell_style(),
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
@@ -741,7 +735,7 @@ impl Term for Console {
     // }
 
     /// Enable RAW mode for the terminal.
-    fn enable_raw_mode(&mut self) -> Result<(ConsoleMode, ConsoleKeyMap)> {
+    fn enable_raw_mode(&mut self, c: &Config) -> Result<(ConsoleMode, ConsoleKeyMap)> {
         if !self.conin_isatty {
             Err(io::Error::other(
                 "no stdio handle available for this process",
@@ -775,7 +769,7 @@ impl Term for Console {
             // https://docs.microsoft.com/en-us/windows/console/setconsolemode
             self.ansi_colors_supported = mode & console::ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0;
             if self.ansi_colors_supported {
-                if self.color_mode == ColorMode::Disabled {
+                if c.color_mode() == ColorMode::Disabled {
                     mode &= !console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                     debug!(target: "rustyline", "deactivate ENABLE_VIRTUAL_TERMINAL_PROCESSING");
                     unsafe {
@@ -784,7 +778,7 @@ impl Term for Console {
                 } else {
                     debug!(target: "rustyline", "ANSI colors already enabled");
                 }
-            } else if self.color_mode != ColorMode::Disabled {
+            } else if c.color_mode() != ColorMode::Disabled {
                 mode |= console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
                 self.ansi_colors_supported =
                     unsafe { console::SetConsoleMode(self.conout, mode) != 0 };
@@ -823,12 +817,12 @@ impl Term for Console {
         ConsoleRawReader::create(self.conin, self.pipe_reader.clone())
     }
 
-    fn create_writer(&self) -> ConsoleRenderer {
+    fn create_writer(&self, c: &Config) -> ConsoleRenderer {
         ConsoleRenderer::new(
             self.conout,
-            self.colors_enabled(),
-            self.grapheme_cluster_mode,
-            self.bell_style,
+            self.colors_enabled(c),
+            c.grapheme_cluster_mode(),
+            c.bell_style(),
         )
     }
 

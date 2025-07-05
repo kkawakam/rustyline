@@ -33,7 +33,7 @@ The VACUUM command may change the ROWIDs of entries in any tables that do not ha
 
 impl SQLiteHistory {
     /// Transient in-memory database
-    pub fn with_config(config: Config) -> Result<Self>
+    pub fn with_config(config: &Config) -> Result<Self>
     where
         Self: Sized,
     {
@@ -41,11 +41,11 @@ impl SQLiteHistory {
     }
 
     /// Open specified database
-    pub fn open<P: AsRef<Path> + ?Sized>(config: Config, path: &P) -> Result<Self> {
+    pub fn open<P: AsRef<Path> + ?Sized>(config: &Config, path: &P) -> Result<Self> {
         Self::new(config, normalize(path.as_ref()))
     }
 
-    fn new(config: Config, path: Option<PathBuf>) -> Result<Self> {
+    fn new(config: &Config, path: Option<PathBuf>) -> Result<Self> {
         let conn = conn(path.as_ref())?;
         let mut sh = Self {
             max_len: config.max_history_size(),
@@ -457,7 +457,7 @@ mod tests {
     use std::path::Path;
 
     fn init() -> Result<SQLiteHistory> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         h.add("line1")?;
         h.add("line2")?;
         h.add("line3")?;
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn get() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         assert_eq!(None, h.get(0, SearchDirection::Forward)?);
         h.add("line")?;
         assert_eq!(
@@ -483,7 +483,7 @@ mod tests {
 
     #[test]
     fn len() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         assert_eq!(0, h.len());
         h.add("line")?;
         assert_eq!(1, h.len());
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn is_empty() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         assert!(h.is_empty());
         h.add("line")?;
         assert!(!h.is_empty());
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn set_max_len() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         h.add("l1")?;
         h.add("l2")?;
         h.add("l3")?;
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn ignore_dups() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         h.ignore_dups(true)?;
         h.ignore_dups(false)?;
         h.ignore_dups(true)
@@ -528,7 +528,7 @@ mod tests {
     fn save() -> Result<()> {
         let db1 = "file:db1?mode=memory";
         let db2 = "file:db2?mode=memory";
-        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        let mut h = SQLiteHistory::open(&Config::default(), db1)?;
         h.save(Path::new(db1))?;
         h.save(Path::new(db2))?;
         h.add("line")?;
@@ -547,7 +547,7 @@ mod tests {
         // let db2 = "file:db2?mode=memory&cache=shared";
         let tf = tempfile::NamedTempFile::new()?;
         let db2 = tf.path();
-        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        let mut h = SQLiteHistory::open(&Config::default(), db1)?;
         h.append(Path::new(db1))?;
         //h.append(Path::new(db2))?;
         h.add("line")?;
@@ -563,7 +563,7 @@ mod tests {
     fn load() -> Result<()> {
         let db1 = "file:db1?mode=memory";
         let db2 = "file:db2?mode=memory";
-        let mut h = SQLiteHistory::open(Config::default(), db1)?;
+        let mut h = SQLiteHistory::open(&Config::default(), db1)?;
         h.load(Path::new(db1))?;
         h.add("line")?;
         h.load(Path::new(db2))?;
@@ -575,7 +575,7 @@ mod tests {
 
     #[test]
     fn clear() -> Result<()> {
-        let mut h = SQLiteHistory::with_config(Config::default())?;
+        let mut h = SQLiteHistory::with_config(&Config::default())?;
         h.clear()?;
         h.add("line")?;
         h.clear()?;

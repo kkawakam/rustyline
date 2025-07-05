@@ -1336,24 +1336,17 @@ pub struct PosixTerminal {
     tty_out: AltFd,
     is_out_a_tty: bool,
     close_on_drop: bool,
-    pub(crate) color_mode: ColorMode,
-    grapheme_cluster_mode: GraphemeClusterMode,
-    tab_stop: u8,
-    bell_style: BellStyle,
-    enable_bracketed_paste: bool,
-    enable_synchronized_output: bool,
     raw_mode: Arc<AtomicBool>,
     // external print reader
     pipe_reader: Option<PipeReader>,
     // external print writer
     pipe_writer: Option<PipeWriter>,
     sig: Option<Sig>,
-    enable_signals: bool,
 }
 
 impl PosixTerminal {
-    fn colors_enabled(&self) -> bool {
-        match self.color_mode {
+    fn colors_enabled(&self, config: &Config) -> bool {
+        match config.color_mode() {
             ColorMode::Enabled => self.is_out_a_tty,
             ColorMode::Forced => true,
             ColorMode::Disabled => false,
@@ -1370,7 +1363,7 @@ impl Term for PosixTerminal {
     type Reader = PosixRawReader;
     type Writer = PosixRenderer;
 
-    fn new(config: Config) -> Result<Self> {
+    fn new(config: &Config) -> Result<Self> {
         let (tty_in, is_in_a_tty, tty_out, is_out_a_tty, close_on_drop) =
             if config.behavior() == Behavior::PreferTerm {
                 let tty = OpenOptions::new().read(true).write(true).open("/dev/tty");
@@ -1399,17 +1392,10 @@ impl Term for PosixTerminal {
             tty_out,
             is_out_a_tty,
             close_on_drop,
-            color_mode: config.color_mode(),
-            grapheme_cluster_mode: config.grapheme_cluster_mode(),
-            tab_stop: config.tab_stop(),
-            bell_style: config.bell_style(),
-            enable_bracketed_paste: config.enable_bracketed_paste(),
-            enable_synchronized_output: config.enable_synchronized_output(),
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
             sig,
-            enable_signals: config.enable_signals(),
         })
     }
 
@@ -1431,16 +1417,16 @@ impl Term for PosixTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<(Self::Mode, PosixKeyMap)> {
+    fn enable_raw_mode(&mut self, c: &Config) -> Result<(Self::Mode, PosixKeyMap)> {
         use nix::errno::Errno::ENOTTY;
         if !self.is_in_a_tty {
             return Err(ENOTTY.into());
         }
-        let (original_mode, key_map) = termios_::enable_raw_mode(self.tty_in, self.enable_signals)?;
+        let (original_mode, key_map) = termios_::enable_raw_mode(self.tty_in, c.enable_signals())?;
 
         self.raw_mode.store(true, Ordering::SeqCst);
         // enable bracketed paste
-        let out = if !self.enable_bracketed_paste {
+        let out = if !c.enable_bracketed_paste() {
             None
         } else if let Err(e) = write_all(self.tty_out, BRACKETED_PASTE_ON) {
             debug!(target: "rustyline", "Cannot enable bracketed paste: {e}");
@@ -1485,14 +1471,14 @@ impl Term for PosixTerminal {
         )
     }
 
-    fn create_writer(&self) -> PosixRenderer {
+    fn create_writer(&self, c: &Config) -> PosixRenderer {
         PosixRenderer::new(
             self.tty_out,
-            Unit::from(self.tab_stop),
-            self.colors_enabled(),
-            self.enable_synchronized_output,
-            self.grapheme_cluster_mode,
-            self.bell_style,
+            Unit::from(c.tab_stop()),
+            self.colors_enabled(c),
+            c.enable_synchronized_output(),
+            c.grapheme_cluster_mode(),
+            c.bell_style(),
         )
     }
 

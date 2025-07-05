@@ -190,7 +190,7 @@ impl MemHistory {
     /// Default constructor
     #[must_use]
     pub fn new() -> Self {
-        Self::with_config(Config::default())
+        Self::with_config(&Config::default())
     }
 
     /// Customized constructor with:
@@ -198,7 +198,7 @@ impl MemHistory {
     /// - [`Config::history_ignore_space()`],
     /// - [`Config::history_duplicates()`].
     #[must_use]
-    pub fn with_config(config: Config) -> Self {
+    pub fn with_config(config: &Config) -> Self {
         Self {
             entries: VecDeque::new(),
             max_len: config.max_history_size(),
@@ -469,7 +469,7 @@ impl FileHistory {
     /// Default constructor
     #[must_use]
     pub fn new() -> Self {
-        Self::with_config(Config::default())
+        Self::with_config(&Config::default())
     }
 
     /// Customized constructor with:
@@ -477,7 +477,7 @@ impl FileHistory {
     /// - [`Config::history_ignore_space()`],
     /// - [`Config::history_duplicates()`].
     #[must_use]
-    pub fn with_config(config: Config) -> Self {
+    pub fn with_config(config: &Config) -> Self {
         Self {
             mem: MemHistory::with_config(config),
             new_entries: 0,
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn add() {
         let config = Config::builder().history_ignore_space(true).build();
-        let mut history = DefaultHistory::with_config(config);
+        let mut history = DefaultHistory::with_config(&config);
         #[cfg(feature = "with-file-history")]
         assert_eq!(config.max_history_size(), history.mem.max_len);
         assert!(history.add("line1").unwrap());
@@ -966,7 +966,7 @@ mod tests {
         let tf = tempfile::NamedTempFile::new()?;
 
         let config = Config::builder().history_ignore_dups(false)?.build();
-        let mut history = DefaultHistory::with_config(config);
+        let mut history = DefaultHistory::with_config(&config);
         history.add("line1")?;
         history.add("line1")?;
         history.append(tf.path())?;

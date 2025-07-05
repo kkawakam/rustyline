@@ -3,7 +3,7 @@ use crate::{layout::GraphemeClusterMode, Result};
 use std::default::Default;
 
 /// User preferences
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     /// Maximum number of entries in History.
     max_history_size: usize, // history_max_entries
@@ -477,7 +477,7 @@ impl Builder {
     /// By default, stdio is used.
     #[must_use]
     pub fn behavior(mut self, behavior: Behavior) -> Self {
-        self.set_behavior(behavior);
+        self.p.set_behavior(behavior); // cannot be touched after editor / terminal creation
         self
     }
 
@@ -522,7 +522,7 @@ impl Builder {
     /// By default, it's disabled.
     #[must_use]
     pub fn enable_signals(mut self, enable_signals: bool) -> Self {
-        self.p.set_enable_signals(enable_signals);
+        self.set_enable_signals(enable_signals);
         self
     }
 
@@ -621,13 +621,6 @@ pub trait Configurer {
     /// Tell if terminal supports grapheme clustering
     fn set_grapheme_cluster_mode(&mut self, grapheme_cluster_mode: GraphemeClusterMode) {
         self.config_mut().grapheme_cluster_mode = grapheme_cluster_mode;
-    }
-
-    /// Whether to use stdio or not
-    ///
-    /// By default, stdio is used.
-    fn set_behavior(&mut self, behavior: Behavior) {
-        self.config_mut().set_behavior(behavior);
     }
 
     /// Horizontal space taken by a tab.

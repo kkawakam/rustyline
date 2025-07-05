@@ -606,14 +606,15 @@ impl<H: Helper> Editor<H, DefaultHistory> {
 
     /// Create an editor with a specific configuration.
     pub fn with_config(config: Config) -> Result<Self> {
-        Self::with_history(config, DefaultHistory::with_config(config))
+        let history = DefaultHistory::with_config(&config);
+        Self::with_history(config, history)
     }
 }
 
 impl<H: Helper, I: History> Editor<H, I> {
     /// Create an editor with a custom history impl.
     pub fn with_history(config: Config, history: I) -> Result<Self> {
-        let term = Terminal::new(config)?;
+        let term = Terminal::new(&config)?;
         Ok(Self {
             term,
             buffer: None,
@@ -659,7 +660,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
         } else if self.term.is_input_tty() {
-            let (original_mode, term_key_map) = self.term.enable_raw_mode()?;
+            let (original_mode, term_key_map) = self.term.enable_raw_mode(&self.config)?;
             let guard = Guard(&original_mode);
             let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
             if self.config.auto_add_history() {
@@ -687,7 +688,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         original_mode: &tty::Mode,
         term_key_map: tty::KeyMap,
     ) -> Result<String> {
-        let mut stdout = self.term.create_writer();
+        let mut stdout = self.term.create_writer(&self.config);
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
         let ctx = Context::new(&self.history);
@@ -751,7 +752,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 debug!(target: "rustyline", "SIGTSTP");
                 original_mode.disable_raw_mode()?;
                 tty::suspend()?;
-                let _ = self.term.enable_raw_mode()?; // TODO original_mode may have changed
+                let _ = self.term.enable_raw_mode(&self.config)?; // TODO original_mode may have changed
                 s.out.update_size(); // window may have been resized
                 s.refresh_line()?;
                 continue;
@@ -895,7 +896,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// a number of characters.
     pub fn dimensions(&mut self) -> Option<(Unit, Unit)> {
         if self.term.is_output_tty() {
-            let out = self.term.create_writer();
+            let out = self.term.create_writer(&self.config);
             Some((out.get_columns(), out.get_rows()))
         } else {
             None
@@ -905,7 +906,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Clear the screen.
     pub fn clear_screen(&mut self) -> Result<()> {
         if self.term.is_output_tty() {
-            let mut out = self.term.create_writer();
+            let mut out = self.term.create_writer(&self.config);
             out.clear_screen()
         } else {
             Ok(())
@@ -944,11 +945,6 @@ impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
     fn set_history_ignore_space(&mut self, yes: bool) {
         self.config_mut().set_history_ignore_space(yes);
         self.history.ignore_space(yes);
-    }
-
-    fn set_color_mode(&mut self, color_mode: ColorMode) {
-        self.config_mut().set_color_mode(color_mode);
-        self.term.color_mode = color_mode;
     }
 }
 

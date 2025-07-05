@@ -3,7 +3,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
-use crate::config::{BellStyle, ColorMode, Config};
+use crate::config::Config;
 use crate::error::ReadlineError;
 use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
@@ -171,8 +171,6 @@ pub type Terminal = DummyTerminal;
 pub struct DummyTerminal {
     pub keys: Vec<KeyEvent>,
     pub cursor: usize, // cursor position before last command
-    pub color_mode: ColorMode,
-    pub bell_style: BellStyle,
 }
 
 impl Term for DummyTerminal {
@@ -184,12 +182,10 @@ impl Term for DummyTerminal {
     type Reader = IntoIter<KeyEvent>;
     type Writer = Sink;
 
-    fn new(config: Config) -> Result<Self> {
+    fn new(_config: &Config) -> Result<Self> {
         Ok(Self {
             keys: vec![],
             cursor: 0,
-            color_mode: config.color_mode(),
-            bell_style: config.bell_style(),
         })
     }
 
@@ -215,7 +211,7 @@ impl Term for DummyTerminal {
 
     // Interactive loop:
 
-    fn enable_raw_mode(&mut self) -> Result<(Mode, KeyMap)> {
+    fn enable_raw_mode(&mut self, _: &Config) -> Result<(Mode, KeyMap)> {
         Ok(((), ()))
     }
 
@@ -223,7 +219,7 @@ impl Term for DummyTerminal {
         self.keys.clone().into_iter()
     }
 
-    fn create_writer(&self) -> Sink {
+    fn create_writer(&self, _: &Config) -> Sink {
         Sink::default()
     }
 

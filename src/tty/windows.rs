@@ -543,6 +543,14 @@ impl Renderer for ConsoleRenderer {
         self.clear_old_rows(&info, layout)
     }
 
+    /// Clear from cursor to end of line. Used to optimize deletion at EOL
+    fn clear_to_eol(&mut self) -> Result<()> {
+        let info = self.get_console_screen_buffer_info()?;
+        let cursor = info.dwCursorPosition;
+        let n = (info.dwSize.X - cursor.X) as u32;
+        self.clear(n, cursor, info.wAttributes)
+    }
+
     /// Try to get the number of columns in the current terminal,
     /// or assume 80 if it fails.
     fn update_size(&mut self) {

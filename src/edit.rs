@@ -303,7 +303,7 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 
     fn is_cursor_at_end(&self) -> bool {
-        self.line.pos() == self.line.len()
+        self.line.is_cursor_at_end()
     }
 
     fn has_hint(&self) -> bool {

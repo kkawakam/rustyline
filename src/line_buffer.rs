@@ -135,6 +135,12 @@ impl LineBuffer {
         self.pos
     }
 
+    /// Check if cursor is at the end of input
+    #[must_use]
+    pub fn is_cursor_at_end(&self) -> bool {
+        self.pos == self.buf.len()
+    }
+
     /// Set cursor position (byte position)
     pub fn set_pos(&mut self, pos: usize) {
         assert!(pos <= self.buf.len());
@@ -187,7 +193,7 @@ impl LineBuffer {
 
     /// Returns the character at current cursor position.
     pub(crate) fn grapheme_at_cursor(&self) -> Option<&str> {
-        if self.pos == self.buf.len() {
+        if self.is_cursor_at_end() {
             None
         } else {
             self.buf[self.pos..].graphemes(true).next()
@@ -198,7 +204,7 @@ impl LineBuffer {
     /// position.
     #[must_use]
     pub fn next_pos(&self, n: RepeatCount) -> Option<usize> {
-        if self.pos == self.buf.len() {
+        if self.is_cursor_at_end() {
             return None;
         }
         self.buf[self.pos..]
@@ -237,7 +243,7 @@ impl LineBuffer {
         if self.must_truncate(self.buf.len() + shift) {
             return None;
         }
-        let push = self.pos == self.buf.len();
+        let push = self.is_cursor_at_end();
         if n == 1 {
             self.buf.insert(self.pos, ch);
             cl.insert_char(self.pos, ch);
@@ -264,7 +270,7 @@ impl LineBuffer {
         if text.is_empty() || self.must_truncate(self.buf.len() + shift) {
             return None;
         }
-        let push = self.pos == self.buf.len();
+        let push = self.is_cursor_at_end();
         let pos = self.pos;
         if n == 1 {
             self.insert_str(pos, text, cl);
@@ -324,7 +330,7 @@ impl LineBuffer {
 
     /// Move cursor to the end of the buffer.
     pub fn move_buffer_end(&mut self) -> bool {
-        if self.pos == self.buf.len() {
+        if self.is_cursor_at_end() {
             false
         } else {
             self.pos = self.buf.len();
@@ -453,7 +459,7 @@ impl LineBuffer {
         if self.pos == 0 || self.buf.graphemes(true).count() < 2 {
             return false;
         }
-        if self.pos == self.buf.len() {
+        if self.is_cursor_at_end() {
             self.move_backward(1);
         }
         let chars = self.delete(1, cl).unwrap();
@@ -801,7 +807,7 @@ impl LineBuffer {
     }
 
     fn skip_whitespace(&self) -> Option<usize> {
-        if self.pos == self.buf.len() {
+        if self.is_cursor_at_end() {
             return None;
         }
         self.buf[self.pos..]
@@ -957,7 +963,7 @@ impl LineBuffer {
                 }
             }
             Movement::EndOfBuffer => {
-                if self.pos == self.buf.len() {
+                if self.is_cursor_at_end() {
                     None
                 } else {
                     Some(self.buf[self.pos..].to_owned())

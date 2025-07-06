@@ -11,13 +11,13 @@ pub trait Hint {
     fn completion(&self) -> Option<&str>;
 }
 
-impl Hint for String {
+impl<T: AsRef<str>> Hint for T {
     fn display(&self) -> &str {
-        self.as_str()
+        self.as_ref()
     }
 
     fn completion(&self) -> Option<&str> {
-        Some(self.as_str())
+        Some(self.as_ref())
     }
 }
 

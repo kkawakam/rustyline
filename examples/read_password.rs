@@ -2,16 +2,27 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 
 use rustyline::config::Configurer;
 use rustyline::highlight::{CmdKind, Highlighter};
+#[cfg(feature = "parser")]
+use rustyline::Parser;
 use rustyline::{ColorMode, Editor, Result};
 use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Completer, Helper, Hinter, Validator)]
+#[cfg_attr(feature = "parser", derive(Parser))]
 struct MaskingHighlighter {
     masking: bool,
 }
 
 impl Highlighter for MaskingHighlighter {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
+    fn highlight<'l>(
+        &self,
+        line: &'l str,
+        _pos: usize,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+    ) -> Cow<'l, str> {
         use unicode_width::UnicodeWidthStr;
         if self.masking {
             Owned(" ".repeat(line.width()))

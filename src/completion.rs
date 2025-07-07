@@ -50,6 +50,9 @@ impl Candidate for Pair {
 pub trait Completer {
     /// Specific completion candidate.
     type Candidate: Candidate;
+    /// Parsed user input line(s)
+    #[cfg(feature = "parser")]
+    type Document;
 
     // TODO: let the implementers choose/find word boundaries ??? => Lexer
 
@@ -62,9 +65,16 @@ pub trait Completer {
         &self, // FIXME should be `&mut self`
         line: &str,
         pos: usize,
+        #[cfg(feature = "parser")] doc: &Self::Document,
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Self::Candidate>)> {
-        let _ = (line, pos, ctx);
+        let _ = (
+            line,
+            pos,
+            #[cfg(feature = "parser")]
+            doc,
+            ctx,
+        );
         Ok((0, Vec::with_capacity(0)))
     }
     /// Updates the edited `line` with the `elected` candidate.
@@ -76,6 +86,8 @@ pub trait Completer {
 
 impl Completer for () {
     type Candidate = String;
+    #[cfg(feature = "parser")]
+    type Document = ();
 
     fn update(&self, _line: &mut LineBuffer, _start: usize, _elected: &str, _cl: &mut Changeset) {
         unreachable!();
@@ -87,9 +99,11 @@ macro_rules! box_completer {
         $(
             impl<C: ?Sized + Completer> Completer for $id<C> {
                 type Candidate = C::Candidate;
+                #[cfg(feature = "parser")]
+                type Document = C::Document;
 
-                fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
-                    (**self).complete(line, pos, ctx)
+                fn complete(&self, line: &str, pos: usize, #[cfg(feature = "parser")] doc: &Self::Document, ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
+                    (**self).complete(line, pos, #[cfg(feature = "parser")] doc, ctx)
                 }
                 fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
                     (**self).update(line, start, elected, cl)
@@ -208,8 +222,16 @@ impl Default for FilenameCompleter {
 
 impl Completer for FilenameCompleter {
     type Candidate = Pair;
+    #[cfg(feature = "parser")]
+    type Document = ();
 
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>)> {
         self.complete_path(line, pos)
     }
 }
@@ -609,14 +631,20 @@ mod tests {
         struct StrCmp;
         impl Completer for StrCmp {
             type Candidate = &'static str;
+            #[cfg(feature = "parser")]
+            type Document = ();
         }
         struct RcCmp;
         impl Completer for RcCmp {
             type Candidate = std::rc::Rc<str>;
+            #[cfg(feature = "parser")]
+            type Document = ();
         }
         struct ArcCmp;
         impl Completer for ArcCmp {
             type Candidate = std::sync::Arc<str>;
+            #[cfg(feature = "parser")]
+            type Document = ();
         }
     }
 

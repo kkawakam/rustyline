@@ -1,12 +1,22 @@
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
+#[cfg(feature = "parser")]
+use rustyline::Parser;
 use rustyline::{Completer, Helper, Highlighter, Hinter};
 use rustyline::{Editor, Result};
 
 #[derive(Completer, Helper, Highlighter, Hinter)]
+#[cfg_attr(feature = "parser", derive(Parser))]
 struct InputValidator {}
 
 impl Validator for InputValidator {
-    fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
+    fn validate(
+        &self,
+        #[cfg(feature = "parser")] _doc: &Self::Document,
+        ctx: &mut ValidationContext,
+    ) -> Result<ValidationResult> {
         use ValidationResult::{Incomplete, Invalid, Valid};
         let input = ctx.input();
         let result = if !input.starts_with("SELECT") {

@@ -115,6 +115,9 @@ pub struct Layout {
     pub cursor: Position,
     /// Number of rows used so far (from start of prompt to end of input)
     pub end: Position,
+    /// we have to generate our own newline on line wrap
+    #[cfg(unix)]
+    pub newline: bool,
 }
 
 impl Layout {
@@ -125,6 +128,8 @@ impl Layout {
             default_prompt: false,
             cursor: Position::default(),
             end: Position::default(),
+            #[cfg(unix)]
+            newline: false,
         }
     }
 

@@ -34,6 +34,8 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
+#[cfg(feature = "parser")]
+pub mod parse;
 #[cfg(feature = "with-sqlite-history")]
 pub mod sqlite_history;
 mod tty;
@@ -46,6 +48,8 @@ use std::path::Path;
 use std::result;
 
 use log::debug;
+#[cfg(all(feature = "derive", feature = "parser"))]
+pub use rustyline_derive::Parser;
 #[cfg(feature = "derive")]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 
@@ -66,6 +70,8 @@ pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::layout::GraphemeClusterMode;
 use crate::layout::Unit;
+#[cfg(feature = "parser")]
+use crate::parse::Parser;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -87,7 +93,13 @@ fn complete_line<H: Helper>(
 
     let completer = s.helper.unwrap();
     // get a list of completions
-    let (start, candidates) = completer.complete(&s.line, s.line.pos(), &s.ctx)?;
+    let (start, candidates) = completer.complete(
+        &s.line,
+        s.line.pos(),
+        #[cfg(feature = "parser")]
+        completer.document(),
+        &s.ctx,
+    )?;
     // if no completions, we are done
     if candidates.is_empty() {
         s.out.beep()?;
@@ -341,7 +353,7 @@ fn page_completions<C: Candidate, H: Helper>(
             if i < nbc {
                 let candidate = &candidates[i as usize].display();
                 let width = s.layout.width(candidate);
-                if let Some(highlighter) = s.highlighter() {
+                if let (true, Some(highlighter)) = (s.out.colors_enabled(), s.helper) {
                     ab.push_str(&highlighter.highlight_candidate(candidate, CompletionType::List));
                 } else {
                     ab.push_str(candidate);
@@ -483,10 +495,10 @@ fn apply_backspace_direct(input: &str) -> String {
     out
 }
 
-fn readline_direct(
+fn readline_direct<H: Helper>(
     mut reader: impl BufRead,
     mut writer: impl Write,
-    validator: &Option<impl Validator>,
+    validator: Option<&H>,
 ) -> Result<String> {
     let mut input = String::new();
 
@@ -510,13 +522,17 @@ fn readline_direct(
 
         input = apply_backspace_direct(&input);
 
-        match validator.as_ref() {
+        match validator {
             None => return Ok(input),
             Some(v) => {
                 let mut ctx = input.as_str();
                 let mut ctx = validate::ValidationContext::new(&mut ctx);
 
-                match v.validate(&mut ctx)? {
+                match v.validate(
+                    #[cfg(feature = "parser")]
+                    v.document(),
+                    &mut ctx,
+                )? {
                     validate::ValidationResult::Valid(msg) => {
                         if let Some(msg) = msg {
                             writer.write_all(msg.as_bytes())?;
@@ -543,14 +559,18 @@ fn readline_direct(
 }
 
 /// Syntax specific helper.
-///
-/// TODO Tokenizer/parser used for both completion, suggestion, highlighting.
-/// (parse current line once)
-pub trait Helper
-where
-    Self: Completer + Hinter + Highlighter + Validator,
+#[cfg(feature = "parser")]
+pub trait Helper:
+    Parser
+    + Completer<Document = <Self as Parser>::Document>
+    + Hinter<Document = <Self as Parser>::Document>
+    + Highlighter<Document = <Self as Parser>::Document>
+    + Validator<Document = <Self as Parser>::Document>
 {
 }
+/// Syntax specific helper.
+#[cfg(not(feature = "parser"))]
+pub trait Helper: Completer + Hinter + Highlighter + Validator {}
 
 impl Helper for () {}
 
@@ -658,7 +678,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             stdout.write_all(prompt.as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode(&self.config)?;
             let guard = Guard(&original_mode);
@@ -674,7 +694,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         }
     }
 

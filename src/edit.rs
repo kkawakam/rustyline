@@ -512,20 +512,22 @@ impl<H: Helper> State<'_, '_, H> {
         struct Proxy<'p> {
             changes: &'p mut Changeset,
             kill_ring: &'p mut KillRing,
-            layout: &'p Layout,
-            pos: usize,
-            cursor_shift: Unit,
-            end_shift: Unit,
-            trivial: bool,
+            layout: &'p Layout, // current layout (before kill)
+            pos: usize,         // current cursor (byte) position (before kill)
+            end: usize,         // end (before kill)
+            cursor_shift: Unit, // cursor shift (columns) after kill
+            end_shift: Unit,    // end of line shift (columns) after kill
+            trivial: bool,      // true if a partial screen update can be done
         }
         let mut proxy = Proxy {
             changes: &mut self.changes,
             kill_ring,
             layout: &self.layout,
             pos: self.line.pos(),
+            end: self.line.len(),
             cursor_shift: 0,
             end_shift: 0,
-            trivial: true,
+            trivial: self.layout.cursor.row == self.layout.end.row,
         };
         impl DeleteListener for Proxy<'_> {
             fn start_killing(&mut self) {
@@ -535,14 +537,22 @@ impl<H: Helper> State<'_, '_, H> {
             fn delete(&mut self, idx: usize, string: &str, dir: Direction) {
                 self.changes.delete(idx, string);
                 self.kill_ring.delete(idx, string, dir);
-                if dir == Direction::Backward {
-                    let width = self.layout.width(string);
-                    self.cursor_shift += width;
-                    self.end_shift += width;
-                } else if idx == self.pos {
-                    self.end_shift += self.layout.width(string);
-                } else {
-                    self.trivial = false;
+                if self.trivial {
+                    if dir == Direction::Backward {
+                        if self.pos == self.end {
+                            // backward from eol
+                            let width = self.layout.width(string);
+                            self.cursor_shift += width;
+                            self.end_shift += width;
+                        } else {
+                            self.trivial = false;
+                        }
+                    } else if idx == self.pos && self.pos + string.len() == self.end {
+                        // forward to eol
+                        self.end_shift += self.layout.width(string);
+                    } else {
+                        self.trivial = false;
+                    }
                 }
             }
 
@@ -556,14 +566,13 @@ impl<H: Helper> State<'_, '_, H> {
             let no_previous_hint = self.hint.is_none();
             self.hint();
             if trivial
-                && self.layout.cursor.row == self.layout.end.row
-                && self.line.is_cursor_at_end()
                 && cursor_shift <= self.layout.cursor.col
                 && end_shift <= self.layout.end.col
                 && (self.hint.is_none() && no_previous_hint)
                 && !self.highlight_char(CmdKind::Other)
             {
                 // Avoid a full update of the line in the trivial case.
+                debug_assert!(self.line.is_cursor_at_end());
                 if cursor_shift != 0 {
                     let old = self.layout.cursor;
                     self.layout.cursor.col -= cursor_shift;

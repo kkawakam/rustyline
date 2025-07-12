@@ -108,6 +108,8 @@ pub trait Renderer {
     fn clear_screen(&mut self) -> Result<()>;
     /// Clear rows used by prompt and edited line
     fn clear_rows(&mut self, layout: &Layout) -> Result<()>;
+    /// Clear from cursor to the end of line
+    fn clear_to_eol(&mut self) -> Result<()>;
 
     /// Update the number of columns/rows in the current terminal.
     fn update_size(&mut self);

@@ -11,10 +11,8 @@ use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
-use crate::layout::{cwidh, Layout, Position};
-use crate::line_buffer::{
-    ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
-};
+use crate::layout::{cwidh, Layout, Position, Unit};
+use crate::line_buffer::{DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE};
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
@@ -270,17 +268,15 @@ impl<H: Helper> Invoke for State<'_, '_, H> {
 
 impl<H: Helper> Refresher for State<'_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
-        let prompt_size = self.prompt_size;
         self.hint();
         self.highlight_char(CmdKind::Other);
-        self.refresh(self.prompt, prompt_size, true, Info::Hint)
+        self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
     }
 
     fn refresh_line_with_msg(&mut self, msg: Option<&str>, kind: CmdKind) -> Result<()> {
-        let prompt_size = self.prompt_size;
         self.hint = None;
         self.highlight_char(kind);
-        self.refresh(self.prompt, prompt_size, true, Info::Msg(msg))
+        self.refresh(self.prompt, self.prompt_size, true, Info::Msg(msg))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
@@ -303,7 +299,7 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 
     fn is_cursor_at_end(&self) -> bool {
-        self.line.pos() == self.line.len()
+        self.line.is_cursor_at_end()
     }
 
     fn has_hint(&self) -> bool {
@@ -361,7 +357,6 @@ impl<H: Helper> State<'_, '_, H> {
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
             if push {
-                let prompt_size = self.prompt_size;
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
                 let width = cwidh(ch);
@@ -379,7 +374,7 @@ impl<H: Helper> State<'_, '_, H> {
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     self.out.write_and_flush(bits)
                 } else {
-                    self.refresh(self.prompt, prompt_size, true, Info::Hint)
+                    self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
                 }
             } else {
                 self.refresh_line()
@@ -514,37 +509,83 @@ impl<H: Helper> State<'_, '_, H> {
     }
 
     pub fn edit_kill(&mut self, mvt: &Movement, kill_ring: &mut KillRing) -> Result<()> {
-        struct Proxy<'p>(&'p mut Changeset, &'p mut KillRing);
-        let mut proxy = Proxy(&mut self.changes, kill_ring);
+        struct Proxy<'p> {
+            changes: &'p mut Changeset,
+            kill_ring: &'p mut KillRing,
+            layout: &'p Layout, // current layout (before kill)
+            pos: usize,         // current cursor (byte) position (before kill)
+            end: usize,         // end (before kill)
+            cursor_shift: Unit, // cursor shift (columns) after kill
+            end_shift: Unit,    // end of line shift (columns) after kill
+            trivial: bool,      // true if a partial screen update can be done
+        }
+        let mut proxy = Proxy {
+            changes: &mut self.changes,
+            kill_ring,
+            layout: &self.layout,
+            pos: self.line.pos(),
+            end: self.line.len(),
+            cursor_shift: 0,
+            end_shift: 0,
+            trivial: self.layout.cursor.row == self.layout.end.row,
+        };
         impl DeleteListener for Proxy<'_> {
             fn start_killing(&mut self) {
-                self.1.start_killing();
+                self.kill_ring.start_killing();
             }
 
             fn delete(&mut self, idx: usize, string: &str, dir: Direction) {
-                self.0.delete(idx, string);
-                self.1.delete(idx, string, dir);
+                self.changes.delete(idx, string);
+                self.kill_ring.delete(idx, string, dir);
+                if self.trivial {
+                    if dir == Direction::Backward {
+                        if self.pos == self.end {
+                            // backward from eol
+                            let width = self.layout.width(string);
+                            self.cursor_shift += width;
+                            self.end_shift += width;
+                        } else {
+                            self.trivial = false;
+                        }
+                    } else if idx == self.pos && self.pos + string.len() == self.end {
+                        // forward to eol
+                        self.end_shift += self.layout.width(string);
+                    } else {
+                        self.trivial = false;
+                    }
+                }
             }
 
             fn stop_killing(&mut self) {
-                self.1.stop_killing()
-            }
-        }
-        impl ChangeListener for Proxy<'_> {
-            fn insert_char(&mut self, idx: usize, c: char) {
-                self.0.insert_char(idx, c)
-            }
-
-            fn insert_str(&mut self, idx: usize, string: &str) {
-                self.0.insert_str(idx, string)
-            }
-
-            fn replace(&mut self, idx: usize, old: &str, new: &str) {
-                self.0.replace(idx, old, new)
+                self.kill_ring.stop_killing()
             }
         }
         if self.line.kill(mvt, &mut proxy) {
-            self.refresh_line()
+            let (trivial, cursor_shift, end_shift) =
+                (proxy.trivial, proxy.cursor_shift, proxy.end_shift);
+            let no_previous_hint = self.hint.is_none();
+            self.hint();
+            if trivial
+                && cursor_shift <= self.layout.cursor.col
+                && end_shift <= self.layout.end.col
+                && (self.hint.is_none() && no_previous_hint)
+                && !self.highlight_char(CmdKind::Other)
+            {
+                // Avoid a full update of the line in the trivial case.
+                debug_assert!(self.line.is_cursor_at_end());
+                if cursor_shift != 0 {
+                    let old = self.layout.cursor;
+                    self.layout.cursor.col -= cursor_shift;
+                    debug!(target: "rustyline", "old cursor: {:?}", old.col);
+                    debug!(target: "rustyline", "new cursor: {:?}", self.layout.cursor.col);
+                    self.out.move_cursor(old, self.layout.cursor)?;
+                }
+                self.layout.end.col -= end_shift;
+                debug_assert_eq!(self.layout.cursor, self.layout.end);
+                self.out.clear_to_eol()
+            } else {
+                self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
+            }
         } else {
             Ok(())
         }

@@ -1139,6 +1139,11 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
+    /// Clear from cursor to end of line. Used to optimize deletion at EOL
+    fn clear_to_eol(&mut self) -> Result<()> {
+        self.write_and_flush("\x1b[K")
+    }
+
     /// Try to update the number of columns in the current terminal,
     fn update_size(&mut self) {
         let (cols, _) = get_win_size(self.out);

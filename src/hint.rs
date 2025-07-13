@@ -25,18 +25,34 @@ impl<T: AsRef<str>> Hint for T {
 pub trait Hinter {
     /// Specific hint type
     type Hint: Hint + 'static;
-
+    /// Parsed user input line(s)
+    #[cfg(feature = "parser")]
+    type Document;
     /// Takes the currently edited `line` with the cursor `pos`ition and
     /// returns the string that should be displayed or `None`
     /// if no hint is available for the text the user currently typed.
     // TODO Validate: called while editing line but not while moving cursor.
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
-        let _ = (line, pos, ctx);
+    fn hint(
+        &self,
+        line: &str,
+        pos: usize,
+        #[cfg(feature = "parser")] doc: &Self::Document,
+        ctx: &Context<'_>,
+    ) -> Option<Self::Hint> {
+        let _ = (
+            line,
+            pos,
+            #[cfg(feature = "parser")]
+            doc,
+            ctx,
+        );
         None
     }
 }
 
 impl Hinter for () {
+    #[cfg(feature = "parser")]
+    type Document = ();
     type Hint = String;
 }
 
@@ -53,9 +69,17 @@ impl HistoryHinter {
 }
 
 impl Hinter for HistoryHinter {
+    #[cfg(feature = "parser")]
+    type Document = ();
     type Hint = String;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+    fn hint(
+        &self,
+        line: &str,
+        pos: usize,
+        #[cfg(feature = "parser")] _: &Self::Document,
+        ctx: &Context<'_>,
+    ) -> Option<String> {
         if line.is_empty() || pos < line.len() {
             return None;
         }
@@ -89,7 +113,13 @@ mod test {
         let history = DefaultHistory::new();
         let ctx = Context::new(&history);
         let hinter = HistoryHinter {};
-        let hint = hinter.hint("test", 4, &ctx);
+        let hint = hinter.hint(
+            "test",
+            4,
+            #[cfg(feature = "parser")]
+            &(),
+            &ctx,
+        );
         assert_eq!(None, hint);
     }
 }

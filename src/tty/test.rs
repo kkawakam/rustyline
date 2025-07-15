@@ -134,6 +134,10 @@ impl Renderer for Sink {
         Ok(())
     }
 
+    fn clear_to_eol(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn update_size(&mut self) {}
 
     fn get_columns(&self) -> Unit {

@@ -5,10 +5,8 @@ use std::vec::IntoIter;
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
 use crate::config::Config;
 use crate::error::ReadlineError;
-use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
-use crate::line_buffer::LineBuffer;
 use crate::{Cmd, Result};
 
 pub type Buffer = ();
@@ -103,11 +101,10 @@ impl Renderer for Sink {
     fn refresh_line(
         &mut self,
         _prompt: &str,
-        _line: &LineBuffer,
+        _line: &str,
         _hint: Option<&str>,
         _old_layout: &Layout,
         _new_layout: &Layout,
-        _highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
         Ok(())
     }

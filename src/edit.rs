@@ -685,6 +685,7 @@ impl<H: Helper> State<'_, '_, H> {
         if history.is_empty() {
             return Ok(());
         }
+        self.ctx.recall(!prev && self.line.is_empty());
         if self.ctx.history_index == history.len() {
             if prev {
                 // Save the current edited line before overwriting it
@@ -811,7 +812,7 @@ pub fn init_state<'out, H: Helper>(
         byte_buffer: [0; 4],
         changes: Changeset::new(),
         helper,
-        ctx: Context::new(history),
+        ctx: Context::new(history, None),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
     }

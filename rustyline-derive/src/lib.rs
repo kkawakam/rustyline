@@ -49,14 +49,17 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics ::rustyline::completion::Completer for #name #ty_generics #where_clause {
                 type Candidate = <#field_type as ::rustyline::completion::Completer>::Candidate;
+                #[cfg(feature = "parser")]
+                type Document = <#field_type as ::rustyline::completion::Completer>::Document;
 
                 fn complete(
                     &self,
                     line: &str,
                     pos: usize,
+                    #[cfg(feature = "parser")] doc: &Self::Document,
                     ctx: &::rustyline::Context<'_>,
                 ) -> ::rustyline::Result<(usize, ::std::vec::Vec<Self::Candidate>)> {
-                    ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, ctx)
+                    ::rustyline::completion::Completer::complete(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc, ctx)
                 }
 
                 fn update(&self, line: &mut ::rustyline::line_buffer::LineBuffer, start: usize, elected: &str, cl: &mut ::rustyline::Changeset) {
@@ -69,6 +72,8 @@ pub fn completer_macro_derive(input: TokenStream) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics ::rustyline::completion::Completer for #name #ty_generics #where_clause {
                 type Candidate = ::std::string::String;
+                #[cfg(feature = "parser")]
+                type Document = ();
             }
         }
     };
@@ -98,12 +103,16 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = if let Some((index, field)) = get_field_by_attr(&input.data, "Highlighter") {
         let field_name_or_index = field_name_or_index_token(index, field);
+        let field_type = &field.ty;
 
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
-                fn highlight<'l>(&self, line: &'l str, pos: usize) -> ::std::borrow::Cow<'l, str> {
-                    ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos)
+                #[cfg(feature = "parser")]
+                type Document = <#field_type as ::rustyline::highlight::Highlighter>::Document;
+
+                fn highlight<'l>(&self, line: &'l str, pos: usize, #[cfg(feature = "parser")] doc: &Self::Document) -> ::std::borrow::Cow<'l, str> {
+                    ::rustyline::highlight::Highlighter::highlight(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc)
                 }
 
                 fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -135,6 +144,8 @@ pub fn highlighter_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::highlight::Highlighter for #name #ty_generics #where_clause {
+                #[cfg(feature = "parser")]
+                type Document = ();
             }
         }
     };
@@ -155,9 +166,11 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics ::rustyline::hint::Hinter for #name #ty_generics #where_clause {
                 type Hint = <#field_type as ::rustyline::hint::Hinter>::Hint;
+                #[cfg(feature = "parser")]
+                type Document = <#field_type as ::rustyline::hint::Hinter>::Document;
 
-                fn hint(&self, line: &str, pos: usize, ctx: &::rustyline::Context<'_>) -> ::std::option::Option<Self::Hint> {
-                    ::rustyline::hint::Hinter::hint(&self.#field_name_or_index, line, pos, ctx)
+                fn hint(&self, line: &str, pos: usize, #[cfg(feature = "parser")] doc: &Self::Document, ctx: &::rustyline::Context<'_>) -> ::std::option::Option<Self::Hint> {
+                    ::rustyline::hint::Hinter::hint(&self.#field_name_or_index, line, pos, #[cfg(feature = "parser")] doc, ctx)
                 }
             }
         }
@@ -166,6 +179,8 @@ pub fn hinter_macro_derive(input: TokenStream) -> TokenStream {
             #[automatically_derived]
             impl #impl_generics ::rustyline::hint::Hinter for #name #ty_generics #where_clause {
                 type Hint = ::std::string::String;
+                #[cfg(feature = "parser")]
+                type Document = ();
             }
         }
     };
@@ -180,15 +195,20 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let expanded = if let Some((index, field)) = get_field_by_attr(&input.data, "Validator") {
         let field_name_or_index = field_name_or_index_token(index, field);
+        let field_type = &field.ty;
 
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
+                #[cfg(feature = "parser")]
+                type Document = <#field_type as ::rustyline::validate::Validator>::Document;
+
                 fn validate(
                     &self,
+                    #[cfg(feature = "parser")] doc: &Self::Document,
                     ctx: &mut ::rustyline::validate::ValidationContext,
                 ) -> ::rustyline::Result<::rustyline::validate::ValidationResult> {
-                    ::rustyline::validate::Validator::validate(&self.#field_name_or_index, ctx)
+                    ::rustyline::validate::Validator::validate(&self.#field_name_or_index, #[cfg(feature = "parser")] doc, ctx)
                 }
 
                 fn validate_while_typing(&self) -> bool {
@@ -200,6 +220,53 @@ pub fn validator_macro_derive(input: TokenStream) -> TokenStream {
         quote! {
             #[automatically_derived]
             impl #impl_generics ::rustyline::validate::Validator for #name #ty_generics #where_clause {
+                #[cfg(feature = "parser")]
+                type Document = ();
+            }
+        }
+    };
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Parser, attributes(rustyline))]
+pub fn parser_macro_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let expanded = if let Some((index, field)) = get_field_by_attr(&input.data, "Parser") {
+        let field_name_or_index = field_name_or_index_token(index, field);
+        let field_type = &field.ty;
+
+        quote! {
+            #[automatically_derived]
+            #[cfg(feature = "parser")]
+            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
+                type Document = <#field_type as ::rustyline::parse::Parser>::Document;
+
+                fn update(&mut self, line: &str) {
+                    ::rustyline::parse::Parser::update(&self.#field_name_or_index, line)
+                }
+                fn document(&self) -> &Self::Document {
+                    ::rustyline::parse::Parser::document(&self.#field_name_or_index)
+                }
+            }
+        }
+    } else {
+        quote! {
+            #[automatically_derived]
+            impl #impl_generics ::rustyline::parse::Parser for #name #ty_generics #where_clause {
+                type Document = ();
+                fn update(&mut self, _: &str) {}
+                fn document(&self) -> &Self::Document {
+                    &()
+                }
+            }
+            #[automatically_derived]
+            impl #impl_generics ::rustyline::line_buffer::ChangeListener for #name #ty_generics #where_clause {
+            }
+            #[automatically_derived]
+            impl #impl_generics ::rustyline::line_buffer::DeleteListener for #name #ty_generics #where_clause {
             }
         }
     };

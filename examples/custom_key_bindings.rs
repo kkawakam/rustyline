@@ -3,6 +3,8 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::history::DefaultHistory;
+#[cfg(feature = "parser")]
+use rustyline::Parser;
 use rustyline::{
     Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
     Result,
@@ -10,9 +12,13 @@ use rustyline::{
 use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Completer, Helper, Hinter, Validator)]
+#[cfg_attr(feature = "parser", derive(Parser))]
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);
 
 impl Highlighter for MyHelper {
+    #[cfg(feature = "parser")]
+    type Document = ();
+
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,

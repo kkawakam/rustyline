@@ -440,7 +440,7 @@ impl Renderer for ConsoleRenderer {
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
-        old_layout: &Layout,
+        old_layout: Option<&Layout>,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
@@ -481,7 +481,9 @@ impl Renderer for ConsoleRenderer {
         // just to avoid flickering
         let mut guard = self.set_cursor_visibility(false)?;
         // position at the start of the prompt, clear to end of previous input
-        self.clear_old_rows(&info, old_layout)?;
+        if let Some(old_layout) = old_layout {
+            self.clear_old_rows(&info, old_layout)?;
+        }
         // display prompt, input line and hint
         write_to_console(self.conout, self.buffer.as_str(), &mut self.utf16)?;
 

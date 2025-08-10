@@ -17,6 +17,7 @@ use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 use crate::KillRing;
+use RefreshKind::All;
 
 /// Represent the state during line editing.
 /// Implement rendering.
@@ -39,6 +40,15 @@ enum Info<'m> {
     NoHint,
     Hint,
     Msg(Option<&'m str>),
+}
+
+/// Refresh kind
+#[derive(PartialEq)]
+pub enum RefreshKind {
+    // Do not clear old rows and keep current layout
+    Min,
+    // Clear old rows + layout
+    All,
 }
 
 impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
@@ -136,8 +146,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             return Ok(());
         }
         if self.highlight_char(kind) {
-            let prompt_size = self.prompt_size;
-            self.refresh(self.prompt, prompt_size, true, Info::NoHint)?;
+            self.refresh(self.prompt, self.prompt_size, true, All, Info::NoHint)?;
         } else {
             self.out.move_cursor(self.layout.cursor, cursor)?;
             self.layout.prompt_size = self.prompt_size;
@@ -161,11 +170,16 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.out.move_cursor_at_leftmost(rdr)
     }
 
+    pub fn repaint(&mut self, kind: RefreshKind) -> Result<()> {
+        self.refresh(self.prompt, self.prompt_size, true, kind, Info::Hint)
+    }
+
     fn refresh(
         &mut self,
         prompt: &str,
         prompt_size: Position,
         default_prompt: bool,
+        kind: RefreshKind,
         info: Info<'_>,
     ) -> Result<()> {
         let info = match info {
@@ -179,21 +193,26 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             None
         };
 
-        let new_layout = self
-            .out
-            .compute_layout(prompt_size, default_prompt, &self.line, info);
+        if kind == RefreshKind::Min {
+            self.out
+                .refresh_line(prompt, &self.line, info, None, &self.layout, highlighter)?;
+        } else {
+            let new_layout = self
+                .out
+                .compute_layout(prompt_size, default_prompt, &self.line, info);
 
-        debug!(target: "rustyline", "old layout: {:?}", self.layout);
-        debug!(target: "rustyline", "new layout: {new_layout:?}");
-        self.out.refresh_line(
-            prompt,
-            &self.line,
-            info,
-            &self.layout,
-            &new_layout,
-            highlighter,
-        )?;
-        self.layout = new_layout;
+            debug!(target: "rustyline", "old layout: {:?}", self.layout);
+            debug!(target: "rustyline", "new layout: {new_layout:?}");
+            self.out.refresh_line(
+                prompt,
+                &self.line,
+                info,
+                Some(&self.layout),
+                &new_layout,
+                highlighter,
+            )?;
+            self.layout = new_layout;
+        }
 
         Ok(())
     }
@@ -270,20 +289,20 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     fn refresh_line(&mut self) -> Result<()> {
         self.hint();
         self.highlight_char(CmdKind::Other);
-        self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
+        self.repaint(All)
     }
 
     fn refresh_line_with_msg(&mut self, msg: Option<&str>, kind: CmdKind) -> Result<()> {
         self.hint = None;
         self.highlight_char(kind);
-        self.refresh(self.prompt, self.prompt_size, true, Info::Msg(msg))
+        self.refresh(self.prompt, self.prompt_size, true, All, Info::Msg(msg))
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
         let prompt_size = self.out.calculate_position(prompt, Position::default());
         self.hint();
         self.highlight_char(CmdKind::Other);
-        self.refresh(prompt, prompt_size, false, Info::Hint)
+        self.refresh(prompt, prompt_size, false, All, Info::Hint)
     }
 
     fn doing_insert(&mut self) {
@@ -321,13 +340,11 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     fn external_print(&mut self, msg: String) -> Result<()> {
         self.out.begin_synchronized_update()?;
         self.out.clear_rows(&self.layout)?;
-        self.layout.end.row = 0;
-        self.layout.cursor.row = 0;
         self.out.write_and_flush(msg.as_str())?;
         if !msg.ends_with('\n') {
             self.out.write_and_flush("\n")?;
         }
-        self.refresh_line()?;
+        self.repaint(RefreshKind::Min)?;
         self.out.end_synchronized_update()
     }
 }
@@ -374,7 +391,7 @@ impl<H: Helper> State<'_, '_, H> {
                     let bits = ch.encode_utf8(&mut self.byte_buffer);
                     self.out.write_and_flush(bits)
                 } else {
-                    self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
+                    self.repaint(All)
                 }
             } else {
                 self.refresh_line()
@@ -584,7 +601,7 @@ impl<H: Helper> State<'_, '_, H> {
                 debug_assert_eq!(self.layout.cursor, self.layout.end);
                 self.out.clear_to_eol()
             } else {
-                self.refresh(self.prompt, self.prompt_size, true, Info::Hint)
+                self.repaint(All)
             }
         } else {
             Ok(())
@@ -638,7 +655,7 @@ impl<H: Helper> State<'_, '_, H> {
         }
     }
 
-    /// Moves the cursor to the same column in the line above
+    /// Moves the cursor to the same column in the line below
     pub fn edit_move_line_down(&mut self, n: RepeatCount) -> Result<bool> {
         if self.line.move_to_line_down(n, &self.layout) {
             self.move_cursor(CmdKind::MoveCursor)?;

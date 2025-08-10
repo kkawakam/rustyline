@@ -105,7 +105,7 @@ impl Renderer for Sink {
         _prompt: &str,
         _line: &LineBuffer,
         _hint: Option<&str>,
-        _old_layout: &Layout,
+        _old_layout: Option<&Layout>,
         _new_layout: &Layout,
         _highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {

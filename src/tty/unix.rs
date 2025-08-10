@@ -1026,7 +1026,7 @@ impl Renderer for PosixRenderer {
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
-        old_layout: &Layout,
+        old_layout: Option<&Layout>,
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()> {
@@ -1038,7 +1038,9 @@ impl Renderer for PosixRenderer {
         let cursor = new_layout.cursor;
         let end_pos = new_layout.end;
 
-        self.clear_old_rows(old_layout);
+        if let Some(old_layout) = old_layout {
+            self.clear_old_rows(old_layout);
+        }
 
         if let Some(highlighter) = highlighter {
             // display the prompt
@@ -1752,7 +1754,7 @@ mod test {
         let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
-        out.refresh_line(prompt, &line, None, &old_layout, &new_layout, None)
+        out.refresh_line(prompt, &line, None, Some(&old_layout), &new_layout, None)
             .unwrap();
         #[rustfmt::skip]
         assert_eq!(

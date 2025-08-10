@@ -55,7 +55,7 @@ use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
-use crate::edit::State;
+use crate::edit::{RefreshKind, State};
 use crate::error::ReadlineError;
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hinter;
@@ -356,9 +356,7 @@ fn page_completions<C: Candidate, H: Helper>(
         s.out.write_and_flush(ab.as_str())?;
     }
     s.out.write_and_flush("\n")?;
-    s.layout.end.row = 0; // dirty way to make clear_old_rows do nothing
-    s.layout.cursor.row = 0;
-    s.refresh_line()?;
+    s.repaint(RefreshKind::Min)?;
     Ok(None)
 }
 

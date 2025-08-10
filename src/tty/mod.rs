@@ -54,7 +54,7 @@ pub trait Renderer {
         prompt: &str,
         line: &LineBuffer,
         hint: Option<&str>,
-        old_layout: &Layout,
+        old_layout: Option<&Layout>, // used to clear old rows
         new_layout: &Layout,
         highlighter: Option<&dyn Highlighter>,
     ) -> Result<()>;

@@ -55,7 +55,7 @@ use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
 use crate::completion::{longest_common_prefix, Candidate, Completer};
 pub use crate::config::{Behavior, ColorMode, CompletionType, Config, EditMode, HistoryDuplicates};
-use crate::edit::{State, RefreshKind};
+use crate::edit::{RefreshKind, State};
 use crate::error::ReadlineError;
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hinter;

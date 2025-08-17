@@ -361,7 +361,7 @@ fn normalize(s: &str) -> Cow<'_, str> {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn normalize(s: &str) -> Cow<str> {
+fn normalize(s: &str) -> Cow<'_, str> {
     Cow::Borrowed(s)
 }
 

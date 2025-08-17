@@ -359,12 +359,13 @@ impl<H: Helper> State<'_, '_, H> {
             if push {
                 let no_previous_hint = self.hint.is_none();
                 self.hint();
+                let highlight_char = self.highlight_char(CmdKind::Other);
                 let width = cwidh(ch);
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()
                     && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
-                    && !self.highlight_char(CmdKind::Other)
+                    && !highlight_char
                 {
                     // Avoid a full update of the line in the trivial case.
                     self.layout.cursor.col += width;
@@ -565,11 +566,12 @@ impl<H: Helper> State<'_, '_, H> {
                 (proxy.trivial, proxy.cursor_shift, proxy.end_shift);
             let no_previous_hint = self.hint.is_none();
             self.hint();
+            let highlight_char = self.highlight_char(CmdKind::Other);
             if trivial
                 && cursor_shift <= self.layout.cursor.col
                 && end_shift <= self.layout.end.col
                 && (self.hint.is_none() && no_previous_hint)
-                && !self.highlight_char(CmdKind::Other)
+                && !highlight_char
             {
                 // Avoid a full update of the line in the trivial case.
                 debug_assert!(self.line.is_cursor_at_end());

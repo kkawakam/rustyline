@@ -123,7 +123,7 @@ fn find_matching_bracket(line: &str, pos: usize, bracket: u8) -> Option<(u8, usi
     if is_open_bracket(bracket) {
         // forward search
         idx = pos + 1;
-        let bytes = &line.as_bytes()[idx..];
+        let bytes = line.as_bytes().get(idx..)?;
         for b in bytes {
             if *b == matching {
                 unmatched -= 1;
@@ -140,7 +140,7 @@ fn find_matching_bracket(line: &str, pos: usize, bracket: u8) -> Option<(u8, usi
     } else {
         // backward search
         idx = pos;
-        let bytes = &line.as_bytes()[..idx];
+        let bytes = line.as_bytes().get(..idx)?;
         for b in bytes.iter().rev() {
             if *b == matching {
                 unmatched -= 1;

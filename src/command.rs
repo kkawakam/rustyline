@@ -44,19 +44,8 @@ pub fn execute<H: Helper>(
         Cmd::Insert(n, text) => {
             s.edit_yank(input_state, &text, Anchor::Before, n)?;
         }
-        Cmd::Move(Movement::BeginningOfLine) => {
-            // Move to the beginning of line.
-            s.edit_move_home()?;
-        }
-        Cmd::Move(Movement::ViFirstPrint) => {
-            s.edit_move_home()?;
-            if s.line.starts_with(char::is_whitespace) {
-                s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
-            }
-        }
-        Cmd::Move(Movement::BackwardChar(n)) => {
-            // Move back a character.
-            s.edit_move_backward(n)?;
+        Cmd::Move(mvt) => {
+            execute_move(s, mvt)?;
         }
         Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
         Cmd::Replace(mvt, text) => {
@@ -64,6 +53,13 @@ pub fn execute<H: Helper>(
             if let Some(text) = text {
                 s.edit_insert_text(&text)?;
             }
+        }
+        Cmd::ReplaceAndMove(mvt1, text, mvt2) => {
+            s.edit_kill(&mvt1, kill_ring)?;
+            if let Some(text) = text {
+                s.edit_insert_text(&text)?;
+            }
+            execute_move(s, mvt2)?;
         }
         Cmd::Overwrite(c) => {
             s.edit_overwrite_char(c)?;
@@ -74,14 +70,6 @@ pub fn execute<H: Helper>(
             } else if !input_state.is_emacs_mode() {
                 return Ok(Submit);
             }
-        }
-        Cmd::Move(Movement::EndOfLine) => {
-            // Move to the end of line.
-            s.edit_move_end()?;
-        }
-        Cmd::Move(Movement::ForwardChar(n)) => {
-            // Move forward a character.
-            s.edit_move_forward(n)?;
         }
         Cmd::ClearScreen => {
             // Clear the screen leaving the current line at the top of the screen.
@@ -162,34 +150,12 @@ pub fn execute<H: Helper>(
             // move to last entry in history
             s.edit_history(false)?;
         }
-        Cmd::Move(Movement::BackwardWord(n, word_def)) => {
-            // move backwards one word
-            s.edit_move_to_prev_word(word_def, n)?;
-        }
         Cmd::CapitalizeWord => {
             // capitalize word after point
             s.edit_word(WordAction::Capitalize)?;
         }
         Cmd::Kill(ref mvt) => {
             s.edit_kill(mvt, kill_ring)?;
-        }
-        Cmd::Move(Movement::ForwardWord(n, at, word_def)) => {
-            // move forwards one word
-            s.edit_move_to_next_word(at, word_def, n)?;
-        }
-        Cmd::Move(Movement::LineUp(n)) => {
-            s.edit_move_line_up(n)?;
-        }
-        Cmd::Move(Movement::LineDown(n)) => {
-            s.edit_move_line_down(n)?;
-        }
-        Cmd::Move(Movement::BeginningOfBuffer) => {
-            // Move to the start of the buffer.
-            s.edit_move_buffer_start()?;
-        }
-        Cmd::Move(Movement::EndOfBuffer) => {
-            // Move to the end of the buffer.
-            s.edit_move_buffer_end(CmdKind::MoveCursor)?;
         }
         Cmd::DowncaseWord => {
             // lowercase word after point
@@ -209,7 +175,6 @@ pub fn execute<H: Helper>(
                 s.edit_yank_pop(yank_size, text)?;
             }
         }
-        Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
         Cmd::Undo(n) => {
             if s.changes.undo(&mut s.line, n) {
                 s.refresh_line()?;
@@ -227,6 +192,67 @@ pub fn execute<H: Helper>(
             // the input
             s.move_cursor_to_end()?;
             return Err(error::ReadlineError::Interrupted);
+        }
+        _ => {
+            // Ignore the character typed.
+        }
+    }
+    Ok(Proceed)
+}
+
+fn execute_move<H: Helper>(
+    s: &mut State<'_, '_, H>,
+    mvt: Movement,
+) -> Result<Status> {
+    use Status::Proceed;
+
+    match mvt {
+        Movement::BeginningOfLine => {
+            // Move to the beginning of line.
+            s.edit_move_home()?;
+        }
+        Movement::EndOfLine => {
+            // Move to the end of line.
+            s.edit_move_end()?;
+        }
+        Movement::BackwardWord(n, word_def) => {
+            // move backwards one word
+            s.edit_move_to_prev_word(word_def, n)?;
+        }
+        Movement::ForwardWord(n, at, word_def) => {
+            // move forwards one word
+            s.edit_move_to_next_word(at, word_def, n)?;
+        }
+        Movement::ViCharSearch(n, cs) => {
+            s.edit_move_to(cs, n)?;
+        }
+        Movement::ViFirstPrint => {
+            s.edit_move_home()?;
+            if s.line.starts_with(char::is_whitespace) {
+                s.edit_move_to_next_word(At::Start, Word::Big, 1)?;
+            }
+        }
+        Movement::BackwardChar(n) => {
+            // Move back a character.
+            s.edit_move_backward(n)?;
+        }
+        Movement::ForwardChar(n) => {
+            // Move forward a character.
+            s.edit_move_forward(n)?;
+        }
+        Movement::LineUp(n) => {
+            s.edit_move_line_up(n)?;
+        }
+        Movement::LineDown(n) => {
+            s.edit_move_line_down(n)?;
+        }
+        Movement::BeginningOfBuffer => {
+            // Move to the start of the buffer.
+            s.edit_move_buffer_start()?;
+        }
+        Movement::EndOfBuffer => {
+            // Move to the end of the buffer.
+            s.edit_move_buffer_end(CmdKind::MoveCursor)?;
         }
         _ => {
             // Ignore the character typed.

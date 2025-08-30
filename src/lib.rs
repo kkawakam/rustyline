@@ -649,6 +649,11 @@ impl<H: Helper, I: History> Editor<H, I> {
     }
 
     fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
+        #[cfg(windows)]
+        debug_assert!(
+            memchr::memmem::find(prompt.as_bytes(), b"\x1b[").is_none(),
+            "prompt should not be styled"
+        );
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout

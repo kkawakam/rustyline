@@ -8,6 +8,6 @@ cargo build
 export LLVM_PROFILE_FILE="rusqlite-%p-%m.profraw"
 cargo test
 # cargo binstall grcov
-grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing -o ./target/debug/coverage/
+grcov . -s . --binary-path ./target/debug/ -t html --ignore-not-existing -o ./target/debug/coverage/
 rg --files -g '*.profraw' | xargs rm
 open target/debug/coverage/index.html

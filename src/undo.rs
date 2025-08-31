@@ -461,6 +461,26 @@ mod tests {
     }
 
     #[test]
+    fn test_consecutive_replace() {
+        let mut buf = LineBuffer::init("", 0);
+        buf.insert_str(0, "Hello, world!", &mut NoListener);
+        let mut cs = Changeset::new();
+
+        buf.replace(1..4, "i", &mut NoListener);
+        assert_eq!(buf.as_str(), "Hio, world!");
+        cs.replace(1, "ell", "i");
+        buf.replace(2..3, "", &mut NoListener);
+        assert_eq!(buf.as_str(), "Hi, world!");
+        cs.replace(2, "o", "");
+
+        cs.undo(&mut buf, 1);
+        assert_eq!(buf.as_str(), "Hello, world!");
+
+        cs.redo(&mut buf);
+        assert_eq!(buf.as_str(), "Hi, world!");
+    }
+
+    #[test]
     fn test_last_insert() {
         let mut cs = Changeset::new();
         cs.begin();

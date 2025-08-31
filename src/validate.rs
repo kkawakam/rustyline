@@ -133,3 +133,39 @@ fn validate_brackets(input: &str) -> ValidationResult {
         ValidationResult::Incomplete
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ValidationContext, Validator};
+    use crate::{validate::ValidationResult, Result};
+
+    #[test]
+    fn test_unit() -> Result<()> {
+        let validator = ();
+        let mut ctx = "";
+        let mut ctx = ValidationContext::new(&mut ctx);
+        let vr = validator.validate(&mut ctx)?;
+        assert!(vr.is_valid());
+        assert!(!vr.has_message());
+        assert!(!validator.validate_while_typing());
+        Ok(())
+    }
+
+    #[test]
+    fn validate_brackets() {
+        let vr = super::validate_brackets("[x{(x)x}]");
+        assert!(matches!(vr, ValidationResult::Valid(None)));
+        let vr = super::validate_brackets("[x{(x)x}x");
+        assert!(matches!(vr, ValidationResult::Incomplete));
+        let vr = super::validate_brackets("[x{(x)x]");
+        let ValidationResult::Invalid(Some(msg)) = vr else {
+            panic!();
+        };
+        assert_eq!("Mismatched brackets: '{' is not properly closed", msg);
+        let vr = super::validate_brackets("[x{(x)x}]]");
+        let ValidationResult::Invalid(Some(msg)) = vr else {
+            panic!();
+        };
+        assert_eq!("Mismatched brackets: ']' is unpaired", msg);
+    }
+}

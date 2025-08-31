@@ -1,5 +1,4 @@
 //! Tests specific definitions
-use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::{Event, ExternalPrinter, RawMode, RawReader, Renderer, Term};
@@ -18,38 +17,6 @@ pub type Mode = ();
 impl RawMode for Mode {
     fn disable_raw_mode(&self) -> Result<()> {
         Ok(())
-    }
-}
-
-impl RawReader for Iter<'_, KeyEvent> {
-    type Buffer = Buffer;
-
-    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        self.next_key(single_esc_abort).map(Event::KeyPress)
-    }
-
-    fn next_key(&mut self, _: bool) -> Result<KeyEvent> {
-        match self.next() {
-            Some(key) => Ok(*key),
-            None => Err(ReadlineError::Eof),
-        }
-    }
-
-    #[cfg(unix)]
-    fn next_char(&mut self) -> Result<char> {
-        unimplemented!();
-    }
-
-    fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
-    }
-
-    fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
-        None
-    }
-
-    fn unbuffer(self) -> Option<Buffer> {
-        None
     }
 }
 

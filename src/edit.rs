@@ -120,6 +120,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
             if let Ok(Cmd::Replace(..)) = rc {
                 self.changes.begin();
             }
+            if let Ok(Cmd::ReplaceAndMove(..)) = rc {
+                self.changes.begin();
+            }
             return rc;
         }
     }

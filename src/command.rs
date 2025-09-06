@@ -8,16 +8,16 @@ use crate::keymap::{Anchor, At, Cmd, Movement, Word};
 use crate::keymap::{InputState, Refresher};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
-use crate::{Helper, Result};
+use crate::{Helper, Prompt, Result};
 
 pub enum Status {
     Proceed,
     Submit,
 }
 
-pub fn execute<H: Helper>(
+pub fn execute<H: Helper, P: Prompt + ?Sized>(
     cmd: Cmd,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, H, P>,
     input_state: &InputState,
     kill_ring: &mut KillRing,
     config: &Config,

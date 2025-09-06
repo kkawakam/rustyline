@@ -34,6 +34,7 @@ mod keys;
 mod kill_ring;
 mod layout;
 pub mod line_buffer;
+mod prompt;
 #[cfg(feature = "with-sqlite-history")]
 pub mod sqlite_history;
 mod tty;
@@ -66,6 +67,7 @@ pub use crate::keys::{KeyCode, KeyEvent, Modifiers};
 use crate::kill_ring::KillRing;
 pub use crate::layout::GraphemeClusterMode;
 use crate::layout::Unit;
+pub use crate::prompt::Prompt;
 pub use crate::tty::ExternalPrinter;
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
@@ -74,9 +76,9 @@ use crate::validate::Validator;
 pub type Result<T> = result::Result<T, ReadlineError>;
 
 /// Completes the line/word
-fn complete_line<H: Helper>(
+fn complete_line<H: Helper, P: Prompt + ?Sized>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, H, P>,
     input_state: &mut InputState,
     config: &Config,
 ) -> Result<Option<Cmd>> {
@@ -266,7 +268,7 @@ fn complete_line<H: Helper>(
 }
 
 /// Completes the current hint
-fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
+fn complete_hint_line<H: Helper, P: Prompt + ?Sized>(s: &mut State<'_, '_, H, P>) -> Result<()> {
     let Some(hint) = s.hint.as_ref() else {
         return Ok(());
     };
@@ -281,9 +283,9 @@ fn complete_hint_line<H: Helper>(s: &mut State<'_, '_, H>) -> Result<()> {
     s.refresh_line()
 }
 
-fn page_completions<C: Candidate, H: Helper>(
+fn page_completions<C: Candidate, H: Helper, P: Prompt + ?Sized>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, H, P>,
     input_state: &mut InputState,
     candidates: &[C],
 ) -> Result<Option<Cmd>> {
@@ -361,9 +363,9 @@ fn page_completions<C: Candidate, H: Helper>(
 }
 
 /// Incremental search
-fn reverse_incremental_search<H: Helper, I: History>(
+fn reverse_incremental_search<H: Helper, I: History, P: Prompt + ?Sized>(
     rdr: &mut <Terminal as Term>::Reader,
-    s: &mut State<'_, '_, H>,
+    s: &mut State<'_, '_, H, P>,
     input_state: &mut InputState,
     history: &I,
 ) -> Result<Option<Cmd>> {
@@ -633,7 +635,7 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// terminal.
     /// Otherwise (e.g., if `stdin` is a pipe or the terminal is not supported),
     /// it uses file-style interaction.
-    pub fn readline(&mut self, prompt: &str) -> Result<String> {
+    pub fn readline<P: Prompt + ?Sized>(&mut self, prompt: &P) -> Result<String> {
         self.readline_with(prompt, None)
     }
 
@@ -644,21 +646,24 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// The string on the left of the tuple is what will appear to the left of
     /// the cursor and the string on the right is what will appear to the
     /// right of the cursor.
-    pub fn readline_with_initial(&mut self, prompt: &str, initial: (&str, &str)) -> Result<String> {
+    pub fn readline_with_initial<P: Prompt + ?Sized>(
+        &mut self,
+        prompt: &P,
+        initial: (&str, &str),
+    ) -> Result<String> {
         self.readline_with(prompt, Some(initial))
     }
 
-    fn readline_with(&mut self, prompt: &str, initial: Option<(&str, &str)>) -> Result<String> {
-        #[cfg(windows)]
-        debug_assert!(
-            memchr::memmem::find(prompt.as_bytes(), b"\x1b[").is_none(),
-            "prompt should not be styled"
-        );
+    fn readline_with<P: Prompt + ?Sized>(
+        &mut self,
+        prompt: &P,
+        initial: Option<(&str, &str)>,
+    ) -> Result<String> {
         if self.term.is_unsupported() {
             debug!(target: "rustyline", "unsupported terminal");
             // Write prompt and flush it to stdout
             let mut stdout = io::stdout();
-            stdout.write_all(prompt.as_bytes())?;
+            stdout.write_all(prompt.raw().as_bytes())?;
             stdout.flush()?;
 
             readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
@@ -684,9 +689,9 @@ impl<H: Helper, I: History> Editor<H, I> {
     /// Handles reading and editing the readline buffer.
     /// It will also handle special inputs in an appropriate fashion
     /// (e.g., C-c will exit readline)
-    fn readline_edit(
+    fn readline_edit<P: Prompt + ?Sized>(
         &mut self,
-        prompt: &str,
+        prompt: &P,
         initial: Option<(&str, &str)>,
         original_mode: &tty::Mode,
         term_key_map: tty::KeyMap,

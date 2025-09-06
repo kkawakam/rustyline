@@ -149,9 +149,15 @@ impl Config {
 
     /// Tell if colors should be enabled.
     ///
-    /// By default, they are except if stdout is not a TTY.
+    /// By default, they are except if stdout is not a TTY or NO_COLOR
+    /// environment variable is set.
     #[must_use]
     pub fn color_mode(&self) -> ColorMode {
+        if self.color_mode == ColorMode::Enabled
+            && std::env::var_os("NO_COLOR").is_some_and(|os| !os.is_empty())
+        {
+            return ColorMode::Disabled;
+        }
         self.color_mode
     }
 

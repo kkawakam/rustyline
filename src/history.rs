@@ -877,6 +877,35 @@ mod tests {
     }
 
     #[test]
+    fn clear() -> Result<()> {
+        let mut history = init();
+        assert_eq!(3, history.len());
+        history.clear()?;
+        assert_eq!(0, history.len());
+        Ok(())
+    }
+
+    #[test]
+    fn ignore_dups() -> Result<()> {
+        let mut history = init();
+        assert_eq!(3, history.len());
+        history.ignore_dups(false)?;
+        history.add("line3")?;
+        assert_eq!(4, history.len());
+        Ok(())
+    }
+
+    #[test]
+    fn ignore_space() -> Result<()> {
+        let mut history = init();
+        assert_eq!(3, history.len());
+        history.ignore_space(true);
+        history.add(" line4")?;
+        assert_eq!(3, history.len());
+        Ok(())
+    }
+
+    #[test]
     #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn save() -> Result<()> {

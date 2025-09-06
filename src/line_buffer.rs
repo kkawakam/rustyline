@@ -878,7 +878,7 @@ impl LineBuffer {
         true
     }
 
-    /// Replaces the content between [`start`..`end`] with `text`
+    /// Replaces the content between `range` with `text`
     /// and positions the cursor to the end of text.
     pub fn replace<C: ChangeListener>(&mut self, range: Range<usize>, text: &str, cl: &mut C) {
         let start = range.start;

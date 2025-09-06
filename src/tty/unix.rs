@@ -32,7 +32,7 @@ use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{error, error::Signal, Cmd, ReadlineError, Result};
+use crate::{error, error::Signal, Cmd, Prompt, ReadlineError, Result};
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
@@ -1021,9 +1021,9 @@ impl Renderer for PosixRenderer {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<P: Prompt + ?Sized>(
         &mut self,
-        prompt: &str,
+        prompt: &P,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: Option<&Layout>,
@@ -1045,13 +1045,13 @@ impl Renderer for PosixRenderer {
         if let Some(highlighter) = highlighter {
             // display the prompt
             self.buffer
-                .push_str(&highlighter.highlight_prompt(prompt, default_prompt));
+                .push_str(&highlighter.highlight_prompt(prompt.styled(), default_prompt));
             // display the input line
             self.buffer
                 .push_str(&highlighter.highlight(line, line.pos()));
         } else {
             // display the prompt
-            self.buffer.push_str(prompt);
+            self.buffer.push_str(prompt.raw());
             // display the input line
             self.buffer.push_str(line);
         }

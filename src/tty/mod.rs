@@ -8,7 +8,7 @@ use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{Cmd, Result};
+use crate::{Cmd, Prompt, Result};
 
 /// Terminal state
 pub trait RawMode: Sized {
@@ -49,9 +49,9 @@ pub trait Renderer {
     fn move_cursor(&mut self, old: Position, new: Position) -> Result<()>;
 
     /// Display `prompt`, line and cursor in terminal output
-    fn refresh_line(
+    fn refresh_line<P: Prompt + ?Sized>(
         &mut self,
-        prompt: &str,
+        prompt: &P,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: Option<&Layout>, // used to clear old rows

@@ -4,7 +4,7 @@ use log::debug;
 use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::{Context, Helper, Result};
+use super::{Context, Helper, Prompt, Result};
 use crate::error::{ReadlineError, Signal};
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hint;
@@ -21,9 +21,9 @@ use RefreshKind::All;
 
 /// Represent the state during line editing.
 /// Implement rendering.
-pub struct State<'out, 'prompt, H: Helper> {
+pub struct State<'out, 'prompt, H: Helper, P: Prompt + ?Sized> {
     pub out: &'out mut <Terminal as Term>::Writer,
-    prompt: &'prompt str,  // Prompt to display (rl_prompt)
+    prompt: &'prompt P,    // Prompt to display (rl_prompt)
     prompt_size: Position, // Prompt Unicode/visible width and height
     pub line: LineBuffer,  // Edited line buffer
     pub layout: Layout,
@@ -51,14 +51,14 @@ pub enum RefreshKind {
     All,
 }
 
-impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
+impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
     pub fn new(
         out: &'out mut <Terminal as Term>::Writer,
-        prompt: &'prompt str,
+        prompt: &'prompt P,
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> Self {
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt.raw(), Position::default());
         let gcm = out.grapheme_cluster_mode();
         Self {
             out,
@@ -110,7 +110,7 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
                         {
                             self.prompt_size = self
                                 .out
-                                .calculate_position(self.prompt, Position::default());
+                                .calculate_position(self.prompt.raw(), Position::default());
                             self.refresh_line()?;
                         }
                         continue;
@@ -174,9 +174,9 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
         self.refresh(self.prompt, self.prompt_size, true, kind, Info::Hint)
     }
 
-    fn refresh(
+    fn refresh<Q: Prompt + ?Sized>(
         &mut self,
-        prompt: &str,
+        prompt: &Q,
         prompt_size: Position,
         default_prompt: bool,
         kind: RefreshKind,
@@ -279,13 +279,13 @@ impl<'out, 'prompt, H: Helper> State<'out, 'prompt, H> {
     }
 }
 
-impl<H: Helper> Invoke for State<'_, '_, H> {
+impl<H: Helper, P: Prompt + ?Sized> Invoke for State<'_, '_, H, P> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
 }
 
-impl<H: Helper> Refresher for State<'_, '_, H> {
+impl<H: Helper, P: Prompt + ?Sized> Refresher for State<'_, '_, H, P> {
     fn refresh_line(&mut self) -> Result<()> {
         self.hint();
         self.highlight_char(CmdKind::Other);
@@ -349,10 +349,10 @@ impl<H: Helper> Refresher for State<'_, '_, H> {
     }
 }
 
-impl<H: Helper> fmt::Debug for State<'_, '_, H> {
+impl<H: Helper, P: Prompt + ?Sized> fmt::Debug for State<'_, '_, H, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("State")
-            .field("prompt", &self.prompt)
+            .field("prompt", &self.prompt.raw())
             .field("prompt_size", &self.prompt_size)
             .field("buf", &self.line)
             .field("cols", &self.out.get_columns())
@@ -362,7 +362,7 @@ impl<H: Helper> fmt::Debug for State<'_, '_, H> {
     }
 }
 
-impl<H: Helper> State<'_, '_, H> {
+impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
     pub fn clear_screen(&mut self) -> Result<()> {
         self.out.clear_screen()?;
         self.layout.cursor = Position::default();
@@ -819,7 +819,7 @@ pub fn init_state<'out, H: Helper>(
     pos: usize,
     helper: Option<&'out H>,
     history: &'out crate::history::DefaultHistory,
-) -> State<'out, 'static, H> {
+) -> State<'out, 'static, H, str> {
     State {
         out,
         prompt: "",

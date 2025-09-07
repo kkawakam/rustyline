@@ -1,4 +1,4 @@
-use std::borrow::Cow::{self, Borrowed, Owned};
+use std::borrow::Cow::{self, Owned};
 
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
@@ -13,18 +13,6 @@ use rustyline::{Completer, Helper, Hinter, Validator};
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);
 
 impl Highlighter for MyHelper {
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
-        prompt: &'p str,
-        default: bool,
-    ) -> Cow<'b, str> {
-        if default {
-            Owned(format!("\x1b[1;32m{prompt}\x1b[m"))
-        } else {
-            Borrowed(prompt)
-        }
-    }
-
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
         Owned(format!("\x1b[1m{hint}\x1b[m"))
     }
@@ -101,7 +89,7 @@ fn main() -> Result<()> {
     );
 
     loop {
-        let line = rl.readline("> ")?;
+        let line = rl.readline(&("> ", "\x1b[1;32m> \x1b[m"))?;
         rl.add_history_entry(line.as_str())?;
         println!("Line: {line}");
     }

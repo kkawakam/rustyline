@@ -1204,7 +1204,7 @@ mod test {
         ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
     };
     use crate::{
-        keymap::{At, CharSearch, Word},
+        keymap::{At, CharSearch, Movement, Word},
         layout::Layout,
     };
 
@@ -1899,5 +1899,60 @@ mod test {
     fn test_sync() {
         fn assert_sync<T: Sync>() {}
         assert_sync::<LineBuffer>();
+    }
+
+    #[test]
+    fn discard_buffer() {
+        let mut dl = Listener::new();
+        let mut s = LineBuffer::init("text", 4);
+        s.kill(&Movement::BeginningOfBuffer, &mut dl);
+        assert_eq!("", s.buf);
+        assert_eq!(0, s.pos);
+        dl.assert_deleted_str_eq("text");
+    }
+
+    #[test]
+    fn kill_buffer() {
+        let mut dl = Listener::new();
+        let mut s = LineBuffer::init("text", 4);
+        s.kill(&Movement::WholeBuffer, &mut dl);
+        assert_eq!("", s.buf);
+        assert_eq!(0, s.pos);
+        dl.assert_deleted_str_eq("text");
+    }
+
+    #[test]
+    fn copy() {
+        let s = LineBuffer::init("text", 4);
+        assert_eq!(None, s.copy(&Movement::EndOfBuffer));
+        assert_eq!(None, s.copy(&Movement::EndOfLine));
+        assert_eq!(None, s.copy(&Movement::ForwardChar(1)));
+        assert_eq!(
+            None,
+            s.copy(&Movement::ForwardWord(1, At::Start, Word::Big))
+        );
+        assert_eq!(
+            None,
+            s.copy(&Movement::ViCharSearch(1, CharSearch::Forward('x')))
+        );
+        assert_eq!(None, s.copy(&Movement::LineDown(1)));
+        assert_eq!(None, s.copy(&Movement::LineUp(1)));
+        assert_eq!(
+            Some("text"),
+            s.copy(&Movement::BeginningOfBuffer).as_deref()
+        );
+        assert_eq!(Some("text"), s.copy(&Movement::BeginningOfLine).as_deref());
+        assert_eq!(Some("text"), s.copy(&Movement::WholeBuffer).as_deref());
+        assert_eq!(Some("text"), s.copy(&Movement::WholeLine).as_deref());
+        assert_eq!(Some("text"), s.copy(&Movement::BackwardChar(4)).as_deref());
+        assert_eq!(
+            Some("text"),
+            s.copy(&Movement::BackwardWord(1, Word::Big)).as_deref()
+        );
+        assert_eq!(
+            Some("text"),
+            s.copy(&Movement::ViCharSearch(2, CharSearch::Backward('t')))
+                .as_deref()
+        );
     }
 }

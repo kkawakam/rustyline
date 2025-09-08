@@ -126,6 +126,12 @@ pub enum Cmd {
         /// of the current input
         accept_in_the_middle: bool,
     },
+    /// Execute a macro (replay keystrokes)
+    ///
+    /// Replays the given string character-by-character as if the user typed each
+    /// character. Newline characters (`\n`) are converted to `AcceptLine` commands
+    /// to automatically submit the input.
+    Macro(String),
 }
 
 impl Cmd {
@@ -141,6 +147,7 @@ impl Cmd {
             | Self::Suspend
             | Self::Yank(..)
             | Self::YankPop => false,
+            Self::Macro(_) => true,
             _ => true,
         }
     }

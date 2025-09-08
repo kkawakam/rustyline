@@ -44,6 +44,9 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
         Cmd::Insert(n, text) => {
             s.edit_yank(input_state, &text, Anchor::Before, n)?;
         }
+        Cmd::Macro(macro_str) => {
+            s.start_macro(macro_str);
+        }
         Cmd::Move(Movement::BeginningOfLine) => {
             // Move to the beginning of line.
             s.edit_move_home()?;

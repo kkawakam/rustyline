@@ -35,6 +35,7 @@ mod kill_ring;
 mod layout;
 pub mod line_buffer;
 mod prompt;
+mod macro_player;
 #[cfg(feature = "with-sqlite-history")]
 pub mod sqlite_history;
 mod tty;

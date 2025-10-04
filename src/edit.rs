@@ -357,14 +357,14 @@ impl<H: Helper> State<'_, '_, H> {
     pub fn edit_insert(&mut self, ch: char, n: RepeatCount) -> Result<()> {
         if let Some(push) = self.line.insert(ch, n, &mut self.changes) {
             if push {
-                let no_previous_hint = self.hint.is_none();
+                let no_previous_msg = !self.layout.has_info;
                 self.hint();
                 let highlight_char = self.highlight_char(CmdKind::Other);
                 let width = cwidh(ch);
                 if n == 1
                     && width != 0 // Ctrl-V + \t or \n ...
                     && self.layout.cursor.col + width < self.out.get_columns()
-                    && (self.hint.is_none() && no_previous_hint) // TODO refresh only current line
+                    && (self.hint.is_none() && no_previous_msg) // TODO refresh only current line
                     && !highlight_char
                 {
                     // Avoid a full update of the line in the trivial case.
@@ -564,13 +564,13 @@ impl<H: Helper> State<'_, '_, H> {
         if self.line.kill(mvt, &mut proxy) {
             let (trivial, cursor_shift, end_shift) =
                 (proxy.trivial, proxy.cursor_shift, proxy.end_shift);
-            let no_previous_hint = self.hint.is_none();
+            let no_previous_msg = !self.layout.has_info;
             self.hint();
             let highlight_char = self.highlight_char(CmdKind::Other);
             if trivial
                 && cursor_shift <= self.layout.cursor.col
                 && end_shift <= self.layout.end.col
-                && (self.hint.is_none() && no_previous_hint)
+                && (self.hint.is_none() && no_previous_msg)
                 && !highlight_char
             {
                 // Avoid a full update of the line in the trivial case.

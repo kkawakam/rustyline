@@ -115,6 +115,8 @@ pub struct Layout {
     pub cursor: Position,
     /// Number of rows used so far (from start of prompt to end of input)
     pub end: Position,
+    /// Has some hint or message at the end of input
+    pub has_info: bool,
 }
 
 impl Layout {
@@ -125,6 +127,7 @@ impl Layout {
             default_prompt: false,
             cursor: Position::default(),
             end: Position::default(),
+            has_info: false,
         }
     }
 

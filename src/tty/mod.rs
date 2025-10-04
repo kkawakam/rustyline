@@ -88,6 +88,7 @@ pub trait Renderer {
             default_prompt,
             cursor,
             end,
+            has_info: info.is_some(),
         };
         debug_assert!(new_layout.prompt_size <= new_layout.cursor);
         debug_assert!(new_layout.cursor <= new_layout.end);

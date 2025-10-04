@@ -9,7 +9,7 @@ use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{Cmd, Result};
+use crate::{Cmd, Prompt, Result};
 
 pub type Buffer = ();
 pub type KeyMap = ();
@@ -100,9 +100,9 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<P: Prompt + ?Sized>(
         &mut self,
-        _prompt: &str,
+        _prompt: &P,
         _line: &LineBuffer,
         _hint: Option<&str>,
         _old_layout: Option<&Layout>,

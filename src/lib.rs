@@ -17,7 +17,7 @@
 //! # Ok::<(), rustyline::error::ReadlineError>(())
 //! ```
 #![warn(missing_docs)]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "custom-bindings")]
 mod binding;

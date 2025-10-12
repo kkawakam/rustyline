@@ -419,6 +419,10 @@ impl<'b> InputState<'b> {
         self.mode == EditMode::Emacs
     }
 
+    pub fn is_vi_cmd_mode(&self) -> bool {
+        self.input_mode == InputMode::Command && self.mode == EditMode::Vi
+    }
+
     /// Parse user input into one command
     /// `single_esc_abort` is used in emacs mode on unix platform when a single
     /// esc key is expected to abort current action.

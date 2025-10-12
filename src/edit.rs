@@ -447,7 +447,7 @@ impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
             self.line.move_forward(1);
         }
         if self.line.yank(text, n, &mut self.changes).is_some() {
-            if !input_state.is_emacs_mode() {
+            if input_state.is_vi_cmd_mode() {
                 self.line.move_backward(1);
             }
             self.refresh_line()

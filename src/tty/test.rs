@@ -41,7 +41,7 @@ impl RawReader for Iter<'_, KeyEvent> {
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
+        Ok("pasted".to_owned())
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
@@ -78,7 +78,7 @@ impl RawReader for IntoIter<KeyEvent> {
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
+        Ok("pasted".to_owned())
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {

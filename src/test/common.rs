@@ -338,3 +338,24 @@ fn ctrl__() {
         }
     }
 }
+
+#[test]
+fn paste() {
+    for mode in &[EditMode::Emacs, EditMode::Vi] {
+        assert_cursor(
+            *mode,
+            ("", ""),
+            &[E(K::BracketedPasteStart, M::NONE), E::ENTER],
+            ("pasted", ""),
+        );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", ""),
+                &[E::ESC, E(K::BracketedPasteStart, M::NONE), E::ENTER],
+                ("paste", "d"),
+            );
+        }
+    }
+}

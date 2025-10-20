@@ -594,6 +594,7 @@ pub struct Editor<H: Helper, I: History> {
     kill_ring: KillRing,
     config: Config,
     custom_bindings: Bindings,
+    pending_restore: Option<String>,
 }
 
 /// Default editor with no helper and `DefaultHistory`
@@ -624,7 +625,35 @@ impl<H: Helper, I: History> Editor<H, I> {
             kill_ring: KillRing::new(60),
             config,
             custom_bindings: Bindings::new(),
+            pending_restore: None,
         })
+    }
+
+    /// Set content to be restored on the next readline call
+    ///
+    /// This is used by MacroClearLine to restore the cleared line after the macro executes.
+    /// Generally, applications don't need to call this directly.
+    pub fn set_pending_restore(&mut self, content: String) {
+        self.pending_restore = Some(content);
+    }
+
+    /// Get and clear any pending restore content
+    ///
+    /// Returns the saved content that should be restored on the next readline call.
+    /// This is set by [`Cmd::MacroClearLine`] when it clears the current line.
+    ///
+    /// Applications should check this before each readline call and use
+    /// [`Editor::readline_with_initial`] to restore the content:
+    ///
+    /// ```ignore
+    /// let result = if let Some(restore) = rl.take_pending_restore() {
+    ///     rl.readline_with_initial("> ", (&restore, ""))
+    /// } else {
+    ///     rl.readline("> ")
+    /// };
+    /// ```
+    pub fn take_pending_restore(&mut self) -> Option<String> {
+        self.pending_restore.take()
     }
 
     /// This method will read a line from STDIN and will display a `prompt`.
@@ -805,6 +834,12 @@ impl<H: Helper, I: History> Editor<H, I> {
             let _ = original_mode; // silent warning
         }
         self.buffer = rdr.unbuffer();
+
+        // Transfer pending_restore from MacroPlayer to Editor for next readline call
+        if let Some(restore_content) = s.macro_player_mut().take_pending_restore() {
+            self.pending_restore = Some(restore_content);
+        }
+
         Ok(s.line.into_string())
     }
 

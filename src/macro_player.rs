@@ -4,6 +4,7 @@
 pub struct MacroPlayer {
     buffer: Vec<char>,
     position: usize,
+    pending_restore: Option<String>,
 }
 
 impl MacroPlayer {
@@ -11,6 +12,22 @@ impl MacroPlayer {
     pub fn start(&mut self, macro_str: String) {
         self.buffer = macro_str.chars().filter(|&c| c != '\r').collect();
         self.position = 0;
+    }
+
+    /// Set content to be restored on the next readline call
+    ///
+    /// This is called by [`Cmd::MacroClearLine`] to save the cleared line content.
+    /// The content is transferred to [`Editor`] at the end of the readline session.
+    pub fn set_pending_restore(&mut self, content: String) {
+        self.pending_restore = Some(content);
+    }
+
+    /// Get and clear any pending restore content
+    ///
+    /// This is called internally to transfer the pending restore to [`Editor`]
+    /// at the end of the readline session.
+    pub fn take_pending_restore(&mut self) -> Option<String> {
+        self.pending_restore.take()
     }
 }
 

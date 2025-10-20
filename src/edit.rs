@@ -88,6 +88,11 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
         self.macro_player.start(macro_str);
     }
 
+    /// Get mutable access to the macro player
+    pub fn macro_player_mut(&mut self) -> &mut MacroPlayer {
+        &mut self.macro_player
+    }
+
     pub fn highlighter(&self) -> Option<&dyn Highlighter> {
         if self.out.colors_enabled() {
             self.helper.map(|h| h as &dyn Highlighter)

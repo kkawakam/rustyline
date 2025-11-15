@@ -200,7 +200,7 @@ pub trait Term {
         buffer: Option<Self::Buffer>,
         config: &Config,
         key_map: Self::KeyMap,
-    ) -> Self::Reader;
+    ) -> Result<Self::Reader>;
     /// Create a writer
     fn create_writer(&self, config: &Config) -> Self::Writer;
     fn writeln(&self) -> Result<()>;

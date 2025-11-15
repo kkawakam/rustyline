@@ -830,8 +830,11 @@ impl Term for Console {
         _: Option<ConsoleBuffer>,
         _: &Config,
         _: ConsoleKeyMap,
-    ) -> ConsoleRawReader {
-        ConsoleRawReader::create(self.conin, self.pipe_reader.clone())
+    ) -> Result<ConsoleRawReader> {
+        Ok(ConsoleRawReader::create(
+            self.conin,
+            self.pipe_reader.clone(),
+        ))
     }
 
     fn create_writer(&self, c: &Config) -> ConsoleRenderer {

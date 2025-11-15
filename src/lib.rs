@@ -714,7 +714,7 @@ impl<H: Helper, I: History> Editor<H, I> {
 
         let mut rdr = self
             .term
-            .create_reader(self.buffer.take(), &self.config, term_key_map);
+            .create_reader(self.buffer.take(), &self.config, term_key_map)?;
         if self.term.is_output_tty() && self.config.check_cursor_position() {
             if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
                 if let ReadlineError::Signal(error::Signal::Resize) = e {

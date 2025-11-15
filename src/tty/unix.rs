@@ -128,7 +128,7 @@ impl RawMode for PosixMode {
 // So we use low-level stuff instead...
 struct TtyIn {
     fd: AltFd,
-    sig_pipe: Option<AltFd>,
+    sig: Option<Sig>,
 }
 
 impl Read for TtyIn {
@@ -160,11 +160,19 @@ impl Read for TtyIn {
         }
     }
 }
+#[expect(unused_must_use)]
+impl Drop for TtyIn {
+    fn drop(&mut self) {
+        if let Some(sig) = self.sig.take() {
+            sig.uninstall_sigwinch_handler();
+        }
+    }
+}
 
 impl TtyIn {
     /// Check if a signal has been received
     fn sig(&self) -> nix::Result<Option<Signal>> {
-        if let Some(pipe) = self.sig_pipe {
+        if let Some(pipe) = self.sig_fd() {
             let mut buf = [0u8; 64];
             match read(pipe, &mut buf) {
                 Ok(0) => Ok(None),
@@ -175,6 +183,10 @@ impl TtyIn {
         } else {
             Ok(None)
         }
+    }
+
+    fn sig_fd(&self) -> Option<BorrowedFd<'_>> {
+        self.sig.as_ref().map(|s| s.pipe.as_fd())
     }
 }
 
@@ -235,14 +247,14 @@ const RXVT_CTRL_SHIFT: char = '@';
 impl PosixRawReader {
     fn new(
         fd: AltFd,
-        sig_pipe: Option<AltFd>,
+        sig: Option<Sig>,
         buffer: Option<PosixBuffer>,
         config: &Config,
         key_map: PosixKeyMap,
         pipe_reader: Option<PipeReader>,
         #[cfg(target_os = "macos")] is_dev_tty: bool,
     ) -> Self {
-        let inner = TtyIn { fd, sig_pipe };
+        let inner = TtyIn { fd, sig };
         #[cfg(any(not(feature = "buffer-redux"), test))]
         let (tty_in, _) = (BufReader::with_capacity(1024, inner), buffer);
         #[cfg(all(feature = "buffer-redux", not(test)))]
@@ -734,7 +746,7 @@ impl PosixRawReader {
     // timeout is used only with /dev/tty on MacOs
     fn select(&mut self, timeout: Option<PollTimeout>, single_esc_abort: bool) -> Result<Event> {
         let tty_in = self.as_fd();
-        let sig_pipe = self.tty_in.get_ref().sig_pipe.as_ref().map(|fd| fd.as_fd());
+        let sig_pipe = self.tty_in.get_ref().sig_fd();
         let pipe_reader = if timeout.is_some() {
             None
         } else {
@@ -1264,7 +1276,9 @@ fn set_cursor_visibility(fd: AltFd, visible: bool) -> Result<Option<PosixCursorG
 }
 
 #[cfg(not(feature = "signal-hook"))]
-static mut SIG_PIPE: AltFd = AltFd(-1);
+const INVALID_FD: AltFd = AltFd(-1);
+#[cfg(not(feature = "signal-hook"))]
+static mut SIG_PIPE: AltFd = INVALID_FD;
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sig_handler(sig: libc::c_int) {
     let b = error::Signal::to_byte(sig);
@@ -1284,6 +1298,7 @@ struct Sig {
 impl Sig {
     #[cfg(not(feature = "signal-hook"))]
     fn install_sigwinch_handler() -> Result<Self> {
+        assert!(unsafe { SIG_PIPE == INVALID_FD });
         use nix::sys::signal;
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
@@ -1320,7 +1335,7 @@ impl Sig {
         let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
         close(self.pipe)?;
         unsafe { close(SIG_PIPE)? };
-        unsafe { SIG_PIPE = AltFd(-1) };
+        unsafe { SIG_PIPE = INVALID_FD };
         Ok(())
     }
 
@@ -1348,7 +1363,6 @@ pub struct PosixTerminal {
     pipe_reader: Option<PipeReader>,
     // external print writer
     pipe_writer: Option<PipeWriter>,
-    sig: Option<Sig>,
 }
 
 impl PosixTerminal {
@@ -1387,11 +1401,6 @@ impl Term for PosixTerminal {
                 (i, is_a_tty(i), o, is_a_tty(o), false)
             };
         let unsupported = super::is_unsupported_term();
-        let sig = if !unsupported && is_in_a_tty && is_out_a_tty {
-            Some(Sig::install_sigwinch_handler()?)
-        } else {
-            None
-        };
         Ok(Self {
             unsupported,
             tty_in,
@@ -1402,7 +1411,6 @@ impl Term for PosixTerminal {
             raw_mode: Arc::new(AtomicBool::new(false)),
             pipe_reader: None,
             pipe_writer: None,
-            sig,
         })
     }
 
@@ -1465,17 +1473,23 @@ impl Term for PosixTerminal {
         buffer: Option<PosixBuffer>,
         config: &Config,
         key_map: PosixKeyMap,
-    ) -> PosixRawReader {
-        PosixRawReader::new(
+    ) -> Result<PosixRawReader> {
+        debug_assert!(!self.unsupported && self.is_in_a_tty);
+        let sig = if self.is_out_a_tty {
+            Some(Sig::install_sigwinch_handler()?)
+        } else {
+            None
+        };
+        Ok(PosixRawReader::new(
             self.tty_in,
-            self.sig.as_ref().map(|s| s.pipe),
+            sig,
             buffer,
             config,
             key_map,
             self.pipe_reader.clone(),
             #[cfg(target_os = "macos")]
             self.close_on_drop,
-        )
+        ))
     }
 
     fn create_writer(&self, c: &Config) -> PosixRenderer {
@@ -1534,9 +1548,6 @@ impl Drop for PosixTerminal {
         if self.close_on_drop {
             close(self.tty_in);
             debug_assert_eq!(self.tty_in, self.tty_out);
-        }
-        if let Some(sig) = self.sig.take() {
-            sig.uninstall_sigwinch_handler();
         }
     }
 }

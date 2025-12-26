@@ -126,6 +126,32 @@ pub enum Cmd {
         /// of the current input
         accept_in_the_middle: bool,
     },
+    /// Execute a macro (replay keystrokes)
+    ///
+    /// Replays the given string character-by-character as if the user typed each
+    /// character. Newline characters (`\n`) are converted to `AcceptLine` commands
+    /// to automatically submit the input.
+    Macro(String),
+    /// Execute a macro after clearing the current line
+    ///
+    /// Clears the current line content, then replays the given string
+    /// character-by-character as if the user typed each character.
+    /// Newline characters (`\n`) are converted to `AcceptLine` commands
+    /// to automatically submit the input.
+    ///
+    /// The cleared line content is saved and can be restored by the application
+    /// on the next readline call. See [`Editor::take_pending_restore`] for details.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Check for pending restore before each readline
+    /// let result = if let Some(restore) = rl.take_pending_restore() {
+    ///     rl.readline_with_initial("> ", (&restore, ""))
+    /// } else {
+    ///     rl.readline("> ")
+    /// };
+    /// ```
+    MacroClearLine(String),
 }
 
 impl Cmd {
@@ -141,6 +167,7 @@ impl Cmd {
             | Self::Suspend
             | Self::Yank(..)
             | Self::YankPop => false,
+            Self::Macro(_) | Self::MacroClearLine(_) => true,
             _ => true,
         }
     }

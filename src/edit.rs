@@ -13,6 +13,7 @@ use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{cwidh, Layout, Position, Unit};
 use crate::line_buffer::{DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE};
+use crate::macro_player::MacroPlayer;
 use crate::tty::{Renderer, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
@@ -34,6 +35,7 @@ pub struct State<'out, 'prompt, H: Helper, P: Prompt + ?Sized> {
     pub ctx: Context<'out>,          // Give access to history for `hinter`
     pub hint: Option<Box<dyn Hint>>, // last hint displayed
     pub highlight_char: bool,        // `true` if a char has been highlighted
+    macro_player: MacroPlayer,       // Macro player for keystroke replay
 }
 
 enum Info<'m> {
@@ -73,7 +75,22 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
             ctx,
             hint: None,
             highlight_char: false,
+            macro_player: MacroPlayer::default(),
         }
+    }
+
+    /// Start macro replay
+    ///
+    /// Initiates replay of a macro string character-by-character.
+    /// Each character in the macro will be processed as if the user typed it,
+    /// with `\n` characters triggering `AcceptLine` to submit the input.
+    pub fn start_macro(&mut self, macro_str: String) {
+        self.macro_player.start(macro_str);
+    }
+
+    /// Get mutable access to the macro player
+    pub fn macro_player_mut(&mut self) -> &mut MacroPlayer {
+        &mut self.macro_player
     }
 
     pub fn highlighter(&self) -> Option<&dyn Highlighter> {
@@ -92,6 +109,15 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
         ignore_external_print: bool,
     ) -> Result<Cmd> {
         loop {
+            // Check if we're replaying a macro
+            if let Some(ch) = self.macro_player.next() {
+                // Convert character to appropriate command
+                return Ok(match ch {
+                    '\n' => Cmd::AcceptLine,
+                    c => Cmd::SelfInsert(1, c),
+                });
+            }
+
             let rc = input_state.next_cmd(rdr, self, single_esc_abort, ignore_external_print);
             if let Err(ReadlineError::Signal(signal)) = rc {
                 match signal {
@@ -833,6 +859,7 @@ pub fn init_state<'out, H: Helper>(
         ctx: Context::new(history),
         hint: Some(Box::new("hint".to_owned())),
         highlight_char: false,
+        macro_player: MacroPlayer::default(),
     }
 }
 

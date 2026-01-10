@@ -42,7 +42,7 @@ mod undo;
 pub mod validate;
 
 use std::fmt;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::path::Path;
 use std::result;
 
@@ -926,6 +926,12 @@ impl<H: Helper, I: History> Editor<H, I> {
         self.term.create_external_printer()
     }
 
+    /// Create a wrapper for the external printer implementing std::io::Write
+    pub fn create_external_writer(&mut self) -> Result<Box<dyn Write + Send>> {
+        self.create_external_printer().map(|printer|
+            Box::new(ExternalPrinterWriter(Box::new(printer))) as Box<dyn Write + Send>)
+    }
+
     /// Change cursor visibility
     pub fn set_cursor_visibility(
         &mut self,
@@ -934,6 +940,23 @@ impl<H: Helper, I: History> Editor<H, I> {
         self.term.set_cursor_visibility(visible)
     }
 }
+
+struct ExternalPrinterWriter<P>(Box<P>);
+
+impl<P> Write for ExternalPrinterWriter<P>
+where P: ExternalPrinter + Send {
+    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
+        let mut string = String::with_capacity(buf.len());
+        buf.read_to_string(&mut string).inspect(|_| {
+            self.0.print(string); //.strip_suffix('\n').map(|s| s.to_string()).unwrap_or(string));
+        })
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 
 impl<H: Helper, I: History> config::Configurer for Editor<H, I> {
     fn config_mut(&mut self) -> &mut Config {

@@ -1,8 +1,6 @@
 //! History API
 
 #[cfg(feature = "with-file-history")]
-use fd_lock::RwLock;
-#[cfg(feature = "with-file-history")]
 use log::{debug, warn};
 use std::borrow::Cow;
 use std::collections::vec_deque;
@@ -696,11 +694,10 @@ impl History for FileHistory {
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        let mut lock = RwLock::new(file);
-        let lock_guard = lock.write()?;
-        self.save_to(&lock_guard, false)?;
+        file.lock()?;
+        self.save_to(&file, false)?;
         self.new_entries = 0;
-        self.update_path(path, &lock_guard, self.len())
+        self.update_path(path, &file, self.len())
     }
 
     fn append(&mut self, path: &Path) -> Result<()> {
@@ -712,12 +709,11 @@ impl History for FileHistory {
         if !path.exists() || self.new_entries == self.mem.max_len {
             return self.save(path);
         }
-        let file = OpenOptions::new().write(true).read(true).open(path)?;
-        let mut lock = RwLock::new(file);
-        let mut lock_guard = lock.write()?;
-        if self.can_just_append(path, &lock_guard)? {
-            lock_guard.seek(SeekFrom::End(0))?;
-            self.save_to(&lock_guard, true)?;
+        let mut file = OpenOptions::new().write(true).read(true).open(path)?;
+        file.lock()?;
+        if self.can_just_append(path, &file)? {
+            file.seek(SeekFrom::End(0))?;
+            self.save_to(&file, true)?;
             let size = self
                 .path_info
                 .as_ref()
@@ -725,7 +721,7 @@ impl History for FileHistory {
                 .2
                 .saturating_add(self.new_entries);
             self.new_entries = 0;
-            return self.update_path(path, &lock_guard, size);
+            return self.update_path(path, &file, size);
         }
         // we may need to truncate file before appending new entries
         let mut other = Self {
@@ -738,26 +734,25 @@ impl History for FileHistory {
             new_entries: 0,
             path_info: None,
         };
-        other.load_from(&lock_guard)?;
+        other.load_from(&file)?;
         let first_new_entry = self.mem.len().saturating_sub(self.new_entries);
         for entry in self.mem.entries.iter().skip(first_new_entry) {
             other.add(entry)?;
         }
-        lock_guard.seek(SeekFrom::Start(0))?;
-        lock_guard.set_len(0)?; // if new size < old size
-        other.save_to(&lock_guard, false)?;
-        self.update_path(path, &lock_guard, other.len())?;
+        file.seek(SeekFrom::Start(0))?;
+        file.set_len(0)?; // if new size < old size
+        other.save_to(&file, false)?;
+        self.update_path(path, &file, other.len())?;
         self.new_entries = 0;
         Ok(())
     }
 
     fn load(&mut self, path: &Path) -> Result<()> {
         let file = File::open(path)?;
-        let lock = RwLock::new(file);
-        let lock_guard = lock.read()?;
+        file.lock_shared()?;
         let len = self.len();
-        if self.load_from(&lock_guard)? {
-            self.update_path(path, &lock_guard, self.len() - len)
+        if self.load_from(&file)? {
+            self.update_path(path, &file, self.len() - len)
         } else {
             // discard old version on next save
             self.path_info = None;

@@ -356,7 +356,7 @@ fn filename_complete(
 
 #[cfg(any(windows, target_os = "macos"))]
 fn normalize(s: &str) -> Cow<'_, str> {
-    // case insensitive
+    // case-insensitive
     Owned(s.to_lowercase())
 }
 

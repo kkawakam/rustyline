@@ -227,16 +227,16 @@ impl Term for DummyTerminal {
         Sink::default()
     }
 
+    fn writeln(&self) -> Result<()> {
+        Ok(())
+    }
+
     fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
         Ok(DummyExternalPrinter {})
     }
 
     fn set_cursor_visibility(&mut self, _: bool) -> Result<Option<()>> {
         Ok(None)
-    }
-
-    fn writeln(&self) -> Result<()> {
-        Ok(())
     }
 }
 

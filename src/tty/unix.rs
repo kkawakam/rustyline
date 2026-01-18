@@ -302,7 +302,7 @@ impl PosixRawReader {
             //
             // In general this more or less works just adding ALT to an existing
             // key, but has a wrinkle in that `ESC ESC` without anything
-            // following should be interpreted as the the escape key.
+            // following should be interpreted as the escape key.
             //
             // We handle this by polling to see if there's anything coming
             // within our timeout, and if so, recursing once, but adding alt to

@@ -25,7 +25,6 @@ cfg-if = "1.0"
 # For file completion
 home = { version = "0.5.4", optional = true }
 # For History
-fd-lock = { version = "4.0.0", optional = true }
 rusqlite = { version = "0.38.0", optional = true, default-features = false, features = [
     "bundled",
     "cache",
@@ -79,7 +78,7 @@ default = ["custom-bindings", "with-dirs", "with-file-history"]
 custom-bindings = ["radix_trie"]
 derive = ["rustyline-derive"]
 with-dirs = ["home"]
-with-file-history = ["fd-lock"]
+with-file-history = []
 with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]

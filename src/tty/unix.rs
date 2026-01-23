@@ -1285,9 +1285,9 @@ extern "C" fn sig_handler(sig: libc::c_int) {
     let _ = unsafe { write(SIG_PIPE, &[b]) };
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Sig {
-    pipe: AltFd,
+    pipe: UnixStream,
     #[cfg(not(feature = "signal-hook"))]
     original_sigint: nix::sys::signal::SigAction,
     #[cfg(not(feature = "signal-hook"))]
@@ -1311,7 +1311,7 @@ impl Sig {
         let original_sigint = unsafe { signal::sigaction(signal::SIGINT, &sa)? };
         let original_sigwinch = unsafe { signal::sigaction(signal::SIGWINCH, &sa)? };
         Ok(Self {
-            pipe: AltFd(pipe.into_raw_fd()),
+            pipe,
             original_sigint,
             original_sigwinch,
         })
@@ -1322,10 +1322,7 @@ impl Sig {
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
         let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
-        Ok(Self {
-            pipe: AltFd(pipe.into_raw_fd()),
-            id,
-        })
+        Ok(Self { pipe, id })
     }
 
     #[cfg(not(feature = "signal-hook"))]

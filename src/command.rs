@@ -44,6 +44,21 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
         Cmd::Insert(n, text) => {
             s.edit_yank(input_state, &text, Anchor::Before, n)?;
         }
+        Cmd::Macro(macro_str) => {
+            s.start_macro(macro_str);
+        }
+        Cmd::MacroClearLine(macro_str) => {
+            // Save the current line content for restoration after macro execution
+            if !s.line.is_empty() {
+                let line_content = s.line.as_str().to_string();
+                s.macro_player_mut().set_pending_restore(line_content);
+            }
+            // Clear the current line
+            s.edit_kill(&Movement::WholeLine, kill_ring)?;
+            s.changes.end();
+            // Then start the macro
+            s.start_macro(macro_str);
+        }
         Cmd::Move(Movement::BeginningOfLine) => {
             // Move to the beginning of line.
             s.edit_move_home()?;

@@ -19,11 +19,11 @@ maintenance = { status = "actively-developed" }
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0.87", default-features = false, features = [
+syn = { version = "2.0.89", default-features = false, features = [
     "derive",
     "parsing",
     "printing",
     "proc-macro",
 ] }
 quote = { version = "1.0.36", default-features = false }
-proc-macro2 = { version = "1.0.86", default-features = false }
+proc-macro2 = { version = "1.0.91", default-features = false }

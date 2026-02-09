@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 
 use rustyline::{DefaultEditor, ExternalPrinter, Result};
 

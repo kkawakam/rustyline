@@ -589,11 +589,10 @@ impl<'b> InputState<'b> {
                 if let Some(cmd) = self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)? {
                     cmd
                 } else {
-                    let snd_key = match evt {
-                        // we may have already read the second key in custom_seq_binding
-                        #[allow(clippy::out_of_bounds_indexing)]
-                        Event::KeySeq(ref key_seq) if key_seq.len() > 1 => key_seq[1],
-                        _ => rdr.next_key(true)?,
+                    let snd_key = if let Some(snd_key) = evt.get(1) {
+                        *snd_key
+                    } else {
+                        rdr.next_key(true)?
                     };
                     match snd_key {
                         E(K::Char('G'), M::CTRL) | E::ESC => Cmd::Abort,
@@ -1168,7 +1167,7 @@ impl InputState<'_> {
     ) -> Result<Option<Cmd>> {
         while let Some(subtrie) = self.custom_bindings.get_raw_descendant(evt) {
             let snd_key = rdr.next_key(true)?;
-            if let Event::KeySeq(ref mut key_seq) = evt {
+            if let Event::KeySeq(key_seq) = evt {
                 key_seq.push(snd_key);
             } else {
                 break;
@@ -1219,6 +1218,12 @@ enum Event {
 impl From<KeyEvent> for Event {
     fn from(k: KeyEvent) -> Self {
         Self::KeySeq([k])
+    }
+}
+impl Event {
+    pub fn get(&self, i: usize) -> Option<&KeyEvent> {
+        let Self::KeySeq(ks) = self;
+        ks.get(i)
     }
 }
 pub struct Bindings {}

@@ -671,10 +671,10 @@ impl<H: Helper, I: History> Editor<H, I> {
             let (original_mode, term_key_map) = self.term.enable_raw_mode(&self.config)?;
             let guard = Guard(&original_mode);
             let user_input = self.readline_edit(prompt, initial, &original_mode, term_key_map);
-            if self.config.auto_add_history() {
-                if let Ok(ref line) = user_input {
-                    self.add_history_entry(line.as_str())?;
-                }
+            if self.config.auto_add_history()
+                && let Ok(ref line) = user_input
+            {
+                self.add_history_entry(line.as_str())?;
             }
             drop(guard); // disable_raw_mode(original_mode)?;
             self.term.writeln()?;
@@ -715,13 +715,14 @@ impl<H: Helper, I: History> Editor<H, I> {
         let mut rdr = self
             .term
             .create_reader(self.buffer.take(), &self.config, term_key_map)?;
-        if self.term.is_output_tty() && self.config.check_cursor_position() {
-            if let Err(e) = s.move_cursor_at_leftmost(&mut rdr) {
-                if let ReadlineError::Signal(error::Signal::Resize) = e {
-                    s.out.update_size();
-                } else {
-                    return Err(e);
-                }
+        if self.term.is_output_tty()
+            && self.config.check_cursor_position()
+            && let Err(e) = s.move_cursor_at_leftmost(&mut rdr)
+        {
+            if let ReadlineError::Signal(error::Signal::Resize) = e {
+                s.out.update_size();
+            } else {
+                return Err(e);
             }
         }
         s.refresh_line()?;

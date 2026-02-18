@@ -261,12 +261,11 @@ impl MemHistory {
         {
             return true;
         }
-        if self.ignore_dups {
-            if let Some(s) = self.entries.back() {
-                if s == line {
-                    return true;
-                }
-            }
+        if self.ignore_dups
+            && let Some(s) = self.entries.back()
+            && s == line
+        {
+            return true;
         }
         false
     }

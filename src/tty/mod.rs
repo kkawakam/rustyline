@@ -249,10 +249,14 @@ pub use self::test::*;
 mod test_ {
     #[test]
     fn test_unsupported_term() {
-        std::env::set_var("TERM", "xterm");
+        unsafe {
+            std::env::set_var("TERM", "xterm");
+        }
         assert!(!super::is_unsupported_term());
 
-        std::env::set_var("TERM", "dumb");
+        unsafe {
+            std::env::set_var("TERM", "dumb");
+        }
         assert!(super::is_unsupported_term());
     }
 }

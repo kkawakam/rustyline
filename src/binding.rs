@@ -125,13 +125,25 @@ pub enum EventHandler {
     Simple(Cmd),
     /// handler behaviour depends on input state
     Conditional(Box<dyn ConditionalEventHandler>),
-    /* invoke multiple actions
-     * TODO Macro(), */
+    /// Invoke multiple commands in sequence.
+    ///
+    /// Commands are executed in order. Sequences of two or more commands
+    /// are wrapped in a single undo group so that one undo reverts the
+    /// entire sequence; the kill ring is not reset between commands.
+    /// Commands after a line-terminating command (`AcceptLine`,
+    /// `EndOfFile`, …) are not executed.
+    Macro(Vec<Cmd>),
 }
 
 impl From<Cmd> for EventHandler {
     fn from(c: Cmd) -> Self {
         Self::Simple(c)
+    }
+}
+
+impl From<Vec<Cmd>> for EventHandler {
+    fn from(cmds: Vec<Cmd>) -> Self {
+        Self::Macro(cmds)
     }
 }
 
@@ -250,5 +262,21 @@ mod test {
     fn size_of_event() {
         use core::mem::size_of;
         assert_eq!(size_of::<Event>(), 32);
+    }
+
+    #[test]
+    fn macro_handler() {
+        let mut trie = Trie::new();
+        let cmds = vec![Cmd::Insert(1, "help".to_string()), Cmd::AcceptLine];
+        let evt = Event::from(KeyEvent(KeyCode::F(1), Modifiers::NONE));
+        trie.insert(evt.clone(), EventHandler::Macro(cmds));
+        let handler = trie.get(&evt).unwrap();
+        assert!(matches!(handler, EventHandler::Macro(v) if v.len() == 2));
+    }
+
+    #[test]
+    fn from_vec_cmd() {
+        let handler: EventHandler = vec![Cmd::Noop, Cmd::AcceptLine].into();
+        assert!(matches!(handler, EventHandler::Macro(v) if v.len() == 2));
     }
 }

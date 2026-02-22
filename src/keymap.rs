@@ -1,6 +1,9 @@
 //! Bindings from keys to command for Emacs and Vi modes
 use log::debug;
 
+#[cfg(feature = "custom-bindings")]
+use std::collections::VecDeque;
+
 use super::Result;
 use crate::highlight::CmdKind;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
@@ -357,6 +360,8 @@ pub struct InputState<'b> {
     num_args: i16,
     last_cmd: Cmd,                        // vi only
     last_char_search: Option<CharSearch>, // vi only
+    #[cfg(feature = "custom-bindings")]
+    macro_queue: VecDeque<Cmd>,
 }
 
 /// Provide indirect mutation to user input.
@@ -412,6 +417,8 @@ impl<'b> InputState<'b> {
             num_args: 0,
             last_cmd: Cmd::Noop,
             last_char_search: None,
+            #[cfg(feature = "custom-bindings")]
+            macro_queue: VecDeque::new(),
         }
     }
 
@@ -433,6 +440,10 @@ impl<'b> InputState<'b> {
         single_esc_abort: bool,
         ignore_external_print: bool,
     ) -> Result<Cmd> {
+        #[cfg(feature = "custom-bindings")]
+        if let Some(cmd) = self.macro_queue.pop_front() {
+            return Ok(cmd);
+        }
         let single_esc_abort = self.single_esc_abort(single_esc_abort);
         let key;
         if ignore_external_print {
@@ -1137,7 +1148,7 @@ impl<'b> InputState<'b> {
 impl InputState<'_> {
     /// Application customized binding
     fn custom_binding(
-        &self,
+        &mut self,
         wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
@@ -1152,6 +1163,12 @@ impl InputState<'_> {
                     let ctx = EventContext::new(self, wrt);
                     handler.handle(evt, n, positive, &ctx)
                 }
+                EventHandler::Macro(cmds) => {
+                    let mut iter = cmds.iter().cloned();
+                    let first = iter.next();
+                    self.macro_queue.extend(iter);
+                    first
+                }
             }
         } else {
             None
@@ -1159,7 +1176,7 @@ impl InputState<'_> {
     }
 
     fn custom_seq_binding<R: RawReader>(
-        &self,
+        &mut self,
         rdr: &mut R,
         wrt: &dyn Refresher,
         evt: &mut Event,
@@ -1181,6 +1198,12 @@ impl InputState<'_> {
                         let ctx = EventContext::new(self, wrt);
                         handler.handle(evt, n, positive, &ctx)
                     }
+                    EventHandler::Macro(cmds) => {
+                        let mut iter = cmds.iter().cloned();
+                        let first = iter.next();
+                        self.macro_queue.extend(iter);
+                        first
+                    }
                 };
                 if cmd.is_some() {
                     return Ok(cmd);
@@ -1193,12 +1216,12 @@ impl InputState<'_> {
 
 #[cfg(not(feature = "custom-bindings"))]
 impl<'b> InputState<'b> {
-    fn custom_binding(&self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
+    fn custom_binding(&mut self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
         None
     }
 
     fn custom_seq_binding<R: RawReader>(
-        &self,
+        &mut self,
         _: &mut R,
         _: &dyn Refresher,
         _: &mut Event,

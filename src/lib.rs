@@ -736,7 +736,6 @@ impl<H: Helper, I: History> Editor<H, I> {
             }
 
             // First trigger commands that need extra input
-
             if cmd == Cmd::Complete && s.helper.is_some() {
                 let next = complete_line(&mut rdr, &mut s, &mut input_state, &self.config)?;
                 if let Some(next) = next {

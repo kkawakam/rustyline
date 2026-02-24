@@ -728,10 +728,22 @@ impl<H: Helper, I: History> Editor<H, I> {
         }
         s.refresh_line()?;
 
+        #[cfg(feature = "custom-bindings")]
+        let mut macro_undo_group_active = false;
         loop {
             let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
 
-            if cmd.should_reset_kill_ring() {
+            #[cfg(feature = "custom-bindings")]
+            if input_state.take_macro_just_started() {
+                macro_undo_group_active = true;
+                self.kill_ring.reset();
+                s.changes.begin();
+            }
+
+            let should_reset = cmd.should_reset_kill_ring();
+            #[cfg(feature = "custom-bindings")]
+            let should_reset = should_reset && !macro_undo_group_active;
+            if should_reset {
                 self.kill_ring.reset();
             }
 
@@ -791,7 +803,19 @@ impl<H: Helper, I: History> Editor<H, I> {
             }
 
             // Execute things can be done solely on a state object
-            match command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config)? {
+            let result =
+                command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config);
+
+            #[cfg(feature = "custom-bindings")]
+            if macro_undo_group_active && (result.is_err() || !input_state.macro_active()) {
+                macro_undo_group_active = false;
+                s.changes.end();
+                if matches!(result, Ok(command::Status::Proceed)) {
+                    s.refresh_line()?;
+                }
+            }
+
+            match result? {
                 command::Status::Proceed => continue,
                 command::Status::Submit => break,
             }

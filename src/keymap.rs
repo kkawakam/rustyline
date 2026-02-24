@@ -96,6 +96,11 @@ pub enum Cmd {
     TransposeWords(RepeatCount),
     /// undo
     Undo(RepeatCount),
+    /// Save the current line buffer so it can be restored later via
+    /// take_stashed_line. Typically used as the first command in an
+    /// `EventHandler::Macro` to preserve the in-progress input before
+    /// clearing and submitting a different command.
+    Stash,
     /// Unsupported / unexpected
     Unknown,
     /// upcase-word

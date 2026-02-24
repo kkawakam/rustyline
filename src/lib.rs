@@ -595,6 +595,7 @@ pub struct Editor<H: Helper, I: History> {
     kill_ring: KillRing,
     config: Config,
     custom_bindings: Bindings,
+    stashed_line: Option<String>,
 }
 
 /// Default editor with no helper and `DefaultHistory`
@@ -625,6 +626,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             kill_ring: KillRing::new(60),
             config,
             custom_bindings: Bindings::new(),
+            stashed_line: None,
         })
     }
 
@@ -745,6 +747,17 @@ impl<H: Helper, I: History> Editor<H, I> {
             let should_reset = should_reset && !macro_undo_group_active;
             if should_reset {
                 self.kill_ring.reset();
+            }
+
+            if cmd == Cmd::Stash {
+                self.stashed_line = Some(s.line.as_str().to_owned());
+                #[cfg(feature = "custom-bindings")]
+                if macro_undo_group_active && !input_state.macro_active() {
+                    macro_undo_group_active = false;
+                    s.changes.end();
+                    s.refresh_line()?;
+                }
+                continue;
             }
 
             // First trigger commands that need extra input
@@ -899,6 +912,16 @@ impl<H: Helper, I: History> Editor<H, I> {
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))
+    }
+
+    /// Returns and clears the line saved by a previous `Cmd::Stash`.
+    ///
+    /// Typical usage: after a macro that stashes the current input, clears
+    /// the line, submits a different command, and accepts — call this to
+    /// recover the original input and pass it as `initial` to the next
+    /// `readline_with_initial`.
+    pub fn take_stashed_line(&mut self) -> Option<String> {
+        self.stashed_line.take()
     }
 
     /// Returns an iterator over edited lines.

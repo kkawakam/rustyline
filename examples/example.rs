@@ -59,7 +59,7 @@ fn main() -> rustyline::Result<()> {
     loop {
         let p = format!("{count}> ");
         let colored_prompt = format!("\x1b[1;32m{p}\x1b[0m");
-        let readline = rl.readline(&(p, colored_prompt));
+        let readline = rl.readline(&format("{p}{colored_prompt}"));
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str())?;

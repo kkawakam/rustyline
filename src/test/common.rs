@@ -451,6 +451,31 @@ fn macro_single_cmd_undo() {
 }
 
 #[test]
+fn macro_stash_and_restore() {
+    let mut editor = init_editor(
+        EditMode::Emacs,
+        &[
+            E::from('f'),
+            E::from('o'),
+            E::from('o'),
+            E(K::F(1), M::NONE),
+        ],
+    );
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Stash,
+            Cmd::Kill(Movement::WholeLine),
+            Cmd::Insert(1, "bar".to_string()),
+            Cmd::AcceptLine,
+        ]),
+    );
+    assert_eq!("bar", editor.readline(">>").unwrap());
+    assert_eq!(Some("foo".to_string()), editor.take_stashed_line());
+    assert_eq!(None, editor.take_stashed_line());
+}
+
+#[test]
 fn macro_kill_ring_coalesce() {
     // Two consecutive kills inside a macro should coalesce: Yank pastes both.
     // "hello world", 2x Kill(BackwardWord) removes both words. Yank restores both.

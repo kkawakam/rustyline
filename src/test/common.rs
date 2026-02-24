@@ -2,7 +2,9 @@
 use super::{assert_cursor, assert_line, assert_line_with_initial, init_editor};
 use crate::config::EditMode;
 use crate::error::ReadlineError;
+use crate::keymap::{Cmd, Movement};
 use crate::keys::{KeyCode as K, KeyEvent as E, Modifiers as M};
+use crate::EventHandler;
 
 #[test]
 fn home_key() {
@@ -358,4 +360,114 @@ fn paste() {
             );
         }
     }
+}
+
+#[test]
+fn macro_insert_and_accept() {
+    let mut editor = init_editor(EditMode::Emacs, &[E(K::F(1), M::NONE)]);
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Insert(1, "hello".to_string()),
+            Cmd::AcceptLine,
+        ]),
+    );
+    assert_eq!("hello", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_clear_and_replace() {
+    let mut editor = init_editor(
+        EditMode::Emacs,
+        &[E::from('f'), E::from('o'), E::from('o'), E(K::F(2), M::NONE)],
+    );
+    editor.bind_sequence(
+        E(K::F(2), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Kill(Movement::WholeLine),
+            Cmd::Insert(1, "bar".to_string()),
+            Cmd::AcceptLine,
+        ]),
+    );
+    assert_eq!("bar", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_undo_group() {
+    let mut editor = init_editor(
+        EditMode::Emacs,
+        &[E(K::F(1), M::NONE), E::ctrl('_'), E::ENTER],
+    );
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Insert(1, "hello".to_string()),
+            Cmd::Insert(1, " world".to_string()),
+        ]),
+    );
+    assert_eq!("", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_empty() {
+    let mut editor = init_editor(EditMode::Emacs, &[E(K::F(3), M::NONE), E::ENTER]);
+    editor.bind_sequence(E(K::F(3), M::NONE), EventHandler::Macro(vec![]));
+    assert_eq!("", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_vi_insert_and_accept() {
+    let mut editor = init_editor(EditMode::Vi, &[E(K::F(1), M::NONE)]);
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Insert(1, "hello".to_string()),
+            Cmd::AcceptLine,
+        ]),
+    );
+    assert_eq!("hello", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_single_cmd_undo() {
+    // 'a', F1 (single-cmd macro: insert "X"), undo "X", undo 'a', enter
+    // Both undos must take effect; an orphaned "Begin" would silently eat the
+    // second undo, leaving 'a' in the buffer.
+    let mut editor = init_editor(
+        EditMode::Emacs,
+        &[
+            E::from('a'),
+            E(K::F(1), M::NONE),
+            E::ctrl('_'),
+            E::ctrl('_'),
+            E::ENTER,
+        ],
+    );
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![Cmd::Insert(1, "X".to_string())]),
+    );
+    assert_eq!("", editor.readline(">>").unwrap());
+}
+
+#[test]
+fn macro_kill_ring_coalesce() {
+    // Two consecutive kills inside a macro should coalesce: Yank pastes both.
+    // "hello world", 2x Kill(BackwardWord) removes both words. Yank restores both.
+    use crate::keymap::Word;
+    let mut editor = init_editor(
+        EditMode::Emacs,
+        &[E(K::F(1), M::NONE), E::ctrl('Y'), E::ENTER],
+    );
+    editor.bind_sequence(
+        E(K::F(1), M::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Kill(Movement::BackwardWord(1, Word::Big)),
+            Cmd::Kill(Movement::BackwardWord(1, Word::Big)),
+        ]),
+    );
+    assert_eq!(
+        "hello world",
+        editor.readline_with_initial(">>", ("hello world", "")).unwrap()
+    );
 }

@@ -362,6 +362,10 @@ pub struct InputState<'b> {
     last_char_search: Option<CharSearch>, // vi only
     #[cfg(feature = "custom-bindings")]
     macro_queue: VecDeque<Cmd>,
+    #[cfg(feature = "custom-bindings")]
+    macro_active: bool,
+    #[cfg(feature = "custom-bindings")]
+    macro_just_started: bool,
 }
 
 /// Provide indirect mutation to user input.
@@ -419,6 +423,10 @@ impl<'b> InputState<'b> {
             last_char_search: None,
             #[cfg(feature = "custom-bindings")]
             macro_queue: VecDeque::new(),
+            #[cfg(feature = "custom-bindings")]
+            macro_active: false,
+            #[cfg(feature = "custom-bindings")]
+            macro_just_started: false,
         }
     }
 
@@ -428,6 +436,30 @@ impl<'b> InputState<'b> {
 
     pub fn is_vi_cmd_mode(&self) -> bool {
         self.input_mode == InputMode::Command && self.mode == EditMode::Vi
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn macro_active(&self) -> bool {
+        self.macro_active
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn take_macro_just_started(&mut self) -> bool {
+        let started = self.macro_just_started;
+        self.macro_just_started = false;
+        started
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    fn dispatch_macro(&mut self, cmds: &[Cmd]) -> Option<Cmd> {
+        let mut iter = cmds.iter().cloned();
+        let first = iter.next();
+        self.macro_queue.extend(iter);
+        if !self.macro_queue.is_empty() {
+            self.macro_active = true;
+            self.macro_just_started = true;
+        }
+        Some(first.unwrap_or(Cmd::Noop))
     }
 
     /// Parse user input into one command
@@ -442,6 +474,9 @@ impl<'b> InputState<'b> {
     ) -> Result<Cmd> {
         #[cfg(feature = "custom-bindings")]
         if let Some(cmd) = self.macro_queue.pop_front() {
+            if self.macro_queue.is_empty() {
+                self.macro_active = false;
+            }
             return Ok(cmd);
         }
         let single_esc_abort = self.single_esc_abort(single_esc_abort);
@@ -1163,12 +1198,7 @@ impl InputState<'_> {
                     let ctx = EventContext::new(self, wrt);
                     handler.handle(evt, n, positive, &ctx)
                 }
-                EventHandler::Macro(cmds) => {
-                    let mut iter = cmds.iter().cloned();
-                    let first = iter.next();
-                    self.macro_queue.extend(iter);
-                    first
-                }
+                EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
             }
         } else {
             None
@@ -1198,12 +1228,7 @@ impl InputState<'_> {
                         let ctx = EventContext::new(self, wrt);
                         handler.handle(evt, n, positive, &ctx)
                     }
-                    EventHandler::Macro(cmds) => {
-                        let mut iter = cmds.iter().cloned();
-                        let first = iter.next();
-                        self.macro_queue.extend(iter);
-                        first
-                    }
+                    EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
                 };
                 if cmd.is_some() {
                     return Ok(cmd);

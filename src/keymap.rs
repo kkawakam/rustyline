@@ -355,6 +355,14 @@ pub enum InputMode {
     Replace,
 }
 
+#[cfg(feature = "custom-bindings")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacroState {
+    Idle,
+    Starting,
+    Active,
+}
+
 /// Transform key(s) to commands based on current input mode
 pub struct InputState<'b> {
     pub(crate) mode: EditMode,
@@ -368,9 +376,7 @@ pub struct InputState<'b> {
     #[cfg(feature = "custom-bindings")]
     macro_queue: VecDeque<Cmd>,
     #[cfg(feature = "custom-bindings")]
-    macro_active: bool,
-    #[cfg(feature = "custom-bindings")]
-    macro_just_started: bool,
+    macro_state: MacroState,
 }
 
 /// Provide indirect mutation to user input.
@@ -429,9 +435,7 @@ impl<'b> InputState<'b> {
             #[cfg(feature = "custom-bindings")]
             macro_queue: VecDeque::new(),
             #[cfg(feature = "custom-bindings")]
-            macro_active: false,
-            #[cfg(feature = "custom-bindings")]
-            macro_just_started: false,
+            macro_state: MacroState::Idle,
         }
     }
 
@@ -445,14 +449,17 @@ impl<'b> InputState<'b> {
 
     #[cfg(feature = "custom-bindings")]
     pub(crate) fn macro_active(&self) -> bool {
-        self.macro_active
+        self.macro_state != MacroState::Idle
     }
 
     #[cfg(feature = "custom-bindings")]
     pub(crate) fn take_macro_just_started(&mut self) -> bool {
-        let started = self.macro_just_started;
-        self.macro_just_started = false;
-        started
+        if self.macro_state == MacroState::Starting {
+            self.macro_state = MacroState::Active;
+            true
+        } else {
+            false
+        }
     }
 
     #[cfg(feature = "custom-bindings")]
@@ -461,8 +468,7 @@ impl<'b> InputState<'b> {
         let first = iter.next();
         self.macro_queue.extend(iter);
         if !self.macro_queue.is_empty() {
-            self.macro_active = true;
-            self.macro_just_started = true;
+            self.macro_state = MacroState::Starting;
         }
         Some(first.unwrap_or(Cmd::Noop))
     }
@@ -480,7 +486,7 @@ impl<'b> InputState<'b> {
         #[cfg(feature = "custom-bindings")]
         if let Some(cmd) = self.macro_queue.pop_front() {
             if self.macro_queue.is_empty() {
-                self.macro_active = false;
+                self.macro_state = MacroState::Idle;
             }
             return Ok(cmd);
         }

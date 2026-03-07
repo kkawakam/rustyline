@@ -1173,7 +1173,7 @@ impl InputState<'_> {
             } else {
                 break;
             }
-            let handler = subtrie.get(evt).unwrap_or(None);
+            let handler = subtrie.get(evt).unwrap_or_default();
             if let Some(handler) = handler {
                 let cmd = match handler {
                     EventHandler::Simple(cmd) => Some(cmd.clone()),

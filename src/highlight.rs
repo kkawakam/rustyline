@@ -71,53 +71,34 @@ pub trait Highlighter {
 
 impl Highlighter for () {}
 
-/// How to highlight a matching bracket
-#[derive(Default)]
-pub enum MatchingBracketStyle {
-    /// Color the matching bracket blue
-    #[default]
-    Blue,
-    /// Make the matching bracket bold
-    Bold,
-    /// Make the matching bracket underlined
-    Underline,
-}
-
-impl MatchingBracketStyle {
-    fn ansi(&self) -> &str {
-        match self {
-            MatchingBracketStyle::Blue => "\x1b[1;34m",
-            MatchingBracketStyle::Bold => "\x1b[1m",
-            MatchingBracketStyle::Underline => "\x1b[4m",
-        }
-    }
-}
-
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.
-#[derive(Default)]
 pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
-    style: MatchingBracketStyle,
+    format: fn(char) -> String,
+}
+
+impl Default for MatchingBracketHighlighter {
+    fn default() -> Self {
+        Self {
+            bracket: Default::default(),
+            format: |c| format!("\x1b[1;34m{}\x1b[0m", c),
+        }
+    }
 }
 
 impl MatchingBracketHighlighter {
     /// Constructor
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            bracket: Cell::new(None),
-            style: MatchingBracketStyle::default(),
-        }
+        MatchingBracketHighlighter::default()
     }
 
-    /// Create a new matching bracket highlighter with a specific matching style
-    pub fn with_style(style: MatchingBracketStyle) -> Self {
-        Self {
-            bracket: Cell::new(None),
-            style,
-        }
+    /// Use a specific style for the matching bracket
+    pub fn with_format(mut self, format: fn(char) -> String) -> Self {
+        self.format = format;
+        self
     }
 }
 
@@ -130,7 +111,7 @@ impl Highlighter for MatchingBracketHighlighter {
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
-                copy.replace_range(idx..=idx, &format!("{}{}\x1b[0m", self.style.ansi(), matching as char));
+                copy.replace_range(idx..=idx, &(self.format)(matching as char));
                 return Owned(copy);
             }
         }

@@ -48,6 +48,11 @@ fn get_win_size(fd: AltFd) -> (Unit, Unit) {
         return (80, 24);
     }
 
+    // Guard against invalid fd
+    if fd.0 == -1 {
+        return (80, 24);
+    }
+
     unsafe {
         let mut size: libc::winsize = zeroed();
         match win_size(fd.0, &mut size) {
@@ -86,6 +91,9 @@ impl AsFd for AltFd {
 
 /// Return whether or not STDIN, STDOUT or STDERR is a TTY
 fn is_a_tty(fd: AltFd) -> bool {
+    if fd.0 == -1 {
+        return false;
+    }
     isatty(fd).unwrap_or(false)
 }
 
@@ -1246,6 +1254,11 @@ fn read_digits_until(rdr: &mut PosixRawReader, sep: char) -> Result<Option<u32>>
 }
 
 fn write_all(fd: AltFd, buf: &str) -> nix::Result<()> {
+    // Guard against invalid fd
+    if fd.0 == -1 {
+        return Err(Errno::EBADF);
+    }
+
     let mut bytes = buf.as_bytes();
     while !bytes.is_empty() {
         match write(fd, bytes) {
@@ -1282,7 +1295,10 @@ static mut SIG_PIPE: AltFd = INVALID_FD;
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sig_handler(sig: libc::c_int) {
     let b = error::Signal::to_byte(sig);
-    let _ = unsafe { write(SIG_PIPE, &[b]) };
+    let sp = unsafe { SIG_PIPE };
+    if sp.0 != -1 {
+        let _ = write(sp, &[b]);
+    }
 }
 
 #[derive(Debug)]

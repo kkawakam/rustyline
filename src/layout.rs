@@ -57,12 +57,12 @@ impl Default for GraphemeClusterMode {
 pub type Unit = u16;
 /// Character width / number of columns
 pub(crate) fn cwidh(c: char) -> Unit {
-    use unicode_width::UnicodeWidthChar;
+    use unicode_width::UnicodeWidthChar as _;
     Unit::try_from(c.width().unwrap_or(0)).unwrap()
 }
 
 fn uwidth(s: &str) -> Unit {
-    use unicode_width::UnicodeWidthStr;
+    use unicode_width::UnicodeWidthStr as _;
     Unit::try_from(s.width()).unwrap()
 }
 

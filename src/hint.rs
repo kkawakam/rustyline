@@ -80,7 +80,7 @@ impl Hinter for HistoryHinter {
 
 #[cfg(test)]
 mod test {
-    use super::{Hinter, HistoryHinter};
+    use super::{Hinter as _, HistoryHinter};
     use crate::history::DefaultHistory;
     use crate::Context;
 

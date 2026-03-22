@@ -688,7 +688,7 @@ impl<'b> InputState<'b> {
             } else {
                 wrt.refresh_line()?;
                 return Ok(key);
-            };
+            }
         }
     }
 

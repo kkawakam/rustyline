@@ -5,7 +5,7 @@ use crate::error;
 use crate::highlight::CmdKind;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, Cmd, Movement, Word};
-use crate::keymap::{InputState, Refresher};
+use crate::keymap::{InputState, Refresher as _};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
 use crate::{Helper, Prompt, Result};
@@ -33,7 +33,7 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
             }
         }
         _ => {}
-    };
+    }
     match cmd {
         Cmd::CompleteHint => {
             complete_hint_line(s)?;

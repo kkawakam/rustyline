@@ -1,9 +1,9 @@
 use std::thread;
 use std::time::Duration;
 
-use rand::{rng, RngExt};
+use rand::{rng, RngExt as _};
 
-use rustyline::{DefaultEditor, ExternalPrinter, Result};
+use rustyline::{DefaultEditor, ExternalPrinter as _, Result};
 
 fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;

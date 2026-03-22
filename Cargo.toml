@@ -120,3 +120,14 @@ all-features = false
 no-default-features = true
 default-target = "x86_64-unknown-linux-gnu"
 rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace.lints.clippy]
+ref_option = "warn"
+semicolon_if_nothing_returned = "warn"
+unnecessary_semicolon = "warn"
+unused_trait_names = "warn"
+
+#collapsible_match = "allow"
+
+[lints]
+workspace = true

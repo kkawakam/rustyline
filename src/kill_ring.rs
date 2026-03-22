@@ -49,7 +49,7 @@ impl KillRing {
             match dir {
                 Mode::Append => self.slots[self.index].push_str(text),
                 Mode::Prepend => self.slots[self.index].insert_str(0, text),
-            };
+            }
         } else {
             self.last_action = Action::Kill;
             if self.slots.capacity() == 0 {

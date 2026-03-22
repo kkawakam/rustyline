@@ -484,7 +484,7 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
                     mode = ScanMode::Normal;
                 } // no escape in single quotes
             }
-        };
+        }
     }
     if ScanMode::DoubleQuote == mode || ScanMode::EscapeInDoubleQuote == mode {
         return Some((quote_index, Quote::Double));
@@ -594,13 +594,13 @@ mod tests {
         assert_eq!(
             Some((0, super::Quote::Double)),
             super::find_unclosed_quote("\"c:\\users\\All Users\\")
-        )
+        );
     }
 
     #[cfg(windows)]
     #[test]
     pub fn normalize() {
-        assert_eq!(super::normalize("Windows"), "windows")
+        assert_eq!(super::normalize("Windows"), "windows");
     }
 
     #[test]

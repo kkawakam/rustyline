@@ -4,9 +4,9 @@ use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
-use std::ops::{Deref, Index, Range};
+use std::ops::{Deref, Index as _, Range};
 use std::string::Drain;
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 
 /// Default maximum buffer size for the line read
 pub(crate) const MAX_LINE: usize = 4096;
@@ -660,7 +660,7 @@ impl LineBuffer {
             } else {
                 end = self.buf.len();
                 break;
-            };
+            }
         }
         Some((start, end))
     }
@@ -799,7 +799,7 @@ impl LineBuffer {
                     let start = self.pos;
                     self.drain(start..pos + c.len_utf8(), Direction::Forward, dl);
                 }
-            };
+            }
             true
         } else {
             false
@@ -1219,7 +1219,7 @@ mod test {
 
         fn assert_deleted_str_eq(&self, expected: &str) {
             let actual = self.deleted_str.as_ref().expect("no deleted string");
-            assert_eq!(expected, actual)
+            assert_eq!(expected, actual);
         }
     }
 

@@ -7,7 +7,7 @@ use std::io::BufReader;
 use std::io::{self, ErrorKind, Read, Write as _};
 use std::os::fd::{AsFd, AsRawFd as _, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 
@@ -1276,13 +1276,17 @@ fn set_cursor_visibility(fd: AltFd, visible: bool) -> Result<Option<PosixCursorG
 }
 
 #[cfg(not(feature = "signal-hook"))]
-const INVALID_FD: AltFd = AltFd(-1);
-#[cfg(not(feature = "signal-hook"))]
-static mut SIG_PIPE: AltFd = INVALID_FD;
+static SIG_PIPE: AtomicI32 = AtomicI32::new(-1);
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sig_handler(sig: libc::c_int) {
     let b = error::Signal::to_byte(sig);
-    let _ = unsafe { write(SIG_PIPE, &[b]) };
+    let fd = SIG_PIPE.load(Ordering::SeqCst);
+    if fd != -1 {
+        let _ = write(AltFd(fd), &[b]);
+    } else {
+        // might not be safe to use in signal handler:
+        // warn!(target: "rustyline", "cannot notify signal {sig}");
+    }
 }
 
 #[derive(Debug)]
@@ -1298,11 +1302,17 @@ struct Sig {
 impl Sig {
     #[cfg(not(feature = "signal-hook"))]
     fn install_sigwinch_handler() -> Result<Self> {
-        assert!(unsafe { SIG_PIPE == INVALID_FD });
         use nix::sys::signal;
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
-        unsafe { SIG_PIPE = AltFd(pipe_write.into_raw_fd()) };
+        SIG_PIPE
+            .compare_exchange(
+                -1,
+                pipe_write.into_raw_fd(),
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .expect("Previous `pipe_write` should have been closed");
         let sa = signal::SigAction::new(
             signal::SigHandler::Handler(sig_handler),
             signal::SaFlags::empty(),
@@ -1331,8 +1341,12 @@ impl Sig {
         let _ = unsafe { signal::sigaction(signal::SIGINT, &self.original_sigint)? };
         let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
         close(self.pipe)?;
-        unsafe { close(SIG_PIPE)? };
-        unsafe { SIG_PIPE = INVALID_FD };
+        let fd = SIG_PIPE.swap(-1, Ordering::SeqCst);
+        if fd != -1 {
+            close(fd)?;
+        } else {
+            warn!(target: "rustyline", "Invalid `pipe_write`");
+        }
         Ok(())
     }
 

@@ -35,6 +35,8 @@ impl Highlighter for MyHelper {
 
 // To debug rustyline:
 // RUST_LOG=rustyline=debug cargo run --example example 2> debug.log
+// or for Windows Powershell:
+// $env:RUST_LOG="rustyline=debug"; cargo run --example example 2> debug.log
 fn main() -> rustyline::Result<()> {
     env_logger::init();
     let config = Config::builder()

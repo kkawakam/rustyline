@@ -1280,7 +1280,7 @@ static SIG_PIPE: AtomicI32 = AtomicI32::new(-1);
 #[cfg(not(feature = "signal-hook"))]
 extern "C" fn sig_handler(sig: libc::c_int) {
     let b = error::Signal::to_byte(sig);
-    let fd = SIG_PIPE.load(Ordering::SeqCst);
+    let fd = SIG_PIPE.load(Ordering::Relaxed);
     if fd != -1 {
         let _ = write(AltFd(fd), &[b]);
     } else {
@@ -1309,8 +1309,8 @@ impl Sig {
             .compare_exchange(
                 -1,
                 pipe_write.into_raw_fd(),
-                Ordering::SeqCst,
-                Ordering::SeqCst,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
             )
             .expect("Previous `pipe_write` should have been closed");
         let sa = signal::SigAction::new(
@@ -1341,7 +1341,7 @@ impl Sig {
         let _ = unsafe { signal::sigaction(signal::SIGINT, &self.original_sigint)? };
         let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
         close(self.pipe)?;
-        let fd = SIG_PIPE.swap(-1, Ordering::SeqCst);
+        let fd = SIG_PIPE.swap(-1, Ordering::Relaxed);
         if fd != -1 {
             close(fd)?;
         } else {

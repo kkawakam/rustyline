@@ -174,6 +174,11 @@ pub trait History {
     #[must_use]
     fn iter(&self) -> impl DoubleEndedIterator<Item = &String> + '_;
      */
+
+    /// recently used index
+    fn recent_index(&mut self) -> Option<usize>;
+    /// Update recently used index
+    fn set_recent_index(&mut self, entry: Option<(usize, &str)>);
 }
 
 /// Transient in-memory history implementation.
@@ -182,6 +187,7 @@ pub struct MemHistory {
     max_len: usize,
     ignore_space: bool,
     ignore_dups: bool,
+    recent: Option<usize>,
 }
 
 impl MemHistory {
@@ -202,6 +208,7 @@ impl MemHistory {
             max_len: config.max_history_size(),
             ignore_space: config.history_ignore_space(),
             ignore_dups: config.history_duplicates() == HistoryDuplicates::IgnoreConsecutive,
+            recent: None,
         }
     }
 
@@ -354,6 +361,7 @@ impl History for MemHistory {
 
     fn clear(&mut self) -> Result<()> {
         self.entries.clear();
+        self.recent.take();
         Ok(())
     }
 
@@ -421,6 +429,27 @@ impl History for MemHistory {
                 },
             )
         }
+    }
+
+    fn recent_index(&mut self) -> Option<usize> {
+        self.recent.take()
+    }
+
+    fn set_recent_index(&mut self, entry: Option<(usize, &str)>) {
+        self.recent = if let Some((idx, line)) = entry {
+            if idx == self.len() {
+                None
+            } else if self
+                .get(idx, SearchDirection::Reverse)
+                .is_ok_and(|sr| sr.map_or(false, |sr| sr.entry.eq(line)))
+            {
+                Some(idx)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
     }
 }
 
@@ -730,6 +759,7 @@ impl History for FileHistory {
                 max_len: self.mem.max_len,
                 ignore_space: self.mem.ignore_space,
                 ignore_dups: self.mem.ignore_dups,
+                recent: None,
             },
             new_entries: 0,
             path_info: None,
@@ -782,6 +812,14 @@ impl History for FileHistory {
         dir: SearchDirection,
     ) -> Result<Option<SearchResult<'_>>> {
         self.mem.starts_with(term, start, dir)
+    }
+
+    fn recent_index(&mut self) -> Option<usize> {
+        self.mem.recent_index()
+    }
+
+    fn set_recent_index(&mut self, entry: Option<(usize, &str)>) {
+        self.mem.set_recent_index(entry)
     }
 }
 

@@ -1,0 +1,6 @@
+tasks:
+  - init: cargo build
+    name: build
+  - init: cargo test
+    name: test
+    openMode: split-right

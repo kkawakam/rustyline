@@ -112,8 +112,8 @@ pub struct FilenameCompleter {
 
 const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 
-cfg_if::cfg_if! {
-    if #[cfg(unix)] {
+cfg_select! {
+    unix => {
         // rl_basic_word_break_characters, rl_completer_word_break_characters
         const fn default_break_chars(c : char) -> bool {
             matches!(c, ' ' | '\t' | '\n' | '"' | '\\' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' |
@@ -123,15 +123,18 @@ cfg_if::cfg_if! {
         // In double quotes, not all break_chars need to be escaped
         // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
         const fn double_quotes_special_chars(c: char) -> bool { matches!(c, '"' | '$' | '\\' | '`') }
-    } else if #[cfg(windows)] {
+    }
+    windows => {
         // Remove \ to make file completion works on windows
         const fn default_break_chars(c: char) -> bool {
             matches!(c, ' ' | '\t' | '\n' | '"' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' | '{' |
             '(' | '\0')
         }
         const ESCAPE_CHAR: Option<char> = None;
-        const fn double_quotes_special_chars(c: char) -> bool { c == '"' } // TODO Validate: only '"' ?
-    } else if #[cfg(target_arch = "wasm32")] {
+         // TODO Validate: only '"' ?
+        const fn double_quotes_special_chars(c: char) -> bool { c == '"' }
+    }
+    target_arch = "wasm32" => {
         const fn default_break_chars(c: char) -> bool { false }
         const ESCAPE_CHAR: Option<char> = None;
         const fn double_quotes_special_chars(c: char) -> bool { false }

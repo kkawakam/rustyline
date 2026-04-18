@@ -805,8 +805,8 @@ impl<'a> IntoIterator for &'a FileHistory {
 }
 
 #[cfg(feature = "with-file-history")]
-cfg_if::cfg_if! {
-    if #[cfg(any(windows, target_arch = "wasm32"))] {
+cfg_select! {
+    any(windows, target_arch = "wasm32") => {
         fn umask() -> u16 {
             0
         }
@@ -814,7 +814,8 @@ cfg_if::cfg_if! {
         fn restore_umask(_: u16) {}
 
         fn fix_perm(_: &File) {}
-    } else if #[cfg(unix)] {
+    }
+    unix => {
         use nix::sys::stat::{self, Mode, fchmod};
         fn umask() -> Mode {
             stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)

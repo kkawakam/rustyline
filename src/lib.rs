@@ -50,7 +50,7 @@ use log::debug;
 #[cfg(feature = "derive")]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
 
-use crate::tty::{Buffer, RawMode, RawReader, Renderer, Term, Terminal};
+use crate::tty::{Buffer, RawMode as _, RawReader as _, Renderer as _, Term, Terminal};
 
 #[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
@@ -488,7 +488,7 @@ fn apply_backspace_direct(input: &str) -> String {
 fn readline_direct(
     mut reader: impl BufRead,
     mut writer: impl Write,
-    validator: &Option<impl Validator>,
+    validator: Option<&impl Validator>,
 ) -> Result<String> {
     let mut input = String::new();
 
@@ -668,7 +668,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             stdout.write_all(prompt.raw().as_bytes())?;
             stdout.flush()?;
 
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         } else if self.term.is_input_tty() {
             let (original_mode, term_key_map) = self.term.enable_raw_mode(&self.config)?;
             let guard = Guard(&original_mode);
@@ -684,7 +684,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         } else {
             debug!(target: "rustyline", "stdin is not a tty");
             // Not a tty: read from file / pipe.
-            readline_direct(io::stdin().lock(), io::stderr(), &self.helper)
+            readline_direct(io::stdin().lock(), io::stderr(), self.helper.as_ref())
         }
     }
 

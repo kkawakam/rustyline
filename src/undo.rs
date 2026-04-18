@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use crate::keymap::RepeatCount;
 use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer, NoListener};
 use log::debug;
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 
 enum Change {
     Begin,
@@ -274,7 +274,7 @@ impl Changeset {
                     change.undo(line);
                     undone = true;
                 }
-            };
+            }
             self.redos.push(change);
             if waiting_for_begin <= 0 {
                 count += 1;
@@ -307,7 +307,7 @@ impl Changeset {
                     change.redo(line);
                     redone = true;
                 }
-            };
+            }
             self.undos.push(change);
             if waiting_for_end <= 0 {
                 break;

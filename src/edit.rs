@@ -2,7 +2,7 @@
 
 use log::debug;
 use std::fmt;
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::{Context, Helper, Prompt, Result};
 use crate::error::{ReadlineError, Signal};
@@ -13,7 +13,7 @@ use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
 use crate::layout::{cwidh, Layout, Position, Unit};
 use crate::line_buffer::{DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE};
-use crate::tty::{Renderer, Term, Terminal};
+use crate::tty::{Renderer as _, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
 use crate::KillRing;
@@ -575,7 +575,7 @@ impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
             }
 
             fn stop_killing(&mut self) {
-                self.kill_ring.stop_killing()
+                self.kill_ring.stop_killing();
             }
         }
         if self.line.kill(mvt, &mut proxy) {
@@ -839,7 +839,7 @@ pub fn init_state<'out, H: Helper>(
 #[cfg(test)]
 mod test {
     use super::init_state;
-    use crate::history::{DefaultHistory, History};
+    use crate::history::{DefaultHistory, History as _};
     use crate::tty::Sink;
 
     #[test]

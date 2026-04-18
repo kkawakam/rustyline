@@ -229,7 +229,7 @@ mod test {
         assert!(sub_result.unwrap().is_some());
         let prefix = Event::from(KeyEvent::ctrl('O'));
         let subtrie = trie.get_raw_descendant(&prefix);
-        assert!(subtrie.is_none())
+        assert!(subtrie.is_none());
     }
 
     #[test]

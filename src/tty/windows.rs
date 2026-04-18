@@ -4,7 +4,7 @@
 use std::fs::OpenOptions;
 use std::io;
 use std::mem;
-use std::os::windows::io::IntoRawHandle;
+use std::os::windows::io::IntoRawHandle as _;
 use std::ptr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +12,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 
 use log::{debug, warn};
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{self as foundation, FALSE, HANDLE, TRUE};
 use windows_sys::Win32::System::Console as console;
@@ -137,7 +137,7 @@ impl ConsoleRawReader {
                     Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
                 }
             } else {
-                Err(io::Error::last_os_error())?
+                Err(io::Error::last_os_error())?;
             }
         }
     }

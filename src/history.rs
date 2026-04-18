@@ -484,7 +484,7 @@ impl FileHistory {
     }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
-        use std::io::{BufWriter, Write};
+        use std::io::{BufWriter, Write as _};
 
         fix_perm(file);
         let mut wtr = BufWriter::new(file);
@@ -521,7 +521,7 @@ impl FileHistory {
     }
 
     fn load_from(&mut self, file: &File) -> Result<bool> {
-        use std::io::{BufRead, BufReader};
+        use std::io::{BufRead as _, BufReader};
 
         let rdr = BufReader::new(file);
         let mut lines = rdr.lines();
@@ -701,7 +701,7 @@ impl History for FileHistory {
     }
 
     fn append(&mut self, path: &Path) -> Result<()> {
-        use std::io::Seek;
+        use std::io::Seek as _;
 
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
@@ -832,7 +832,7 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{DefaultHistory, History, SearchDirection, SearchResult};
+    use super::{DefaultHistory, History as _, SearchDirection, SearchResult};
     use crate::config::Config;
     use crate::Result;
 
@@ -906,7 +906,7 @@ mod tests {
     #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn load_legacy() -> Result<()> {
-        use std::io::Write;
+        use std::io::Write as _;
         let tf = tempfile::NamedTempFile::new()?;
         {
             let mut legacy = std::fs::File::create(tf.path())?;

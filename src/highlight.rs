@@ -74,18 +74,31 @@ impl Highlighter for () {}
 // TODO versus https://python-prompt-toolkit.readthedocs.io/en/master/pages/reference.html?highlight=HighlightMatchingBracketProcessor#prompt_toolkit.layout.processors.HighlightMatchingBracketProcessor
 
 /// Highlight matching bracket when typed or cursor moved on.
-#[derive(Default)]
 pub struct MatchingBracketHighlighter {
     bracket: Cell<Option<(u8, usize)>>, // memorize the character to search...
+    format: fn(char) -> String,
+}
+
+impl Default for MatchingBracketHighlighter {
+    fn default() -> Self {
+        Self {
+            bracket: Default::default(),
+            format: |c| format!("\x1b[1;34m{}\x1b[0m", c),
+        }
+    }
 }
 
 impl MatchingBracketHighlighter {
     /// Constructor
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            bracket: Cell::new(None),
-        }
+        MatchingBracketHighlighter::default()
+    }
+
+    /// Use a specific style for the matching bracket
+    pub fn with_format(mut self, format: fn(char) -> String) -> Self {
+        self.format = format;
+        self
     }
 }
 
@@ -98,7 +111,7 @@ impl Highlighter for MatchingBracketHighlighter {
         if let Some((bracket, pos)) = self.bracket.get() {
             if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
                 let mut copy = line.to_owned();
-                copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
+                copy.replace_range(idx..=idx, &(self.format)(matching as char));
                 return Owned(copy);
             }
         }

@@ -2,6 +2,7 @@
 
 use crate::history::SearchDirection;
 use crate::Context;
+use std::borrow::ToOwned;
 
 /// A hint returned by Hinter
 pub trait Hint {
@@ -64,17 +65,17 @@ impl Hinter for HistoryHinter {
         } else {
             ctx.history_index()
         };
-        if let Some(sr) = ctx
+        if let Ok(Some(sr)) = ctx
             .history
             .starts_with(line, start, SearchDirection::Reverse)
-            .unwrap_or(None)
         {
             if sr.entry == line {
                 return None;
             }
-            return Some(sr.entry[pos..].to_owned());
+            sr.entry.get(pos..).map(ToOwned::to_owned)
+        } else {
+            None
         }
-        None
     }
 }
 

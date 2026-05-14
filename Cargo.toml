@@ -21,7 +21,6 @@ members = ["rustyline-derive"]
 
 [dependencies]
 bitflags = "2.11"
-cfg-if = "1.0.4"
 # For file completion
 home = { version = "0.5.12", optional = true }
 # For History

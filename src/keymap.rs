@@ -1209,10 +1209,11 @@ impl<'b> InputState<'b> {
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "custom-bindings")] {
+cfg_select! {
+    feature = "custom-bindings" => {
 pub type Bindings = radix_trie::Trie<Event, EventHandler>;
-    } else {
+    }
+    _ => {
 enum Event {
    KeySeq([KeyEvent; 1]),
 }

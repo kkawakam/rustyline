@@ -1,6 +1,9 @@
 //! Bindings from keys to command for Emacs and Vi modes
 use log::debug;
 
+#[cfg(feature = "custom-bindings")]
+use std::collections::VecDeque;
+
 use super::Result;
 use crate::highlight::CmdKind;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
@@ -93,6 +96,11 @@ pub enum Cmd {
     TransposeWords(RepeatCount),
     /// undo
     Undo(RepeatCount),
+    /// Save the current line buffer so it can be restored later via
+    /// take_stashed_line. Typically used as the first command in an
+    /// `EventHandler::Macro` to preserve the in-progress input before
+    /// clearing and submitting a different command.
+    Stash,
     /// Unsupported / unexpected
     Unknown,
     /// upcase-word
@@ -357,6 +365,12 @@ pub struct InputState<'b> {
     num_args: i16,
     last_cmd: Cmd,                        // vi only
     last_char_search: Option<CharSearch>, // vi only
+    #[cfg(feature = "custom-bindings")]
+    macro_queue: VecDeque<Cmd>,
+    #[cfg(feature = "custom-bindings")]
+    macro_active: bool,
+    #[cfg(feature = "custom-bindings")]
+    macro_just_started: bool,
 }
 
 /// Provide indirect mutation to user input.
@@ -412,6 +426,12 @@ impl<'b> InputState<'b> {
             num_args: 0,
             last_cmd: Cmd::Noop,
             last_char_search: None,
+            #[cfg(feature = "custom-bindings")]
+            macro_queue: VecDeque::new(),
+            #[cfg(feature = "custom-bindings")]
+            macro_active: false,
+            #[cfg(feature = "custom-bindings")]
+            macro_just_started: false,
         }
     }
 
@@ -421,6 +441,30 @@ impl<'b> InputState<'b> {
 
     pub fn is_vi_cmd_mode(&self) -> bool {
         self.input_mode == InputMode::Command && self.mode == EditMode::Vi
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn macro_active(&self) -> bool {
+        self.macro_active
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn take_macro_just_started(&mut self) -> bool {
+        let started = self.macro_just_started;
+        self.macro_just_started = false;
+        started
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    fn dispatch_macro(&mut self, cmds: &[Cmd]) -> Option<Cmd> {
+        let mut iter = cmds.iter().cloned();
+        let first = iter.next();
+        self.macro_queue.extend(iter);
+        if !self.macro_queue.is_empty() {
+            self.macro_active = true;
+            self.macro_just_started = true;
+        }
+        Some(first.unwrap_or(Cmd::Noop))
     }
 
     /// Parse user input into one command
@@ -433,6 +477,13 @@ impl<'b> InputState<'b> {
         single_esc_abort: bool,
         ignore_external_print: bool,
     ) -> Result<Cmd> {
+        #[cfg(feature = "custom-bindings")]
+        if let Some(cmd) = self.macro_queue.pop_front() {
+            if self.macro_queue.is_empty() {
+                self.macro_active = false;
+            }
+            return Ok(cmd);
+        }
         let single_esc_abort = self.single_esc_abort(single_esc_abort);
         let key;
         if ignore_external_print {
@@ -1137,7 +1188,7 @@ impl<'b> InputState<'b> {
 impl InputState<'_> {
     /// Application customized binding
     fn custom_binding(
-        &self,
+        &mut self,
         wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
@@ -1152,6 +1203,7 @@ impl InputState<'_> {
                     let ctx = EventContext::new(self, wrt);
                     handler.handle(evt, n, positive, &ctx)
                 }
+                EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
             }
         } else {
             None
@@ -1159,7 +1211,7 @@ impl InputState<'_> {
     }
 
     fn custom_seq_binding<R: RawReader>(
-        &self,
+        &mut self,
         rdr: &mut R,
         wrt: &dyn Refresher,
         evt: &mut Event,
@@ -1181,6 +1233,7 @@ impl InputState<'_> {
                         let ctx = EventContext::new(self, wrt);
                         handler.handle(evt, n, positive, &ctx)
                     }
+                    EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
                 };
                 if cmd.is_some() {
                     return Ok(cmd);
@@ -1193,12 +1246,12 @@ impl InputState<'_> {
 
 #[cfg(not(feature = "custom-bindings"))]
 impl<'b> InputState<'b> {
-    fn custom_binding(&self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
+    fn custom_binding(&mut self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
         None
     }
 
     fn custom_seq_binding<R: RawReader>(
-        &self,
+        &mut self,
         _: &mut R,
         _: &dyn Refresher,
         _: &mut Event,

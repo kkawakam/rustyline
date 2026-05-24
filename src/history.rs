@@ -363,25 +363,25 @@ impl History for MemHistory {
         start: usize,
         dir: SearchDirection,
     ) -> Result<Option<SearchResult<'_>>> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| entry.find(term);
-            Ok(self.search_match(term, start, dir, test))
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            Ok(
-                if let Ok(re) = RegexBuilder::new(&escape(term))
-                    .case_insensitive(true)
-                    .build()
-                {
-                    let test = |entry: &str| re.find(entry).map(|m| m.start());
-                    self.search_match(term, start, dir, test)
-                } else {
-                    None
-                },
-            )
+        cfg_select! {
+            feature = "case_insensitive_history_search" => {
+                use regex::{escape, RegexBuilder};
+                Ok(
+                    if let Ok(re) = RegexBuilder::new(&escape(term))
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        let test = |entry: &str| re.find(entry).map(|m| m.start());
+                        self.search_match(term, start, dir, test)
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => {
+                let test = |entry: &str| entry.find(term);
+                Ok(self.search_match(term, start, dir, test))
+            }
         }
     }
 
@@ -391,35 +391,35 @@ impl History for MemHistory {
         start: usize,
         dir: SearchDirection,
     ) -> Result<Option<SearchResult<'_>>> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| {
-                if entry.starts_with(term) {
-                    Some(term.len())
-                } else {
-                    None
-                }
-            };
-            Ok(self.search_match(term, start, dir, test))
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            Ok(
-                if let Ok(re) = RegexBuilder::new(&escape(term))
-                    .case_insensitive(true)
-                    .build()
-                {
-                    let test = |entry: &str| {
-                        re.find(entry)
-                            .and_then(|m| if m.start() == 0 { Some(m) } else { None })
-                            .map(|m| m.end())
-                    };
-                    self.search_match(term, start, dir, test)
-                } else {
-                    None
-                },
-            )
+        cfg_select! {
+            feature = "case_insensitive_history_search" => {
+                use regex::{escape, RegexBuilder};
+                Ok(
+                    if let Ok(re) = RegexBuilder::new(&escape(term))
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        let test = |entry: &str| {
+                            re.find(entry)
+                                .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                                .map(|m| m.end())
+                        };
+                        self.search_match(term, start, dir, test)
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => {
+                let test = |entry: &str| {
+                    if entry.starts_with(term) {
+                        Some(term.len())
+                    } else {
+                        None
+                    }
+                };
+                Ok(self.search_match(term, start, dir, test))
+            }
         }
     }
 }
@@ -633,12 +633,16 @@ impl FileHistory {
     }
 }
 
-/// Default transient in-memory history implementation
-#[cfg(not(feature = "with-file-history"))]
-pub type DefaultHistory = MemHistory;
-/// Default file-based history implementation
-#[cfg(feature = "with-file-history")]
-pub type DefaultHistory = FileHistory;
+cfg_select! {
+    feature = "with-file-history" => {
+        /// Default file-based history implementation
+        pub type DefaultHistory = FileHistory;
+    }
+    _ => {
+        /// Default transient in-memory history implementation
+        pub type DefaultHistory = MemHistory;
+    }
+}
 
 #[cfg(feature = "with-file-history")]
 impl History for FileHistory {

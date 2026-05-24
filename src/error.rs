@@ -85,18 +85,15 @@ pub enum Signal {
 
 #[cfg(unix)]
 impl Signal {
-    #[cfg(not(feature = "signal-hook"))]
     pub(crate) fn from(b: u8) -> Self {
-        match b {
-            b'I' => Self::Interrupt,
-            b'W' => Self::Resize,
-            _ => unreachable!(),
+        cfg_select! {
+          feature = "signal-hook" => Self::Resize,
+          _ => match b {
+              b'I' => Self::Interrupt,
+              b'W' => Self::Resize,
+              _ => unreachable!(),
+          }
         }
-    }
-
-    #[cfg(feature = "signal-hook")]
-    pub(crate) fn from(_: u8) -> Self {
-        Self::Resize
     }
 
     #[cfg(not(feature = "signal-hook"))]

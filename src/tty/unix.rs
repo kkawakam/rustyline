@@ -794,10 +794,12 @@ impl PosixRawReader {
                 // prefer user input over external print
                 return self.next_key(single_esc_abort).map(Event::KeyPress);
             } else if timeout.is_some() {
-                #[cfg(target_os = "macos")]
-                return Ok(Event::Timeout(true));
-                #[cfg(not(target_os = "macos"))]
-                unreachable!()
+                cfg_select! {
+                    target_os = "macos" => {
+                        return Ok(Event::Timeout(true));
+                    }
+                    _ => unreachable!()
+                }
             } else if let Some(ref pipe_reader) = self.pipe_reader {
                 let mut guard = pipe_reader.lock().unwrap();
                 let mut buf = [0; 1];
@@ -813,17 +815,16 @@ impl PosixRawReader {
 impl RawReader for PosixRawReader {
     type Buffer = PosixBuffer;
 
-    #[cfg(not(feature = "signal-hook"))]
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        match self.pipe_reader {
-            Some(_) => self.select(None, single_esc_abort),
-            None => self.next_key(single_esc_abort).map(Event::KeyPress),
+        cfg_select! {
+          feature = "signal-hook" => {
+              self.select(None, single_esc_abort)
+          }
+          _ => match self.pipe_reader {
+              Some(_) => self.select(None, single_esc_abort),
+              None => self.next_key(single_esc_abort).map(Event::KeyPress),
+          }
         }
-    }
-
-    #[cfg(feature = "signal-hook")]
-    fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
-        self.select(None, single_esc_abort)
     }
 
     fn next_key(&mut self, single_esc_abort: bool) -> Result<KeyEvent> {
@@ -1300,60 +1301,59 @@ struct Sig {
     id: signal_hook::SigId,
 }
 impl Sig {
-    #[cfg(not(feature = "signal-hook"))]
-    fn install_sigwinch_handler() -> Result<Self> {
-        use nix::sys::signal;
-        let (pipe, pipe_write) = UnixStream::pair()?;
-        pipe.set_nonblocking(true)?;
-        SIG_PIPE
-            .compare_exchange(
-                -1,
-                pipe_write.into_raw_fd(),
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            )
-            .expect("Previous `pipe_write` should have been closed");
-        let sa = signal::SigAction::new(
-            signal::SigHandler::Handler(sig_handler),
-            signal::SaFlags::empty(),
-            signal::SigSet::empty(),
-        );
-        let original_sigint = unsafe { signal::sigaction(signal::SIGINT, &sa)? };
-        let original_sigwinch = unsafe { signal::sigaction(signal::SIGWINCH, &sa)? };
-        Ok(Self {
-            pipe,
-            original_sigint,
-            original_sigwinch,
-        })
-    }
-
-    #[cfg(feature = "signal-hook")]
     fn install_sigwinch_handler() -> Result<Self> {
         let (pipe, pipe_write) = UnixStream::pair()?;
         pipe.set_nonblocking(true)?;
-        let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
-        Ok(Self { pipe, id })
-    }
-
-    #[cfg(not(feature = "signal-hook"))]
-    fn uninstall_sigwinch_handler(self) -> Result<()> {
-        use nix::sys::signal;
-        let _ = unsafe { signal::sigaction(signal::SIGINT, &self.original_sigint)? };
-        let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
-        close(self.pipe)?;
-        let fd = SIG_PIPE.swap(-1, Ordering::Relaxed);
-        if fd != -1 {
-            close(fd)?;
-        } else {
-            warn!(target: "rustyline", "Invalid `pipe_write`");
+        cfg_select! {
+            feature = "signal-hook" => {
+                let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
+                Ok(Self { pipe, id })
+            }
+            _ => {
+                use nix::sys::signal;
+                SIG_PIPE
+                    .compare_exchange(
+                        -1,
+                        pipe_write.into_raw_fd(),
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    )
+                    .expect("Previous `pipe_write` should have been closed");
+                let sa = signal::SigAction::new(
+                    signal::SigHandler::Handler(sig_handler),
+                    signal::SaFlags::empty(),
+                    signal::SigSet::empty(),
+                );
+                let original_sigint = unsafe { signal::sigaction(signal::SIGINT, &sa)? };
+                let original_sigwinch = unsafe { signal::sigaction(signal::SIGWINCH, &sa)? };
+                Ok(Self {
+                    pipe,
+                    original_sigint,
+                    original_sigwinch,
+                })
+            }
         }
-        Ok(())
     }
 
-    #[cfg(feature = "signal-hook")]
     fn uninstall_sigwinch_handler(self) -> Result<()> {
-        signal_hook::low_level::unregister(self.id);
-        close(self.pipe)?;
+        cfg_select! {
+            feature = "signal-hook" => {
+                signal_hook::low_level::unregister(self.id);
+                close(self.pipe)?;
+            }
+            _ => {
+                use nix::sys::signal;
+                let _ = unsafe { signal::sigaction(signal::SIGINT, &self.original_sigint)? };
+                let _ = unsafe { signal::sigaction(signal::SIGWINCH, &self.original_sigwinch)? };
+                close(self.pipe)?;
+                let fd = SIG_PIPE.swap(-1, Ordering::Relaxed);
+                if fd != -1 {
+                    close(fd)?;
+                } else {
+                    warn!(target: "rustyline", "Invalid `pipe_write`");
+                }
+            }
+        }
         Ok(())
     }
 }

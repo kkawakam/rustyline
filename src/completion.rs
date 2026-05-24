@@ -300,20 +300,17 @@ fn filename_complete(
     let dir_path = Path::new(dir_name);
     let dir = if dir_path.starts_with("~") {
         // ~[/...]
-        #[cfg(feature = "with-dirs")]
-        {
-            if let Some(home) = home_dir() {
-                match dir_path.strip_prefix("~") {
-                    Ok(rel_path) => home.join(rel_path),
-                    _ => home,
+        cfg_select! {
+            feature = "with-dirs" =>
+                if let Some(home) = home_dir() {
+                    match dir_path.strip_prefix("~") {
+                        Ok(rel_path) => home.join(rel_path),
+                        _ => home,
+                    }
+                } else {
+                    dir_path.to_path_buf()
                 }
-            } else {
-                dir_path.to_path_buf()
-            }
-        }
-        #[cfg(not(feature = "with-dirs"))]
-        {
-            dir_path.to_path_buf()
+            _ => dir_path.to_path_buf()
         }
     } else if dir_path.is_relative() {
         // TODO ~user[/...] (https://crates.io/crates/users)
@@ -357,15 +354,12 @@ fn filename_complete(
     entries
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 fn normalize(s: &str) -> Cow<'_, str> {
-    // case-insensitive
-    Owned(s.to_lowercase())
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
-fn normalize(s: &str) -> Cow<'_, str> {
-    Cow::Borrowed(s)
+    cfg_select! {
+        windows => Owned(s.to_lowercase()), // case-insensitive
+        target_os = "macos" => Owned(s.to_lowercase()), // case-insensitive
+        _ => Cow::Borrowed(s)
+    }
 }
 
 /// Given a `line` and a cursor `pos`ition,

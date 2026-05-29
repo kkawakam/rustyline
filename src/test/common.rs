@@ -1,4 +1,6 @@
 //! Basic commands tests.
+use std::assert_matches;
+
 use super::{assert_cursor, assert_line, assert_line_with_initial, init_editor};
 use crate::config::EditMode;
 use crate::error::ReadlineError;

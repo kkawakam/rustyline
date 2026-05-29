@@ -986,9 +986,6 @@ impl<H: Helper, I: History> Iterator for Iter<'_, H, I> {
 }
 
 #[cfg(test)]
-#[macro_use]
-extern crate assert_matches;
-#[cfg(test)]
 mod test;
 
 #[cfg(doctest)]

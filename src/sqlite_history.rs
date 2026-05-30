@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension as _};
 
 use crate::history::SearchResult;
 use crate::{Config, History, HistoryDuplicates, ReadlineError, Result, SearchDirection};
@@ -120,7 +120,7 @@ END;
 PRAGMA user_version = 1;
 COMMIT;
                  ",
-            )?
+            )?;
         }
         self.conn.pragma_update(None, "foreign_keys", 1)?;
         if self.ignore_dups || user_version > 0 {
@@ -451,7 +451,7 @@ fn offset(s: String) -> usize {
 mod tests {
     use super::SQLiteHistory;
     use crate::config::Config;
-    use crate::history::{History, SearchDirection, SearchResult};
+    use crate::history::{History as _, SearchDirection, SearchResult};
     use crate::Result;
     use std::borrow::Cow;
     use std::path::Path;

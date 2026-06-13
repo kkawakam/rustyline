@@ -401,7 +401,7 @@ impl History for MemHistory {
                     {
                         let test = |entry: &str| {
                             re.find(entry)
-                                .and_then(|m| if m.start() == 0 { Some(m) } else { None })
+                                .filter(|m| m.start() == 0)
                                 .map(|m| m.end())
                         };
                         self.search_match(term, start, dir, test)

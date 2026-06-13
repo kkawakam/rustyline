@@ -97,16 +97,12 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
             // Fetch the previous command from the history list.
             s.edit_history_next(true)?;
         }
-        Cmd::LineUpOrPreviousHistory(n) =>
-        {
-            #[expect(clippy::collapsible_match)]
+        Cmd::LineUpOrPreviousHistory(n) => {
             if !s.edit_move_line_up(n)? {
                 s.edit_history_next(true)?;
             }
         }
-        Cmd::LineDownOrNextHistory(n) =>
-        {
-            #[expect(clippy::collapsible_match)]
+        Cmd::LineDownOrNextHistory(n) => {
             if !s.edit_move_line_down(n)? {
                 s.edit_history_next(false)?;
             }
@@ -215,9 +211,7 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
             }
         }
         Cmd::Move(Movement::ViCharSearch(n, cs)) => s.edit_move_to(cs, n)?,
-        Cmd::Undo(n) =>
-        {
-            #[expect(clippy::collapsible_match)]
+        Cmd::Undo(n) => {
             if s.changes.undo(&mut s.line, n) {
                 s.refresh_line()?;
             }

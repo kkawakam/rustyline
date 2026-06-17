@@ -111,6 +111,9 @@ pub enum Cmd {
     LineDownOrNextHistory(RepeatCount),
     /// Inserts a newline
     Newline,
+    /// vi-open-line: open a new line and enter input mode — `Anchor::After`
+    /// for `o` (below the current line), `Anchor::Before` for `O` (above).
+    OpenLine(Anchor),
     /// Either accepts or inserts a newline
     ///
     /// Always inserts newline if input is non-valid. Can also insert newline
@@ -744,6 +747,18 @@ impl<'b> InputState<'b> {
                 self.input_mode = InputMode::Insert;
                 wrt.doing_insert();
                 Cmd::Move(Movement::EndOfLine)
+            }
+            E(K::Char('o'), M::NONE) => {
+                // vi-open-below
+                self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
+                Cmd::OpenLine(Anchor::After)
+            }
+            E(K::Char('O'), M::NONE) => {
+                // vi-open-above
+                self.input_mode = InputMode::Insert;
+                wrt.doing_insert();
+                Cmd::OpenLine(Anchor::Before)
             }
             E(K::Char('b'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Vi)), /* vi-prev-word */
             E(K::Char('B'), M::NONE) => Cmd::Move(Movement::BackwardWord(n, Word::Big)),

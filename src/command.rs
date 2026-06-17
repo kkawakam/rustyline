@@ -124,6 +124,21 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
                 kill_ring.kill(&text, Mode::Append);
             }
         }
+        Cmd::OpenLine(anchor) => {
+            // vi `o` / `O`: open a new line below / above the current one and
+            // enter input mode (the vi keymap already switched to Insert).
+            match anchor {
+                Anchor::After => {
+                    s.edit_move_end()?;
+                    s.edit_insert('\n', 1)?;
+                }
+                Anchor::Before => {
+                    s.edit_move_home()?;
+                    s.edit_insert('\n', 1)?;
+                    s.edit_move_backward(1)?;
+                }
+            }
+        }
         Cmd::Newline => {
             s.edit_insert('\n', 1)?;
         }

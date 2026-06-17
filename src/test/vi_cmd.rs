@@ -94,6 +94,30 @@ fn uppercase_a() {
 }
 
 #[test]
+fn o() {
+    // vi-open-below: `o` opens a new line after the current one (regardless of
+    // cursor column) and enters insert mode.
+    assert_cursor(
+        EditMode::Vi,
+        ("Hel", "lo"),
+        &[E::ESC, E::from('o'), E::from('x'), E::ENTER],
+        ("Hello\nx", ""),
+    );
+}
+
+#[test]
+fn uppercase_o() {
+    // vi-open-above: `O` opens a new line before the current one and enters
+    // insert mode on it.
+    assert_cursor(
+        EditMode::Vi,
+        ("Hel", "lo"),
+        &[E::ESC, E::from('O'), E::from('x'), E::ENTER],
+        ("x", "\nHello"),
+    );
+}
+
+#[test]
 fn b() {
     assert_cursor(
         EditMode::Vi,

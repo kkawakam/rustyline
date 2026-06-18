@@ -583,8 +583,10 @@ impl<'b> InputState<'b> {
                 Movement::BeginningOfLine
             }),
             E(K::Char('L'), M::CTRL) => Cmd::ClearScreen,
-            E(K::Char('N'), M::CTRL) => Cmd::NextHistory,
-            E(K::Char('P'), M::CTRL) => Cmd::PreviousHistory,
+            E(K::Char('N'), M::CTRL_SHIFT) => Cmd::NextHistory,
+            E(K::Char('P'), M::CTRL_SHIFT) => Cmd::PreviousHistory,
+            E(K::Char('N'), M::CTRL) => Cmd::LineDownOrNextHistory(1),
+            E(K::Char('P'), M::CTRL) => Cmd::LineUpOrPreviousHistory(1),
             E(K::Char('X'), M::CTRL) => {
                 if let Some(cmd) = self.custom_seq_binding(rdr, wrt, &mut evt, n, positive)? {
                     cmd

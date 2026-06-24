@@ -178,10 +178,10 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
         s.edit_move_end()?;
         s.line.set_pos(save_pos);
         // we got a second tab, maybe show list of possible completions
-        let show_completions = if candidates.len() > config.completion_prompt_limit() {
+        let asked = candidates.len() > config.completion_prompt_limit();
+        let show_completions = if asked {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             s.out.write_and_flush(msg.as_str())?;
-            s.layout.end.row += 1;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
                 && cmd != Cmd::SelfInsert(1, 'n')
@@ -197,6 +197,9 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
         if show_completions {
             page_completions(rdr, s, input_state, &candidates)
         } else {
+            if asked {
+                s.layout.end.row += 1; // erase Display all ... possibilities
+            }
             s.refresh_line()?;
             Ok(None)
         }

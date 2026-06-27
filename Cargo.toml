@@ -11,7 +11,7 @@ keywords = ["readline"]
 license = "MIT"
 categories = ["command-line-interface"]
 
-exclude = ["/.github/*", "/rustfmt.toml"]
+exclude = ["/.github/*", "/rustfmt.toml", "/grcov.sh"]
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -71,6 +71,9 @@ env_logger = { version = "0.11", default-features = false }
 tempfile = "3.26.0"
 rand = "0.10"
 
+[target.'cfg(unix)'.dev-dependencies]
+rexpect = "0.7.1"
+
 [features]
 default = ["custom-bindings", "with-dirs", "with-file-history"]
 custom-bindings = ["radix_trie"]
@@ -80,6 +83,10 @@ with-file-history = []
 with-sqlite-history = ["rusqlite"]
 with-fuzzy = ["skim"]
 case_insensitive_history_search = ["regex"]
+
+[[bin]]
+name = "re"
+path = "src/test/re.rs"
 
 [[example]]
 name = "custom_key_bindings"

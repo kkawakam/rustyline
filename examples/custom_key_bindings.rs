@@ -3,8 +3,8 @@ use std::borrow::Cow::{self, Owned};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::{
-    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
-    Result,
+    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyCode, KeyEvent,
+    Modifiers, RepeatCount, Result,
 };
 use rustyline::{Completer, Helper, Hinter, Validator};
 
@@ -84,6 +84,14 @@ fn main() -> Result<()> {
     rl.bind_sequence(
         Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
         EventHandler::Simple(Cmd::Suspend), // TODO external editor
+    );
+    // Bind F1 to insert "help" and accept the line
+    rl.bind_sequence(
+        KeyEvent(KeyCode::F(1), Modifiers::NONE),
+        EventHandler::Macro(vec![
+            Cmd::Insert(1, "help".to_owned()),
+            Cmd::AcceptLine,
+        ]),
     );
 
     loop {

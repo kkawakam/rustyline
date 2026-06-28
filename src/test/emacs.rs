@@ -245,6 +245,20 @@ fn ctrl_x_ctrl_u() {
 }
 
 #[test]
+#[cfg(feature = "custom-bindings")]
+fn ctrl_x_ctrl_x() {
+    use crate::binding::{Event, EventHandler};
+    use crate::Cmd;
+    let mut editor = super::init_editor(EditMode::Emacs, &[E::ctrl('X'), E::ctrl('X'), E::ENTER]);
+    editor.bind_sequence(
+        Event::KeySeq(vec![E::ctrl('X'), E::ctrl('E')]),
+        EventHandler::Simple(Cmd::Noop),
+    );
+    let actual_line = editor.readline("").unwrap();
+    assert_eq!("", actual_line);
+}
+
+#[test]
 fn meta_b() {
     assert_cursor(
         EditMode::Emacs,

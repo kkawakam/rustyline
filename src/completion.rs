@@ -112,8 +112,8 @@ pub struct FilenameCompleter {
 
 const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 
-cfg_if::cfg_if! {
-    if #[cfg(unix)] {
+cfg_select! {
+    unix => {
         // rl_basic_word_break_characters, rl_completer_word_break_characters
         const fn default_break_chars(c : char) -> bool {
             matches!(c, ' ' | '\t' | '\n' | '"' | '\\' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' |
@@ -123,15 +123,18 @@ cfg_if::cfg_if! {
         // In double quotes, not all break_chars need to be escaped
         // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
         const fn double_quotes_special_chars(c: char) -> bool { matches!(c, '"' | '$' | '\\' | '`') }
-    } else if #[cfg(windows)] {
+    }
+    windows => {
         // Remove \ to make file completion works on windows
         const fn default_break_chars(c: char) -> bool {
             matches!(c, ' ' | '\t' | '\n' | '"' | '\'' | '`' | '@' | '$' | '>' | '<' | '=' | ';' | '|' | '&' | '{' |
             '(' | '\0')
         }
         const ESCAPE_CHAR: Option<char> = None;
-        const fn double_quotes_special_chars(c: char) -> bool { c == '"' } // TODO Validate: only '"' ?
-    } else if #[cfg(target_arch = "wasm32")] {
+         // TODO Validate: only '"' ?
+        const fn double_quotes_special_chars(c: char) -> bool { c == '"' }
+    }
+    target_arch = "wasm32" => {
         const fn default_break_chars(c: char) -> bool { false }
         const ESCAPE_CHAR: Option<char> = None;
         const fn double_quotes_special_chars(c: char) -> bool { false }
@@ -297,20 +300,17 @@ fn filename_complete(
     let dir_path = Path::new(dir_name);
     let dir = if dir_path.starts_with("~") {
         // ~[/...]
-        #[cfg(feature = "with-dirs")]
-        {
-            if let Some(home) = home_dir() {
-                match dir_path.strip_prefix("~") {
-                    Ok(rel_path) => home.join(rel_path),
-                    _ => home,
+        cfg_select! {
+            feature = "with-dirs" =>
+                if let Some(home) = home_dir() {
+                    match dir_path.strip_prefix("~") {
+                        Ok(rel_path) => home.join(rel_path),
+                        _ => home,
+                    }
+                } else {
+                    dir_path.to_path_buf()
                 }
-            } else {
-                dir_path.to_path_buf()
-            }
-        }
-        #[cfg(not(feature = "with-dirs"))]
-        {
-            dir_path.to_path_buf()
+            _ => dir_path.to_path_buf()
         }
     } else if dir_path.is_relative() {
         // TODO ~user[/...] (https://crates.io/crates/users)
@@ -354,15 +354,12 @@ fn filename_complete(
     entries
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 fn normalize(s: &str) -> Cow<'_, str> {
-    // case insensitive
-    Owned(s.to_lowercase())
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
-fn normalize(s: &str) -> Cow<'_, str> {
-    Cow::Borrowed(s)
+    cfg_select! {
+        windows => Owned(s.to_lowercase()), // case-insensitive
+        target_os = "macos" => Owned(s.to_lowercase()), // case-insensitive
+        _ => Cow::Borrowed(s)
+    }
 }
 
 /// Given a `line` and a cursor `pos`ition,
@@ -484,7 +481,7 @@ fn find_unclosed_quote(s: &str) -> Option<(usize, Quote)> {
                     mode = ScanMode::Normal;
                 } // no escape in single quotes
             }
-        };
+        }
     }
     if ScanMode::DoubleQuote == mode || ScanMode::EscapeInDoubleQuote == mode {
         return Some((quote_index, Quote::Double));
@@ -594,13 +591,13 @@ mod tests {
         assert_eq!(
             Some((0, super::Quote::Double)),
             super::find_unclosed_quote("\"c:\\users\\All Users\\")
-        )
+        );
     }
 
     #[cfg(windows)]
     #[test]
     pub fn normalize() {
-        assert_eq!(super::normalize("Windows"), "windows")
+        assert_eq!(super::normalize("Windows"), "windows");
     }
 
     #[test]

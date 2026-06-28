@@ -57,12 +57,12 @@ impl Default for GraphemeClusterMode {
 pub type Unit = u16;
 /// Character width / number of columns
 pub(crate) fn cwidh(c: char) -> Unit {
-    use unicode_width::UnicodeWidthChar;
+    use unicode_width::UnicodeWidthChar as _;
     Unit::try_from(c.width().unwrap_or(0)).unwrap()
 }
 
 fn uwidth(s: &str) -> Unit {
-    use unicode_width::UnicodeWidthStr;
+    use unicode_width::UnicodeWidthStr as _;
     Unit::try_from(s.width()).unwrap()
 }
 
@@ -115,6 +115,8 @@ pub struct Layout {
     pub cursor: Position,
     /// Number of rows used so far (from start of prompt to end of input)
     pub end: Position,
+    /// Has some hint or message at the end of input
+    pub has_info: bool,
 }
 
 impl Layout {
@@ -125,6 +127,7 @@ impl Layout {
             default_prompt: false,
             cursor: Position::default(),
             end: Position::default(),
+            has_info: false,
         }
     }
 
@@ -148,7 +151,7 @@ mod test {
         // WezTerm KO, Terminal.app (rendered width = 1)
         assert_eq!(2, super::uwidth("❤️"));
         let gcm = GraphemeClusterMode::Unicode;
-        assert_eq!(2, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"))
+        assert_eq!(2, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
     #[test]
     fn test_wcwidth() {
@@ -159,7 +162,7 @@ mod test {
         assert_eq!(16, super::wcwidth("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
         assert_eq!(1, super::wcwidth("❤️"));
         let gcm = GraphemeClusterMode::WcWidth;
-        assert_eq!(16, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"))
+        assert_eq!(16, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
     #[test]
     fn test_no_zwj() {
@@ -170,6 +173,6 @@ mod test {
         assert_eq!(8, super::no_zwj("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
         assert_eq!(2, super::no_zwj("️❤️"));
         let gcm = GraphemeClusterMode::NoZwj;
-        assert_eq!(8, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"))
+        assert_eq!(8, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
 }

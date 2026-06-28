@@ -4,9 +4,9 @@ use crate::layout::Layout;
 use std::cmp::min;
 use std::fmt;
 use std::iter;
-use std::ops::{Deref, Index, Range};
+use std::ops::{Deref, Index as _, Range};
 use std::string::Drain;
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 
 /// Default maximum buffer size for the line read
 pub(crate) const MAX_LINE: usize = 4096;
@@ -625,10 +625,9 @@ impl LineBuffer {
     ///
     /// Fails if the cursor is on the first line
     fn n_lines_up(&self, n: RepeatCount) -> Option<(usize, usize)> {
-        let mut start = if let Some(off) = self.buf[..self.pos].rfind('\n') {
+        let mut start = {
+            let off = self.buf[..self.pos].rfind('\n')?;
             off + 1
-        } else {
-            return None;
         };
         let end = self.buf[self.pos..]
             .find('\n')
@@ -648,10 +647,9 @@ impl LineBuffer {
     ///
     /// Fails if the cursor is on the last line
     fn n_lines_down(&self, n: RepeatCount) -> Option<(usize, usize)> {
-        let mut end = if let Some(off) = self.buf[self.pos..].find('\n') {
+        let mut end = {
+            let off = self.buf[self.pos..].find('\n')?;
             self.pos + off + 1
-        } else {
-            return None;
         };
         let start = self.buf[..self.pos].rfind('\n').unwrap_or(0);
         for _ in 0..n {
@@ -660,7 +658,7 @@ impl LineBuffer {
             } else {
                 end = self.buf.len();
                 break;
-            };
+            }
         }
         Some((start, end))
     }
@@ -799,7 +797,7 @@ impl LineBuffer {
                     let start = self.pos;
                     self.drain(start..pos + c.len_utf8(), Direction::Forward, dl);
                 }
-            };
+            }
             true
         } else {
             false
@@ -878,7 +876,7 @@ impl LineBuffer {
         true
     }
 
-    /// Replaces the content between [`start`..`end`] with `text`
+    /// Replaces the content between `range` with `text`
     /// and positions the cursor to the end of text.
     pub fn replace<C: ChangeListener>(&mut self, range: Range<usize>, text: &str, cl: &mut C) {
         let start = range.start;
@@ -1219,7 +1217,7 @@ mod test {
 
         fn assert_deleted_str_eq(&self, expected: &str) {
             let actual = self.deleted_str.as_ref().expect("no deleted string");
-            assert_eq!(expected, actual)
+            assert_eq!(expected, actual);
         }
     }
 

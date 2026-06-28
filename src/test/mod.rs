@@ -5,7 +5,7 @@ use crate::config::{CompletionType, Config, EditMode};
 use crate::edit::init_state;
 use crate::highlight::Highlighter;
 use crate::hint::Hinter;
-use crate::history::History;
+use crate::history::History as _;
 use crate::keymap::{Bindings, Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
@@ -188,7 +188,7 @@ fn test_readline_direct() {
     let output = readline_direct(
         Cursor::new("([)\n\u{0008}\n\n\r\n])".as_bytes()),
         Cursor::new(&mut write_buf),
-        &Some(crate::validate::MatchingBracketValidator::new()),
+        Some(crate::validate::MatchingBracketValidator::new()).as_ref(),
     );
 
     assert_eq!(

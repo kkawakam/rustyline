@@ -1,8 +1,6 @@
 //! History API
 
 #[cfg(feature = "with-file-history")]
-use fd_lock::RwLock;
-#[cfg(feature = "with-file-history")]
 use log::{debug, warn};
 use std::borrow::Cow;
 use std::collections::vec_deque;
@@ -365,25 +363,25 @@ impl History for MemHistory {
         start: usize,
         dir: SearchDirection,
     ) -> Result<Option<SearchResult<'_>>> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| entry.find(term);
-            Ok(self.search_match(term, start, dir, test))
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            Ok(
-                if let Ok(re) = RegexBuilder::new(&escape(term))
-                    .case_insensitive(true)
-                    .build()
-                {
-                    let test = |entry: &str| re.find(entry).map(|m| m.start());
-                    self.search_match(term, start, dir, test)
-                } else {
-                    None
-                },
-            )
+        cfg_select! {
+            feature = "case_insensitive_history_search" => {
+                use regex::{escape, RegexBuilder};
+                Ok(
+                    if let Ok(re) = RegexBuilder::new(&escape(term))
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        let test = |entry: &str| re.find(entry).map(|m| m.start());
+                        self.search_match(term, start, dir, test)
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => {
+                let test = |entry: &str| entry.find(term);
+                Ok(self.search_match(term, start, dir, test))
+            }
         }
     }
 
@@ -393,35 +391,35 @@ impl History for MemHistory {
         start: usize,
         dir: SearchDirection,
     ) -> Result<Option<SearchResult<'_>>> {
-        #[cfg(not(feature = "case_insensitive_history_search"))]
-        {
-            let test = |entry: &str| {
-                if entry.starts_with(term) {
-                    Some(term.len())
-                } else {
-                    None
-                }
-            };
-            Ok(self.search_match(term, start, dir, test))
-        }
-        #[cfg(feature = "case_insensitive_history_search")]
-        {
-            use regex::{escape, RegexBuilder};
-            Ok(
-                if let Ok(re) = RegexBuilder::new(&escape(term))
-                    .case_insensitive(true)
-                    .build()
-                {
-                    let test = |entry: &str| {
-                        re.find(entry)
-                            .and_then(|m| if m.start() == 0 { Some(m) } else { None })
-                            .map(|m| m.end())
-                    };
-                    self.search_match(term, start, dir, test)
-                } else {
-                    None
-                },
-            )
+        cfg_select! {
+            feature = "case_insensitive_history_search" => {
+                use regex::{escape, RegexBuilder};
+                Ok(
+                    if let Ok(re) = RegexBuilder::new(&escape(term))
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        let test = |entry: &str| {
+                            re.find(entry)
+                                .filter(|m| m.start() == 0)
+                                .map(|m| m.end())
+                        };
+                        self.search_match(term, start, dir, test)
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => {
+                let test = |entry: &str| {
+                    if entry.starts_with(term) {
+                        Some(term.len())
+                    } else {
+                        None
+                    }
+                };
+                Ok(self.search_match(term, start, dir, test))
+            }
         }
     }
 }
@@ -486,7 +484,7 @@ impl FileHistory {
     }
 
     fn save_to(&mut self, file: &File, append: bool) -> Result<()> {
-        use std::io::{BufWriter, Write};
+        use std::io::{BufWriter, Write as _};
 
         fix_perm(file);
         let mut wtr = BufWriter::new(file);
@@ -523,7 +521,7 @@ impl FileHistory {
     }
 
     fn load_from(&mut self, file: &File) -> Result<bool> {
-        use std::io::{BufRead, BufReader};
+        use std::io::{BufRead as _, BufReader};
 
         let rdr = BufReader::new(file);
         let mut lines = rdr.lines();
@@ -635,12 +633,16 @@ impl FileHistory {
     }
 }
 
-/// Default transient in-memory history implementation
-#[cfg(not(feature = "with-file-history"))]
-pub type DefaultHistory = MemHistory;
-/// Default file-based history implementation
-#[cfg(feature = "with-file-history")]
-pub type DefaultHistory = FileHistory;
+cfg_select! {
+    feature = "with-file-history" => {
+        /// Default file-based history implementation
+        pub type DefaultHistory = FileHistory;
+    }
+    _ => {
+        /// Default transient in-memory history implementation
+        pub type DefaultHistory = MemHistory;
+    }
+}
 
 #[cfg(feature = "with-file-history")]
 impl History for FileHistory {
@@ -696,15 +698,14 @@ impl History for FileHistory {
         let f = File::create(path);
         restore_umask(old_umask);
         let file = f?;
-        let mut lock = RwLock::new(file);
-        let lock_guard = lock.write()?;
-        self.save_to(&lock_guard, false)?;
+        file.lock()?;
+        self.save_to(&file, false)?;
         self.new_entries = 0;
-        self.update_path(path, &lock_guard, self.len())
+        self.update_path(path, &file, self.len())
     }
 
     fn append(&mut self, path: &Path) -> Result<()> {
-        use std::io::Seek;
+        use std::io::Seek as _;
 
         if self.is_empty() || self.new_entries == 0 {
             return Ok(());
@@ -712,12 +713,11 @@ impl History for FileHistory {
         if !path.exists() || self.new_entries == self.mem.max_len {
             return self.save(path);
         }
-        let file = OpenOptions::new().write(true).read(true).open(path)?;
-        let mut lock = RwLock::new(file);
-        let mut lock_guard = lock.write()?;
-        if self.can_just_append(path, &lock_guard)? {
-            lock_guard.seek(SeekFrom::End(0))?;
-            self.save_to(&lock_guard, true)?;
+        let mut file = OpenOptions::new().write(true).read(true).open(path)?;
+        file.lock()?;
+        if self.can_just_append(path, &file)? {
+            file.seek(SeekFrom::End(0))?;
+            self.save_to(&file, true)?;
             let size = self
                 .path_info
                 .as_ref()
@@ -725,7 +725,7 @@ impl History for FileHistory {
                 .2
                 .saturating_add(self.new_entries);
             self.new_entries = 0;
-            return self.update_path(path, &lock_guard, size);
+            return self.update_path(path, &file, size);
         }
         // we may need to truncate file before appending new entries
         let mut other = Self {
@@ -738,26 +738,25 @@ impl History for FileHistory {
             new_entries: 0,
             path_info: None,
         };
-        other.load_from(&lock_guard)?;
+        other.load_from(&file)?;
         let first_new_entry = self.mem.len().saturating_sub(self.new_entries);
         for entry in self.mem.entries.iter().skip(first_new_entry) {
             other.add(entry)?;
         }
-        lock_guard.seek(SeekFrom::Start(0))?;
-        lock_guard.set_len(0)?; // if new size < old size
-        other.save_to(&lock_guard, false)?;
-        self.update_path(path, &lock_guard, other.len())?;
+        file.seek(SeekFrom::Start(0))?;
+        file.set_len(0)?; // if new size < old size
+        other.save_to(&file, false)?;
+        self.update_path(path, &file, other.len())?;
         self.new_entries = 0;
         Ok(())
     }
 
     fn load(&mut self, path: &Path) -> Result<()> {
         let file = File::open(path)?;
-        let lock = RwLock::new(file);
-        let lock_guard = lock.read()?;
+        file.lock_shared()?;
         let len = self.len();
-        if self.load_from(&lock_guard)? {
-            self.update_path(path, &lock_guard, self.len() - len)
+        if self.load_from(&file)? {
+            self.update_path(path, &file, self.len() - len)
         } else {
             // discard old version on next save
             self.path_info = None;
@@ -810,8 +809,8 @@ impl<'a> IntoIterator for &'a FileHistory {
 }
 
 #[cfg(feature = "with-file-history")]
-cfg_if::cfg_if! {
-    if #[cfg(any(windows, target_arch = "wasm32"))] {
+cfg_select! {
+    any(windows, target_arch = "wasm32") => {
         fn umask() -> u16 {
             0
         }
@@ -819,7 +818,8 @@ cfg_if::cfg_if! {
         fn restore_umask(_: u16) {}
 
         fn fix_perm(_: &File) {}
-    } else if #[cfg(unix)] {
+    }
+    unix => {
         use nix::sys::stat::{self, Mode, fchmod};
         fn umask() -> Mode {
             stat::umask(Mode::S_IXUSR | Mode::S_IRWXG | Mode::S_IRWXO)
@@ -837,7 +837,7 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
-    use super::{DefaultHistory, History, SearchDirection, SearchResult};
+    use super::{DefaultHistory, History as _, SearchDirection, SearchResult};
     use crate::config::Config;
     use crate::Result;
 
@@ -940,7 +940,7 @@ mod tests {
     #[cfg(feature = "with-file-history")]
     #[cfg_attr(miri, ignore)] // unsupported operation: `getcwd` not available when isolation is enabled
     fn load_legacy() -> Result<()> {
-        use std::io::Write;
+        use std::io::Write as _;
         let tf = tempfile::NamedTempFile::new()?;
         {
             let mut legacy = std::fs::File::create(tf.path())?;

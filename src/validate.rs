@@ -136,7 +136,7 @@ fn validate_brackets(input: &str) -> ValidationResult {
 
 #[cfg(test)]
 mod tests {
-    use super::{ValidationContext, Validator};
+    use super::{ValidationContext, Validator as _};
     use crate::{validate::ValidationResult, Result};
 
     #[test]

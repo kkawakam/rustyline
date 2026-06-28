@@ -4,7 +4,7 @@
 use std::fs::OpenOptions;
 use std::io;
 use std::mem;
-use std::os::windows::io::IntoRawHandle;
+use std::os::windows::io::IntoRawHandle as _;
 use std::ptr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +12,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 
 use log::{debug, warn};
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::UnicodeSegmentation as _;
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{self as foundation, FALSE, HANDLE, TRUE};
 use windows_sys::Win32::System::Console as console;
@@ -25,7 +25,7 @@ use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{error, Cmd, Result};
+use crate::{error, Cmd, Prompt, Result};
 
 fn get_std_handle(fd: console::STD_HANDLE) -> Result<HANDLE> {
     let handle = unsafe { console::GetStdHandle(fd) };
@@ -137,7 +137,7 @@ impl ConsoleRawReader {
                     Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e))?,
                 }
             } else {
-                Err(io::Error::last_os_error())?
+                Err(io::Error::last_os_error())?;
             }
         }
     }
@@ -435,9 +435,9 @@ impl Renderer for ConsoleRenderer {
             .map(|_| ())
     }
 
-    fn refresh_line(
+    fn refresh_line<P: Prompt + ?Sized>(
         &mut self,
-        prompt: &str,
+        prompt: &P,
         line: &LineBuffer,
         hint: Option<&str>,
         old_layout: Option<&Layout>,
@@ -453,17 +453,20 @@ impl Renderer for ConsoleRenderer {
         if let Some(highlighter) = highlighter {
             // TODO handle ansi escape code (SetConsoleTextAttribute)
             // append the prompt
-            col = self.wrap_at_eol(&highlighter.highlight_prompt(prompt, default_prompt), col);
+            col = self.wrap_at_eol(
+                &highlighter.highlight_prompt(prompt.styled(), default_prompt),
+                col,
+            );
             // append the input line
             col = self.wrap_at_eol(&highlighter.highlight(line, line.pos()), col);
         } else if self.colors_enabled {
             // append the prompt
-            col = self.wrap_at_eol(prompt, col);
+            col = self.wrap_at_eol(prompt.styled(), col);
             // append the input line
             col = self.wrap_at_eol(line, col);
         } else {
             // append the prompt
-            self.buffer.push_str(prompt);
+            self.buffer.push_str(prompt.raw());
             // append the input line
             self.buffer.push_str(line);
         }
@@ -503,6 +506,10 @@ impl Renderer for ConsoleRenderer {
 
     /// Characters with 2 column width are correctly handled (not split).
     fn calculate_position(&self, s: &str, orig: Position) -> Position {
+        debug_assert!(
+            memchr::memmem::find(s.as_bytes(), b"\x1b[").is_none(),
+            "content should not be styled directly"
+        );
         let mut pos = orig;
         for c in s.graphemes(true) {
             if c == "\n" {
@@ -823,8 +830,11 @@ impl Term for Console {
         _: Option<ConsoleBuffer>,
         _: &Config,
         _: ConsoleKeyMap,
-    ) -> ConsoleRawReader {
-        ConsoleRawReader::create(self.conin, self.pipe_reader.clone())
+    ) -> Result<ConsoleRawReader> {
+        Ok(ConsoleRawReader::create(
+            self.conin,
+            self.pipe_reader.clone(),
+        ))
     }
 
     fn create_writer(&self, c: &Config) -> ConsoleRenderer {

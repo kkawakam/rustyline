@@ -419,6 +419,10 @@ impl<'b> InputState<'b> {
         self.mode == EditMode::Emacs
     }
 
+    pub fn is_vi_cmd_mode(&self) -> bool {
+        self.input_mode == InputMode::Command && self.mode == EditMode::Vi
+    }
+
     /// Parse user input into one command
     /// `single_esc_abort` is used in emacs mode on unix platform when a single
     /// esc key is expected to abort current action.
@@ -684,7 +688,7 @@ impl<'b> InputState<'b> {
             } else {
                 wrt.refresh_line()?;
                 return Ok(key);
-            };
+            }
         }
     }
 
@@ -1129,9 +1133,9 @@ impl<'b> InputState<'b> {
     }
 }
 
-#[cfg(feature = "custom-bindings")]
 impl InputState<'_> {
     /// Application customized binding
+    #[allow(unused_variables)]
     fn custom_binding(
         &self,
         wrt: &dyn Refresher,
@@ -1139,21 +1143,27 @@ impl InputState<'_> {
         n: RepeatCount,
         positive: bool,
     ) -> Option<Cmd> {
-        let bindings = self.custom_bindings;
-        let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
-        if let Some(handler) = handler {
-            match handler {
-                EventHandler::Simple(cmd) => Some(cmd.clone()),
-                EventHandler::Conditional(handler) => {
-                    let ctx = EventContext::new(self, wrt);
-                    handler.handle(evt, n, positive, &ctx)
+        cfg_select! {
+            feature = "custom-bindings" => {
+                let bindings = self.custom_bindings;
+                let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
+                if let Some(handler) = handler {
+                    match handler {
+                        EventHandler::Simple(cmd) => Some(cmd.clone()),
+                        EventHandler::Conditional(handler) => {
+                            let ctx = EventContext::new(self, wrt);
+                            handler.handle(evt, n, positive, &ctx)
+                        }
+                    }
+                } else {
+                    None
                 }
             }
-        } else {
-            None
+            _ => None
         }
     }
 
+    #[allow(unused_variables)]
     fn custom_seq_binding<R: RawReader>(
         &self,
         rdr: &mut R,
@@ -1162,53 +1172,41 @@ impl InputState<'_> {
         n: RepeatCount,
         positive: bool,
     ) -> Result<Option<Cmd>> {
-        while let Some(subtrie) = self.custom_bindings.get_raw_descendant(evt) {
-            let snd_key = rdr.next_key(true)?;
-            if let Event::KeySeq(ref mut key_seq) = evt {
-                key_seq.push(snd_key);
-            } else {
-                break;
-            }
-            let handler = subtrie.get(evt).unwrap();
-            if let Some(handler) = handler {
-                let cmd = match handler {
-                    EventHandler::Simple(cmd) => Some(cmd.clone()),
-                    EventHandler::Conditional(handler) => {
-                        let ctx = EventContext::new(self, wrt);
-                        handler.handle(evt, n, positive, &ctx)
+        cfg_select! {
+            feature = "custom-bindings" => {
+                while let Some(subtrie) = self.custom_bindings.get_raw_descendant(evt) {
+                    let snd_key = rdr.next_key(true)?;
+                    if let Event::KeySeq(ref mut key_seq) = evt {
+                        key_seq.push(snd_key);
+                    } else {
+                        break;
                     }
-                };
-                if cmd.is_some() {
-                    return Ok(cmd);
+                    let handler = subtrie.get(evt).unwrap_or_default();
+                    if let Some(handler) = handler {
+                        let cmd = match handler {
+                            EventHandler::Simple(cmd) => Some(cmd.clone()),
+                            EventHandler::Conditional(handler) => {
+                                let ctx = EventContext::new(self, wrt);
+                                handler.handle(evt, n, positive, &ctx)
+                            }
+                        };
+                        if cmd.is_some() {
+                            return Ok(cmd);
+                        }
+                    }
                 }
             }
+            _ => {}
         }
         Ok(None)
     }
 }
 
-#[cfg(not(feature = "custom-bindings"))]
-impl<'b> InputState<'b> {
-    fn custom_binding(&self, _: &dyn Refresher, _: &Event, _: RepeatCount, _: bool) -> Option<Cmd> {
-        None
-    }
-
-    fn custom_seq_binding<R: RawReader>(
-        &self,
-        _: &mut R,
-        _: &dyn Refresher,
-        _: &mut Event,
-        _: RepeatCount,
-        _: bool,
-    ) -> Result<Option<Cmd>> {
-        Ok(None)
-    }
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "custom-bindings")] {
+cfg_select! {
+    feature = "custom-bindings" => {
 pub type Bindings = radix_trie::Trie<Event, EventHandler>;
-    } else {
+    }
+    _ => {
 enum Event {
    KeySeq([KeyEvent; 1]),
 }

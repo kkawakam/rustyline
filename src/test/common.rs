@@ -1,4 +1,6 @@
 //! Basic commands tests.
+use std::assert_matches;
+
 use super::{assert_cursor, assert_line, assert_line_with_initial, init_editor};
 use crate::config::EditMode;
 use crate::error::ReadlineError;
@@ -334,6 +336,27 @@ fn ctrl__() {
                 ("Hello, ", "world"),
                 &[E::ESC, E::ctrl('W'), E::ctrl('_'), E::ENTER],
                 ("Hello,", " world"),
+            );
+        }
+    }
+}
+
+#[test]
+fn paste() {
+    for mode in &[EditMode::Emacs, EditMode::Vi] {
+        assert_cursor(
+            *mode,
+            ("", ""),
+            &[E(K::BracketedPasteStart, M::NONE), E::ENTER],
+            ("pasted", ""),
+        );
+        if *mode == EditMode::Vi {
+            // vi command mode
+            assert_cursor(
+                *mode,
+                ("", ""),
+                &[E::ESC, E(K::BracketedPasteStart, M::NONE), E::ENTER],
+                ("paste", "d"),
             );
         }
     }

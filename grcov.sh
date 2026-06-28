@@ -5,7 +5,7 @@ rm -rf target/debug/coverage/
 # https://github.com/mozilla/grcov?tab=readme-ov-file#usage
 export RUSTFLAGS="-Cinstrument-coverage"
 cargo build
-export LLVM_PROFILE_FILE="rusqlite-%p-%m.profraw"
+export LLVM_PROFILE_FILE="rustyline-%p-%m.profraw"
 cargo test
 # cargo binstall grcov
 grcov . -s . --binary-path ./target/debug/ -t html --ignore-not-existing -o ./target/debug/coverage/

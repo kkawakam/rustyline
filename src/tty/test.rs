@@ -8,7 +8,7 @@ use crate::highlight::Highlighter;
 use crate::keys::KeyEvent;
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{Cmd, Result};
+use crate::{Cmd, Prompt, Result};
 
 pub type Buffer = ();
 pub type KeyMap = ();
@@ -45,7 +45,7 @@ impl RawReader for IntoIter<KeyEvent> {
     }
 
     fn read_pasted_text(&mut self) -> Result<String> {
-        unimplemented!()
+        Ok("pasted".to_owned())
     }
 
     fn find_binding(&self, _: &KeyEvent) -> Option<Cmd> {
@@ -67,9 +67,9 @@ impl Renderer for Sink {
         Ok(())
     }
 
-    fn refresh_line(
+    fn refresh_line<P: Prompt + ?Sized>(
         &mut self,
-        _prompt: &str,
+        _prompt: &P,
         _line: &LineBuffer,
         _hint: Option<&str>,
         _old_layout: Option<&Layout>,
@@ -186,12 +186,16 @@ impl Term for DummyTerminal {
         Ok(((), ()))
     }
 
-    fn create_reader(&self, _: Option<Buffer>, _: &Config, _: KeyMap) -> Self::Reader {
-        self.keys.clone().into_iter()
+    fn create_reader(&self, _: Option<Buffer>, _: &Config, _: KeyMap) -> Result<Self::Reader> {
+        Ok(self.keys.clone().into_iter())
     }
 
     fn create_writer(&self, _: &Config) -> Sink {
         Sink::default()
+    }
+
+    fn writeln(&self) -> Result<()> {
+        Ok(())
     }
 
     fn create_external_printer(&mut self) -> Result<DummyExternalPrinter> {
@@ -200,10 +204,6 @@ impl Term for DummyTerminal {
 
     fn set_cursor_visibility(&mut self, _: bool) -> Result<Option<()>> {
         Ok(None)
-    }
-
-    fn writeln(&self) -> Result<()> {
-        Ok(())
     }
 }
 

@@ -597,19 +597,44 @@ pub struct Editor<H: Helper, I: History> {
     custom_bindings: Bindings,
 }
 
-/// Default editor with no helper and `DefaultHistory`
+/// Default editor with default helper and `DefaultHistory`
 pub type DefaultEditor = Editor<(), DefaultHistory>;
 
 impl<H: Helper> Editor<H, DefaultHistory> {
-    /// Create an editor with the default configuration
+    /// Create an editor with the default configuration but no helper
     pub fn new() -> Result<Self> {
         Self::with_config(Config::default())
     }
 
-    /// Create an editor with a specific configuration.
+    /// Create an editor with a specific configuration but no helper.
     pub fn with_config(config: Config) -> Result<Self> {
         let history = DefaultHistory::with_config(&config);
         Self::with_history(config, history)
+    }
+
+    /// Create an editor with a specific helper.
+    pub fn with_helper(h: H) -> Result<Self> {
+        let mut ed = Self::new();
+        if let Ok(ref mut e) = ed {
+            e.set_helper(Some(h));
+        }
+        ed
+    }
+}
+impl<H: Helper + Default> Editor<H, DefaultHistory> {
+    /// Create an editor with the default configuration and helper
+    #[expect(clippy::should_implement_trait)]
+    pub fn default() -> Result<Self> {
+        Self::with_helper(H::default())
+    }
+
+    /// Create an editor with a specific configuration and default helper
+    pub fn with_default(config: Config) -> Result<Self> {
+        let mut ed = Self::with_config(config);
+        if let Ok(ref mut e) = ed {
+            e.set_helper(Some(H::default()));
+        }
+        ed
     }
 }
 

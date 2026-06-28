@@ -3,7 +3,7 @@ use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, Editor, EventHandler, KeyCode, KeyEvent, Modifiers, Result};
 use rustyline::{Completer, Helper, Highlighter, Hinter, Validator};
 
-#[derive(Completer, Helper, Highlighter, Hinter, Validator)]
+#[derive(Completer, Default, Helper, Highlighter, Hinter, Validator)]
 struct InputValidator {
     #[rustyline(Validator)]
     brackets: MatchingBracketValidator,
@@ -12,12 +12,7 @@ struct InputValidator {
 }
 
 fn main() -> Result<()> {
-    let h = InputValidator {
-        brackets: MatchingBracketValidator::new(),
-        highlighter: MatchingBracketHighlighter::new(),
-    };
-    let mut rl = Editor::new()?;
-    rl.set_helper(Some(h));
+    let mut rl = Editor::<InputValidator, _>::default()?;
     rl.bind_sequence(
         KeyEvent(KeyCode::Char('s'), Modifiers::CTRL),
         EventHandler::Simple(Cmd::Newline),

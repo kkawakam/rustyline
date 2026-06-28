@@ -8,7 +8,7 @@ use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
 use rustyline::{Completer, Helper, Hinter, Validator};
 
-#[derive(Helper, Completer, Hinter, Validator)]
+#[derive(Helper, Completer, Default, Hinter, Validator)]
 struct MyHelper {
     #[rustyline(Completer)]
     completer: FilenameCompleter,
@@ -44,14 +44,7 @@ fn main() -> rustyline::Result<()> {
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
         .build();
-    let h = MyHelper {
-        completer: FilenameCompleter::new(),
-        highlighter: MatchingBracketHighlighter::new(),
-        hinter: HistoryHinter::new(),
-        validator: MatchingBracketValidator::new(),
-    };
-    let mut rl = Editor::with_config(config)?;
-    rl.set_helper(Some(h));
+    let mut rl = Editor::<MyHelper, _>::with_default(config)?;
     rl.bind_sequence(KeyEvent::alt('n'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyEvent::alt('p'), Cmd::HistorySearchBackward);
     if rl.load_history("history.txt").is_err() {

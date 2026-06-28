@@ -2,7 +2,7 @@ use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{Completer, Helper, Highlighter, Hinter};
 use rustyline::{Editor, Result};
 
-#[derive(Completer, Helper, Highlighter, Hinter)]
+#[derive(Completer, Default, Helper, Highlighter, Hinter)]
 struct InputValidator {}
 
 impl Validator for InputValidator {
@@ -21,9 +21,7 @@ impl Validator for InputValidator {
 }
 
 fn main() -> Result<()> {
-    let h = InputValidator {};
-    let mut rl = Editor::new()?;
-    rl.set_helper(Some(h));
+    let mut rl = Editor::<InputValidator, _>::default()?;
 
     let input = rl.readline("> ")?;
     println!("Input: {input}");

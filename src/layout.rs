@@ -138,6 +138,8 @@ impl Layout {
 
 #[cfg(test)]
 mod test {
+    use crate::GraphemeClusterMode;
+
     #[test]
     fn unicode_width() {
         assert_eq!(1, super::uwidth("a"));
@@ -148,6 +150,8 @@ mod test {
         assert_eq!(2, super::uwidth("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
         // WezTerm KO, Terminal.app (rendered width = 1)
         assert_eq!(2, super::uwidth("❤️"));
+        let gcm = GraphemeClusterMode::Unicode;
+        assert_eq!(2, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
     #[test]
     fn test_wcwidth() {
@@ -157,6 +161,8 @@ mod test {
         assert_eq!(8, super::wcwidth("👨‍👩‍👧‍👦"));
         assert_eq!(16, super::wcwidth("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
         assert_eq!(1, super::wcwidth("❤️"));
+        let gcm = GraphemeClusterMode::WcWidth;
+        assert_eq!(16, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
     #[test]
     fn test_no_zwj() {
@@ -166,5 +172,7 @@ mod test {
         assert_eq!(8, super::no_zwj("👨‍👩‍👧‍👦"));
         assert_eq!(8, super::no_zwj("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
         assert_eq!(2, super::no_zwj("️❤️"));
+        let gcm = GraphemeClusterMode::NoZwj;
+        assert_eq!(8, gcm.width("👩🏼‍👨🏼‍👦🏼‍👦🏼"));
     }
 }

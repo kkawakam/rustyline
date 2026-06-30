@@ -3,8 +3,8 @@
 #[cfg(feature = "with-file-history")]
 use log::{debug, warn};
 use std::borrow::Cow;
-use std::collections::vec_deque;
 use std::collections::VecDeque;
+use std::collections::vec_deque;
 #[cfg(feature = "with-file-history")]
 use std::fs::{File, OpenOptions};
 #[cfg(feature = "with-file-history")]
@@ -261,12 +261,11 @@ impl MemHistory {
         {
             return true;
         }
-        if self.ignore_dups {
-            if let Some(s) = self.entries.back() {
-                if s == line {
-                    return true;
-                }
-            }
+        if self.ignore_dups
+            && let Some(s) = self.entries.back()
+            && s == line
+        {
+            return true;
         }
         false
     }
@@ -838,8 +837,8 @@ cfg_select! {
 #[cfg(test)]
 mod tests {
     use super::{DefaultHistory, History as _, SearchDirection, SearchResult};
-    use crate::config::Config;
     use crate::Result;
+    use crate::config::Config;
 
     fn init() -> DefaultHistory {
         let mut history = DefaultHistory::new();

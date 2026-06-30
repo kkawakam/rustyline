@@ -20,7 +20,7 @@ impl KeyEvent {
         if !c.is_control() {
             if !mods.is_empty() {
                 mods.remove(M::SHIFT); // TODO Validate: no SHIFT even if
-                                       // `c` is uppercase
+                // `c` is uppercase
             }
             return E(K::Char(c), mods);
         }

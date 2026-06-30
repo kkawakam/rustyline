@@ -822,27 +822,27 @@ impl LineBuffer {
 
     /// Alter the next word.
     pub fn edit_word<C: ChangeListener>(&mut self, a: WordAction, cl: &mut C) -> bool {
-        if let Some(start) = self.skip_whitespace() {
-            if let Some(end) = self.next_word_pos(start, At::AfterEnd, Word::Emacs, 1) {
-                if start == end {
-                    return false;
-                }
-                let word = self
-                    .drain(start..end, Direction::default(), cl)
-                    .collect::<String>();
-                let result = match a {
-                    WordAction::Capitalize => {
-                        let ch = word.graphemes(true).next().unwrap();
-                        let cap = ch.to_uppercase();
-                        cap + &word[ch.len()..].to_lowercase()
-                    }
-                    WordAction::Lowercase => word.to_lowercase(),
-                    WordAction::Uppercase => word.to_uppercase(),
-                };
-                self.insert_str(start, &result, cl);
-                self.pos = start + result.len();
-                return true;
+        if let Some(start) = self.skip_whitespace()
+            && let Some(end) = self.next_word_pos(start, At::AfterEnd, Word::Emacs, 1)
+        {
+            if start == end {
+                return false;
             }
+            let word = self
+                .drain(start..end, Direction::default(), cl)
+                .collect::<String>();
+            let result = match a {
+                WordAction::Capitalize => {
+                    let ch = word.graphemes(true).next().unwrap();
+                    let cap = ch.to_uppercase();
+                    cap + &word[ch.len()..].to_lowercase()
+                }
+                WordAction::Lowercase => word.to_lowercase(),
+                WordAction::Uppercase => word.to_uppercase(),
+            };
+            self.insert_str(start, &result, cl);
+            self.pos = start + result.len();
+            return true;
         }
         false
     }
@@ -1199,7 +1199,7 @@ fn is_other_char(grapheme: &str) -> bool {
 #[cfg(test)]
 mod test {
     use super::{
-        ChangeListener, DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE,
+        ChangeListener, DeleteListener, Direction, LineBuffer, MAX_LINE, NoListener, WordAction,
     };
     use crate::{
         keymap::{At, CharSearch, Movement, Word},

@@ -26,13 +26,13 @@ use termios::Termios;
 use unicode_segmentation::UnicodeSegmentation as _;
 use utf8parse::{Parser, Receiver};
 
-use super::{width, Event, RawMode, RawReader, Renderer, Term};
+use super::{Event, RawMode, RawReader, Renderer, Term, width};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{error, error::Signal, Cmd, Prompt, ReadlineError, Result};
+use crate::{Cmd, Prompt, ReadlineError, Result, error, error::Signal};
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
@@ -499,7 +499,8 @@ impl PosixRawReader {
                 let seq5 = self.next_char()?;
                 if seq5.is_ascii_digit() {
                     self.next_char()?; // 'R' expected
-                                       //('1', '0', UP) => E(K::, M::), // Alt + Shift + Up
+                    //
+                    //('1', '0', UP) => E(K::, M::), // Alt + Shift + Up
                     Ok(E(K::UnknownEscSeq, M::NONE))
                 } else if seq2 == '1' {
                     Ok(match (seq4, seq5) {
@@ -1575,15 +1576,20 @@ impl super::ExternalPrinter for ExternalPrinter {
         // write directly to stdout/stderr while not in raw mode
         if !self.raw_mode.load(Ordering::SeqCst) {
             write_all(self.tty_out, msg.as_str())?;
-        } else if let Ok(mut writer) = self.writer.0.lock() {
-            self.writer
-                .1
-                .send(msg)
-                .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
-            writer.write_all(b"m")?;
-            writer.flush()?;
         } else {
-            return Err(io::Error::from(ErrorKind::Other).into()); // FIXME
+            match self.writer.0.lock() {
+                Ok(mut writer) => {
+                    self.writer
+                        .1
+                        .send(msg)
+                        .map_err(|_| io::Error::from(ErrorKind::Other))?; // FIXME
+                    writer.write_all(b"m")?;
+                    writer.flush()?;
+                }
+                _ => {
+                    return Err(io::Error::from(ErrorKind::Other).into()); // FIXME
+                }
+            }
         }
         Ok(())
     }

@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Field, Index, Path};
+use syn::{Data, DeriveInput, Field, Index, Path, parse_macro_input};
 
 fn get_field_by_attr<'a>(data: &'a Data, ident: &str) -> Option<(usize, &'a Field)> {
     if let Data::Struct(struct_data) = &data {

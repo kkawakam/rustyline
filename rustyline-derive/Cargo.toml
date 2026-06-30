@@ -2,7 +2,7 @@
 name = "rustyline-derive"
 version = "0.12.0"
 authors = ["gwenn"]
-edition = "2018"
+edition = "2024"
 description = "Rustyline macros implementation of #[derive(Completer, Helper, Hinter, Highlighter)]"
 repository = "https://github.com/kkawakam/rustyline"
 #readme = "README.md"

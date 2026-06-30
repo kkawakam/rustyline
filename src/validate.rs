@@ -1,7 +1,7 @@
 //! Input validation API (Multi-line editing)
 
-use crate::keymap::Invoke;
 use crate::Result;
+use crate::keymap::Invoke;
 
 /// Input validation result
 #[non_exhaustive]
@@ -116,12 +116,12 @@ fn validate_brackets(input: &str) -> ValidationResult {
                 (Some(wanted), _) => {
                     return ValidationResult::Invalid(Some(format!(
                         "Mismatched brackets: {wanted:?} is not properly closed"
-                    )))
+                    )));
                 }
                 (None, c) => {
                     return ValidationResult::Invalid(Some(format!(
                         "Mismatched brackets: {c:?} is unpaired"
-                    )))
+                    )));
                 }
             },
             _ => {}
@@ -137,7 +137,7 @@ fn validate_brackets(input: &str) -> ValidationResult {
 #[cfg(test)]
 mod tests {
     use super::{ValidationContext, Validator as _};
-    use crate::{validate::ValidationResult, Result};
+    use crate::{Result, validate::ValidationResult};
 
     #[test]
     fn test_unit() -> Result<()> {

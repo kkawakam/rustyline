@@ -1,7 +1,7 @@
 //! Hints (suggestions at the right of the prompt as you type).
 
-use crate::history::SearchDirection;
 use crate::Context;
+use crate::history::SearchDirection;
 
 /// A hint returned by Hinter
 pub trait Hint {
@@ -81,8 +81,8 @@ impl Hinter for HistoryHinter {
 #[cfg(test)]
 mod test {
     use super::{Hinter as _, HistoryHinter};
-    use crate::history::DefaultHistory;
     use crate::Context;
+    use crate::history::DefaultHistory;
 
     #[test]
     pub fn empty_history() {

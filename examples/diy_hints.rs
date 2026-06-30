@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use rustyline::hint::{Hint, Hinter};
 use rustyline::Context;
+use rustyline::hint::{Hint, Hinter};
 use rustyline::{Completer, Helper, Highlighter, Validator};
 use rustyline::{Editor, Result};
 

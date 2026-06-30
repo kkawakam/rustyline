@@ -1,5 +1,5 @@
 //! Customize line editor
-use crate::{layout::GraphemeClusterMode, Result};
+use crate::{Result, layout::GraphemeClusterMode};
 use std::default::Default;
 
 /// User preferences

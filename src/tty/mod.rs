@@ -214,16 +214,17 @@ pub trait Term {
 /// unsupported list
 fn is_unsupported_term() -> bool {
     match std::env::var("TERM") {
-        Ok(term) => {
-            for iter in &UNSUPPORTED_TERM {
-                if (*iter).eq_ignore_ascii_case(&term) {
-                    return true;
-                }
-            }
-            false
-        }
+        Ok(term) => is_unsupported(&term),
         Err(_) => false,
     }
+}
+fn is_unsupported(term: &str) -> bool {
+    for iter in &UNSUPPORTED_TERM {
+        if (*iter).eq_ignore_ascii_case(term) {
+            return true;
+        }
+    }
+    false
 }
 
 // If on Windows platform import Windows TTY module
@@ -249,10 +250,8 @@ pub use self::test::*;
 mod test_ {
     #[test]
     fn test_unsupported_term() {
-        std::env::set_var("TERM", "xterm");
-        assert!(!super::is_unsupported_term());
+        assert!(!super::is_unsupported("xterm"));
 
-        std::env::set_var("TERM", "dumb");
-        assert!(super::is_unsupported_term());
+        assert!(super::is_unsupported("dumb"));
     }
 }

@@ -5,18 +5,18 @@ use std::fmt;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::{Context, Helper, Prompt, Result};
+use crate::KillRing;
 use crate::error::{ReadlineError, Signal};
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hint;
 use crate::history::SearchDirection;
 use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
 use crate::keymap::{InputState, Invoke, Refresher};
-use crate::layout::{cwidh, Layout, Position, Unit};
-use crate::line_buffer::{DeleteListener, Direction, LineBuffer, NoListener, WordAction, MAX_LINE};
+use crate::layout::{Layout, Position, Unit, cwidh};
+use crate::line_buffer::{DeleteListener, Direction, LineBuffer, MAX_LINE, NoListener, WordAction};
 use crate::tty::{Renderer as _, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
-use crate::KillRing;
 use RefreshKind::All;
 
 /// Represent the state during line editing.
@@ -414,11 +414,7 @@ impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
             false
         };
         self.changes.end();
-        if succeed {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
+        if succeed { self.refresh_line() } else { Ok(()) }
     }
 
     /// Overwrite the character under the cursor (Vi mode)
@@ -624,11 +620,7 @@ impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
         self.changes.begin();
         let succeed = self.line.transpose_chars(&mut self.changes);
         self.changes.end();
-        if succeed {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
+        if succeed { self.refresh_line() } else { Ok(()) }
     }
 
     pub fn edit_move_to_prev_word(&mut self, word_def: Word, n: RepeatCount) -> Result<()> {
@@ -679,22 +671,14 @@ impl<H: Helper, P: Prompt + ?Sized> State<'_, '_, H, P> {
         self.changes.begin();
         let succeed = self.line.edit_word(a, &mut self.changes);
         self.changes.end();
-        if succeed {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
+        if succeed { self.refresh_line() } else { Ok(()) }
     }
 
     pub fn edit_transpose_words(&mut self, n: RepeatCount) -> Result<()> {
         self.changes.begin();
         let succeed = self.line.transpose_words(n, &mut self.changes);
         self.changes.end();
-        if succeed {
-            self.refresh_line()
-        } else {
-            Ok(())
-        }
+        if succeed { self.refresh_line() } else { Ok(()) }
     }
 
     /// Substitute the currently edited line with the next or previous history

@@ -10,7 +10,7 @@ use crate::keymap::{Bindings, Cmd, InputState};
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::tty::Sink;
 use crate::validate::Validator;
-use crate::{apply_backspace_direct, readline_direct, Context, DefaultEditor, Helper, Result};
+use crate::{Context, DefaultEditor, Helper, Result, apply_backspace_direct, readline_direct};
 
 mod common;
 mod emacs;

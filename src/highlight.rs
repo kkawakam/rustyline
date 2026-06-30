@@ -95,12 +95,12 @@ impl Highlighter for MatchingBracketHighlighter {
             return Borrowed(line);
         }
         // highlight matching brace/bracket/parenthesis if it exists
-        if let Some((bracket, pos)) = self.bracket.get() {
-            if let Some((matching, idx)) = find_matching_bracket(line, pos, bracket) {
-                let mut copy = line.to_owned();
-                copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
-                return Owned(copy);
-            }
+        if let Some((bracket, pos)) = self.bracket.get()
+            && let Some((matching, idx)) = find_matching_bracket(line, pos, bracket)
+        {
+            let mut copy = line.to_owned();
+            copy.replace_range(idx..=idx, &format!("\x1b[1;34m{}\x1b[0m", matching as char));
+            return Owned(copy);
         }
         Borrowed(line)
     }

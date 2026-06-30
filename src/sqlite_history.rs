@@ -450,9 +450,9 @@ fn offset(s: String) -> usize {
 #[cfg(test)]
 mod tests {
     use super::SQLiteHistory;
+    use crate::Result;
     use crate::config::Config;
     use crate::history::{History as _, SearchDirection, SearchResult};
-    use crate::Result;
     use std::borrow::Cow;
     use std::path::Path;
 

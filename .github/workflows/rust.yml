@@ -35,6 +35,8 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: Run tests
         run: cargo test --workspace --all-targets
+      - name: Run tests no default features
+        run: cargo test --no-default-features --workspace --all-targets
       - name: Run doctests
         run: cargo test --workspace --doc
       - name: Test features

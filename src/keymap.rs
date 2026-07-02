@@ -592,6 +592,7 @@ impl<'b> InputState<'b> {
                     let snd_key = match evt {
                         // we may have already read the second key in custom_seq_binding
                         #[allow(clippy::out_of_bounds_indexing)]
+                        #[allow(unconditional_panic)]
                         Event::KeySeq(ref key_seq) if key_seq.len() > 1 => key_seq[1],
                         _ => rdr.next_key(true)?,
                     };

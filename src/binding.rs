@@ -1,9 +1,9 @@
+use radix_trie::TrieKey;
+
 /// Custom event handlers
 use crate::{
     Cmd, EditMode, InputMode, InputState, KeyCode, KeyEvent, Modifiers, Refresher, RepeatCount,
 };
-
-use radix_trie::TrieKey;
 
 /// Input event
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -212,9 +212,10 @@ pub trait ConditionalEventHandler: Send + Sync {
 
 #[cfg(test)]
 mod test {
-    use super::{Event, EventHandler};
-    use crate::{Cmd, KeyCode, KeyEvent, Modifiers};
     use radix_trie::Trie;
+
+    use super::{Event, EventHandler};
+    use crate::{Cmd, KeyEvent};
 
     #[test]
     fn encode() {
@@ -234,7 +235,8 @@ mod test {
 
     #[test]
     fn no_collision() {
-        use {Event as E, EventHandler as H, KeyCode as C, KeyEvent as K, Modifiers as M};
+        use super::{Event as E, EventHandler as H};
+        use crate::{KeyCode as C, KeyEvent as K, Modifiers as M};
         let mut trie = Trie::new();
         trie.insert(E::from(K(C::Backspace, M::NONE)), H::from(Cmd::Noop));
         trie.insert(E::from(K(C::Enter, M::NONE)), H::from(Cmd::Noop));

@@ -1,14 +1,11 @@
-use crate::complete_hint_line;
 use crate::config::Config;
 use crate::edit::State;
-use crate::error;
 use crate::highlight::CmdKind;
 use crate::history::SearchDirection;
-use crate::keymap::{Anchor, At, Cmd, Movement, Word};
-use crate::keymap::{InputState, Refresher as _};
+use crate::keymap::{Anchor, At, Cmd, InputState, Movement, Refresher as _, Word};
 use crate::kill_ring::{KillRing, Mode};
 use crate::line_buffer::WordAction;
-use crate::{Helper, Prompt, Result};
+use crate::{Helper, Prompt, Result, complete_hint_line, error};
 
 pub enum Status {
     Proceed,

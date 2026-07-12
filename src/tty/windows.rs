@@ -2,20 +2,17 @@
 #![expect(clippy::try_err)] // suggested fix does not work (cannot infer...)
 
 use std::fs::OpenOptions;
-use std::io;
-use std::mem;
 use std::os::windows::io::IntoRawHandle as _;
-use std::ptr;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+use std::{io, mem, ptr};
 
 use log::{debug, warn};
 use unicode_segmentation::UnicodeSegmentation as _;
 use windows_sys::Win32::Foundation::{self as foundation, FALSE, HANDLE, TRUE};
-use windows_sys::Win32::System::Console as console;
-use windows_sys::Win32::System::Threading as threading;
+use windows_sys::Win32::System::{Console as console, Threading as threading};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse;
 use windows_sys::core::BOOL;
 
@@ -171,10 +168,11 @@ impl RawReader for ConsoleRawReader {
 }
 
 fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
+    use std::char::decode_utf16;
+
     use console::{
         LEFT_ALT_PRESSED, LEFT_CTRL_PRESSED, RIGHT_ALT_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED,
     };
-    use std::char::decode_utf16;
 
     let mut rec: console::INPUT_RECORD = unsafe { mem::zeroed() };
     let mut count = 0;

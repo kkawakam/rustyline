@@ -1,10 +1,7 @@
 //! History API
 
-#[cfg(feature = "with-file-history")]
-use log::{debug, warn};
 use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::collections::vec_deque;
+use std::collections::{VecDeque, vec_deque};
 #[cfg(feature = "with-file-history")]
 use std::fs::{File, OpenOptions};
 #[cfg(feature = "with-file-history")]
@@ -13,6 +10,9 @@ use std::ops::Index;
 use std::path::Path;
 #[cfg(feature = "with-file-history")]
 use std::time::SystemTime;
+
+#[cfg(feature = "with-file-history")]
+use log::{debug, warn};
 
 use super::Result;
 use crate::config::{Config, HistoryDuplicates};

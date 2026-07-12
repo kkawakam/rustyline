@@ -1,23 +1,25 @@
 //! Command processor
 
-use log::debug;
 use std::fmt;
+
+use log::debug;
 use unicode_segmentation::UnicodeSegmentation as _;
 
+use self::RefreshKind::All;
 use super::{Context, Helper, Prompt, Result};
 use crate::KillRing;
 use crate::error::{ReadlineError, Signal};
 use crate::highlight::{CmdKind, Highlighter};
 use crate::hint::Hint;
 use crate::history::SearchDirection;
-use crate::keymap::{Anchor, At, CharSearch, Cmd, Movement, RepeatCount, Word};
-use crate::keymap::{InputState, Invoke, Refresher};
+use crate::keymap::{
+    Anchor, At, CharSearch, Cmd, InputState, Invoke, Movement, Refresher, RepeatCount, Word,
+};
 use crate::layout::{Layout, Position, Unit, cwidh};
 use crate::line_buffer::{DeleteListener, Direction, LineBuffer, MAX_LINE, NoListener, WordAction};
 use crate::tty::{Renderer as _, Term, Terminal};
 use crate::undo::Changeset;
 use crate::validate::{ValidationContext, ValidationResult};
-use RefreshKind::All;
 
 /// Represent the state during line editing.
 /// Implement rendering.

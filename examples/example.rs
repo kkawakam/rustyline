@@ -5,8 +5,9 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::{CmdKind, Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
-use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, KeyEvent};
-use rustyline::{Completer, Helper, Hinter, Validator};
+use rustyline::{
+    Cmd, Completer, CompletionType, Config, EditMode, Editor, Helper, Hinter, KeyEvent, Validator,
+};
 
 #[derive(Helper, Completer, Default, Hinter, Validator)]
 struct MyHelper {

@@ -2,8 +2,7 @@
 #[cfg(windows)]
 use std::char;
 use std::error::Error;
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 /// The error type for Rustyline errors that can arise from
 /// I/O related errors or Errno when using the nix-rust library

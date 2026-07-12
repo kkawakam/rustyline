@@ -41,16 +41,13 @@ mod tty;
 mod undo;
 pub mod validate;
 
-use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
-use std::result;
+use std::{fmt, result};
 
 use log::debug;
 #[cfg(feature = "derive")]
 pub use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
-
-use crate::tty::{Buffer, RawMode as _, RawReader as _, Renderer as _, Term, Terminal};
 
 #[cfg(feature = "custom-bindings")]
 pub use crate::binding::{ConditionalEventHandler, Event, EventContext, EventHandler};
@@ -69,6 +66,7 @@ pub use crate::layout::GraphemeClusterMode;
 use crate::layout::Unit;
 pub use crate::prompt::Prompt;
 pub use crate::tty::ExternalPrinter;
+use crate::tty::{Buffer, RawMode as _, RawReader as _, Renderer as _, Term, Terminal};
 pub use crate::undo::Changeset;
 use crate::validate::Validator;
 

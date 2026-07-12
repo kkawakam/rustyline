@@ -1,6 +1,8 @@
 //! Customize line editor
-use crate::{Result, layout::GraphemeClusterMode};
 use std::default::Default;
+
+use crate::Result;
+use crate::layout::GraphemeClusterMode;
 
 /// User preferences
 #[derive(Clone, Debug, PartialEq, Eq)]

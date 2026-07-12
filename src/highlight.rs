@@ -1,8 +1,9 @@
 //! Syntax highlighting
 
-use crate::config::CompletionType;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use std::cell::Cell;
+
+use crate::config::CompletionType;
 
 /// Describe which kind of action has been triggering the call to
 /// [`Highlighter`].
@@ -252,8 +253,7 @@ mod tests {
 
     #[test]
     pub fn is_open_bracket() {
-        use super::is_close_bracket;
-        use super::is_open_bracket;
+        use super::{is_close_bracket, is_open_bracket};
         assert!(is_open_bracket(b'('));
         assert!(is_close_bracket(b')'));
     }

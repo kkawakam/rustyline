@@ -1,10 +1,11 @@
 //! Undo API
 use std::fmt::Debug;
 
-use crate::keymap::RepeatCount;
-use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer, NoListener};
 use log::debug;
 use unicode_segmentation::UnicodeSegmentation as _;
+
+use crate::keymap::RepeatCount;
+use crate::line_buffer::{ChangeListener, DeleteListener, Direction, LineBuffer, NoListener};
 
 enum Change {
     Begin,

@@ -28,11 +28,12 @@ use utf8parse::{Parser, Receiver};
 
 use super::{Event, RawMode, RawReader, Renderer, Term, width};
 use crate::config::{Behavior, BellStyle, ColorMode, Config};
+use crate::error::Signal;
 use crate::highlight::Highlighter;
 use crate::keys::{KeyCode as K, KeyEvent, KeyEvent as E, Modifiers as M};
 use crate::layout::{GraphemeClusterMode, Layout, Position, Unit};
 use crate::line_buffer::LineBuffer;
-use crate::{Cmd, Prompt, ReadlineError, Result, error, error::Signal};
+use crate::{Cmd, Prompt, ReadlineError, Result, error};
 
 const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
@@ -1606,11 +1607,13 @@ pub fn suspend() -> Result<()> {
 
 #[cfg(not(feature = "termios"))]
 mod termios_ {
+    use std::collections::HashMap;
+
+    use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
+
     use super::{AltFd, PosixKeyMap};
     use crate::keys::{KeyEvent, Modifiers as M};
     use crate::{Cmd, Result};
-    use nix::sys::termios::{self, SetArg, SpecialCharacterIndices as SCI, Termios};
-    use std::collections::HashMap;
     pub fn disable_raw_mode(tty_in: AltFd, termios: &Termios) -> Result<()> {
         Ok(termios::tcsetattr(tty_in, SetArg::TCSADRAIN, termios)?)
     }
@@ -1667,11 +1670,13 @@ mod termios_ {
 }
 #[cfg(feature = "termios")]
 mod termios_ {
+    use std::collections::HashMap;
+
+    use termios::{self, Termios};
+
     use super::{AltFd, PosixKeyMap};
     use crate::keys::{KeyEvent, Modifiers as M};
     use crate::{Cmd, Result};
-    use std::collections::HashMap;
-    use termios::{self, Termios};
     pub fn disable_raw_mode(tty_in: AltFd, termios: &Termios) -> Result<()> {
         Ok(termios::tcsetattr(tty_in.0, termios::TCSADRAIN, termios)?)
     }

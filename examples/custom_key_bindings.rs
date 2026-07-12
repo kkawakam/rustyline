@@ -3,10 +3,9 @@ use std::borrow::Cow::{self, Owned};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::{
-    Cmd, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, KeyEvent, RepeatCount,
-    Result,
+    Cmd, Completer, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, Helper,
+    Hinter, KeyEvent, RepeatCount, Result, Validator,
 };
-use rustyline::{Completer, Helper, Hinter, Validator};
 
 #[derive(Completer, Default, Helper, Hinter, Validator)]
 struct MyHelper(#[rustyline(Hinter)] HistoryHinter);

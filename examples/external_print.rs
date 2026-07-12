@@ -2,7 +2,6 @@ use std::thread;
 use std::time::Duration;
 
 use rand::{RngExt as _, rng};
-
 use rustyline::{DefaultEditor, ExternalPrinter as _, Result};
 
 fn main() -> Result<()> {

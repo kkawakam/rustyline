@@ -99,9 +99,10 @@ macro_rules! box_completer {
     }
 }
 
-use crate::undo::Changeset;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use crate::undo::Changeset;
 box_completer! { Box Rc Arc }
 
 /// A `Completer` for file and folder names.
@@ -287,9 +288,10 @@ fn filename_complete(
     is_break_char: fn(char) -> bool,
     quote: Quote,
 ) -> Vec<Pair> {
+    use std::env::current_dir;
+
     #[cfg(feature = "with-dirs")]
     use home::home_dir;
-    use std::env::current_dir;
 
     let sep = path::MAIN_SEPARATOR;
     let (dir_name, file_name) = match path.rfind(sep) {

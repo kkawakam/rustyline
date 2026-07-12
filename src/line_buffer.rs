@@ -1,12 +1,13 @@
 //! Line buffer with current cursor position
-use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
-use crate::layout::Layout;
 use std::cmp::min;
-use std::fmt;
-use std::iter;
 use std::ops::{Deref, Index as _, Range};
 use std::string::Drain;
+use std::{fmt, iter};
+
 use unicode_segmentation::UnicodeSegmentation as _;
+
+use crate::keymap::{At, CharSearch, Movement, RepeatCount, Word};
+use crate::layout::Layout;
 
 /// Default maximum buffer size for the line read
 pub(crate) const MAX_LINE: usize = 4096;
@@ -1201,10 +1202,8 @@ mod test {
     use super::{
         ChangeListener, DeleteListener, Direction, LineBuffer, MAX_LINE, NoListener, WordAction,
     };
-    use crate::{
-        keymap::{At, CharSearch, Movement, Word},
-        layout::Layout,
-    };
+    use crate::keymap::{At, CharSearch, Movement, Word};
+    use crate::layout::Layout;
 
     struct Listener {
         deleted_str: Option<String>,

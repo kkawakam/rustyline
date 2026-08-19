@@ -100,6 +100,51 @@ fn complete_symbol() {
     assert_eq!(3, s.line.pos());
 }
 
+struct AmbiguousCompleter;
+impl Completer for AmbiguousCompleter {
+    type Candidate = String;
+
+    fn complete(
+        &self,
+        _line: &str,
+        _pos: usize,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<String>)> {
+        Ok((0, vec!["rust".to_owned(), "rush".to_owned()]))
+    }
+}
+impl Hinter for AmbiguousCompleter {
+    type Hint = String;
+
+    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<Self::Hint> {
+        None
+    }
+}
+impl Helper for AmbiguousCompleter {}
+impl Highlighter for AmbiguousCompleter {}
+impl Validator for AmbiguousCompleter {}
+
+#[test]
+fn complete_tab_confirms_display_all() {
+    let mut out = Sink::default();
+    let history = crate::history::DefaultHistory::new();
+    let helper = Some(AmbiguousCompleter);
+    let mut s = init_state(&mut out, "rus", 3, helper.as_ref(), &history);
+    let config = Config::builder()
+        .completion_type(CompletionType::List)
+        .completion_prompt_limit(1)
+        .build();
+    let bindings = Bindings::new();
+    let mut input_state = InputState::new(&config, &bindings);
+    // First `Tab` triggers the "Display all N possibilities?" prompt,
+    // the second `Tab` answers it (like `y`).
+    let keys = vec![E(K::Tab, M::NONE), E(K::Tab, M::NONE)];
+    let mut rdr: IntoIter<KeyEvent> = keys.into_iter();
+    let cmd = super::complete_line(&mut rdr, &mut s, &mut input_state, &config).unwrap();
+    assert_eq!(None, cmd);
+    assert_eq!("rus", s.line.as_str());
+}
+
 // `keys`: keys to press
 // `expected_line`: line after enter key
 fn assert_line(mode: EditMode, keys: &[KeyEvent], expected_line: &str) {

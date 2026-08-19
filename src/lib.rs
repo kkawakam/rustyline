@@ -162,10 +162,9 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
         } else {
             return Ok(None);
         }
-        let mut cmd = Cmd::Complete;
         if !config.completion_show_all_if_ambiguous() {
             // we can't complete any further, wait for second tab
-            cmd = s.next_cmd(input_state, rdr, true, true)?;
+            let cmd = s.next_cmd(input_state, rdr, true, true)?;
             // if any character other than tab, pass it to the main loop
             if cmd != Cmd::Complete {
                 return Ok(Some(cmd));
@@ -180,15 +179,19 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
         let show_completions = if asked {
             let msg = format!("\nDisplay all {} possibilities? (y or n)", candidates.len());
             s.out.write_and_flush(msg.as_str())?;
+            // Wait for the answer. A `Tab` is accepted as a "yes" so the list
+            // can be expanded without moving away from the completion key.
+            let mut cmd = s.next_cmd(input_state, rdr, false, true)?;
             while cmd != Cmd::SelfInsert(1, 'y')
                 && cmd != Cmd::SelfInsert(1, 'Y')
                 && cmd != Cmd::SelfInsert(1, 'n')
                 && cmd != Cmd::SelfInsert(1, 'N')
+                && cmd != Cmd::Complete
                 && cmd != Cmd::Kill(Movement::BackwardChar(1))
             {
                 cmd = s.next_cmd(input_state, rdr, false, true)?;
             }
-            matches!(cmd, Cmd::SelfInsert(1, 'y' | 'Y'))
+            matches!(cmd, Cmd::SelfInsert(1, 'y' | 'Y') | Cmd::Complete)
         } else {
             true
         };

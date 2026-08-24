@@ -1641,11 +1641,37 @@ mod termios_ {
         raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
 
+        // on Solarish platforms VMIN and VTIME share the c_cc slots
+        // of VEOF and VEOL, which the raw mode settings just overwrote
         let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
-        map_key(&mut key_map, &raw, SCI::VEOF, "VEOF", Cmd::EndOfFile);
-        map_key(&mut key_map, &raw, SCI::VINTR, "VINTR", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, SCI::VSUSP, "VSUSP", Cmd::Suspend);
+        map_key(
+            &mut key_map,
+            &original_mode,
+            SCI::VEOF,
+            "VEOF",
+            Cmd::EndOfFile,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            SCI::VINTR,
+            "VINTR",
+            Cmd::Interrupt,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            SCI::VQUIT,
+            "VQUIT",
+            Cmd::Interrupt,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            SCI::VSUSP,
+            "VSUSP",
+            Cmd::Suspend,
+        );
 
         termios::tcsetattr(tty_in, SetArg::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))
@@ -1698,11 +1724,37 @@ mod termios_ {
         raw.c_cc[termios::VMIN] = 1; // One character-at-a-time input
         raw.c_cc[termios::VTIME] = 0; // with blocking read
 
+        // on Solarish platforms VMIN and VTIME share the c_cc slots
+        // of VEOF and VEOL, which the raw mode settings just overwrote
         let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
-        map_key(&mut key_map, &raw, termios::VEOF, "VEOF", Cmd::EndOfFile);
-        map_key(&mut key_map, &raw, termios::VINTR, "VINTR", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, termios::VQUIT, "VQUIT", Cmd::Interrupt);
-        map_key(&mut key_map, &raw, termios::VSUSP, "VSUSP", Cmd::Suspend);
+        map_key(
+            &mut key_map,
+            &original_mode,
+            termios::VEOF,
+            "VEOF",
+            Cmd::EndOfFile,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            termios::VINTR,
+            "VINTR",
+            Cmd::Interrupt,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            termios::VQUIT,
+            "VQUIT",
+            Cmd::Interrupt,
+        );
+        map_key(
+            &mut key_map,
+            &original_mode,
+            termios::VSUSP,
+            "VSUSP",
+            Cmd::Suspend,
+        );
 
         termios::tcsetattr(tty_in.0, termios::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))

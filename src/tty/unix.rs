@@ -1616,6 +1616,7 @@ mod termios_ {
         use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags};
 
         let original_mode = termios::tcgetattr(tty_in)?;
+        let key_map = key_map(&original_mode);
         let mut raw = original_mode.clone();
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
@@ -1641,52 +1642,53 @@ mod termios_ {
         raw.control_chars[SCI::VMIN as usize] = 1; // One character-at-a-time input
         raw.control_chars[SCI::VTIME as usize] = 0; // with blocking read
 
-        // on Solarish platforms VMIN and VTIME share the c_cc slots
-        // of VEOF and VEOL, which the raw mode settings just overwrote
-        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
-        map_key(
-            &mut key_map,
-            &original_mode,
-            SCI::VEOF,
-            "VEOF",
-            Cmd::EndOfFile,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            SCI::VINTR,
-            "VINTR",
-            Cmd::Interrupt,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            SCI::VQUIT,
-            "VQUIT",
-            Cmd::Interrupt,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            SCI::VSUSP,
-            "VSUSP",
-            Cmd::Suspend,
-        );
-
         termios::tcsetattr(tty_in, SetArg::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))
     }
+    // key bindings for the terminal's special characters, which must be
+    // read from the original mode: on Solarish platforms VMIN and VTIME
+    // share the c_cc slots of VEOF and VEOL, which raw mode overwrites
+    fn key_map(mode: &Termios) -> PosixKeyMap {
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
+        map_key(&mut key_map, mode, SCI::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, mode, SCI::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, mode, SCI::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, mode, SCI::VSUSP, "VSUSP", Cmd::Suspend);
+        key_map
+    }
     fn map_key(
         key_map: &mut HashMap<KeyEvent, Cmd>,
-        raw: &Termios,
+        mode: &Termios,
         index: SCI,
         name: &str,
         cmd: Cmd,
     ) {
-        let cc = char::from(raw.control_chars[index as usize]);
+        let cc = char::from(mode.control_chars[index as usize]);
         let key = KeyEvent::new(cc, M::NONE);
         log::debug!(target: "rustyline", "{name}: {key:?}");
         key_map.insert(key, cmd);
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn key_map_from_mode() {
+            let mut inner: libc::termios = unsafe { std::mem::zeroed() };
+            inner.c_cc[SCI::VEOF as usize] = 0x04;
+            inner.c_cc[SCI::VINTR as usize] = 0x03;
+            inner.c_cc[SCI::VQUIT as usize] = 0x1c;
+            inner.c_cc[SCI::VSUSP as usize] = 0x1a;
+            let mode = Termios::from(inner);
+
+            let map = key_map(&mode);
+            let key = |b| KeyEvent::new(char::from(b), M::NONE);
+            assert_eq!(map.get(&key(0x04)), Some(&Cmd::EndOfFile));
+            assert_eq!(map.get(&key(0x03)), Some(&Cmd::Interrupt));
+            assert_eq!(map.get(&key(0x1c)), Some(&Cmd::Interrupt));
+            assert_eq!(map.get(&key(0x1a)), Some(&Cmd::Suspend));
+        }
     }
 }
 #[cfg(feature = "termios")]
@@ -1703,6 +1705,7 @@ mod termios_ {
     }
     pub fn enable_raw_mode(tty_in: AltFd, enable_signals: bool) -> Result<(Termios, PosixKeyMap)> {
         let original_mode = Termios::from_fd(tty_in.0)?;
+        let key_map = key_map(&original_mode);
         let mut raw = original_mode;
         // disable BREAK interrupt, CR to NL conversion on input,
         // input parity check, strip high bit (bit 8), output flow control
@@ -1724,52 +1727,52 @@ mod termios_ {
         raw.c_cc[termios::VMIN] = 1; // One character-at-a-time input
         raw.c_cc[termios::VTIME] = 0; // with blocking read
 
-        // on Solarish platforms VMIN and VTIME share the c_cc slots
-        // of VEOF and VEOL, which the raw mode settings just overwrote
-        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
-        map_key(
-            &mut key_map,
-            &original_mode,
-            termios::VEOF,
-            "VEOF",
-            Cmd::EndOfFile,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            termios::VINTR,
-            "VINTR",
-            Cmd::Interrupt,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            termios::VQUIT,
-            "VQUIT",
-            Cmd::Interrupt,
-        );
-        map_key(
-            &mut key_map,
-            &original_mode,
-            termios::VSUSP,
-            "VSUSP",
-            Cmd::Suspend,
-        );
-
         termios::tcsetattr(tty_in.0, termios::TCSADRAIN, &raw)?;
         Ok((original_mode, key_map))
     }
+    // key bindings for the terminal's special characters, which must be
+    // read from the original mode: on Solarish platforms VMIN and VTIME
+    // share the c_cc slots of VEOF and VEOL, which raw mode overwrites
+    fn key_map(mode: &Termios) -> PosixKeyMap {
+        let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
+        map_key(&mut key_map, mode, termios::VEOF, "VEOF", Cmd::EndOfFile);
+        map_key(&mut key_map, mode, termios::VINTR, "VINTR", Cmd::Interrupt);
+        map_key(&mut key_map, mode, termios::VQUIT, "VQUIT", Cmd::Interrupt);
+        map_key(&mut key_map, mode, termios::VSUSP, "VSUSP", Cmd::Suspend);
+        key_map
+    }
     fn map_key(
         key_map: &mut HashMap<KeyEvent, Cmd>,
-        raw: &Termios,
+        mode: &Termios,
         index: usize,
         name: &str,
         cmd: Cmd,
     ) {
-        let cc = char::from(raw.c_cc[index]);
+        let cc = char::from(mode.c_cc[index]);
         let key = KeyEvent::new(cc, M::NONE);
         log::debug!(target: "rustyline", "{name}: {key:?}");
         key_map.insert(key, cmd);
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn key_map_from_mode() {
+            let mut mode: Termios = unsafe { std::mem::zeroed() };
+            mode.c_cc[termios::VEOF] = 0x04;
+            mode.c_cc[termios::VINTR] = 0x03;
+            mode.c_cc[termios::VQUIT] = 0x1c;
+            mode.c_cc[termios::VSUSP] = 0x1a;
+
+            let map = key_map(&mode);
+            let key = |b| KeyEvent::new(char::from(b), M::NONE);
+            assert_eq!(map.get(&key(0x04)), Some(&Cmd::EndOfFile));
+            assert_eq!(map.get(&key(0x03)), Some(&Cmd::Interrupt));
+            assert_eq!(map.get(&key(0x1c)), Some(&Cmd::Interrupt));
+            assert_eq!(map.get(&key(0x1a)), Some(&Cmd::Suspend));
+        }
     }
 }
 

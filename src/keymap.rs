@@ -81,6 +81,8 @@ pub enum Cmd {
     ReplaceChar(RepeatCount, char),
     /// vi-change-to, vi-substitute
     Replace(Movement, Option<String>),
+    /// vi-change-to, vi-substitute
+    ReplaceAndMove(Movement, Option<String>, Movement),
     /// reverse-search-history (incremental search)
     ReverseSearchHistory,
     /// self-insert
@@ -137,6 +139,7 @@ impl Cmd {
             Self::ClearScreen
             | Self::Kill(_)
             | Self::Replace(..)
+            | Self::ReplaceAndMove(..)
             | Self::Noop
             | Self::Suspend
             | Self::Yank(..)
@@ -154,6 +157,7 @@ impl Cmd {
                 | Self::Kill(_)
                 | Self::ReplaceChar(..)
                 | Self::Replace(..)
+                | Self::ReplaceAndMove(..)
                 | Self::SelfInsert(..)
                 | Self::ViYankTo(_)
                 | Self::Yank(..) // Cmd::TransposeChars | TODO Validate
@@ -194,6 +198,25 @@ impl Cmd {
                     }
                 } else {
                     Self::Replace(mvt.redo(new), text.clone())
+                }
+            }
+            Self::ReplaceAndMove(ref mvt1, ref text, ref mvt2) => {
+                if text.is_none() {
+                    let last_insert = wrt.last_insert();
+                    if let Movement::ForwardChar(0) = mvt1 {
+                        Self::ReplaceAndMove(
+                            Movement::ForwardChar(
+                                RepeatCount::try_from(last_insert.as_ref().map_or(0, String::len))
+                                    .unwrap(),
+                            ),
+                            last_insert,
+                            mvt2.clone(),
+                        )
+                    } else {
+                        Self::ReplaceAndMove(mvt1.redo(new), last_insert, mvt2.clone())
+                    }
+                } else {
+                    Self::ReplaceAndMove(mvt1.redo(new), text.clone(), mvt2.clone())
                 }
             }
             Self::SelfInsert(previous, c) => {

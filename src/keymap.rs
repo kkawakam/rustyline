@@ -1,4 +1,7 @@
 //! Bindings from keys to command for Emacs and Vi modes
+#[cfg(feature = "custom-bindings")]
+use std::collections::VecDeque;
+
 use log::debug;
 
 use super::Result;
@@ -93,6 +96,11 @@ pub enum Cmd {
     TransposeWords(RepeatCount),
     /// undo
     Undo(RepeatCount),
+    /// Save the current line buffer so it can be restored later via
+    /// take_stashed_line. Typically used as the first command in an
+    /// `EventHandler::Macro` to preserve the in-progress input before
+    /// clearing and submitting a different command.
+    Stash,
     /// Unsupported / unexpected
     Unknown,
     /// upcase-word
@@ -138,6 +146,7 @@ impl Cmd {
             | Self::Kill(_)
             | Self::Replace(..)
             | Self::Noop
+            | Self::Stash
             | Self::Suspend
             | Self::Yank(..)
             | Self::YankPop => false,
@@ -347,6 +356,14 @@ pub enum InputMode {
     Replace,
 }
 
+#[cfg(feature = "custom-bindings")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacroState {
+    Idle,
+    Starting,
+    Active,
+}
+
 /// Transform key(s) to commands based on current input mode
 pub struct InputState<'b> {
     pub(crate) mode: EditMode,
@@ -357,6 +374,10 @@ pub struct InputState<'b> {
     num_args: i16,
     last_cmd: Cmd,                        // vi only
     last_char_search: Option<CharSearch>, // vi only
+    #[cfg(feature = "custom-bindings")]
+    macro_queue: VecDeque<Cmd>,
+    #[cfg(feature = "custom-bindings")]
+    macro_state: MacroState,
 }
 
 /// Provide indirect mutation to user input.
@@ -412,6 +433,10 @@ impl<'b> InputState<'b> {
             num_args: 0,
             last_cmd: Cmd::Noop,
             last_char_search: None,
+            #[cfg(feature = "custom-bindings")]
+            macro_queue: VecDeque::new(),
+            #[cfg(feature = "custom-bindings")]
+            macro_state: MacroState::Idle,
         }
     }
 
@@ -421,6 +446,32 @@ impl<'b> InputState<'b> {
 
     pub fn is_vi_cmd_mode(&self) -> bool {
         self.input_mode == InputMode::Command && self.mode == EditMode::Vi
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn macro_active(&self) -> bool {
+        self.macro_state != MacroState::Idle
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    pub(crate) fn take_macro_just_started(&mut self) -> bool {
+        if self.macro_state == MacroState::Starting {
+            self.macro_state = MacroState::Active;
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(feature = "custom-bindings")]
+    fn dispatch_macro(&mut self, cmds: &[Cmd]) -> Option<Cmd> {
+        let mut iter = cmds.iter().cloned();
+        let first = iter.next();
+        self.macro_queue.extend(iter);
+        if !self.macro_queue.is_empty() {
+            self.macro_state = MacroState::Starting;
+        }
+        Some(first.unwrap_or(Cmd::Noop))
     }
 
     /// Parse user input into one command
@@ -433,6 +484,16 @@ impl<'b> InputState<'b> {
         single_esc_abort: bool,
         ignore_external_print: bool,
     ) -> Result<Cmd> {
+        // A queued macro command that itself reads more input (e.g. Complete,
+        // ReverseSearchHistory) consumes the following queued commands as that
+        // input rather than running them as macro steps.
+        #[cfg(feature = "custom-bindings")]
+        if let Some(cmd) = self.macro_queue.pop_front() {
+            if self.macro_queue.is_empty() {
+                self.macro_state = MacroState::Idle;
+            }
+            return Ok(cmd);
+        }
         let single_esc_abort = self.single_esc_abort(single_esc_abort);
         let key;
         if ignore_external_print {
@@ -533,6 +594,13 @@ impl<'b> InputState<'b> {
 
         let mut evt = key.into();
         if let Some(cmd) = self.custom_binding(wrt, &evt, n, positive) {
+            // Repeat-count semantics for macros are deferred: ignore the count
+            // for a dispatched (multi-command) macro instead of misapplying it
+            // to the first command only.
+            #[cfg(feature = "custom-bindings")]
+            if self.macro_state == MacroState::Starting {
+                return Ok(cmd);
+            }
             return Ok(if cmd.is_repeatable() {
                 cmd.redo(Some(n), wrt)
             } else {
@@ -1137,7 +1205,7 @@ impl InputState<'_> {
     /// Application customized binding
     #[allow(unused_variables)]
     fn custom_binding(
-        &self,
+        &mut self,
         wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
@@ -1154,6 +1222,7 @@ impl InputState<'_> {
                             let ctx = EventContext::new(self, wrt);
                             handler.handle(evt, n, positive, &ctx)
                         }
+                        EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
                     }
                 } else {
                     None
@@ -1165,7 +1234,7 @@ impl InputState<'_> {
 
     #[allow(unused_variables)]
     fn custom_seq_binding<R: RawReader>(
-        &self,
+        &mut self,
         rdr: &mut R,
         wrt: &dyn Refresher,
         evt: &mut Event,
@@ -1189,6 +1258,7 @@ impl InputState<'_> {
                                 let ctx = EventContext::new(self, wrt);
                                 handler.handle(evt, n, positive, &ctx)
                             }
+                            EventHandler::Macro(cmds) => self.dispatch_macro(cmds),
                         };
                         if cmd.is_some() {
                             return Ok(cmd);

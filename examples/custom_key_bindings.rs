@@ -4,7 +4,7 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::{
     Cmd, Completer, ConditionalEventHandler, Editor, Event, EventContext, EventHandler, Helper,
-    Hinter, KeyEvent, RepeatCount, Result, Validator,
+    Hinter, KeyCode, KeyEvent, Modifiers, RepeatCount, Result, Validator,
 };
 
 #[derive(Completer, Default, Helper, Hinter, Validator)]
@@ -83,6 +83,11 @@ fn main() -> Result<()> {
     rl.bind_sequence(
         Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
         EventHandler::Simple(Cmd::Suspend), // TODO external editor
+    );
+    // Bind F1 to insert "help" and accept the line
+    rl.bind_sequence(
+        KeyEvent(KeyCode::F(1), Modifiers::NONE),
+        EventHandler::Macro(vec![Cmd::Insert(1, "help".to_owned()), Cmd::AcceptLine]),
     );
 
     loop {

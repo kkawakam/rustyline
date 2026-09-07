@@ -122,21 +122,25 @@ impl Changeset {
 
     /// Returns `true` when changes happen between the last call to `begin` and
     /// this `end`.
+    ///
+    /// Closes exactly one group so that groups nest: an inner `begin`/`end`
+    /// pair (e.g. a command run inside a macro) no longer collapses an
+    /// enclosing group. [`Self::undo`] already walks nested markers.
     pub(crate) fn end(&mut self) -> bool {
         debug!(target: "rustyline", "Changeset::end");
         self.redos.clear();
-        let mut touched = false;
-        while self.undo_group_level > 0 {
-            self.undo_group_level -= 1;
-            if let Some(&Change::Begin) = self.undos.last() {
-                // empty Begin..End
-                self.undos.pop();
-            } else {
-                self.undos.push(Change::End);
-                touched = true;
-            }
+        if self.undo_group_level == 0 {
+            return false;
         }
-        touched
+        self.undo_group_level -= 1;
+        if let Some(&Change::Begin) = self.undos.last() {
+            // empty Begin..End
+            self.undos.pop();
+            false
+        } else {
+            self.undos.push(Change::End);
+            true
+        }
     }
 
     fn insert_char(idx: usize, c: char) -> Change {
@@ -289,6 +293,15 @@ impl Changeset {
 
     pub(crate) fn truncate(&mut self, len: usize) {
         debug!(target: "rustyline", "Changeset::truncate({len})");
+        // Keep the open-group counter consistent with the markers being
+        // dropped (e.g. an aborted completion truncates away its own `Begin`).
+        for change in &self.undos[len..] {
+            match change {
+                Change::Begin => self.undo_group_level -= 1,
+                Change::End => self.undo_group_level += 1,
+                _ => {}
+            }
+        }
         self.undos.truncate(len);
     }
 
@@ -500,5 +513,35 @@ mod tests {
         cs.begin();
         cs.insert_str(0, "Hi");
         assert!(cs.end());
+    }
+
+    #[test]
+    fn test_nested_group() {
+        // An inner group (e.g. a command run inside a macro) must not close the
+        // enclosing group: one undo still reverts everything.
+        let mut buf = LineBuffer::init("", 0);
+        let mut cs = Changeset::new();
+        cs.begin(); // outer (macro)
+        cs.begin(); // inner (a sub-command opening its own group)
+        cs.insert_str(0, "ab");
+        buf.insert_str(0, "ab", &mut NoListener);
+        cs.end(); // closes inner only, outer stays open
+        cs.insert_str(2, "c");
+        buf.insert_str(2, "c", &mut NoListener);
+        cs.end(); // closes outer
+
+        assert!(cs.undo(&mut buf, 1));
+        assert_eq!("", buf.as_str());
+    }
+
+    #[test]
+    fn test_truncate_group_level() {
+        // Truncating away a `Begin` (as an aborted completion does) must keep
+        // the open-group counter balanced so later `end`s stay in sync.
+        let mut cs = Changeset::new();
+        let mark = cs.begin();
+        cs.insert_str(0, "ab");
+        cs.truncate(mark);
+        assert_eq!(0, cs.undo_group_level);
     }
 }

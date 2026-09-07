@@ -600,6 +600,7 @@ pub struct Editor<H: Helper, I: History> {
     kill_ring: KillRing,
     config: Config,
     custom_bindings: Bindings,
+    stashed_line: Option<String>,
 }
 
 /// Default editor with default helper and `DefaultHistory`
@@ -655,6 +656,7 @@ impl<H: Helper, I: History> Editor<H, I> {
             kill_ring: KillRing::new(60),
             config,
             custom_bindings: Bindings::new(),
+            stashed_line: None,
         })
     }
 
@@ -737,6 +739,7 @@ impl<H: Helper, I: History> Editor<H, I> {
         let mut stdout = self.term.create_writer(&self.config);
 
         self.kill_ring.reset(); // TODO recreate a new kill ring vs reset
+        self.stashed_line = None; // drop any stash the caller did not consume
         let ctx = Context::new(&self.history);
         let mut s = State::new(&mut stdout, prompt, self.helper.as_ref(), ctx);
 
@@ -765,20 +768,55 @@ impl<H: Helper, I: History> Editor<H, I> {
         }
         s.refresh_line()?;
 
+        #[cfg(feature = "custom-bindings")]
+        let mut macro_undo_group_active = false;
+
+        // Close the macro's undo group once its last command has been drained.
+        // Must run on every path that leaves the loop body early, since the
+        // queue is emptied (and `macro_active` cleared) before the command runs.
+        macro_rules! close_macro_group {
+            () => {
+                #[cfg(feature = "custom-bindings")]
+                if macro_undo_group_active && !input_state.macro_active() {
+                    macro_undo_group_active = false;
+                    s.changes.end();
+                }
+            };
+        }
+
         loop {
             let mut cmd = s.next_cmd(&mut input_state, &mut rdr, false, false)?;
 
-            if cmd.should_reset_kill_ring() {
+            #[cfg(feature = "custom-bindings")]
+            let macro_just_started = input_state.take_macro_just_started();
+            #[cfg(feature = "custom-bindings")]
+            if macro_just_started {
+                macro_undo_group_active = true;
+                s.changes.begin();
+            }
+
+            // Inside a macro, suppress the kill-ring reset between commands so
+            // consecutive kills coalesce; the first command still honors its own.
+            let should_reset = cmd.should_reset_kill_ring();
+            #[cfg(feature = "custom-bindings")]
+            let should_reset = should_reset && (macro_just_started || !macro_undo_group_active);
+            if should_reset {
                 self.kill_ring.reset();
             }
 
-            // First trigger commands that need extra input
+            if cmd == Cmd::Stash {
+                self.stashed_line = Some(s.line.as_str().to_owned());
+                close_macro_group!();
+                continue;
+            }
 
+            // First trigger commands that need extra input
             if cmd == Cmd::Complete && s.helper.is_some() {
                 let next = complete_line(&mut rdr, &mut s, &mut input_state, &self.config)?;
                 if let Some(next) = next {
                     cmd = next;
                 } else {
+                    close_macro_group!();
                     continue;
                 }
             }
@@ -790,6 +828,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 if let Some(next) = next {
                     cmd = next;
                 } else {
+                    close_macro_group!();
                     continue;
                 }
             }
@@ -802,6 +841,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 let _ = self.term.enable_raw_mode(&self.config)?; // TODO original_mode may have changed
                 s.out.update_size(); // window may have been resized
                 s.refresh_line()?;
+                close_macro_group!();
                 continue;
             }
 
@@ -810,6 +850,7 @@ impl<H: Helper, I: History> Editor<H, I> {
                 // Quoted insert
                 let c = rdr.next_char()?;
                 s.edit_insert(c, 1)?;
+                close_macro_group!();
                 continue;
             }
 
@@ -829,7 +870,19 @@ impl<H: Helper, I: History> Editor<H, I> {
             }
 
             // Execute things can be done solely on a state object
-            match command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config)? {
+            let result =
+                command::execute(cmd, &mut s, &input_state, &mut self.kill_ring, &self.config);
+
+            #[cfg(feature = "custom-bindings")]
+            if macro_undo_group_active && (result.is_err() || !input_state.macro_active()) {
+                macro_undo_group_active = false;
+                s.changes.end();
+                if matches!(result, Ok(command::Status::Proceed)) {
+                    s.refresh_line()?;
+                }
+            }
+
+            match result? {
                 command::Status::Proceed => continue,
                 command::Status::Submit => break,
             }
@@ -928,6 +981,16 @@ impl<H: Helper, I: History> Editor<H, I> {
     pub fn unbind_sequence<E: Into<Event>>(&mut self, key_seq: E) -> Option<EventHandler> {
         self.custom_bindings
             .remove(&Event::normalize(key_seq.into()))
+    }
+
+    /// Returns and clears the line saved by a previous `Cmd::Stash`.
+    ///
+    /// Typical usage: after a macro that stashes the current input, clears
+    /// the line, submits a different command, and accepts — call this to
+    /// recover the original input and pass it as `initial` to the next
+    /// `readline_with_initial`.
+    pub fn take_stashed_line(&mut self) -> Option<String> {
+        self.stashed_line.take()
     }
 
     /// Returns an iterator over edited lines.

@@ -816,11 +816,14 @@ impl RawReader for PosixRawReader {
     type Buffer = PosixBuffer;
 
     fn wait_for_input(&mut self, single_esc_abort: bool) -> Result<Event> {
+        if !self.tty_in.buffer().is_empty() {
+            return self.next_key(single_esc_abort).map(Event::KeyPress);
+        }
         cfg_select! {
             feature = "signal-hook" => self.select(None, single_esc_abort),
             _ => match self.pipe_reader {
                 Some(_) => self.select(None, single_esc_abort),
-                None => self.next_key(single_esc_abort).map(Event::KeyPress),
+                _ => self.next_key(single_esc_abort).map(Event::KeyPress),
             },
         }
     }

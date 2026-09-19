@@ -524,21 +524,23 @@ impl<'b> InputState<'b> {
         wrt: &mut dyn Refresher,
         mut key: KeyEvent,
     ) -> Result<Cmd> {
-        if let E(K::Char(digit @ '-'), M::ALT) = key {
-            key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        } else if let E(K::Char(digit @ '0'..='9'), M::ALT) = key {
-            key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        }
-        let (n, positive) = self.emacs_num_args(); // consume them in all cases
-
-        let mut evt = key.into();
-        if let Some(cmd) = self.custom_binding(wrt, &evt, n, positive) {
-            return Ok(if cmd.is_repeatable() {
-                cmd.redo(Some(n), wrt)
+        let (n, positive) = loop {
+            let (n, positive) = self.emacs_num_args();
+            if let Some(cmd) = self.custom_binding(wrt, &key.into(), n, positive) {
+                return Ok(if cmd.is_repeatable() {
+                    cmd.redo(Some(n), wrt)
+                } else {
+                    cmd
+                });
+            }
+            if let E(K::Char(digit @ ('-' | '0'..='9')), M::ALT) = key {
+                key = self.emacs_digit_argument(rdr, wrt, digit)?;
             } else {
-                cmd
-            });
-        } else if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
+                break (n, positive);
+            }
+        };
+        let mut evt = key.into();
+        if let Some(cmd) = InputState::term_binding(rdr, wrt, &key) {
             return Ok(cmd);
         }
         let cmd = match key {

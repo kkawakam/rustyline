@@ -37,11 +37,11 @@ I am not sure if this point should be tackled here.
 
 ## Multiple / complex actions
 
-For one key/command, we may want to perform multiple actions.
-We should ask the undo manager to start a "transaction" before first action and commit it after the last action.
-Should we do something specific with the kill ring ?
-We should refresh / repaint only when all actions are performed (or if ask explicitly?) depending on cumulated action impacts.
-...
+`EventHandler::Macro(Vec<Cmd>)` executes a sequence of commands for a single key binding.
+
+- **Undo**: the sequence is wrapped in a single undo group (`Changeset::begin`/`end`), so one undo reverts all commands.
+- **Kill ring**: the kill ring is not reset between commands, preserving consecutive-kill semantics within the macro.
+- **Refresh**: a `refresh_line()` is called after the last command completes. Individual commands still refresh during execution; since they run back-to-back without I/O waits, there is no visible flicker.
 
 ## Misc
 

@@ -197,8 +197,8 @@ fn read_input(handle: HANDLE, max_count: u32) -> Result<KeyEvent> {
         if key_event.bKeyDown == 0 && key_event.wVirtualKeyCode != KeyboardAndMouse::VK_MENU {
             continue;
         }
-        // key_event.wRepeatCount seems to be always set to 1 (maybe because we only
-        // read one character at a time)
+        // key_event.wRepeatCount seems to be always set to 1 (maybe because we
+        // only read one character at a time)
 
         let alt_gr = key_event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED)
             == (LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED);
@@ -324,7 +324,8 @@ impl ConsoleRenderer {
     ) -> Result<console::COORD> {
         use std::cmp::{max, min};
         // https://docs.microsoft.com/en-us/windows/console/setconsolecursorposition
-        // > The coordinates must be within the boundaries of the console screen buffer.
+        // > The coordinates must be within the boundaries of the console screen
+        // > buffer.
         // pos.X = max(0, min(size.X - 1, pos.X));
         pos.Y = max(0, min(size.Y - 1, pos.Y));
         check(unsafe { console::SetConsoleCursorPosition(self.conout, pos) })?;
@@ -805,7 +806,8 @@ impl Term for Console {
         };
 
         self.raw_mode.store(true, Ordering::SeqCst);
-        // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
+        // when all ExternalPrinter are dropped there is no need to use
+        // `pipe_reader`
         if Arc::strong_count(&self.raw_mode) == 1 {
             self.pipe_writer = None;
             self.pipe_reader = None;

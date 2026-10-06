@@ -197,7 +197,8 @@ impl Cmd {
                 }
             }
             Self::SelfInsert(previous, c) => {
-                // consecutive char inserts are repeatable not only the last one...
+                // consecutive char inserts are repeatable not only the last
+                // one...
                 if let Some(text) = wrt.last_insert() {
                     Self::Insert(repeat_count(previous, new), text)
                 } else {

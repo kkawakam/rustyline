@@ -57,8 +57,8 @@ impl Hinter for DIYHinter {
         self.hints
             .iter()
             .filter_map(|hint| {
-                // expect hint after word complete, like redis cli, add condition:
-                // line.ends_with(" ")
+                // expect hint after word complete, like redis cli, add
+                // condition: line.ends_with(" ")
                 if hint.display.starts_with(line) {
                     Some(hint.suffix(pos))
                 } else {

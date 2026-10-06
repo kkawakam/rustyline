@@ -239,7 +239,8 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
 
                 // setup skim and run with input options
                 // will display UI for fuzzy search and return selected results
-                // by default skim multi select is off so only expect one selection
+                // by default skim multi select is off so only expect one
+                // selection
 
                 let options = SkimOptionsBuilder::default()
                     .prompt("? ")
@@ -251,8 +252,9 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
                     .map(|out| out.selected_items)
                     .unwrap_or_default();
 
-                // match the first (and only) returned option with the candidate and update the
-                // line otherwise only refresh line to clear the skim UI changes
+                // match the first (and only) returned option with the candidate
+                // and update the line otherwise only refresh
+                // line to clear the skim UI changes
                 if let Some(item) = selected_items.first() {
                     let item: &Candidate = (*item).as_any() // cast to Any
                         .downcast_ref::<Candidate>() // downcast to concrete type
@@ -364,7 +366,7 @@ fn page_completions<C: Candidate, H: Helper, P: Prompt + ?Sized>(
         s.out.write_and_flush(ab.as_str())?;
     }
     s.out.write_and_flush("\n")?;
-    s.repaint(RefreshKind::Min)?;
+    s.repaint(RefreshKind::All)?;
     Ok(None)
 }
 

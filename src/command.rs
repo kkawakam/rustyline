@@ -82,7 +82,8 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
             s.edit_move_forward(n)?;
         }
         Cmd::ClearScreen => {
-            // Clear the screen leaving the current line at the top of the screen.
+            // Clear the screen leaving the current line at the top of the
+            // screen.
             s.clear_screen()?;
             s.refresh_line()?;
         }

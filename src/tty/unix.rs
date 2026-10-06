@@ -1461,7 +1461,8 @@ impl Term for PosixTerminal {
             Some(self.tty_out)
         };
 
-        // when all ExternalPrinter are dropped there is no need to use `pipe_reader`
+        // when all ExternalPrinter are dropped there is no need to use
+        // `pipe_reader`
         if Arc::strong_count(&self.raw_mode) == 1 {
             self.pipe_writer = None;
             self.pipe_reader = None;
@@ -1622,9 +1623,11 @@ mod termios_ {
         let mut raw = original_mode.clone();
 
         // https://linux.die.net/man/3/termios
-        // > The above symbolic subscript values are all different, except that VTIME,
+        // > The above symbolic subscript values are all different, except that
+        // > VTIME,
         // > VMIN may have the same value as VEOL, VEOF, respectively.
-        // > In noncanonical mode the special character meaning is replaced by the
+        // > In noncanonical mode the special character meaning is replaced by
+        // > the
         // > timeout meaning.
         // So we must read VEOF before writing VTIME
         let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
@@ -1646,7 +1649,8 @@ mod termios_ {
 
         // character-size mark (8 bits)
         raw.control_flags |= ControlFlags::CS8;
-        // disable echoing, canonical mode, extended input processing and signals
+        // disable echoing, canonical mode, extended input processing and
+        // signals
         raw.local_flags &=
             !(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
 
@@ -1690,9 +1694,11 @@ mod termios_ {
         let mut raw = original_mode;
 
         // https://linux.die.net/man/3/termios
-        // > The above symbolic subscript values are all different, except that VTIME,
+        // > The above symbolic subscript values are all different, except that
+        // > VTIME,
         // > VMIN may have the same value as VEOL, VEOF, respectively.
-        // > In noncanonical mode the special character meaning is replaced by the
+        // > In noncanonical mode the special character meaning is replaced by
+        // > the
         // > timeout meaning.
         // So we must read VEOF before writing VTIME
         let mut key_map: HashMap<KeyEvent, Cmd> = HashMap::with_capacity(4);
@@ -1711,7 +1717,8 @@ mod termios_ {
 
         // character-size mark (8 bits)
         raw.c_cflag |= termios::CS8;
-        // disable echoing, canonical mode, extended input processing and signals
+        // disable echoing, canonical mode, extended input processing and
+        // signals
         raw.c_lflag &= !(termios::ECHO | termios::ICANON | termios::IEXTEN | termios::ISIG);
 
         if enable_signals {

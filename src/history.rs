@@ -167,8 +167,9 @@ pub trait History {
     //         direction: SearchDirection,
     //         pattern: &str,
     //     ) -> Option<SearchResult>;
-    // reedline: fn set_navigation(&mut self, navigation: HistoryNavigationQuery);
-    // reedline: fn get_navigation(&self) -> HistoryNavigationQuery;
+    // reedline: fn set_navigation(&mut self, navigation:
+    // HistoryNavigationQuery); reedline: fn get_navigation(&self) ->
+    // HistoryNavigationQuery;
 
     /// Search history (start position inclusive [0, len-1]).
     ///
@@ -590,7 +591,8 @@ impl FileHistory {
                             s.push('\\'); // unescaped back slash
                         }
                         _ => {
-                            // only line feed and back slash should have been escaped
+                            // only line feed and back slash should have been
+                            // escaped
                             warn!(target: "rustyline", "bad escaped line: {line}");
                             copy = None;
                             break;

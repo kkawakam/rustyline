@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 #[cfg(not(feature = "buffer-redux"))]
 use std::io::BufReader;
-use std::io::{self, ErrorKind, Read, Write as _};
+use std::io::{self, BufRead as _, ErrorKind, Read, Write as _};
 use std::os::fd::{AsFd, AsRawFd as _, BorrowedFd, IntoRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -857,22 +857,30 @@ impl RawReader for PosixRawReader {
         Ok(key)
     }
 
+    /// Decode the next char, replacing invalid UTF-8 with U+FFFD the way
+    /// `String::from_utf8_lossy` does: one replacement char per maximal
+    /// invalid subpart.
     fn next_char(&mut self) -> Result<char> {
-        let mut buf = [0; 1];
         let mut receiver = Utf8 {
             c: None,
             valid: true,
         };
         loop {
-            let n = self.tty_in.read(&mut buf)?;
-            if n == 0 {
+            let Some(&b) = self.tty_in.fill_buf()?.first() else {
                 return Err(ReadlineError::Eof);
-            }
-            let b = buf[0];
+            };
+            let in_sequence = self.parser != Parser::new();
             self.parser.advance(&mut receiver, b);
             if !receiver.valid {
-                return Err(ReadlineError::from(ErrorKind::InvalidData));
-            } else if let Some(c) = receiver.c.take() {
+                // A byte that cuts a sequence short is left unread: it may
+                // start the next char, like the ESC of a bracketed paste end.
+                if !in_sequence {
+                    self.tty_in.consume(1);
+                }
+                return Ok(char::REPLACEMENT_CHARACTER);
+            }
+            self.tty_in.consume(1);
+            if let Some(c) = receiver.c.take() {
                 return Ok(c);
             }
         }
@@ -1747,8 +1755,13 @@ mod termios_ {
 
 #[cfg(test)]
 mod test {
-    use super::{AltFd, Position, PosixRenderer, PosixTerminal, Renderer as _};
-    use crate::config::BellStyle;
+    use std::os::fd::{AsRawFd as _, OwnedFd};
+
+    use super::{
+        AltFd, Position, PosixKeyMap, PosixRawReader, PosixRenderer, PosixTerminal, RawReader as _,
+        Renderer as _,
+    };
+    use crate::config::{BellStyle, Config};
     use crate::layout::GraphemeClusterMode;
     use crate::line_buffer::{LineBuffer, NoListener};
 
@@ -1813,5 +1826,59 @@ mod test {
             "\r\u{1b}[K> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\u{1b}[1C",
             out.buffer
         );
+    }
+
+    /// A raw reader over a pipe holding `input`, then EOF. The reader borrows
+    /// the returned read end.
+    fn reader_over(input: &[u8]) -> (OwnedFd, PosixRawReader) {
+        let (rd, wr) = nix::unistd::pipe().unwrap();
+        nix::unistd::write(&wr, input).unwrap();
+        drop(wr);
+        let rdr = PosixRawReader::new(
+            AltFd(rd.as_raw_fd()),
+            None,
+            None,
+            &Config::default(),
+            PosixKeyMap::new(),
+            None,
+            #[cfg(target_os = "macos")]
+            false,
+        );
+        (rd, rdr)
+    }
+
+    fn decode(input: &[u8]) -> String {
+        let (_rd, mut rdr) = reader_over(input);
+        let mut decoded = String::new();
+        loop {
+            match rdr.next_char() {
+                Ok(c) => decoded.push(c),
+                Err(crate::ReadlineError::Eof) => return decoded,
+                Err(e) => panic!("{input:?}: {e}"),
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_utf8_is_replaced() {
+        for input in [
+            &b"a\xffb"[..],
+            b"\xe2\x82a",
+            b"\xe0\x80z",
+            b"\xc3\r",
+            b"\xf0\x9f\x98\x80",
+        ] {
+            assert_eq!(String::from_utf8_lossy(input), decode(input), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn invalid_utf8_keeps_bracketed_paste_end() {
+        let (_rd, mut rdr) = reader_over(b"caf\xe9\r/reset\xc3\x1b[201~y");
+        assert_eq!(
+            "caf\u{FFFD}\n/reset\u{FFFD}",
+            rdr.read_pasted_text().unwrap()
+        );
+        assert_eq!('y', rdr.next_char().unwrap());
     }
 }

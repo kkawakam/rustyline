@@ -73,6 +73,11 @@ use crate::validate::Validator;
 /// The error type for I/O and Linux Syscalls (Errno)
 pub type Result<T> = result::Result<T, ReadlineError>;
 
+#[cfg(all(unix, feature = "with-fuzzy"))]
+fn accept_fuzzy_selection(is_abort: bool) -> bool {
+    !is_abort
+}
+
 /// Completes the line/word
 fn complete_line<H: Helper, P: Prompt + ?Sized>(
     rdr: &mut <Terminal as Term>::Reader,
@@ -249,7 +254,13 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
                     .unwrap();
 
                 let selected_items = Skim::run_with(options, Some(rx_item))
-                    .map(|out| out.selected_items)
+                    .map(|out| {
+                        if accept_fuzzy_selection(out.is_abort) {
+                            out.selected_items
+                        } else {
+                            Vec::new()
+                        }
+                    })
                     .unwrap_or_default();
 
                 // match the first (and only) returned option with the candidate
@@ -272,6 +283,17 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
             }
         };
         Ok(None)
+    }
+}
+
+#[cfg(all(test, unix, feature = "with-fuzzy"))]
+mod fuzzy_tests {
+    use super::accept_fuzzy_selection;
+
+    #[test]
+    fn abort_does_not_apply_the_current_fuzzy_selection() {
+        assert!(!accept_fuzzy_selection(true));
+        assert!(accept_fuzzy_selection(false));
     }
 }
 

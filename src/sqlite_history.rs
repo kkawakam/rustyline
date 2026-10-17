@@ -200,19 +200,19 @@ COMMIT;
         let query = match (dir, start_with) {
             (SearchDirection::Forward, true) => {
                 "SELECT docid, entry FROM fts WHERE entry MATCH '^\"' || ?1 || '*\"'  AND docid >= \
-                 ?2 AND length(entry) >= length(?1) ORDER BY docid ASC LIMIT 1;"
+                 ?2 AND instr(entry, ?1) = 1 ORDER BY docid ASC LIMIT 1;"
             }
             (SearchDirection::Forward, false) => {
                 "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH '\"' || ?1 || '*\"'  \
-                 AND docid >= ?2 AND length(entry) >= length(?1) ORDER BY docid ASC LIMIT 1;"
+                 AND docid >= ?2 AND instr(entry, ?1) >= 1 ORDER BY docid ASC LIMIT 1;"
             }
             (SearchDirection::Reverse, true) => {
                 "SELECT docid, entry FROM fts WHERE entry MATCH '^\"' || ?1 || '*\"'  AND docid <= \
-                 ?2 AND length(entry) >= length(?1) ORDER BY docid DESC LIMIT 1;"
+                 ?2 AND instr(entry, ?1) = 1 ORDER BY docid DESC LIMIT 1;"
             }
             (SearchDirection::Reverse, false) => {
                 "SELECT docid, entry, offsets(fts) FROM fts WHERE entry MATCH '\"' || ?1 || '*\"'  \
-                 AND docid <= ?2 AND length(entry) >= length(?1) ORDER BY docid DESC LIMIT 1;"
+                 AND docid <= ?2 AND instr(entry, ?1) >= 1 ORDER BY docid DESC LIMIT 1;"
             }
         };
         let mut stmt = self.conn.prepare_cached(query)?;
@@ -674,9 +674,9 @@ mod tests {
                 entry: h.get(2, SearchDirection::Reverse)?.unwrap().entry,
                 pos: 4
             }),
-            h.starts_with("LiNe", 2, SearchDirection::Reverse)?
+            h.starts_with("line", 2, SearchDirection::Reverse)?
         );
-        assert_eq!(None, h.starts_with("iNe", 2, SearchDirection::Reverse)?);
+        assert_eq!(None, h.starts_with("ine", 2, SearchDirection::Reverse)?);
         assert_eq!(None, h.starts_with("line1 ", 2, SearchDirection::Reverse)?);
         Ok(())
     }

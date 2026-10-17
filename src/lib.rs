@@ -256,7 +256,8 @@ fn complete_line<H: Helper, P: Prompt + ?Sized>(
                 // and update the line otherwise only refresh
                 // line to clear the skim UI changes
                 if let Some(item) = selected_items.first() {
-                    let item: &Candidate = (*item).as_any() // cast to Any
+                    let item: &Candidate = (*item)
+                        .as_any() // cast to Any
                         .downcast_ref::<Candidate>() // downcast to concrete type
                         .expect("something wrong with downcast");
                     if let Some(candidate) = candidates.get(item.index) {

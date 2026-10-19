@@ -442,7 +442,8 @@ fn meta_digit() {
 fn custom_meta_digit() {
     use crate::Cmd;
     for key in ['0', '3', '9', '-'] {
-        let mut editor = super::init_editor(EditMode::Emacs, &[E::alt(key), E::from('x'), E::ENTER]);
+        let mut editor =
+            super::init_editor(EditMode::Emacs, &[E::alt(key), E::from('x'), E::ENTER]);
         editor.bind_sequence(E::alt(key), Cmd::Insert(1, "√".into()));
         assert_eq!(editor.readline("").unwrap(), "√x");
     }

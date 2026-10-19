@@ -525,14 +525,10 @@ impl<'b> InputState<'b> {
         wrt: &mut dyn Refresher,
         mut key: KeyEvent,
     ) -> Result<Cmd> {
-        if let E(K::Char('-' | '0'..='9'), M::ALT) = key {
+        if let E(K::Char(digit @ ('-' | '0'..='9')), M::ALT) = key {
             if let Some(cmd) = self.custom_binding(wrt, &key.into(), 1, true) {
                 return Ok(cmd);
             }
-        }
-        if let E(K::Char(digit @ '-'), M::ALT) = key {
-            key = self.emacs_digit_argument(rdr, wrt, digit)?;
-        } else if let E(K::Char(digit @ '0'..='9'), M::ALT) = key {
             key = self.emacs_digit_argument(rdr, wrt, digit)?;
         }
         let (n, positive) = self.emacs_num_args(); // consume them in all cases

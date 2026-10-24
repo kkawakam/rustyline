@@ -241,3 +241,31 @@ fn meta_gt() {
         ("a", ""),
     );
 }
+
+#[test]
+fn custom_history_errors() {
+    use std::error::Error as _;
+    use std::fmt;
+
+    use crate::error::ReadlineError;
+
+    #[derive(Debug)]
+    struct BackendError(&'static str);
+
+    impl fmt::Display for BackendError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(self.0)
+        }
+    }
+
+    impl std::error::Error for BackendError {}
+
+    let err = ReadlineError::Custom(Box::new(BackendError("add failed")));
+    assert_eq!(err.to_string(), "add failed");
+    let source = err
+        .source()
+        .unwrap()
+        .downcast_ref::<BackendError>()
+        .unwrap();
+    assert_eq!(source.0, "add failed");
+}

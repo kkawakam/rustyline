@@ -334,7 +334,7 @@ PRAGMA incremental_vacuum;
             }
         } else {
             // TODO Validate: backup whole history
-            self.conn.backup(c"main", path, None)?;
+            self.conn.backup(c"main", path, None::<fn(_)>)?;
             // TODO Validate: keep using original path
         }
         Ok(())

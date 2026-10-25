@@ -96,10 +96,10 @@ impl Signal {
     }
 
     #[cfg(not(feature = "signal-hook"))]
-    pub(crate) fn to_byte(sig: libc::c_int) -> u8 {
+    pub(crate) fn to_byte(sig: nix::libc::c_int) -> u8 {
         match sig {
-            libc::SIGINT => b'I',
-            libc::SIGWINCH => b'W',
+            nix::libc::SIGINT => b'I',
+            nix::libc::SIGWINCH => b'W',
             _ => unreachable!(),
         }
     }

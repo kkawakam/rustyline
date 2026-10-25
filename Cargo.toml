@@ -29,7 +29,6 @@ rusqlite = { version = "0.41.0", optional = true, default-features = false, feat
     "backup",
     "fallible_uint",
 ] }
-libc = "0.2.182"
 log = "0.4.29"
 unicode-width = "0.2.2"
 unicode-segmentation = "1.12"

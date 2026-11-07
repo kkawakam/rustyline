@@ -4,9 +4,9 @@ rg --files -g '*.profraw' | xargs rm
 rm -rf target/debug/coverage/
 # https://github.com/mozilla/grcov?tab=readme-ov-file#usage
 export RUSTFLAGS="-Cinstrument-coverage"
-cargo build
+cargo build --features xflags
 export LLVM_PROFILE_FILE="rustyline-%p-%m.profraw"
-cargo test
+cargo test --features xflags
 # cargo binstall grcov
 grcov . -s . --binary-path ./target/debug/ -t html --ignore-not-existing -o ./target/debug/coverage/
 rg --files -g '*.profraw' | xargs rm

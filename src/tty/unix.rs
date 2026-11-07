@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use buffer_redux::BufReader;
 use log::{debug, warn};
 use nix::errno::Errno;
+use nix::libc::{STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ, winsize};
 use nix::poll::{self, PollFlags, PollTimeout};
 use nix::sys::select::{self, FdSet};
 #[cfg(not(feature = "termios"))]
@@ -40,7 +41,7 @@ const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 const BEGIN_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026h";
 const END_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026l";
 
-nix::ioctl_read_bad!(win_size, libc::TIOCGWINSZ, libc::winsize);
+nix::ioctl_read_bad!(win_size, TIOCGWINSZ, winsize);
 
 fn get_win_size(fd: AltFd) -> (Unit, Unit) {
     use std::mem::zeroed;
@@ -50,7 +51,7 @@ fn get_win_size(fd: AltFd) -> (Unit, Unit) {
     }
 
     unsafe {
-        let mut size: libc::winsize = zeroed();
+        let mut size: winsize = zeroed();
         match win_size(fd.0, &raw mut size) {
             Ok(0) => {
                 // In linux pseudo-terminals are created with dimensions of
@@ -135,28 +136,16 @@ struct TtyIn {
 impl Read for TtyIn {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
-            let res = unsafe {
-                libc::read(
-                    self.fd.0,
-                    buf.as_mut_ptr().cast::<libc::c_void>(),
-                    buf.len() as libc::size_t,
-                )
-            };
-            if res == -1 {
-                let error = io::Error::last_os_error();
-                if error.kind() == ErrorKind::Interrupted {
-                    if let Some(signal) = self.sig()? {
-                        return Err(io::Error::new(
-                            ErrorKind::Interrupted,
-                            error::SignalError(signal),
-                        ));
-                    }
-                } else {
-                    return Err(error);
+            let res = read(self.fd, buf);
+            if let Err(Errno::EINTR) = res {
+                if let Some(signal) = self.sig()? {
+                    return Err(io::Error::new(
+                        ErrorKind::Interrupted,
+                        error::SignalError(signal),
+                    ));
                 }
             } else {
-                #[expect(clippy::cast_sign_loss)]
-                return Ok(res as usize);
+                return res.map_err(io::Error::from);
             }
         }
     }
@@ -596,7 +585,8 @@ impl PosixRawReader {
                         (CTRL_ALT_SHIFT, 'w') => E(K::Char('7'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'x') => E(K::Char('8'), M::CTRL_ALT_SHIFT),
                         (CTRL_ALT_SHIFT, 'y') => E(K::Char('9'), M::CTRL_ALT_SHIFT),
-                        // Meta + arrow on (some?) Macs when using iTerm defaults
+                        // Meta + arrow on (some?) Macs when using iTerm
+                        // defaults
                         ('9', UP) => E(K::Up, M::ALT),
                         ('9', DOWN) => E(K::Down, M::ALT),
                         ('9', RIGHT) => E(K::Right, M::ALT),
@@ -1279,7 +1269,7 @@ fn set_cursor_visibility(fd: AltFd, visible: bool) -> Result<Option<PosixCursorG
 #[cfg(not(feature = "signal-hook"))]
 static SIG_PIPE: AtomicI32 = AtomicI32::new(-1);
 #[cfg(not(feature = "signal-hook"))]
-extern "C" fn sig_handler(sig: libc::c_int) {
+extern "C" fn sig_handler(sig: nix::libc::c_int) {
     let b = error::Signal::to_byte(sig);
     let fd = SIG_PIPE.load(Ordering::Relaxed);
     if fd == -1 {
@@ -1306,7 +1296,7 @@ impl Sig {
         pipe.set_nonblocking(true)?;
         cfg_select! {
             feature = "signal-hook" => {
-                let id = signal_hook::low_level::pipe::register(libc::SIGWINCH, pipe_write)?;
+                let id = signal_hook::low_level::pipe::register(nix::libc::SIGWINCH, pipe_write)?;
                 Ok(Self { pipe, id })
             }
             _ => {
@@ -1404,11 +1394,11 @@ impl Term for PosixTerminal {
                     let is_a_tty = is_a_tty(fd); // TODO: useless ?
                     (fd, is_a_tty, fd, is_a_tty, true)
                 } else {
-                    let (i, o) = (AltFd(libc::STDIN_FILENO), AltFd(libc::STDOUT_FILENO));
+                    let (i, o) = (AltFd(STDIN_FILENO), AltFd(STDOUT_FILENO));
                     (i, is_a_tty(i), o, is_a_tty(o), false)
                 }
             } else {
-                let (i, o) = (AltFd(libc::STDIN_FILENO), AltFd(libc::STDOUT_FILENO));
+                let (i, o) = (AltFd(STDIN_FILENO), AltFd(STDOUT_FILENO));
                 (i, is_a_tty(i), o, is_a_tty(o), false)
             };
         let unsupported = super::is_unsupported_term();
@@ -1747,6 +1737,8 @@ mod termios_ {
 
 #[cfg(test)]
 mod test {
+    use nix::libc::STDOUT_FILENO;
+
     use super::{AltFd, Position, PosixRenderer, PosixTerminal, Renderer as _};
     use crate::config::BellStyle;
     use crate::layout::GraphemeClusterMode;
@@ -1756,7 +1748,7 @@ mod test {
     #[ignore]
     fn prompt_with_ansi_escape_codes() {
         let out = PosixRenderer::new(
-            AltFd(libc::STDOUT_FILENO),
+            AltFd(STDOUT_FILENO),
             4,
             true,
             true,
@@ -1783,7 +1775,7 @@ mod test {
     #[test]
     fn test_line_wrap() {
         let mut out = PosixRenderer::new(
-            AltFd(libc::STDOUT_FILENO),
+            AltFd(STDOUT_FILENO),
             4,
             true,
             true,

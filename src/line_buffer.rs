@@ -638,7 +638,7 @@ impl LineBuffer {
         };
         let end = self.buf[self.pos..]
             .find('\n')
-            .map_or_else(|| self.buf.len(), |x| self.pos + x + 1);
+            .map_or(self.buf.len(), |x| self.pos + x + 1);
         for _ in 0..n {
             if let Some(off) = self.buf[..start - 1].rfind('\n') {
                 start = off + 1;
@@ -684,7 +684,7 @@ impl LineBuffer {
                 let mut dest_start = self.pos + off + 1;
                 let mut dest_end = self.buf[dest_start..]
                     .find('\n')
-                    .map_or_else(|| self.buf.len(), |v| dest_start + v);
+                    .map_or(self.buf.len(), |v| dest_start + v);
                 for _ in 1..n {
                     if dest_end == self.buf.len() {
                         break;
@@ -692,7 +692,7 @@ impl LineBuffer {
                     dest_start = dest_end + 1;
                     dest_end = self.buf[dest_start..]
                         .find('\n')
-                        .map_or_else(|| self.buf.len(), |v| dest_start + v);
+                        .map_or(self.buf.len(), |v| dest_start + v);
                 }
                 self.pos = self.buf[dest_start..dest_end]
                     .grapheme_indices(true)
@@ -1138,7 +1138,7 @@ impl LineBuffer {
         let start = self.buf[..start].rfind('\n').map_or(0, |pos| pos + 1);
         let end = self.buf[end..]
             .rfind('\n')
-            .map_or_else(|| self.buf.len(), |pos| end + pos);
+            .map_or(self.buf.len(), |pos| end + pos);
         let mut index = start;
         if dedent {
             #[expect(clippy::unnecessary_to_owned)]

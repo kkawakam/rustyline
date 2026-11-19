@@ -23,7 +23,7 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
 
     match cmd {
         Cmd::EndOfFile | Cmd::AcceptLine | Cmd::AcceptOrInsertLine { .. } | Cmd::Newline => {
-            #[expect(clippy::collapsible_match)]
+            #[allow(clippy::collapsible_match)]
             if s.has_hint() || !s.is_default_prompt() || s.highlight_char {
                 // Force a refresh without hints to leave the previous
                 // line as the user typed it after a newline.

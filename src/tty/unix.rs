@@ -40,6 +40,10 @@ const BRACKETED_PASTE_ON: &str = "\x1b[?2004h";
 const BRACKETED_PASTE_OFF: &str = "\x1b[?2004l";
 const BEGIN_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026h";
 const END_SYNCHRONIZED_UPDATE: &str = "\x1b[?2026l";
+// Bytes read after a private CSI marker (`0x3c..=0x3f`), including the final
+// byte. ECMA-48 does not limit parameter or intermediate bytes; without a cap
+// a stream of `0x20..=0x3f` never ends and the reader blocks in one key read.
+const MAX_PRIVATE_CSI_TAIL: usize = 1024;
 
 nix::ioctl_read_bad!(win_size, TIOCGWINSZ, winsize);
 
@@ -334,6 +338,25 @@ impl PosixRawReader {
                     self.extended_escape(seq2)
                 }
             }
+        } else if ('<'..='?').contains(&seq2) {
+            // Unsupported private CSI: parameters, then intermediates, then a final byte.
+            let mut intermediates = false;
+            let mut len = 0usize;
+            loop {
+                if len == MAX_PRIVATE_CSI_TAIL {
+                    debug!(target: "rustyline",
+                           "unsupported esc sequence: private CSI too long");
+                    return Err(ReadlineError::from(ErrorKind::InvalidData));
+                }
+                len += 1;
+                match self.next_char()? {
+                    '0'..='?' if !intermediates => {}
+                    ' '..='/' => intermediates = true,
+                    // Stop at the final byte (0x40..=0x7e), or any invalid byte.
+                    _ => break,
+                }
+            }
+            Ok(E(K::UnknownEscSeq, M::NONE))
         } else if seq2 == '[' {
             let seq3 = self.next_char()?;
             // Linux console
@@ -1737,12 +1760,142 @@ mod termios_ {
 
 #[cfg(test)]
 mod test {
+    use std::io::{ErrorKind, Write as _};
+    use std::os::fd::AsRawFd as _;
+    use std::os::unix::net::UnixStream;
+
     use nix::libc::STDOUT_FILENO;
 
-    use super::{AltFd, Position, PosixRenderer, PosixTerminal, Renderer as _};
+    use super::{AltFd, Position, PosixRawReader, PosixRenderer, PosixTerminal, Renderer as _};
     use crate::config::BellStyle;
+    use crate::keys::{KeyCode as K, KeyEvent as E, Modifiers as M};
     use crate::layout::GraphemeClusterMode;
     use crate::line_buffer::{LineBuffer, NoListener};
+    use crate::tty::RawReader as _;
+    use crate::{Config, ReadlineError};
+
+    #[test]
+    fn private_csi_response_does_not_leak_text() {
+        let (input, mut output) = UnixStream::pair().unwrap();
+        output
+            .write_all(
+                b"\x1b[?9ux\x1b[?1u\x1b[?123;4u\x1b[<0:2@\x1b[=1 ~\x1b[>2!/A\t\
+                  \xc3\xa9\x1b[Z\x1b[A\x1b[1;5D\x1b[15~\x1b[[A\x1b[200~\x1b[201~\
+                  \x1b[?1\x00y\x1b[?1 2z",
+            )
+            .unwrap();
+        drop(output);
+        let mut reader = PosixRawReader::new(
+            AltFd(input.as_raw_fd()),
+            None,
+            None,
+            &Config::default(),
+            Default::default(),
+            None,
+            #[cfg(target_os = "macos")]
+            false,
+        );
+        for expected in [
+            E(K::UnknownEscSeq, M::NONE),
+            E::from('x'),
+            E(K::UnknownEscSeq, M::NONE),
+            E(K::UnknownEscSeq, M::NONE),
+            E(K::UnknownEscSeq, M::NONE),
+            E(K::UnknownEscSeq, M::NONE),
+            E(K::UnknownEscSeq, M::NONE),
+            E::from('\t'),
+            E::from('é'),
+            E(K::BackTab, M::NONE),
+            E(K::Up, M::NONE),
+            E(K::Left, M::CTRL),
+            E(K::F(5), M::NONE),
+            E(K::F(1), M::NONE),
+            E(K::BracketedPasteStart, M::NONE),
+            E(K::BracketedPasteEnd, M::NONE),
+            E(K::UnknownEscSeq, M::NONE),
+            E::from('y'),
+            E(K::UnknownEscSeq, M::NONE),
+            E::from('z'),
+        ] {
+            assert_eq!(expected, reader.next_key(false).unwrap());
+        }
+        assert!(matches!(reader.next_key(false), Err(ReadlineError::Eof)));
+    }
+
+    #[test]
+    fn private_csi_response_errors() {
+        for input_bytes in [b"\x1b[?9".as_slice(), b"\x1b[?9\xff"] {
+            let (input, mut output) = UnixStream::pair().unwrap();
+            output.write_all(input_bytes).unwrap();
+            drop(output);
+            let mut reader = PosixRawReader::new(
+                AltFd(input.as_raw_fd()),
+                None,
+                None,
+                &Config::default(),
+                Default::default(),
+                None,
+                #[cfg(target_os = "macos")]
+                false,
+            );
+            let err = reader.next_key(false).unwrap_err();
+            if input_bytes.ends_with(b"\xff") {
+                assert!(matches!(err, ReadlineError::Io(e) if e.kind() == ErrorKind::InvalidData));
+            } else {
+                assert!(matches!(err, ReadlineError::Eof));
+            }
+        }
+    }
+
+    #[test]
+    fn private_csi_response_is_length_bounded() {
+        // A final byte on the last accepted position is consumed; the sentinel stays.
+        let mut within = b"\x1b[?".to_vec();
+        within.extend(vec![b'1'; super::MAX_PRIVATE_CSI_TAIL - 1]);
+        within.push(b'u');
+        within.push(b'x');
+        let (input, mut output) = UnixStream::pair().unwrap();
+        output.write_all(&within).unwrap();
+        drop(output);
+        let mut reader = PosixRawReader::new(
+            AltFd(input.as_raw_fd()),
+            None,
+            None,
+            &Config::default(),
+            Default::default(),
+            None,
+            #[cfg(target_os = "macos")]
+            false,
+        );
+        assert_eq!(
+            E(K::UnknownEscSeq, M::NONE),
+            reader.next_key(false).unwrap()
+        );
+        assert_eq!(E::from('x'), reader.next_key(false).unwrap());
+
+        // Parameter bytes past the cap are rejected and not scanned through to a later final byte.
+        let mut over = b"\x1b[?".to_vec();
+        over.extend(vec![b'0'; super::MAX_PRIVATE_CSI_TAIL]);
+        over.push(b'u');
+        over.push(b'y');
+        let (input, mut output) = UnixStream::pair().unwrap();
+        output.write_all(&over).unwrap();
+        drop(output);
+        let mut reader = PosixRawReader::new(
+            AltFd(input.as_raw_fd()),
+            None,
+            None,
+            &Config::default(),
+            Default::default(),
+            None,
+            #[cfg(target_os = "macos")]
+            false,
+        );
+        let err = reader.next_key(false).unwrap_err();
+        assert!(matches!(err, ReadlineError::Io(e) if e.kind() == ErrorKind::InvalidData));
+        assert_eq!(E::from('u'), reader.next_key(false).unwrap());
+        assert_eq!(E::from('y'), reader.next_key(false).unwrap());
+    }
 
     #[test]
     #[ignore]
